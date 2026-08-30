@@ -5,6 +5,10 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `ep-executing-plans` to implement this plan
 > task-by-task, or `ep-delegate-to-subagents` to run its tasks through subagents. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
+>
+> **One task is one session, so one task is one prompt.** Start each task from its block in
+> [Prompts — one per task](#prompts--one-per-task) — that is what is pasted into a fresh session,
+> and it is complete on its own. This document is what the prompt tells the agent to read.
 
 **Goal:** A person opens a project, creates an epic, adds stories under it, breaks one into tasks,
 moves them through the workflow, comments, links a spec block — and every `work_item` that existed
@@ -247,42 +251,45 @@ Jira/ADO integration. The new module's queries go in `issues.ts` — which is wh
 Per the owner directive of 2026-08-30, now in the global `CLAUDE.md` and in
 [009's "How a module's plan is cut into tasks"](009-project-management-expansion-modules.md#how-a-modules-plan-is-cut-into-tasks--one-stack-one-agent-one-session):
 **a task is one tech stack, one agent, one session**, and consecutive same-stack work is merged
-until it would exceed a **150k-token context**. Eleven tasks, not the twenty-two a
-cut-by-capability plan would have produced — the goal is the fewest sessions, because an agent
-switch costs a whole context reload and twenty small tasks re-read the same files twenty times.
+until it would exceed a **150k-token context**. **Seven tasks** — four `be`, one `ts`, two `fe`.
 
-**The budget, per task, counted before the task was written.** *Read* is the plan section plus
-`CLAUDE.md` plus the pattern files the session must open; *write* is the files it produces;
-*gate* is the build and test output it reads back.
+**The budgets below were re-derived downward on 2026-08-30**, after a first cut produced eleven
+tasks on round numbers between 110k and 145k. Those were guesses dressed as budgets: several tasks
+were nowhere near the cap and were separate only because they were separate *features*, which is
+the cut this directive replaces. Counted properly, four `be` sessions and two `fe` sessions hold
+the same work.
 
 | Task | Stack | Agent | Read | Write | Gate | Total |
-|---|---|---|---|:--:|:--:|:--:|
-| T1 | `be` | `be-java` | plan §T1, `openapi.yaml` regions, 3 role docs | ~1.6k lines YAML | contract parse + 2 vitest | ~120k |
-| T2 | `be` | `data-architect` | plan §T2, `V1` §§work_item/doc_link/RLS, `V2` whole | ~900 lines SQL + 2 test classes | `SchemaConventionTest` + 3 classes | ~135k |
-| T3 | `be` | `be-java` | plan §T3, `work/` package-info, `project/ProjectKeys`, a controller pattern | 4 entities, 7 repos, 3 services, 3 controllers | `./gradlew build` | ~140k |
-| T4 | `be` | `be-java` | plan §T4, `tenancy/Outbox*`, `execution_fact` writer | 2 pure classes, projection, handler, tests | `./gradlew build` | ~110k |
-| T5 | `be` | `be-java` | plan §T5, `case_doc_link` writer, `CatalogueFacts`, `HealthRecomputeOnLinksChanged` | projection, handler, facts, comments, watchers | `./gradlew build` | ~125k |
-| T6 | `be` | `be-java` | plan §T6, `work/BoardFacts`, `work/BoardService` (856 lines), `ArchitectureRulesTest` | 1 new facts method, board rewrite, 9 deletions | `./gradlew build` | ~145k |
-| T7 | `ts` | `tooling-engineer` | plan §T7, `mcp/writes.ts`, `mcp/reads.ts`, `client/core/shapes.ts`, the surface doc | 4 sites + the surface doc | `packages` build + lint + tests | ~115k |
-| T8 | `fe` | `fe-react` | plan §T8, `keys.ts`, `labels.ts`, `devFaults.ts`, `queries/cases.ts` as the pattern | data layer + 2 screens | `build` + `lint` + `test:run` | ~140k |
-| T9 | `fe` | `fe-react` | plan §T9, the kit, `DataRegion`, `epic/story/task/documents` mockups | 3 detail screens + the docs panel | `build` + `lint` + `test:run` | ~145k |
-| T10 | `fe` | `fe-react` | plan §T10, `MyWorkPage`, `DashboardPage`, 4 mockups | settings ×2, My Work, overview | `build` + `lint` + `test:run` | ~145k |
-| T11 | `docs` | *(the session that closes the module)* | plan §T11, `features.md`, 009 | 3 documents | none | ~60k |
+|---|:--:|---|:--:|:--:|:--:|:--:|
+| T1 | `be` | `be-java` | 53k | 38k | 12k | **~105k** |
+| T2 | `be` | `data-architect` | 68k | 45k | 17k | **~130k** |
+| T3 | `be` | `be-java` | 70k | 55k | 20k | **~145k** |
+| T4 | `be` | `be-java` | 80k | 30k | 20k | **~130k** |
+| T5 | `ts` | `tooling-engineer` | 55k | 27k | 15k | **~100k** |
+| T6 | `fe` | `fe-react` | 80k | 55k | 15k | **~150k** |
+| T7 | `fe` | `fe-react` | 73k | 60k | 15k | **~148k** |
 
-**T6 and T9/T10 are the two closest to the ceiling.** Each has a stated seam to split on if a
-session runs out: T6 splits at "delete the nine classes" (the board rewrite first, the deletions
-second); T9 splits at the documents panel; T10 splits after the settings screens. **Both seams are
-inside one stack** — that is the rule, and handing half a task to another agent is not a split.
+*Read* is `CLAUDE.md` (~10k) plus the plan's own task section plus the files the session must open
+as patterns; *write* is what it produces; *gate* is the build and test output it reads back.
 
-**What this costs, and it is real:** the tracker is not usable by a person until **T8** lands, and
-My Work does not show issues until **T10**. Tasks T1–T7 build a contract, a schema, a module and a
-tool surface that no screen reads yet. That is the price of one agent switch per stack rather than
-one per capability, and 009's *"a person can now …"* is closed by T10, not by each task.
+**T6 and T7 sit on the cap**, and each names a seam **inside its own stack** to split on if a
+session runs out: T6 splits after the work table and the new-issue form; T7 splits after the two
+settings screens. Handing half a task to another agent is not a split.
+
+**There is no `docs` task.** The module's close-out rides with **T7**, because the session that
+makes the capability real is the only one that knows what actually landed, what is built-and-
+unverified, and which of 009's dependent prompts stopped being true. A 60k session that only writes
+markdown is exactly the wasted agent switch this directive exists to remove.
+
+**What this costs, and it is real:** the tracker is not usable by a person until **T6** lands, and
+My Work does not show issues until **T7**. T1–T5 build a contract, a schema, a module and a tool
+surface that no screen reads yet. That is the price of one agent switch per stack rather than one
+per capability, and 009's *"a person can now …"* is closed by T7, not by each task.
 
 **No task returns a fake success while waiting for its other half.** There is no contract-first stub
 here: T1 lands the contract and T3 lands the endpoints behind it, so between them the paths 404 —
-which is the truthful answer for a route that does not exist yet, and is what the SPA's own error
-boundaries already render.
+the truthful answer for a route that does not exist yet, and what the SPA's error boundaries already
+render.
 
 ---
 
@@ -290,26 +297,20 @@ boundaries already render.
 
 | # | Task | Stack | Agent | Deliverable | Depends on |
 |---|---|:--:|---|---|---|
-| 1 | T1 — The tracker contract and the roles copies | `be` | `be-java` | `openapi.yaml` serves `/issues`, `/board` and `/projects/{id}/workflow`, `/work-items` is gone, both clients regenerated, and `workitem:manage` is struck through in all three pinned copies | none |
-| 2 | T2 — `V3`: schema, workflow, and the `work_item` migration | `be` | `data-architect` | The nine tables exist under forced RLS, every project has the six statuses and six types, and every pre-upgrade `work_item` is an `issue` with a key — counted either side | T1 |
-| 3 | T3 — The `tracker` module: issues, workflow, transitions | `be` | `be-java` | `POST /issues` returns `201` with a key from `ProjectKeys`; a move the workflow forbids is a `409`; the context boots with `ddl-auto: validate` green | T2 |
-| 4 | T4 — Completion, epic status and `issue_fact` | `be` | `be-java` | An epic carries `{percent, basis, done, total, excludedSpikes}` and a derived status; every issue write lands an `issue_fact` row from one writer | T3 |
-| 5 | T5 — Spec links, comments and watchers | `be` | `be-java` | Linking an epic to a doc block writes `doc_link` with `source_type='ISSUE'` and `GET /issues/{key}/doc-links` returns it with `stale`; comments append and add their author as a watcher | T4 |
-| 6 | T6 — `work` retires; `/board` composes issues | `be` | `be-java` | The nine classes are gone, `GET /board` serves four card kinds with `ISSUE` row-backed, and `derived_item_annotation` is untouched | T5 |
-| 7 | T7 — Issue verbs on the CLI and MCP | `ts` | `tooling-engineer` | No `work-item` verb remains; `tcms_write_issue` and `tcms_read_issue` work against the new contract; the surface document matches what shipped | T6 |
-| 8 | T8 — The data layer, the work table and the new-issue form | `fe` | `fe-react` | `/projects/:id/work` lists the project's issues and `/projects/:id/work/new` creates one with one field, through `DataRegion` and one `keys` factory | T7 |
-| 9 | T9 — Epic, story, task and the documents panel | `fe` | `fe-react` | Each of the three detail screens renders and moves an issue with the transition menu; a document shows which issues link to it | T8 |
-| 10 | T10 — Settings, My Work and the project overview | `fe` | `fe-react` | My Work shows the caller's issues across two projects beside their reviews and executions with the private note; `/projects/:id` lands on epics, backlog and test health | T9 |
-| 11 | T11 — Close the module | `docs` | *(the closing session)* | `docs/features.md`, the MCP surface and 009's status table say what actually landed | T10 |
+| 1 | T1 — The tracker contract | `be` | `be-java` | `openapi.yaml` serves `/issues`, `/board` and `/projects/{id}/workflow`, `/work-items` is gone, and both clients are regenerated in the same commit | none |
+| 2 | T2 — `V3`, and the roles copies | `be` | `data-architect` | The nine tables exist under forced RLS, every project has the six statuses and six types, every pre-upgrade `work_item` is an `issue` with a key — counted either side — and `workitem:manage` is struck through in all three pinned copies | T1 |
+| 3 | T3 — The `tracker` module: issues, workflow, completion, `issue_fact` | `be` | `be-java` | `POST /issues` returns `201` with a key from `ProjectKeys`, a forbidden move is a `409`, an epic carries `{percent, basis, done, total, excludedSpikes}` and a derived status, and every write lands an `issue_fact` row from one writer | T2 |
+| 4 | T4 — Spec links, comments, and the retirement of `work` | `be` | `be-java` | `GET /issues/{key}/doc-links` returns links with `stale`, comments append and add their author as a watcher, the nine `work` classes are gone, and `GET /board` serves four card kinds with `ISSUE` row-backed | T3 |
+| 5 | T5 — Issue verbs on the CLI and MCP | `ts` | `tooling-engineer` | No `work-item` verb remains; `tcms_write_issue` and `tcms_read_issue` work against the new contract; the surface document matches what shipped | T4 |
+| 6 | T6 — The tracker screens | `fe` | `fe-react` | A person lists a project's issues, creates one from a single field, and opens an epic, a story or a task and moves it — every screen through `DataRegion`, one `keys` factory | T5 |
+| 7 | T7 — Settings, My Work, the overview, and the close-out | `fe` | `fe-react` | My Work shows the caller's issues across two projects beside their reviews and executions with the private note; `/projects/:id` lands on epics, backlog and test health; 009's status table says what landed | T6 |
 
 
 ---
 
-### T1 — `be` · The tracker contract and the roles copies
+### T1 — `be` · The tracker contract
 
-**Agent:** `be-java` · **Stack:** `be` · **Budget:** ~120k
-
-#### Part A — the contract
+**Agent:** `be-java` · **Stack:** `be` · **Budget:** ~105k
 
 **Deliverable:** `openapi.yaml` serves `/issues`, `/issues/{key}`, `/issues/{key}/comments`,
 `/issues/{key}/transitions`, `/issues/{key}/doc-links`, `/projects/{projectId}/workflow` and
@@ -1231,7 +1232,11 @@ Both generated clients regenerated in this commit."
 
 ---
 
-#### Part B — `workitem:manage` superseded
+### T2 — `be` · `V3`, and the roles copies
+
+**Agent:** `data-architect` (with `data-postgresql`, `data-migrations`) · **Stack:** `be` · **Budget:** ~130k
+
+#### Part A — `workitem:manage` superseded
 
 **Deliverable:** `workitem:manage` reads "→ superseded by `issue:*`" in the roles spec §A3,
 `permission-matrix-summary.md` and `README.md`, in one commit; `matrixCopies.test.ts` green.
@@ -1320,11 +1325,7 @@ copies move in one commit or matrixCopies.test.ts reddens."
 
 ---
 
-### T2 — `be` · `V3`: schema, workflow and the `work_item` migration
-
-**Agent:** `data-architect` (with `data-postgresql`, `data-migrations`) · **Stack:** `be` · **Budget:** ~135k
-
-#### Part A — the nine tables
+#### Part B — the nine tables
 
 **Deliverable:** `issue`, `issue_type`, `issue_status`, `issue_transition`, `issue_link`,
 `issue_comment`, `issue_watcher`, `issue_doc_link` and `issue_fact` exist, every one with
@@ -1776,12 +1777,12 @@ disagreement scope §3 names."
 
 ---
 
-#### Part B — the seeded workflow and the backfill
+#### Part C — the seeded workflow and the backfill
 
 **Deliverable:** every project — the ones that already exist and every one created afterwards —
 has the six default statuses with their kinds, the transitions between them, and the five issue
 types.
-**Depends on:** Part A
+**Depends on:** Part B
 
 **Files:**
 - Modify: `backend/src/main/resources/db/migration/V3__tracker_core.sql` (append section 5)
@@ -1841,7 +1842,7 @@ BEGIN
     END IF;
 
     -- ==== V1 blocks 1-4, REPRODUCED VERBATIM FROM V2. Do not summarise them. ====
-    -- [T4 step 1a: copy blocks 1-4 out of V2 exactly — the Feature dimension, the
+    -- [T2 Part C step 1a: copy blocks 1-4 out of V2 exactly — the Feature dimension, the
     --  seven case statuses, the Default configuration and the documentation space,
     --  WITH THEIR COMMENTS. They are not restated in this plan on purpose: a
     --  paraphrase is how a block loses a WHERE NOT EXISTS clause.]
@@ -2069,12 +2070,12 @@ blocks rather than the one the newest migration added."
 
 ---
 
-#### Part C — `work_item` → `issue`
+#### Part D — `work_item` → `issue`
 
 **Deliverable:** every pre-upgrade `work_item` is an `issue` of the story-level `Task` type with a
 key, `work_item_link` rows are `issue_link` rows, both tables are dropped, and a test counts the
 rows on each side rather than reading the SQL.
-**Depends on:** Part B
+**Depends on:** Part C
 
 **Files:**
 - Modify: `backend/src/main/resources/db/migration/V3__tracker_core.sql` (append section 6)
@@ -2348,10 +2349,12 @@ and no error."
 
 ---
 
-### T3 — `be` · The `tracker` module: issues, workflow, transitions
+### T3 — `be` · The `tracker` module: issues, workflow, completion and `issue_fact`
 
 **Agent:** `be-java` (with `be-java-database-code`, `be-java-unit-testing`) · **Stack:** `be` ·
-**Budget:** ~140k
+**Budget:** ~145k — on the cap. **Seam if it runs out:** land Part A, commit, do Part B next.
+
+#### Part A — entities, issue CRUD, the workflow and transitions
 
 **Deliverable:** `POST /issues` returns `201` with a key allocated from `ProjectKeys`;
 `GET /issues/{key}` returns the issue with its children and legal moves; a move the workflow
@@ -2710,7 +2713,7 @@ interface IssueRepository extends JpaRepository<Issue, UUID> {
         ProjectKeys.Allocation allocation = keys.allocate(request.projectId(), 1);
         Issue created = Issue.create(allocation.keyAt(0), allocation.seqAt(0), ...);
         issues.save(created);
-        events.issueChanged(created);       // T4 wires this to the outbox
+        events.issueChanged(created);       // T3 Part B wires this to the outbox
         return new Outcome.Created(viewOf(created));
     }
 ```
@@ -2798,14 +2801,12 @@ entry is deleted — the rule fails in both directions and the entry said M1 wou
 
 ---
 
-### T4 — `be` · Completion, epic status and `issue_fact`
-
-**Agent:** `be-java` (with `be-java-unit-testing`) · **Stack:** `be` · **Budget:** ~110k
+#### Part B — completion, epic status and `issue_fact`
 
 **Deliverable:** an epic's `completion` carries `{percent, basis, done, total, excludedSpikes}` and
 its status is derived and not writable; every issue write lands an `issue_fact` row with its four
 timestamps, written by one class and no other.
-**Depends on:** T3
+**Depends on:** Part A
 
 **Files:**
 - Create: `backend/src/main/java/com/tcms/tracker/Completion.java`, `EpicStatus.java`,
@@ -3138,14 +3139,16 @@ failure scope §3 describes is silent: nothing breaks, and a report is just wron
 
 ---
 
-### T5 — `be` · Spec links, comments and watchers
+### T4 — `be` · Spec links, comments, and the retirement of `work`
 
-**Agent:** `be-java` · **Stack:** `be` · **Budget:** ~125k
+**Agent:** `be-java` · **Stack:** `be` · **Budget:** ~130k
+
+#### Part A — spec links, comments and watchers
 
 **Deliverable:** linking an epic to a documentation block writes a `doc_link` row with
 `source_type = 'ISSUE'`, `GET /issues/{key}/doc-links` returns it with its excerpt and `stale`
 flag, and `POST /issues/{key}/comments` appends a comment and adds its author as a watcher.
-**Depends on:** T4
+**Depends on:** T3
 
 **Files:**
 - Modify: `backend/src/main/java/com/tcms/documentation/LinkSourceType.java`,
@@ -3300,15 +3303,11 @@ they never hear about it."
 
 ---
 
-### T6 — `be` · `work` retires; `/board` composes issues
-
-**Agent:** `be-java` · **Stack:** `be` · **Budget:** ~145k — **the closest to the ceiling.** If the
-session runs out, the seam is Step 5: land the board rewrite, commit, and delete the nine classes
-in a second session. **Do not split it by handing the deletions to another stack.**
+#### Part B — `work` retires; `/board` composes issues
 
 **Deliverable:** the nine `work` classes are gone, `GET /board` serves four card kinds with `ISSUE`
 as the row-backed one, and `derived_item_annotation` and its rows are untouched.
-**Depends on:** T5
+**Depends on:** Part A
 
 **Files:**
 - Modify: `backend/src/main/java/com/tcms/work/BoardFacts.java` (515 lines),
@@ -3419,7 +3418,7 @@ and neither is a `404` because nothing failed to resolve.
 The `409` the `PATCH` used to answer — *"this card mirrors a source and its status is not stored"* —
 does not disappear; it moves to `POST /issues/{key}/transitions`, which 404s a synthetic
 `execution:{uuid}` id because that is not an issue key. **That is a real behaviour change and it is
-worse:** the old message named the action that does work. Record it as a known regression in T11's
+worse:** the old message named the action that does work. Record it as a known regression in T7's
 built-and-unverified list; restoring it needs M2's board, which is where a drag actually happens.
 
 - [ ] **Step 4: `AnnotationController` — `derived_item_annotation` survives**
@@ -3541,7 +3540,7 @@ working agreement, so the next reader sees the reasoning was considered:
 
 **Note the fourth test's expectation.** The seeded workflow permits every pair except *into* `Done`
 from anywhere but `In Review` — so from `In Review` all five other statuses are legal. Write the
-assertion against what T2's seed actually inserts, not against `settings-workflow.html`'s
+assertion against what T2 Part C's seed actually inserts, not against `settings-workflow.html`'s
 right-hand panel, which illustrates the moves **from `In Progress`**.
 
 - [ ] **Step 8: Gate and commit**
@@ -3565,15 +3564,15 @@ D11's private note on a card you do not own is what makes a mixed board usable."
 
 ---
 
-### T7 — `ts` · Issue verbs on the CLI and MCP
+### T5 — `ts` · Issue verbs on the CLI and MCP
 
 **Agent:** `tooling-engineer` (with `tool-cli-builder`, `tool-mcp-builder`,
-`tool-capability-contract`) · **Stack:** `ts` · **Budget:** ~115k
+`tool-capability-contract`) · **Stack:** `ts` · **Budget:** ~100k
 
 **Deliverable:** no `work-item` verb remains in `packages/`; `tcms_write_issue` and
 `tcms_read_issue` work against the new contract; `docs/specs/2026-08-08-mcp-tool-and-command-surface.md`
 lists every issue verb with its typed input and the shared output envelope.
-**Depends on:** T6
+**Depends on:** T4
 
 **Files:**
 - Modify: `packages/mcp/src/writes.ts:1255-1310`, `packages/mcp/src/reads.ts:607`,
@@ -3667,7 +3666,7 @@ tree by `citedFiles.test.ts` for the paths it names.
 would typecheck against a stale `client` dist. The root script names the order client → cli → mcp.
 
 Expected: builds clean, lint at 0 warnings, tests green — including `citedFiles.test.ts`, which
-fails if any path named in a comment anywhere is not on disk. **T6 deleted nine files; a comment in
+fails if any path named in a comment anywhere is not on disk. **T4 deleted nine files; a comment in
 `frontend/` or `backend/` still citing one reddens this job**, which is where that failure surfaces.
 
 - [ ] **Step 7: Commit**
@@ -3688,16 +3687,19 @@ the execution-status field already makes for the same reason."
 
 ---
 
-### T8 — `fe` · The data layer, the work table and the new-issue form
+### T6 — `fe` · The tracker screens
 
 **Agent:** `fe-react` (with `fe-react-data-fetching`, `fe-react-forms`, `fe-react-ui-rules`,
-`fe-react-component-testing`) · **Stack:** `fe` · **Budget:** ~140k
+`fe-react-component-testing`, `fe-react-accessibility`) · **Stack:** `fe` · **Budget:** ~150k — on
+the cap. **Seam if it runs out:** land Part A, commit, do Part B next.
+
+#### Part A — the data layer, the work table and the new-issue form
 
 **Deliverable:** `/projects/:projectId/work` lists the project's issues in a sortable table with a
 filter that survives a reload, and `/projects/:projectId/work/new` creates one from a single field —
 both through `DataRegion`, one `keys` factory, and labels that make an unlabelled enum member a
 compile error.
-**Depends on:** T7
+**Depends on:** T5
 
 **Files:**
 - Create: `frontend/src/api/queries/issues.ts`, `frontend/src/features/tracker/WorkTablePage.tsx`,
@@ -3934,16 +3936,11 @@ legal ones."
 
 ---
 
-### T9 — `fe` · Epic, story, task and the documents panel
-
-**Agent:** `fe-react` (with `fe-react-data-fetching`, `fe-react-ui-rules`,
-`fe-react-component-testing`, `fe-react-accessibility`) · **Stack:** `fe` · **Budget:** ~145k — near
-the ceiling. **Seam if it runs out:** land the three detail screens, commit, do the documents panel
-in a second session.
+#### Part B — epic, story, task and the documents panel
 
 **Deliverable:** `/issues/:key` renders as an epic, a story or a task according to its type, each
 moving the issue through the transition menu; opening a document shows which issues link to it.
-**Depends on:** T8
+**Depends on:** Part A
 
 **Files:**
 - Create: `frontend/src/features/tracker/IssueDetailPage.tsx`, `EpicPanels.tsx`, `StoryPanels.tsx`,
@@ -4009,7 +4006,7 @@ render either.
 `epic.html`'s two link cards are the shape: a normal one, and one with a warning border, a
 "changed since linked" badge, the excerpt **as it was linked**, and a Re-confirm button.
 
-Re-confirming is a `documentation` write (T5's arm), so the button targets that endpoint and
+Re-confirming is a `documentation` write (T4 Part A's arm), so the button targets that endpoint and
 invalidates `keys.issueDocLinks`. The caption under it — *"The excerpt above is what you linked.
 Re-confirming replaces it with the current text and clears this flag"* — is the whole explanation
 of what `stale` means and it is rendered verbatim.
@@ -4046,7 +4043,7 @@ sends.
   });
 
   it('surfaces a refused transition beside the picker, not as a toast', async () => {
-    // Driven by tcmsFaults' `conflict`, built in T8. A toast scrolls away and the
+    // Driven by tcmsFaults' `conflict`, built in T6 Part A. A toast scrolls away and the
     // card is left looking like it moved.
   });
 ```
@@ -4071,19 +4068,21 @@ derived from its stories."
 
 ---
 
-### T10 — `fe` · Settings, My Work and the project overview
+### T7 — `fe` · Settings, My Work, the overview, and the close-out
 
 **Agent:** `fe-react` (with `fe-react-data-fetching`, `fe-react-ui-rules`,
-`fe-react-component-testing`, `fe-react-accessibility`) · **Stack:** `fe` · **Budget:** ~145k — near
-the ceiling. **Seam if it runs out:** land the two settings screens, commit, do My Work and the
-overview in a second session. **This is the task that closes the module's "a person can now …".**
+`fe-react-component-testing`, `fe-react-accessibility`) · **Stack:** `fe` · **Budget:** ~148k — on
+the cap. **Seam if it runs out:** land the two settings screens, commit, do My Work and the overview
+next. **This is the task that closes the module's "a person can now …".**
+
+#### Part A — the screens
 
 **Deliverable:** the workflow settings screen lists the six seeded statuses with their kinds and
 refuses to orphan an issue; My Work shows the caller's issues across two projects beside their
 pending reviews and executions, with the private note and personal due date; `/projects/:id` lands
 on epics, unscheduled backlog and test health, and explains rather than empties the sections M1 has
 no data for.
-**Depends on:** T9
+**Depends on:** T6
 
 **Files:**
 - Create: `frontend/src/features/settings/WorkflowSettingsPage.tsx`,
@@ -4117,7 +4116,7 @@ no data for.
 caption *"Prefixes every issue in this project — `ACME-124`. Existing links keep working if it
 changes"*) and the **Issue types** list.
 
-The types list is **six rows, not the mockup's five** (T2 Part B): `Epic`, `Story`, `Task`, `Bug`,
+The types list is **six rows, not the mockup's five** (T2 Part C): `Epic`, `Story`, `Task`, `Bug`,
 `Spike` and `Sub-task`. The mockup shows five and separately shows an "Add sub-task" affordance on a
 story — both cannot be true with one `Task` type, because D29 puts `Task` at the **story** level.
 The recorded resolution is six types with two rendering as `T`, and the screen's captions say which
@@ -4143,7 +4142,7 @@ What must stay true:
   one list — nothing here asks which project you meant."*
 - **The private note is on a card the viewer does not own.** The "My notes" panel lists the caller's
   `derived_item_annotation` rows with their personal due dates and the caption *"teammates do not
-  see this"*. Writing one is T6's `PUT /board/annotations/...`.
+  see this"*. Writing one is T4 Part B's `PUT /board/annotations/...`.
 
 **Absent (D-f):** the `AI` tags, the "My assistant" panel (M5), the "This week" hours KPI (M6).
 
@@ -4260,13 +4259,11 @@ advertisement, not an explanation."
 
 ---
 
-### T11 — `docs` · Close the module
-
-**Agent:** the session that finishes T10 · **Stack:** `docs` · **Budget:** ~60k
+#### Part B — close the module
 
 **Deliverable:** `docs/features.md`, the MCP surface document and plan 009's status table say what
 actually landed, and the prompts of every module that depends on M1 are true again.
-**Depends on:** T10
+**Depends on:** Part A
 
 **Files:**
 - Modify: `docs/features.md`, `docs/plans/009-project-management-expansion-modules.md`,
@@ -4307,12 +4304,12 @@ sentence left visible** so a reader who finds `work_item` in the git history kno
 
 1. **Status table.** M1's row → `done YYYY-MM-DD @ <short sha>`.
 2. **Built and unverified.** Under 009's M1 section. The gates prove it compiles. At minimum:
-   - Every screen T8–T10 built, if nobody has clicked through the lab.
+   - Every screen T6–T7 built, if nobody has clicked through the lab.
    - The `work_item` migration on an instance that actually holds rows — the count test proves it
      on a synthetic fixture, not on the lab's data.
    - `issue_fact`'s `release_assigned_at`, written by nothing until M3.
    - `issue_link`, which has no writer until M3's H7 work.
-   - **The lost 409 message** (T6 Step 3): moving a derived card used to answer *"this card mirrors
+   - **The lost 409 message** (T4 Part B Step 3): moving a derived card used to answer *"this card mirrors
      a source; fix the source instead"* and now answers 404 from `/issues/{key}`. A known
      regression, restored by M2's board.
 3. **The migration actually taken.** If it was not `V3`, correct 009's table **and** the M1 `**db**`
@@ -4341,7 +4338,7 @@ In 009's M1 section, so the next agent finds the answer rather than the finding:
 - **The three hardcoded `'Agent'` role names** (D-h) — left in place, with the reason: they select
   the one `assignable = false` role to decide which configuration block to print, they predate M0,
   and removing them needs a stable role code on the contract that no module has asked for.
-- **`settings-general.html` shows five issue types; the product seeds six** (T2 Part B) — the
+- **`settings-general.html` shows five issue types; the product seeds six** (T2 Part C) — the
   mockup's own "Add sub-task" affordance requires a `TASK`-level type, and D29 puts `Task` at
   `STORY`.
 - **009's M1 says `project-overview.html` lands without its test-health panel** (D-f) — it landed
@@ -4358,15 +4355,15 @@ error page all typechecked and linted clean. **Say "built and unverified" when t
 
 ## Self-review
 
-**1. Spec coverage.** Stories H1 (epic + doc links + completion + count) → T3, T4, T5, T9. H2
-(stories, bugs, spikes under an epic; spike excluded) → T3, T4, T8. H3 (quick task, one field) → T2
-Part B's `Task` type, T8. H4 (break into sub-tasks; does not self-close) → T3, T9. H5 (legal moves
-only; forbidden move refused with a reason; epic status derived) → T3, T4, T9. H6 (estimate in
-hours; basis stated) → T1, T4, T9. H8 (comments, watchers, history) → T5, T9. B1 (configure the
-workflow; sensible default; removal asks where issues go) → T2 Part B, T3, T10. B5 (My Work
-composite; private note) → T6, T10. D8 → T4. D11 → T6, T10. D12 → T2 Part C. D29 → T2 Part B. D31 →
-T4. **H7 (link a story to its test cases) is M3's**, per the execution breakdown's `t18`; `issue_link`
-lands here with no writer, which T11 records.
+**1. Spec coverage.** Stories H1 (epic + doc links + completion + count) → T3, T4, T6. H2 (stories,
+bugs, spikes under an epic; spike excluded) → T3, T6. H3 (quick task, one field) → T2 Part C's
+`Task` type, T6. H4 (break into sub-tasks; does not self-close) → T3, T6. H5 (legal moves only;
+forbidden move refused with a reason; epic status derived) → T3, T6. H6 (estimate in hours; basis
+stated) → T1, T3, T6. H8 (comments, watchers, history) → T4, T6. B1 (configure the workflow;
+sensible default; removal asks where issues go) → T2 Part C, T3, T7. B5 (My Work composite; private
+note) → T4, T7. D8 → T3 Part B. D11 → T4 Part B, T7. D12 → T2 Part D. D29 → T2 Part C. D31 → T3
+Part B. **H7 (link a story to its test cases) is M3's**, per the execution breakdown's `t18`;
+`issue_link` lands in T2 with no writer, which T7 Part B records.
 
 **2. Placeholder scan.** The one deliberate "copy this rather than read a paraphrase" is T2 Part B
 Step 1's instruction to lift blocks 1–5 of `tcms_seed_project_defaults` out of `V2` verbatim. That
@@ -4379,14 +4376,394 @@ and the test that catches an omission.
 `issueStatusKinds` (T8). `Basis` is `COUNT | ESTIMATE` in T1, T4 and T8's `completionBases`.
 `BoardCard.status` is `{name, kind}` in T1, T6 and T10.
 
-**4. Order.** T1 (contract) → T2 (schema) → T3–T6 (`be`) → T7 (`ts`) → T8–T10 (`fe`) → T11 (docs).
+**4. Order.** T1 (contract) → T2 (schema) → T3–T4 (`be`) → T5 (`ts`) → T6–T7 (`fe`).
 Every dependency points backwards. The one thing that cannot start at its position is nothing: T2
 needs the contract only for the shapes it stores, T7 needs T6's `/board` to exist, and T8 needs T7
 only because both stacks share the generated client that T1 produced.
 
-**5. Deliverables.** Eleven tasks, eleven `**Deliverable:**` lines, each a fact about the world
+**5. Deliverables.** Seven tasks, seven `**Deliverable:**` lines, each a fact about the world
 rather than an activity.
 
-**6. The stack rule.** Every task is one stack — six `be`, one `ts`, three `fe`, one `docs` — with
-its agent named and its 150k budget counted. The two nearest the ceiling (T6, T9/T10) each name a
-seam **inside their own stack** to split on.
+**6. The stack rule.** Every task is one stack — four `be`, one `ts`, two `fe` — with its agent
+named and its 150k budget counted from what the session actually loads. The three on the cap (T3,
+T6, T7) each name a seam **inside their own stack** to split on, and the close-out rides with T7
+rather than taking a session of its own.
+
+---
+
+## Prompts — one per task
+
+**One task is one session, so one task is one prompt.** Each block below is pasted whole into a
+fresh session. They are written to be complete on their own: the agent reads what it names, does
+the task, runs its gate and commits. Nothing here assumes the reader has seen another prompt.
+
+**Run them in order.** A task's `Depends on` must be committed before its prompt is pasted — the
+sequence is `T1 → T2 → T3 → T4 → T5 → T6 → T7`, and 009's status table is what records that M1 is
+running at all.
+
+**These are living text.** A task that lands something different from what its plan section
+predicted — a renamed endpoint, a column that moved — **rewrites the prompts below it before it
+stops**, in place, no changelog appended. The next session trusts its prompt and the plan section
+it names, and re-verifies nothing else.
+
+---
+
+### T1 — `be` · The tracker contract
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory —
+/be-java for this task.
+
+Execute T1 of docs/plans/011-tracker-core.md. Read, in this order: that plan's "Decisions taken
+before the tasks" section in full (nine decisions, two of them owner-confirmed — D-a and D-c decide
+what you are about to write), then "How this plan is cut", then T1 itself.
+
+You are the FIRST task of module M1. Nothing in tracker exists yet.
+
+Context you need that the plan states but is worth having up front:
+
+- GET /work-items is NOT work-item CRUD. It is the one operation serving all three boards —
+  /projects/:id/board, /my-work and /teams/:id/board — which D11 keeps composite. Removing the path
+  as plan 009 wrote it would delete My Work. The PATH goes; the operation becomes GET /board with
+  ISSUE replacing TASK as the row-backed card kind. This was put to the owner and confirmed.
+- A board card's status becomes an object {name, kind}, and WorkItemStatus is deleted. An issue's
+  status is a per-project issue_status row, so a fixed five-member enum cannot spell it without a
+  mapping table — and a card carrying two spellings of where it is, is the two-contradictory-numbers
+  failure this repo has already shipped once.
+- M0 already seeded the whole issue:* permission slice. You add NO permission. Do not touch the
+  three pinned matrix copies in this task — that is T2 Part A, and it is a separate commit.
+
+Then:
+1. Write openapi.yaml per T1's steps 2-4. EVERY schema gets its `required` array, including inline
+   nested objects — `required` does not descend, and without it every generated property is
+   optional. Delete the two /work-items paths and the four WorkItem* schemas; Priority STAYS
+   (test_case uses it). Grep the file for prose naming the removed path — there are five sites
+   outside the operations — and correct each.
+2. Regenerate BOTH clients in the SAME commit: `cd frontend && npm run gen:api` and
+   `cd packages/client && npm run gen:api`. Two copies of one contract; a commit carrying one is
+   the drift the pairing exists to prevent.
+3. Do NOT edit contractBodies.ts in either copy. Its shared region is a generic walker over spec()
+   with no per-schema bodies, so new endpoints need no change there — verify with
+   `npm run test:run -w @tcms/client -- contractPairing`.
+4. The tree does NOT build after this commit: frontend and packages both still reference the removed
+   WorkItem types. That is expected and is repaired by T4 and T5. Your gate is the contract parse
+   check and contractPairing, not a full build. Say so in the commit message rather than leaving the
+   next session to discover it.
+5. Commit exactly: docs/specs/openapi.yaml, frontend/src/api/schema.d.ts, packages/client/src/schema.ts.
+   `git add <paths>`, never `git add -A` — concurrent sessions happen in this repo.
+
+Work on the current branch. Check with `git rev-parse --abbrev-ref HEAD`; do not create one.
+````
+
+---
+
+### T2 — `be` · `V3`, and the roles copies
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory —
+/data-postgresql and /data-migrations for this task, under the data-architect agent.
+
+Execute T2 of docs/plans/011-tracker-core.md — four parts, four commits. Read that plan's
+"Decisions taken before the tasks" (especially D-b, which is owner-confirmed and reverses what plan
+009 asked for), then T2's four parts.
+
+BEFORE WRITING THE FILE: `ls backend/src/main/resources/db/migration/`. The plan reserves V3 and the
+directory is the authority. `out-of-order` is unset, so a lower number arriving after a higher one is
+silently NOT APPLIED, and Testcontainers builds each database from scratch so it will never show you
+the conflict.
+
+Also read, because you are editing what they describe: V1's work_item/work_item_link/
+derived_item_annotation/doc_link/case_doc_link sections and its RLS loop; V2 IN FULL.
+
+The two things most likely to go wrong, both stated at length in the plan:
+
+- D-b: the workflow is seeded by tcms_seed_project_defaults, NOT by the ProjectCreatedEvent plan 009
+  and its review R5 called for. A Java event type may not cross a module boundary in this codebase at
+  all (CompanyScopedEvent's own header), and outbox delivery has a PT1M floor — a new project would
+  have no statuses for up to a minute, so its first issue could not be created. The function is
+  synchronous, transactional, and already called by all three creation paths.
+- That means V3 reproduces the WHOLE function again under CREATE OR REPLACE, as V2 already did once.
+  EVERY block V2 has must appear — the Feature dimension, the seven case statuses, the Default
+  configuration, the doc space, the key counter — or the ones you omit silently stop being seeded for
+  every project created afterwards. Copy them out of V2 VERBATIM; do not paraphrase, that is how a
+  block loses a WHERE NOT EXISTS. Extend ProjectKeySequenceSchemaTest to assert all seven blocks.
+
+Then:
+1. Part A — strike `workitem:manage` through as "→ superseded by issue:*" in the roles spec §A3,
+   permission-matrix-summary.md and README.md. ALL THREE IN ONE COMMIT or matrixCopies.test.ts
+   reddens. The role_permission ROWS are NOT deleted — a permission nothing reads is inert, and
+   deleting seeded rows only makes three documents that pin the matrix disagree with the database.
+2. Part B — the nine tables. company_id NOT NULL leading every composite index, FORCE ROW LEVEL
+   SECURITY, and the isolation predicate BYTE-IDENTICAL to V1's (SchemaConventionTest compares them).
+   The migration's comments carry the why, in V1's style.
+3. Part C — the seed function and the backfill. The backfill is a LOOP with set_config, for V2's
+   reason: Flyway connects as tcms_owner, which holds no BYPASSRLS, so a plain INSERT ... SELECT
+   FROM project with app.current_company unset reads ZERO ROWS and reports success.
+4. Part D — work_item → issue as parentless Stories (D12), carrying the ID forward so
+   derived_item_annotation still resolves. Then DROP both tables. Verify by COUNTING ROWS EITHER SIDE
+   on a container migrated to V2 — 009 requires this explicitly, "not by reading the SQL", because a
+   project whose rows silently did not move produces a shorter result set and no error.
+5. Gates on shanks via ~/bin/tcms-remote (sync, then backend ./gradlew build). Read
+   docs/specs/shanks-runner-details.md first: BUILD FAILED with "Could not write XML test results"
+   and ZERO assertion failures is an fd limit — `ulimit -n 65535; ./gradlew build`. And
+   com.tcms.reporting.FlakeScoreTest fails six tests as PRE-EXISTING, proven so on 2026-08-30; do not
+   attribute them to this module.
+6. One commit per part, `git add <paths>` only.
+````
+
+---
+
+### T3 — `be` · The `tracker` module
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory —
+/be-java plus be-java-database-code and be-java-unit-testing.
+
+Execute T3 of docs/plans/011-tracker-core.md — two parts. This is the largest task in the module and
+it is budgeted AT the 150k cap. If you run out, the seam is between Part A and Part B: commit Part A
+and stop, saying so. Do not hand half of it to another agent.
+
+Read: the plan's "Decisions" section, its "File structure" table (which names every file you create),
+and T3's two parts. Then read, because you are building against them:
+backend/src/main/java/com/tcms/project/ProjectKeys.java IN FULL, com/tcms/work/package-info.java,
+and one existing controller+service pair as the pattern (project/ProjectCreateService.java is the
+closest in shape — its gate ordering and its audit call are both copied here).
+
+Four things this codebase will punish you for getting wrong, all in CLAUDE.md:
+
+- EVERY repository interface carries @Transactional(readOnly = true). Spring Data gives a transaction
+  only to the INHERITED CRUD methods, so a derived or @Query method otherwise runs with no company set
+  and every RLS-protected read returns ZERO ROWS — fail-closed and silent.
+- Company context comes from the authenticated session, NEVER from a parameter, header or path segment.
+- tracker may depend only on the five foundation modules. ArchUnit enforces it. project is one of
+  them, which is what makes importing ProjectKeys legal.
+- ProjectKeys.allocate carries an entry in ArchitectureRulesTest.UNEXERCISED_BY_DECISION saying it has
+  no production caller until M1. DELETE THAT ENTRY in this task. The rule fails in BOTH directions —
+  an entry that stopped describing an unexercised method is as red as an unexercised method with no
+  entry — and the entry itself says M1 deletes it.
+
+Then:
+1. Part A — the module: package-info with its allowedDependencies, the four entities, seven
+   repositories, IssueEdit (pure — write its eight tests FIRST, they need no container), IssueService,
+   the three controllers. The depth rule is checked against issue_type.level and NEVER against a type
+   name: a fourth story-level type must stay a row rather than becoming a code change.
+   A new issue enters the project's first status BY POSITION, never by the word "Backlog" — a project
+   that renamed it still has a first column.
+2. Part B — Completion (D8) and EpicStatus (D31), both pure, both tested first; then issue_fact and
+   its outbox handler. issue_fact has EXACTLY ONE WRITER and the test greps the whole main source tree
+   for a second, because the failure scope §3 describes is silent: nothing breaks and a report is just
+   wrong. Mint one OutboxEvents name — read that file's header first, it explains why a past-tense name
+   is an occurrence and a "changed" name is a coalesced state, and getting it backwards loses events.
+3. Gate on shanks: ~/bin/tcms-remote sync, then backend ./gradlew build. FlakeScoreTest's six failures
+   are pre-existing; do not claim them. Read docs/specs/shanks-runner-details.md first.
+4. One commit per part, `git add <paths>` only.
+````
+
+---
+
+### T4 — `be` · Spec links, comments, and the retirement of `work`
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first; /be-java is mandatory.
+
+Execute T4 of docs/plans/011-tracker-core.md — two parts. Read the plan's "Decisions" (D-e is this
+task's whole shape) and T4's two parts.
+
+READ backend/src/main/java/com/tcms/work/package-info.java IN FULL BEFORE TOUCHING ANYTHING. It is 97
+lines and it is this module's design document — in particular why exactly one class may name a foreign
+table, and why a derived card is never materialised. You are about to change what it describes, and
+you rewrite the superseded paragraph in the struck-through style rather than deleting it.
+
+Also read: repository/HealthRecomputeOnLinksChanged.java (the template for your handler),
+V1's case_doc_link comments (your projection mirrors it field for field), documentation/CatalogueFacts.java,
+and work/BoardFacts.java + BoardService.java, which you are rewriting.
+
+D-e, because it is the part people get backwards: tracker NEVER WRITES doc_link. documentation owns
+that table and its write endpoint. What you do is widen LinkSourceType with ISSUE, give CatalogueFacts
+an arm that resolves an issue by key, and keep issue_doc_link in tracker as a projection rebuilt whole
+per company on the EXISTING documentation.links_changed event. No new outbox name. Rebuilding rather
+than patching is the only way to notice a link that was REMOVED.
+
+Then:
+1. Part A — LinkSourceType.ISSUE (and rewrite the enum's paragraph that PREDICTS this member arriving,
+   rather than leaving it predicting something that has happened), the CatalogueFacts arm, the
+   projection and its handler, comments and watchers. Commenting adds the author as a watcher: without
+   it people comment, the thread continues, and they never hear about it. Assert the negative on
+   Viewer — issue:comment yes, issue:edit no.
+2. Part B — BoardFacts gains assignedIssues (its FIFTH crossing and the first into tracker; work still
+   may NOT depend on tracker, so the edge is one method in the one file allowed to name a foreign
+   table). BoardService's ISSUE generator replaces the TASK one, every card's status becomes
+   CardStatus(name, kind), and an ISSUE card's allowedTransitions come from the project's workflow —
+   NOT from "every status but the current one". WorkItem's comment claiming an unconstrained status is
+   "the model rather than an omission" is now false; delete it rather than leaving it describing what
+   changed. Then delete the nine classes, move Priority to com.tcms.api (grep for importers first), and
+   add the annotation endpoint — derived_item_annotation survives and D11 says it matters more, not
+   less.
+3. Gate on shanks: sync, backend ./gradlew build. FlakeScoreTest's six are pre-existing.
+4. One commit per part, `git add <paths>` only. Note in the commit that moving a derived card now
+   answers 404 from /issues/{key} rather than the old 409 that named the action that does work — that
+   is a REGRESSION, it is recorded in T7's built-and-unverified list, and M2's board restores it.
+````
+
+---
+
+### T5 — `ts` · Issue verbs on the CLI and MCP
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first; the tooling-engineer agent with
+tool-cli-builder, tool-mcp-builder and tool-capability-contract.
+
+Execute T5 of docs/plans/011-tracker-core.md. Read the plan's decision D-d and T5 itself.
+
+CORRECT THE COUNT BEFORE YOU START. Plan 009 says "the six work-item verbs in packages/cli and
+packages/mcp". That counts nothing in the tree. What actually exists is four sites:
+  - packages/mcp/src/writes.ts:1255 — tcms_write_work_item, ONE tool, two arms (create, move)
+  - packages/mcp/src/reads.ts:607 — a GET /work-items read inside the orient tool, filtering QUARANTINE
+  - packages/client/src/core/shapes.ts:817 — WORK_ITEM_SHAPE, registered at :908
+  - packages/cli/src/reads.ts:580 — a COMMENT naming work-item as a noun the CLI does not deliver
+The CLI has no work-item verbs at all. It gains issue verbs it never had, so rewrite that comment to
+name the two nouns that are still undelivered (report, triage) rather than leaving it claiming a gap
+that has closed.
+
+The design point that matters: typeId and statusId are UUIDs an agent cannot guess, and handed a bare
+UUID field an agent will invent one. shapes.ts:805 already solved this for execution statuses — its
+note says a status guessed from another project is refused and tcms_orient serves the project's own
+list. Do the same: the issue tool takes a type NAME and a status NAME, resolves them against
+GET /projects/{projectId}/workflow, and refuses an unknown one by listing what the project has.
+
+Then:
+1. tcms_write_work_item → tcms_write_issue, two arms → four (create, update, move, comment), gate
+   from workitem:manage → the issue:* keys. Add tcms_read_issue returning allowedTransitions AS NAMES —
+   an assistant that can see which moves are legal does not attempt one that is not.
+2. reads.ts:607's GET /work-items → GET /board. Its comment explaining why quarantine comes off the
+   board is still true; keep it.
+3. WORK_ITEM_SHAPE → ISSUE_SHAPE, registered under `issue`.
+4. CLI: tcms issue list / show / create / move / comment.
+5. Update docs/specs/2026-08-08-mcp-tool-and-command-surface.md IN THE SAME COMMIT — every verb with
+   its typed input and the shared output envelope. Say what actually shipped.
+6. Gate on shanks: sync, then `packages npm run build` — at the ROOT, never --workspaces, which runs
+   them alphabetically so cli would typecheck against a stale client dist. Then lint --workspaces at 0
+   warnings and test:run --workspaces. citedFiles.test.ts is in that job and fails if any path named in
+   a comment ANYWHERE is not on disk — T4 deleted nine files, so a stale citation in frontend/ or
+   backend/ reddens THIS job. Fix it here.
+````
+
+---
+
+### T6 — `fe` · The tracker screens
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first; /fe-react is mandatory for every screen.
+
+Execute T6 of docs/plans/011-tracker-core.md — two parts, budgeted AT the 150k cap. If you run out,
+the seam is between Part A and Part B: commit Part A and stop, saying so.
+
+Read: the plan's decision D-f (which lists, per screen, every element that belongs to a LATER module
+and must be ABSENT rather than empty), then T6's two parts. Then open docs/mockups/index.html and walk
+work-table.html, issue-new.html, epic.html, story.html, task.html and documents.html. The mockups are
+the source of truth for what a screen SHOWS; the plan and the scope spec for what the system DOES.
+
+Name collision, already decided: frontend/src/api/queries/tracker.ts EXISTS and is the EXTERNAL
+Jira/ADO integration. The new module's queries go in issues.ts. Do not rename the existing file.
+
+Rules from CLAUDE.md that this task will test:
+- ONE keys factory, src/api/queries/keys.ts. Never add a second — two modules deriving one key shape
+  drift silently toward an invalidation that matches nothing.
+- New enums into lib/labels.ts as `satisfies Record<Union, string>`, so an unlabelled member is a
+  COMPILE ERROR. Delete workItemColumns with the type it labels.
+- Build the fault switch BEFORE the screen it proves. A refused transition (409 naming the legal moves)
+  cannot be produced by using the app, because the picker only ever offers legal moves. Both DEV guards
+  stay a literal import.meta.env.DEV — routing that check through an imported constant SHIPS the module.
+- Every screen through DataRegion for the loading/loaded/failed/empty/stale matrix.
+- No sx, no CSS-in-JS, no second stylesheet. Tailwind utilities and the kit in src/components/kit/.
+- In tests: never build your own QueryClient — only createTestQueryClient's has the caches. Use the
+  shared fixtures.ts so every exchange is checked against openapi.yaml, and anchor path-keyed mock arms
+  (/^\/issues\/[^/]+$/) so /issues/ACME-1/comments is not caught by the detail arm's prefix. A render
+  that trips an error boundary FAILS unless it calls renderingIntoAnErrorBoundary() and says why.
+
+Then:
+1. Part A — keys, labels, devFaults, queries/issues.ts, the work table and the new-issue form. Quick
+   add is ONE FIELD (story H3); the full form sits below it. Columns M1 has no data for are ABSENT from
+   the column picker, not greyed — an empty Release column reads as a release that is not set, not as a
+   feature that has not shipped. The four view tabs M1 does not build render a panel naming the module
+   they arrive in, because D34 makes Work one nav entry and a tab that vanishes between releases is
+   worse than one that says when it comes.
+2. Part B — one route /issues/:key dispatching on type.level to three panel sets, plus the documents
+   "Linked from" panel. A forbidden move renders DISABLED WITH ITS REASON, not absent — task.html's
+   caption is the requirement. An epic has NO transition menu at all and a caption saying its status is
+   derived from its stories (D31): a disabled menu would read as a missing permission.
+   The completion meter COMPUTES NOTHING — percent, basis, done, total and excludedSpikes all arrive
+   from the server (D8, "one number, one place"), and the basis is rendered beside the number ALWAYS.
+3. Gate on shanks: sync, then `frontend npm run build` (tsc -b + vite build, NOT tsc --noEmit, which has
+   reported 0 errors while the build failed with nine), `frontend npm run lint` at 0 warnings, and
+   `frontend npm run test:run`.
+4. One commit per part, `git add <paths>` only.
+````
+
+---
+
+### T7 — `fe` · Settings, My Work, the overview, and the close-out
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first; /fe-react is mandatory for every screen.
+
+Execute T7 of docs/plans/011-tracker-core.md — two parts, budgeted AT the 150k cap. Part A is the
+task that closes the module's "a person can now …". If you run out, the seam is after the two settings
+screens.
+
+Read: the plan's decision D-f, then T7's two parts, then the plan's "Decisions" section in full —
+Part B has to write those decisions back into plan 009 and you cannot summarise what you have not read.
+Then walk docs/mockups/settings-workflow.html, settings-general.html, my-work.html,
+project-overview.html and solo-overview.html.
+
+Three things in this task are easy to get subtly wrong:
+
+- my-work.html IS NOT A KANBAN and the current MyWorkPage is. The mockup renders two TABLES —
+  "Assigned issues" and "Test executions & reviews" — plus a private "My notes" panel. The mockup wins
+  on what a screen shows, so the personal board becomes two tables over ONE GET /board response, split
+  on kind === 'ISSUE'. ONE REQUEST, not two: two would let the halves disagree about who the caller is.
+- solo-overview.html IS NOT A SEPARATE SCREEN. It is project-overview.html for a company with no
+  clients — no client chip, no client column, no "attach a client" prompt. It is an ACCEPTANCE
+  CRITERION, and an empty "Client: —" chip is exactly the nagging the mockup rules out and exactly what
+  a naive port produces.
+- A section M1 has no data for EXPLAINS ITSELF; it does not render empty. The release panel renders
+  solo-overview.html's "No releases yet" empty state — a glyph, what a release IS, and the action that
+  creates one — written against the endpoint from the start so M3 turns it on with DATA rather than by
+  replacing the component. Budget burn and Team are NOT RENDERED AT ALL: a release is a thing this
+  project will have and has none yet; a budget is a module that is not installed, and an empty-state
+  card for it is an advertisement.
+
+Note also: plan 009 says the overview lands WITHOUT its test-health panel. That is wrong in the cheap
+direction — DashboardPage already renders it against endpoints that exist, and D27 says the overview
+reuses those regions. It lands here, and Part B records the correction.
+
+Then:
+1. Part A — the workflow settings screen (with ↑/↓ beside every row, not drag alone: WCAG 2.2 Dragging
+   Movements, and the mockups' standing rule that dragging is never the only way), the general settings
+   screen (SIX issue types, not the mockup's five — the mockup's own "Add sub-task" affordance needs a
+   TASK-level type and D29 puts Task at STORY; the plan records this disagreement), My Work, and the
+   project overview. Gate on shanks: frontend npm run build && lint && test:run.
+2. Part B — close the module. FIRST run the WHOLE gate on shanks: backend ./gradlew build, frontend
+   build + lint + test:run, packages build + lint --workspaces + test:run --workspaces.
+   FlakeScoreTest's six failures are PRE-EXISTING and proven so; do not claim or fix them.
+   Then:
+   a. Read frontend/src/features/help/sections.tsx. Its prose is swept by NO TEST — tierClaims.test.ts
+      catches only a claim that somebody LACKS a permission, and M0 shipped three false sentences in
+      that file past every gate. Correct anything describing the board as holding tasks.
+   b. Rewrite docs/features.md's work section, struck through and superseded, never deleted.
+   c. 009's hand-off protocol, all six steps: status table → `done YYYY-MM-DD @ <sha>`; the
+      built-and-unverified list (including the lost 409 message from T4 Part B, and issue_link and
+      issue_fact.release_assigned_at, which have no writer until M3); the V actually taken; and REWRITE
+      THE PROMPTS OF M2, M4, M5 AND M6 in place with the endpoint paths, package name
+      (com.tcms.tracker), outbox event name and issue_fact columns AS THEY LANDED — every one of those
+      prompts currently says /work-items. Tell them the two decisions they must honour: there is no
+      ProjectCreatedEvent (D-b), and a card's status is {name, kind} (D-c).
+   d. Close review items R4 and R5. R5 closes as RESOLVED DIFFERENTLY FROM THE PROPOSAL — record D-b's
+      reason, not just the outcome, so the next reader does not re-propose the event.
+   e. Record the three findings M1 chose not to fix: the three hardcoded 'Agent' role names, the
+      five-vs-six issue types, and 009's wrong claim about the test-health panel.
+   f. Commit 009 ON ITS OWN, `docs(plan): M1 done`, staging only that file.
+3. Say what is BUILT AND UNVERIFIED, in the chat as well as in the plan. The gates prove it compiles,
+   not that it works — a no-op theme toggle, two contradictory percentages on one screen and a
+   provider-ordering bug that rendered nothing but the error page all typechecked and linted clean.
+````

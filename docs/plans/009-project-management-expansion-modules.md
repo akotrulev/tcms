@@ -550,7 +550,14 @@ is written from this document and should not have to go looking.
    half to another one.
 5. **The tree still builds at every task boundary**, and each task still states one deliverable.
 6. **Order:** the contract and the schema first (both stacks bind to them), then `be`, then `ts`,
-   then `fe`, then the documentation and verification pass.
+   then `fe`. **The documentation close-out rides with the last task rather than taking a session of
+   its own** — that session is the only one that knows what actually landed and what is
+   built-and-unverified, and a session that only writes markdown is the wasted agent switch this
+   rule exists to remove.
+7. **One task is one session, so the module plan carries one paste-ready prompt per task**, in a
+   `## Prompts — one per task` section, each complete on its own and naming what to read, what to
+   commit and which gate to run. This document's per-*module* prompts stay what they are — they
+   start a module; the module's own per-*task* prompts run it.
 
 **What this costs, accepted deliberately:** no user-facing capability works until both its `be` and
 its `fe` task have landed, so a module cannot be stopped mid-feature and still be demonstrated.
