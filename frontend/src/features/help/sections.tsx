@@ -112,7 +112,7 @@ export const helpSections: HelpSection[] = [
   {
     id: 'roles',
     title: 'Roles and access',
-    summary: 'The six roles, exactly what each one can do, and how a grant reaches you.',
+    summary: 'The nine roles, exactly what each one can do, and how a grant reaches you.',
     body: (
       <>
         <P>
@@ -134,9 +134,9 @@ export const helpSections: HelpSection[] = [
               term: 'Adding somebody to a project',
               detail: (
                 <>
-                  Costs <Code>project:members</Code> on that project — held by Test Lead, Company
-                  Admin and Instance Admin. A Test Lead can staff their own project without being
-                  able to staff anybody else&apos;s. Do it from{' '}
+                  Costs <Code>project:members</Code> on that project — held by Test Lead, Project
+                  Manager, Company Admin and Instance Admin. A Test Lead can staff their own project
+                  without being able to staff anybody else&apos;s. Do it from{' '}
                   <strong>Project → Access &amp; roles</strong>.
                 </>
               ),
@@ -175,7 +175,7 @@ export const helpSections: HelpSection[] = [
         <List
           items={[
             <>
-              <strong>Six roles, and they are fixed.</strong> There are no custom roles, not even
+              <strong>Nine roles, and they are fixed.</strong> There are no custom roles, not even
               clone-and-edit. A team needing something between two tiers gets the higher one.
             </>,
             <>
@@ -184,9 +184,10 @@ export const helpSections: HelpSection[] = [
               the catalogue, so a gap shows up as a gap.
             </>,
             <>
-              <strong>Test Lead adds exactly seven things over Test Engineer</strong>: the three
-              approvals, plus permission to change a project&apos;s settings, its members, its
-              integrations and to read its audit log.
+              <strong>Test Lead adds exactly ten things over Test Engineer</strong>: the three
+              approvals, permission to change a project&apos;s settings, its members and its
+              integrations, to read its audit log, and to delete issues, change the issue workflow
+              and import issues from another tracker.
             </>,
             <>
               <strong>Nobody approves their own work</strong> by default. Reviewing and commenting
