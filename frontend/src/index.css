@@ -168,7 +168,14 @@
   /* --- status: the saturation budget lives here --- */
   --color-passed: #2c7a58;
   --color-failed: #bd3a2b;
-  --color-blocked: #8a5f0d;
+  /* Re-stepped from #8a5f0d on 2026-08-30 (renders audit 6.1). Design language §6's 15 ΔE floor was
+     derived for the DARK palette only; at #8a5f0d this sat 12.6 from `failed` and 13.0 from
+     `skipped`, and the light TR-1 bar drew red beside brown reading as one warm band. #623c00
+     clears the floor on both (18.9 / 15.9) and still carries 8.26:1 as TEXT on
+     --color-surface-sunken, which these tokens also have to do — the run legend colours its words
+     with them. A brighter amber clears ΔE and fails contrast: #b07d00 measures 15.7 ΔE and 3.33:1.
+     `app/statusPalette.test.ts` is the check, and it measures both schemes. */
+  --color-blocked: #623c00;
   --color-skipped: #5c6674;
   --color-untested: #646d7a;
   /* Blue, not the former purple: design language rule 5 makes `Then` and `Retest` one hue, and
@@ -178,7 +185,9 @@
 
   /* The Gherkin keyword hues — the same three values as passed/blocked/retest, by rule 5. */
   --color-given: #2c7a58;
-  --color-when: #8a5f0d;
+  /* Moves with --color-blocked above; `tokenSystem` asserts the pair, because rule 5 makes `When`
+     and `Blocked` one hue and that is a claim about meaning, not a coincidence. */
+  --color-when: #623c00;
   --color-then: #3d57a0;
 
   /* The two surfaces the app had no name for; see the dark block for what each is. */
