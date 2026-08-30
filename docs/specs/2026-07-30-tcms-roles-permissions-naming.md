@@ -99,12 +99,17 @@ administrator does deliberately; joining a company confers only the `Company Mem
 |---|---|---|---|
 | **Instance Admin** | SYSTEM | yes | The operator. Everything, every company. Provisions companies, appoints their admins. Reach into client content is audited in *the client's* trail. |
 | **Company Admin** | COMPANY | yes | Everything in the companies they're assigned to; nothing outside. Creates projects, manages teams/members/vocabularies/IdP/tokens. Appoints Test Leads. |
+| **Project Manager** | PROJECT | yes | Runs the delivery of one project — epics, stories and tasks, the board and the backlog, releases and the roadmap, staffing it and approving its timesheets. Reads and comments on the test repository; **authors and approves nothing in it**. Added 2026-08-30 by `V2` (expansion D3). |
+| **Account Manager** | COMPANY | yes | Owns the client relationship: clients, their contacts, and who is free to staff them. **Sees no money at all** — Billing is absent from their sidebar rather than refused inside it. Added 2026-08-30 by `V2`. |
+| **Finance** | COMPANY | yes | Owns the money: rate cards, budgets, expenses, invoices, margin. Reads clients so an invoice can name one; writes nothing about them. **Holds no project grant**, so a COMPANY-scope role does not become a way to read every project's test content. Added 2026-08-30 by `V2`. |
 | **Test Lead** | PROJECT | yes | Full control of their project(s). Company Admin scoped to one project. **Test Engineer plus exactly two things since `V52` (2026-08-15): giving approvals, and adding and managing permission on the project.** |
 | **Test Engineer** | PROJECT | yes | The working contributor role, **granted explicitly — never a default**. **Full CRUD over everything in the project** — cases, their steps, suites, plans, runs, results, evidence, documents and artifacts — **whoever authored it and whatever kind of thing it is** (`V52`, 2026-08-15; ~~cannot delete a suite or a project-scope artifact, amend others' results, close runs~~ ~~cannot delete others' work~~). Executes, reviews, files defects, maintains the shared library, closes runs, amends results, publishes documents. **Cannot approve, and cannot change project settings, members, integrations or read the audit trail.** |
 | **Automation Service** | PROJECT | yes | Non-human. Attached to API tokens, **never people — and `assignable = false` since `V41` (2026-08-08), which is where that sentence stopped being a description and became a rule.** |
 | **Viewer** | PROJECT | yes | Read-only, plus commenting and report export. **The default everywhere.** |
 
 ~~**These six are the complete set of *assignable* roles in v1.**~~ → **superseded 2026-08-08 by `V41`: these six are the complete *role* set, and five of them are assignable.** Automation Service is one of the six and is not one of them — it is a capability set a *credential* carries, which this table has said since M0 and nothing enforced. The two lists were the same list until today, and the sentence `V15` and `V40` were both careful to keep literally true is retired rather than reworded, because the care was spent on the wrong invariant: what mattered was never "the six are assignable" but "no role outside the catalogue is". Seeded, immutable, **not cloneable — no custom roles at all**, not even clone-and-edit. A client needing something between two tiers gets the higher one, or the built-in boundary is drawn wrong and should be fixed. Enforcement is permission-based (nothing checks a role name), so adding a role designer later is additive — phase 3, on evidence of demand.
+
+**→ superseded again 2026-08-30 by `V2` (expansion D3): there are nine roles and eight of them are assignable.** Project Manager (`PROJECT`), Account Manager and Finance (`COMPANY`) are seeded, immutable and grantable like the rest; `Automation Service` remains the one of the nine that is not. Still **no custom roles at all**, not even clone-and-edit, and D3's own note records the role that was considered and refused: there is no Developer role, because the difference between a developer and a Test Engineer is which screens they open and not what they may do. The count in this sentence has now moved three times (`V15`, `V40`, `V2`) and the invariant under it has not: **no role outside the catalogue exists.**
 
 **Two further rows exist in `role` and neither is one of the six.** Both are `assignable = false` — nobody is ever granted them — and there the resemblance ends. **Since `V41` `assignable = false` is no longer the same statement as "not one of the six"**: three rows carry it, and Automation Service is one of the six.
 
@@ -132,19 +137,21 @@ for a future key that needs it ~~and the qualifier still in play is `PLAN_SCOPE`
 and every cell below is `✓` or `—` — the one exception being Automation Service's `case:create`,
 which is narrowed by a *rule* and not by the qualifier column (§A5)
 
-**IA** Instance Admin · **CA** Company Admin · **TL** Test Lead · **TE** Test Engineer · **AS** Automation Service · **V** Viewer
+**IA** Instance Admin · **CA** Company Admin · **PM** Project Manager · **TL** Test Lead ·
+**TE** Test Engineer · **AS** Automation Service · **V** Viewer — and, in the `COMPANY` tables,
+**AM** Account Manager · **FIN** Finance
 
 #### Repository
 
-| Permission | IA | CA | TL | TE | AS | V |
-|---|:--:|:--:|:--:|:--:|:--:|:--:|
-| `suite:manage` *(create, rename, move, reorder)* | ✓ | ✓ | ✓ | ✓ | — | — |
-| `suite:delete` *(the collection, not its cases)* | ✓ | ✓ | ✓ | ✓ | — | — |
-| `case:read` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `case:create` | ✓ | ✓ | ✓ | ✓ | quarantine only | — |
-| `case:edit` | ✓ | ✓ | ✓ | ✓ | — | — |
-| `case:delete` | ✓ | ✓ | ✓ | ✓ | — | — |
-| `library:manage` *(shared conditions & steps)* | ✓ | ✓ | ✓ | ✓ | — | — |
+| Permission | IA | CA | PM | TL | TE | AS | V |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| `suite:manage` *(create, rename, move, reorder)* | ✓ | ✓ | — | ✓ | ✓ | — | — |
+| `suite:delete` *(the collection, not its cases)* | ✓ | ✓ | — | ✓ | ✓ | — | — |
+| `case:read` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `case:create` | ✓ | ✓ | — | ✓ | ✓ | quarantine only | — |
+| `case:edit` | ✓ | ✓ | — | ✓ | ✓ | — | — |
+| `case:delete` | ✓ | ✓ | — | ✓ | ✓ | — | — |
+| `library:manage` *(shared conditions & steps)* | ✓ | ✓ | — | ✓ | ✓ | — | — |
 
 ~~**`suite:delete` split out** — a suite is a flat named *collection* (§98), so deleting one destroys the grouping rather than the cases in it. That makes it a decision about shared structure, which is where the lead line now sits.~~ ~~deleting a subtree is the most destructive repository action, so it sits with leads while contributors keep organising the tree freely~~ → the subtree it named stopped existing at §98; the grant did not move, but the reason had to.
 
@@ -163,11 +170,11 @@ The old reasoning is not being called wrong, it is being overruled for this surf
 
 #### Review
 
-| Permission | IA | CA | TL | TE | AS | V |
-|---|:--:|:--:|:--:|:--:|:--:|:--:|
-| `case:comment` | ✓ | ✓ | ✓ | ✓ | — | ✓ |
-| `case:review` · `suite:review` · `plan:review` · `doc:review` | ✓ | ✓ | ✓ | ✓ | — | — |
-| `case:approve` · `suite:approve` · `plan:approve` | ✓ | ✓ | ✓ | — | — | — |
+| Permission | IA | CA | PM | TL | TE | AS | V |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| `case:comment` | ✓ | ✓ | ✓ | ✓ | ✓ | — | ✓ |
+| `case:review` · `suite:review` · `plan:review` · `doc:review` | ✓ | ✓ | — | ✓ | ✓ | — | — |
+| `case:approve` · `suite:approve` · `plan:approve` | ✓ | ✓ | — | ✓ | — | — | — |
 
 **`doc:review` is the 56th key (2026-08-28, `V71`, plan 005 S9b):** a documentation page joins the
 three reviewable artifacts (`ReviewSubjectType.DOC`, gated by `ProjectSettings.reviewEnabledDoc`), and
@@ -185,18 +192,18 @@ Author-cannot-approve-own-work defaults on.
 
 #### Execution
 
-| Permission | IA | CA | TL | TE | AS | V |
-|---|:--:|:--:|:--:|:--:|:--:|:--:|
-| `plan:create` | ✓ | ✓ | ✓ | ✓ | — | — |
-| `plan:edit` | ✓ | ✓ | ✓ | ✓ | — | — |
-| `plan:delete` | ✓ | ✓ | ✓ | ✓ | — | — |
-| `run:create` | ✓ | ✓ | ✓ | ✓ | ✓ | — |
-| `run:execute` | ✓ | ✓ | ✓ | ✓ | — | — |
-| `run:close` | ✓ | ✓ | ✓ | ✓ | — | — |
-| `result:submit` | ✓ | ✓ | ✓ | ✓ | ✓ | — |
-| `result:amend` | ✓ | ✓ | ✓ | ✓ | — | — |
-| `evidence:attach` | ✓ | ✓ | ✓ | ✓ | ✓ | — |
-| `evidence:delete` | ✓ | ✓ | ✓ | ✓ | — | — |
+| Permission | IA | CA | PM | TL | TE | AS | V |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| `plan:create` | ✓ | ✓ | — | ✓ | ✓ | — | — |
+| `plan:edit` | ✓ | ✓ | — | ✓ | ✓ | — | — |
+| `plan:delete` | ✓ | ✓ | — | ✓ | ✓ | — | — |
+| `run:create` | ✓ | ✓ | — | ✓ | ✓ | ✓ | — |
+| `run:execute` | ✓ | ✓ | — | ✓ | ✓ | — | — |
+| `run:close` | ✓ | ✓ | — | ✓ | ✓ | — | — |
+| `result:submit` | ✓ | ✓ | — | ✓ | ✓ | ✓ | — |
+| `result:amend` | ✓ | ✓ | — | ✓ | ✓ | — | — |
+| `evidence:attach` | ✓ | ✓ | — | ✓ | ✓ | ✓ | — |
+| `evidence:delete` | ✓ | ✓ | — | ✓ | ✓ | — | — |
 
 **`plan:delete` and `evidence:delete` moved on 2026-08-14** (`V51`, §207) — see §A3's `case:delete` note for the argument. `plan:delete` was the *tier* half of it: Test Engineer never held the key at all, so there was no qualifier to remove, and a contributor who may create and edit a plan may now retire one. `evidence:delete` moves for consistency rather than because the requirement names evidence — leaving one `OWN` row behind would have kept the qualifier populated by an exception nobody decided.
 
@@ -206,29 +213,105 @@ Author-cannot-approve-own-work defaults on.
 
 #### Defects & work items
 
-| Permission | IA | CA | TL | TE | AS | V |
-|---|:--:|:--:|:--:|:--:|:--:|:--:|
-| `defect:create` | ✓ | ✓ | ✓ | ✓ | — | — |
-| `workitem:manage` | ✓ | ✓ | ✓ | ✓ | — | — |
+| Permission | IA | CA | PM | TL | TE | AS | V |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| `defect:create` | ✓ | ✓ | ✓ | ✓ | ✓ | — | — |
+| `workitem:manage` | ✓ | ✓ | ✓ | ✓ | ✓ | — | — |
 
 Both new — the plan described the features (defect filing from a failed step; the kanban board, §6l) without permissions to govern them.
 
+#### Tracker
+
+| Permission | IA | CA | PM | TL | TE | AS | V |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| `issue:read` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `issue:create` | ✓ | ✓ | ✓ | ✓ | ✓ | — | — |
+| `issue:edit` | ✓ | ✓ | ✓ | ✓ | ✓ | — | — |
+| `issue:delete` | ✓ | ✓ | ✓ | ✓ | — | — | — |
+| `issue:comment` | ✓ | ✓ | ✓ | ✓ | ✓ | — | ✓ |
+| `issue:workflow` *(types, statuses, transitions)* | ✓ | ✓ | ✓ | ✓ | — | — | — |
+| `issue:import` *(from an external tracker)* | ✓ | ✓ | ✓ | ✓ | — | — | — |
+
+**Test Engineer holds `issue:create`, not only `issue:edit` — D28.** D3 gave it edit alone, and D3
+also says a developer *is* a Test Engineer while D10 says the assignee breaks a Story into Tasks. A
+developer who cannot create an issue cannot file a bug or do that breakdown.
+
+**`issue:comment` is the `case:comment` row, one table over**, and it is here for that row's reason:
+a Viewer — often the client — may say something about the work without gaining any write access to
+it. A comment key held by nobody who lacks `issue:edit` would buy nothing, which is the argument
+this section already used to refuse `suite:comment` and `plan:comment`.
+
+**Test Lead holds `issue:*` and no other new key** (D3, taken literally on 2026-08-30). See §A4: the
+Lead-minus-Engineer delta is ten keys now, not seven, and `issue:delete`, `issue:workflow` and
+`issue:import` are the three that joined.
+
+#### Board & backlog
+
+| Permission | IA | CA | PM | TL | TE | AS | V |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| `board:read` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `board:rank` *(order the backlog)* | ✓ | ✓ | ✓ | — | — | — | — |
+| `board:configure` *(columns, swimlanes, WIP limits)* | ✓ | ✓ | ✓ | — | — | — | — |
+
+**There is no `board:move`.** Dragging a card between columns changes the issue's status and costs
+`issue:edit`, which is the key that already governs that field. A separate key would be granted to
+exactly the roles holding `issue:edit` and would make the board and the issue screen disagree about
+who may do the same thing. **Ordering the backlog is different** and does earn its own key:
+prioritisation is a decision about what the team does next, and story B4 asks for it as a Project
+Manager.
+
+#### Releases
+
+| Permission | IA | CA | PM | TL | TE | AS | V |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| `release:read` *(and the roadmap)* | ✓ | ✓ | ✓ | ✓ | ✓ | — | ✓ |
+| `release:manage` | ✓ | ✓ | ✓ | — | — | — | — |
+| `release:publish` | ✓ | ✓ | ✓ | — | — | — | — |
+
+`release:publish` is separate from `release:manage` for the reason `doc:publish` is separate from
+`doc:edit`: publishing moves a state, and it is its own gate and its own audit row.
+
+#### Time
+
+| Permission | IA | CA | PM | TL | TE | AS | V |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| `time:log` *(your own hours)* | ✓ | ✓ | ✓ | ✓ | ✓ | — | — |
+| `time:read` *(other people's)* | ✓ | ✓ | ✓ | — | — | — | — |
+| `time:edit` *(amend somebody else's entry)* | ✓ | ✓ | ✓ | — | — | — | — |
+| `time:approve` | ✓ | ✓ | ✓ | — | — | — | — |
+
+**Logging time and knowing what it costs are different questions and different keys.** A Test
+Engineer holds `time:log` and no `ratecard:read`, so they record their day and never see its price
+(story T1). That negative is asserted by a test rather than read off this table.
+
+#### Staffing
+
+| Permission | IA | CA | PM | TL | TE | AS | V |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| `staffing:read` *(this project's allocations)* | ✓ | ✓ | ✓ | — | — | — | — |
+| `staffing:allocate` | ✓ | ✓ | ✓ | — | — | — | — |
+
+The company-wide half of staffing — the directory, profiles and absences — is under
+**Staffing — `COMPANY` scope** below. The split is not cosmetic: a key that is only ever *asked*
+company-wide, granted to a `PROJECT`-scope role, is an unreachable row, which is the defect §43
+repaired for `company:read`.
+
 #### Reporting
 
-| Permission | IA | CA | TL | TE | AS | V |
-|---|:--:|:--:|:--:|:--:|:--:|:--:|
-| `report:view` | ✓ | ✓ | ✓ | ✓ | — | ✓ |
-| `report:export` | ✓ | ✓ | ✓ | ✓ | — | ✓ |
+| Permission | IA | CA | PM | TL | TE | AS | V |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| `report:view` | ✓ | ✓ | ✓ | ✓ | ✓ | — | ✓ |
+| `report:export` | ✓ | ✓ | ✓ | ✓ | ✓ | — | ✓ |
 
 **Decided: if you can view it, you can export it.** The two permissions stay separate in the catalogue so a company can clone a role that drops export, but the built-ins grant them together. §6e's note about export leaving the access-control boundary stands as documentation, not as a default restriction.
 
 #### Documentation
 
-| Permission | IA | CA | TL | TE | AS | V |
-|---|:--:|:--:|:--:|:--:|:--:|:--:|
-| `doc:read` | ✓ | ✓ | ✓ | ✓ | — | ✓ |
-| `doc:edit` | ✓ | ✓ | ✓ | ✓ | — | — |
-| `doc:publish` | ✓ | ✓ | ✓ | ✓ | — | — |
+| Permission | IA | CA | PM | TL | TE | AS | V |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| `doc:read` | ✓ | ✓ | ✓ | ✓ | ✓ | — | ✓ |
+| `doc:edit` | ✓ | ✓ | ✓ | ✓ | ✓ | — | — |
+| `doc:publish` | ✓ | ✓ | ✓ | ✓ | ✓ | — | — |
 
 **`doc:publish` moved 2026-08-15** (`V52`, §210). It was Lead-only as *the human's signal that a document is ready*; it is a contributor's now, because publishing a page is not an approval and the tier draws no other line. The key stays separate from `doc:edit` — publishing still moves a state and is still its own gate and its own audit row.
 
@@ -236,11 +319,11 @@ Both new — the plan described the features (defect filing from a failed step; 
 
 #### Artifacts
 
-| Permission | IA | CA | TL | TE | AS | V |
-|---|:--:|:--:|:--:|:--:|:--:|:--:|
-| `artifact:read` | ✓ | ✓ | ✓ | ✓ | — | ✓ |
-| `artifact:edit` | ✓ | ✓ | ✓ | ✓ | — | — |
-| `artifact:delete` | ✓ | ✓ | ✓ | ✓ | — | — |
+| Permission | IA | CA | PM | TL | TE | AS | V |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| `artifact:read` | ✓ | ✓ | ✓ | ✓ | ✓ | — | ✓ |
+| `artifact:edit` | ✓ | ✓ | — | ✓ | ✓ | — | — |
+| `artifact:delete` | ✓ | ✓ | — | ✓ | ✓ | — | — |
 
 ~~Project-scope artifact edit is Lead-only; sign-off artifacts are write-once.~~
 
@@ -252,35 +335,90 @@ Both new — the plan described the features (defect filing from a failed step; 
 
 #### Project
 
-| Permission | IA | CA | TL | TE | AS | V |
-|---|:--:|:--:|:--:|:--:|:--:|:--:|
-| `project:read` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `project:audit` | ✓ | ✓ | ✓ | — | — | — |
-| `project:settings` | ✓ | ✓ | ✓ | — | — | — |
-| `project:members` | ✓ | ✓ | ✓ | — | — | — |
-| `integration:manage` | ✓ | ✓ | ✓ | — | — | — |
+| Permission | IA | CA | PM | TL | TE | AS | V |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| `project:read` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `project:audit` | ✓ | ✓ | ✓ | ✓ | — | — | — |
+| `project:settings` | ✓ | ✓ | ✓ | ✓ | — | — | — |
+| `project:members` | ✓ | ✓ | ✓ | ✓ | — | — | — |
+| `integration:manage` | ✓ | ✓ | ✓ | ✓ | — | — | — |
 
 **`project:audit` is new.** Without it a Test Lead could not read their own project's history — `audit:view` exists only at company scope, which was an oversight.
 
 #### Company — `COMPANY` scope
 
-| Permission | IA | CA | Every member | Covers |
-|---|:--:|:--:|:--:|---|
-| `company:read` | ✓ | ✓ | ✓ | Company profile, name, slug, branding, plus the settings view |
-| `company:settings` | ✓ | ✓ | — | Branding, policies, defaults |
-| `company:members` | ✓ | ✓ | — | Invite, remove, set membership display names |
-| `company:teams` | ✓ | ✓ | — | Teams, nesting, leads, org-chart structure |
-| `company:vocabulary` | ✓ | ✓ | — | Test Type / Level / Phase values |
-| `company:idp` | ✓ | ✓ | — | Identity providers, claim→role mappings |
-| `project:create` | ✓ | ✓ | — | Create projects in the company |
-| `token:issue` | ✓ | ✓ | — | API / CI tokens |
-| `audit:view` | ✓ | ✓ | — | The company-wide audit log |
+| Permission | IA | CA | AM | FIN | Every member | Covers |
+|---|:--:|:--:|:--:|:--:|:--:|---|
+| `company:read` | ✓ | ✓ | ✓ | ✓ | ✓ | Company profile, name, slug, branding, plus the settings view |
+| `company:settings` | ✓ | ✓ | — | — | — | Branding, policies, defaults |
+| `company:members` | ✓ | ✓ | — | — | — | Invite, remove, set membership display names |
+| `company:teams` | ✓ | ✓ | — | — | — | Teams, nesting, leads, org-chart structure |
+| `company:vocabulary` | ✓ | ✓ | — | — | — | Test Type / Level / Phase values |
+| `company:idp` | ✓ | ✓ | — | — | — | Identity providers, claim→role mappings |
+| `project:create` | ✓ | ✓ | — | — | — | Create projects in the company |
+| `token:issue` | ✓ | ✓ | — | — | — | API / CI tokens |
+| `audit:view` | ✓ | ✓ | — | — | — | The company-wide audit log |
 
 **`company:read` is granted to every company member explicitly**, rather than being implicit in membership — one uniform mechanism, and every check is a real permission check.
 
 **How "every member" is actually delivered — corrected 2026-08-01.** ~~It is seeded onto five of the six built-in roles, so holding any of them holds it.~~ → **superseded.** That is what `V3` did, and it did not work: four of those five roles are **PROJECT-scope**, while a company-level question is answered from the SYSTEM and COMPANY terms only (`PermissionEvaluator.evaluateCompanyWide`, deliberately — see below). So the permission this table says every member holds was **unreachable at company scope for everyone below Company Admin**, which is the defect handoff §39 found and §43 repaired. The per-role grants above are unchanged and still correct; what carries the permission company-wide is the **Company Member** baseline of §A2, granted on joining.
 
 **The repair that was rejected, so it is not re-proposed:** letting the evaluator answer "held anywhere in this company". It fixes `company:read` and breaks the scope model — `case:delete` held on one project would then read true for the whole company, and every company-scope gate in the product would be answering a question about one project. Scope is what makes a Test Lead the lead of *one* project.
+
+#### Clients — `COMPANY` scope
+
+| Permission | IA | CA | AM | FIN | Every member | Covers |
+|---|:--:|:--:|:--:|:--:|:--:|---|
+| `client:read` | ✓ | ✓ | ✓ | ✓ | — | Client organisations, their contacts, and the projects attached to them |
+| `client:create` | ✓ | ✓ | ✓ | — | — | Record a new client organisation |
+| `client:edit` | ✓ | ✓ | ✓ | — | — | Edit a client and its contacts |
+| `client:delete` | ✓ | ✓ | ✓ | — | — | Delete a client |
+
+**Finance reads clients and writes none of them.** An invoice has to name a client, so the read is
+structural; editing the record is the Account Manager's job under their own login.
+
+**A Project Manager is `PROJECT` scope and therefore holds no `client:*` key at all** — a
+company-wide grant would be an unreachable row for them (§43). The project form's client picker is
+served from the project-settings endpoint under `project:settings`, which is plan 010's D-M0-9 and
+is module Mc's to build.
+
+#### Staffing — `COMPANY` scope
+
+| Permission | IA | CA | AM | FIN | Every member | Covers |
+|---|:--:|:--:|:--:|:--:|:--:|---|
+| `staffing:directory` | ✓ | ✓ | ✓ | ✓ | — | The company-wide capacity view and the skills directory — who has a skill and when they are free |
+| `staffing:profile` | ✓ | ✓ | ✓ | — | — | Maintain people's skills and staffing profiles |
+| `staffing:absence` | ✓ | ✓ | ✓ | — | — | Record absence on somebody else's behalf |
+
+The per-project half — `staffing:read` and `staffing:allocate` — is in the `PROJECT`-scope
+**Staffing** table above, and the split is the point: "who is on *this* project" is a project
+question a Project Manager answers, and "who in the company has this skill" is a company one.
+Finance holds `staffing:directory` because utilisation is a money question as much as a staffing
+one.
+
+#### Money — `COMPANY` scope
+
+| Permission | IA | CA | AM | FIN | Every member | Covers |
+|---|:--:|:--:|:--:|:--:|:--:|---|
+| `ratecard:read` | ✓ | ✓ | — | ✓ | — | Rate cards, and what an hour is charged at |
+| `ratecard:manage` | ✓ | ✓ | — | ✓ | — | Create and edit rate cards |
+| `billing:read` | ✓ | ✓ | — | ✓ | — | Budgets, invoices and margin |
+| `billing:budget` | ✓ | ✓ | — | ✓ | — | Set and edit a project's budget |
+| `billing:expense` | ✓ | ✓ | — | ✓ | — | Record an expense against a project |
+| `billing:invoice` | ✓ | ✓ | — | ✓ | — | Draft and edit an invoice |
+| `billing:issue` | ✓ | ✓ | — | ✓ | — | Issue an invoice, locking its lines |
+
+**The sharpest boundary in the catalogue.** These seven keys are held by Finance, Company Admin and
+Instance Admin and by **nobody else** — not by an Account Manager, who owns the client relationship
+and never sees its price, and not by a Project Manager, whose budget view is a percentage on the
+project overview rather than a number in a currency. That needs a test asserting the negative, not a
+careful reading of this table, and `SeedDataTest.moneyIsFinanceAndAdminsOnly` is it.
+
+**Account Manager and Finance hold no `project:read` and no `report:view`, deliberately.** Both are
+`COMPANY` scope, so either key would open **every project in the company, present and future** —
+the boundary §A1 draws and the reason `Company Member` exists. A Finance user pricing approved hours
+reads `time_entry` under `billing:invoice`; a client page listing its projects is served from the
+client aggregate under `client:read`.
 
 #### System — `SYSTEM` scope
 
@@ -298,12 +436,22 @@ Both new — the plan described the features (defect filing from a failed step; 
 
 ### A4. What separates the tiers
 
-**Test Engineer → Test Lead**, ~~three lines~~ → **two, since `V52` (2026-08-15, §210)**, and they are a **closed set of seven keys** rather than three descriptions:
+**Test Engineer → Test Lead**, ~~three lines~~ → **two, since `V52` (2026-08-15, §210)**, and they are a **closed set of ~~seven~~ ten keys** rather than three descriptions:
 
 | What a Test Lead may do that a Test Engineer may not | Keys |
 |---|---|
 | **Give approvals** | `case:approve` · `suite:approve` · `plan:approve` |
 | **Add and manage permission on the project** | `project:members` · `project:settings` · `project:audit` · `integration:manage` |
+| **And manage its issues** | `issue:delete` · `issue:workflow` · `issue:import` |
+
+~~Test Lead minus Test Engineer is exactly seven keys.~~ → **superseded 2026-08-30 (`V2`, plan 010): it is ten.** D3 of the project-management expansion gives Test Lead `issue:*` and Test Engineer `issue:create`/`issue:edit`/`issue:comment`, so `issue:delete`, `issue:workflow` and `issue:import` join the delta. **The line itself did not move** — it is still approvals and project configuration:
+
+    case:approve · suite:approve · plan:approve            giving approvals
+    project:members · project:settings · project:audit     managing the project
+    integration:manage                                     and its integrations
+    issue:delete · issue:workflow · issue:import           and its issues
+
+Deleting an issue and configuring the project's workflow are the second clause, not a third category. The seven were not wrong; there are three more of the same kind.
 
 Nothing else. `SeedDataTest.testEngineerToTestLeadBoundary` asserts that delta **exactly, in both directions**, so a key leaving the list is a capability handed to contributors and a key joining it is one taken away — either needs this table edited first. The previous shape asserted the keys somebody thought to name and said nothing about a key nobody did.
 
@@ -317,7 +465,7 @@ Nothing else. `SeedDataTest.testEngineerToTestLeadBoundary` asserts that delta *
    What replaces it as the safety story: **soft delete on every one of these tables**, the audit trail, and the fact that a contributor is an *explicit* grant and never a default (§A7).
 2. **Review vs approve** — anyone can comment, contributors can review, only Lead+ signs off. **This is now one of the two lines rather than one of three**, and it is untouched by `V52`.
 
-   **What `*:approve` buys, stated once (2026-08-15, §208):** granting a sign-off, and moving an artifact that *currently has one* — wherever it is going. It does **not** buy the authoring ladder's other rungs. A case or suite that nobody signed off is moved by its edit key (`case:edit` / `suite:manage`) in every direction the ladder has, **including `DEPRECATED`, and including back out of it**. This is principle 1's rewrite applied to a gate rather than to a grant: retiring unsigned content is content work, and it had been costing `*:approve` on an argument — *"retiring is the soft form of a delete, and the delete is Lead-only"* — that `V51` deleted the premise of on a case and that never held on a suite, where `suite:delete` **removes** the folder while deprecating keeps it, keeps its members, and can be undone. No permission moved and no grant changed; the catalogue is the same 55 keys and the same rows. See `LifecycleLadder.permissionFor`, which is the one place the rule is written.
+   **What `*:approve` buys, stated once (2026-08-15, §208):** granting a sign-off, and moving an artifact that *currently has one* — wherever it is going. It does **not** buy the authoring ladder's other rungs. A case or suite that nobody signed off is moved by its edit key (`case:edit` / `suite:manage`) in every direction the ladder has, **including `DEPRECATED`, and including back out of it**. This is principle 1's rewrite applied to a gate rather than to a grant: retiring unsigned content is content work, and it had been costing `*:approve` on an argument — *"retiring is the soft form of a delete, and the delete is Lead-only"* — that `V51` deleted the premise of on a case and that never held on a suite, where `suite:delete` **removes** the folder while deprecating keeps it, keeps its members, and can be undone. No permission moved and no grant changed; the catalogue was the same 55 keys and the same rows (89 since `V2`, and that change moved no `*:approve` row either). See `LifecycleLadder.permissionFor`, which is the one place the rule is written.
 3. **Content vs configuration** — project settings, members, integrations and the audit trail are Lead-only. **Renumbered to line 2 of two by `V52`; the content is unchanged**, and it is the half of the requirement that says *"adding and managing permission on the project"*. All four keys stay, including `project:audit` — reading who changed what is part of administering access, not part of doing the work.
 
 **Test Lead → Company Admin** — same powers, wider target, plus company configuration and project creation.
@@ -352,7 +500,7 @@ Nothing else. `SeedDataTest.testEngineerToTestLeadBoundary` asserts that delta *
 
 ### A6. Automation Service — the exact grant
 
-Deliberately the smallest role in the product, because a leaked CI token is the realistic breach:
+Deliberately the smallest role in the product, because a leaked CI token is the realistic breach. ~~Six keys~~ → **eight since `V2` (2026-08-30)**:
 
 ```
 case:read         ✓
@@ -361,9 +509,13 @@ result:submit     ✓
 evidence:attach   ✓
 case:create       ✓  restricted to the quarantine folder
 project:read      ✓  visibility precondition, not a capability — see below
+issue:read        ✓  V2, 2026-08-30
+board:read        ✓  V2, 2026-08-30
 ```
 
 Everything else denied. A leaked token can post results and add quarantine stubs; it cannot edit or delete a real case, close a run, or read reports.
+
+**`issue:read` and `board:read` joined on 2026-08-30 (`V2`, expansion D3) and are the whole of what the expansion gives this role.** A CI job that posts a result and can say which story the failure belongs to is the case D3 names; nothing about it is a write, and `issue:create` was considered and refused — a pipeline that can open work items is a pipeline that can fill somebody's backlog from a loop. The paragraph above is unchanged in substance: two more reads on a credential that already reads the project's cases.
 
 **Nobody holds it. `V41` (2026-08-08) made it `assignable = false`**, so `POST /role-assignments` refuses it and the grant pickers drop it — it is chosen in the token-issue form and nowhere else, exactly like `Agent` (§A6a). The grant above is unchanged, and so is everything about issuing it: this is the smallest role in the product and it is the one every CI credential carries. **Grants that already existed are kept and stay revocable** — see `V41` §1 for why that is a *different* rule from assignability, and §A2 for the sentence about "the six" that it retired.
 

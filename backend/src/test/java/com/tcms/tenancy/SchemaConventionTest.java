@@ -313,7 +313,14 @@ class SchemaConventionTest extends IntegrationTestBase {
                 // layer's (TrackerIdentityService filters on user_id = the caller). Reading this
                 // number as "the credential table is protected" would be reading half of it — see
                 // that class, and V73's header, which says the same thing from the schema side.
-                .isEqualTo(74);
+                //
+                // 75 since V2 (plan 010, module M0) — project_key_sequence. The per-project
+                // issue-key counter is company-owned like key_sequence beside it, so it is not a
+                // fourteenth exception: company_id NOT NULL leading its primary key, FORCE ROW
+                // LEVEL SECURITY, and the predicate above byte for byte. V2 enables the policy
+                // AFTER its backfill loop, deliberately — see that migration's header for the
+                // silent-INSERT trap that ordering avoids.
+                .isEqualTo(75);
     }
 
     @Test

@@ -20,10 +20,17 @@ type Area =
   | 'review'
   | 'execution'
   | 'work'
+  | 'tracker'
+  | 'board'
+  | 'releases'
+  | 'time'
+  | 'staffing'
   | 'reporting'
   | 'documentation'
   | 'artifacts'
   | 'project'
+  | 'clients'
+  | 'money'
   | 'company'
   | 'system';
 
@@ -68,6 +75,33 @@ export const permissionAreas = {
   'defect:create': 'work',
   'workitem:manage': 'work',
 
+  'issue:read': 'tracker',
+  'issue:create': 'tracker',
+  'issue:edit': 'tracker',
+  'issue:delete': 'tracker',
+  'issue:comment': 'tracker',
+  'issue:workflow': 'tracker',
+  'issue:import': 'tracker',
+
+  'board:read': 'board',
+  'board:rank': 'board',
+  'board:configure': 'board',
+
+  'release:read': 'releases',
+  'release:manage': 'releases',
+  'release:publish': 'releases',
+
+  'time:log': 'time',
+  'time:read': 'time',
+  'time:edit': 'time',
+  'time:approve': 'time',
+
+  'staffing:read': 'staffing',
+  'staffing:allocate': 'staffing',
+  'staffing:directory': 'staffing',
+  'staffing:profile': 'staffing',
+  'staffing:absence': 'staffing',
+
   'report:view': 'reporting',
   'report:export': 'reporting',
 
@@ -84,6 +118,19 @@ export const permissionAreas = {
   'project:settings': 'project',
   'project:members': 'project',
   'integration:manage': 'project',
+
+  'client:read': 'clients',
+  'client:create': 'clients',
+  'client:edit': 'clients',
+  'client:delete': 'clients',
+
+  'ratecard:read': 'money',
+  'ratecard:manage': 'money',
+  'billing:read': 'money',
+  'billing:budget': 'money',
+  'billing:expense': 'money',
+  'billing:invoice': 'money',
+  'billing:issue': 'money',
 
   'company:read': 'company',
   'company:settings': 'company',
@@ -151,6 +198,33 @@ export const permissionLabels = {
   'defect:create': 'raise defects',
   'workitem:manage': 'manage board items',
 
+  'issue:read': 'view issues',
+  'issue:create': 'create issues',
+  'issue:edit': 'edit issues',
+  'issue:delete': 'delete issues',
+  'issue:comment': 'comment on issues',
+  'issue:workflow': 'change the issue workflow',
+  'issue:import': 'import issues from another tracker',
+
+  'board:read': 'view the board and backlog',
+  'board:rank': 'order the backlog',
+  'board:configure': 'configure boards',
+
+  'release:read': 'view releases and the roadmap',
+  'release:manage': 'create and edit releases',
+  'release:publish': 'mark a release released',
+
+  'time:log': 'log your hours',
+  'time:read': "view other people's time",
+  'time:edit': "amend somebody else's time entry",
+  'time:approve': 'approve timesheets',
+
+  'staffing:read': "view this project's staffing",
+  'staffing:allocate': 'allocate people to this project',
+  'staffing:directory': 'view the company staffing directory',
+  'staffing:profile': 'maintain staffing profiles and skills',
+  'staffing:absence': "record somebody else's absence",
+
   'report:view': 'view reports',
   'report:export': 'export reports',
 
@@ -167,6 +241,19 @@ export const permissionLabels = {
   'project:settings': 'change project settings',
   'project:members': 'manage project members',
   'integration:manage': 'manage integrations',
+
+  'client:read': 'view clients',
+  'client:create': 'create clients',
+  'client:edit': 'edit clients and their contacts',
+  'client:delete': 'delete clients',
+
+  'ratecard:read': 'view rate cards',
+  'ratecard:manage': 'create and edit rate cards',
+  'billing:read': 'view budgets and invoices',
+  'billing:budget': 'set project budgets',
+  'billing:expense': 'record expenses',
+  'billing:invoice': 'draft invoices',
+  'billing:issue': 'issue an invoice',
 
   'company:read': 'view this company',
   'company:settings': 'change company settings',
@@ -192,10 +279,17 @@ export const areaLabels = {
   review: 'Review',
   execution: 'Execution',
   work: 'Defects & work',
+  tracker: 'Issues',
+  board: 'Board & backlog',
+  releases: 'Releases',
+  time: 'Time',
+  staffing: 'Staffing',
   reporting: 'Reporting',
   documentation: 'Documentation',
   artifacts: 'Artifacts',
   project: 'Project',
+  clients: 'Clients',
+  money: 'Rates & billing',
   company: 'Company',
   system: 'System',
 } as const satisfies Record<Area, string>;

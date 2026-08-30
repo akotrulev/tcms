@@ -60,10 +60,13 @@ import { SPEC_ROLES, specMatrix, type SpecRole } from './roleMatrix.js';
 const COPY_COLUMNS: Record<string, SpecRole> = {
   'Instance Admin': 'IA',
   'Company Admin': 'CA',
+  'Project Manager': 'PM',
   'Test Lead': 'TL',
   'Test Engineer': 'TE',
   'Automation Service': 'AS',
   Viewer: 'V',
+  'Account Manager': 'AM',
+  Finance: 'FIN',
   'Every member': 'Every member',
 };
 

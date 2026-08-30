@@ -36,57 +36,85 @@ Roles are ordered least-permissioned first. Rows are grouped by how widely a per
 > table is a convenience copy. If they disagree, the spec wins and this table is the bug — and
 > since §215 the build says so: `packages/client/src/test/matrixCopies.test.ts` compares all three
 > scopes below against §A3 cell by cell, both ways, so a copy that goes stale reddens CI.
-> 56 permissions — 55 seeded by `V3__seed_permissions_and_roles.sql`, `doc:review` by `V71` (2026-08-28); no other migration has added one
-> since. There is no wildcard permission, and **code checks permissions, never role names**.
+> 89 permissions — 55 seeded by `V3__seed_permissions_and_roles.sql`, `doc:review` by `V71`
+> (2026-08-28), and 33 by `V2` (2026-08-30) for the project-management expansion: `issue:*`,
+> `board:*`, `release:*`, `time:*`, `staffing:*`, `client:*`, `ratecard:*` and `billing:*`.
+> There is no wildcard permission, and **code checks permissions, never role names**.
 
 ### `PROJECT` scope
 
-| Permission | Viewer | Automation Service | Test Engineer | Test Lead | Company Admin | Instance Admin |
-|---|:--:|:--:|:--:|:--:|:--:|:--:|
-| `case:read` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `project:read` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `case:comment` | ✓ | — | ✓ | ✓ | ✓ | ✓ |
-| `report:view` | ✓ | — | ✓ | ✓ | ✓ | ✓ |
-| `report:export` | ✓ | — | ✓ | ✓ | ✓ | ✓ |
-| `doc:read` | ✓ | — | ✓ | ✓ | ✓ | ✓ |
-| `artifact:read` | ✓ | — | ✓ | ✓ | ✓ | ✓ |
-| `case:create` | — | quarantine only | ✓ | ✓ | ✓ | ✓ |
-| `run:create` | — | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `result:submit` | — | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `evidence:attach` | — | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `suite:manage` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `case:edit` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `case:delete` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `library:manage` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `case:review` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `suite:review` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `plan:review` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `doc:review` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `plan:create` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `plan:edit` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `plan:delete` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `run:execute` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `evidence:delete` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `defect:create` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `workitem:manage` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `doc:edit` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `artifact:edit` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `suite:delete` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `artifact:delete` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `run:close` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `result:amend` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `doc:publish` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `case:approve` | — | — | — | ✓ | ✓ | ✓ |
-| `suite:approve` | — | — | — | ✓ | ✓ | ✓ |
-| `plan:approve` | — | — | — | ✓ | ✓ | ✓ |
-| `project:audit` | — | — | — | ✓ | ✓ | ✓ |
-| `project:settings` | — | — | — | ✓ | ✓ | ✓ |
-| `project:members` | — | — | — | ✓ | ✓ | ✓ |
-| `integration:manage` | — | — | — | ✓ | ✓ | ✓ |
+| Permission | Viewer | Automation Service | Test Engineer | Project Manager | Test Lead | Company Admin | Instance Admin |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| `case:read` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `project:read` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `issue:read` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `board:read` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `case:comment` | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `report:view` | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `report:export` | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `doc:read` | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `artifact:read` | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `issue:comment` | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `release:read` | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `case:create` | — | quarantine only | ✓ | — | ✓ | ✓ | ✓ |
+| `run:create` | — | ✓ | ✓ | — | ✓ | ✓ | ✓ |
+| `result:submit` | — | ✓ | ✓ | — | ✓ | ✓ | ✓ |
+| `evidence:attach` | — | ✓ | ✓ | — | ✓ | ✓ | ✓ |
+| `suite:manage` | — | — | ✓ | — | ✓ | ✓ | ✓ |
+| `case:edit` | — | — | ✓ | — | ✓ | ✓ | ✓ |
+| `case:delete` | — | — | ✓ | — | ✓ | ✓ | ✓ |
+| `library:manage` | — | — | ✓ | — | ✓ | ✓ | ✓ |
+| `case:review` | — | — | ✓ | — | ✓ | ✓ | ✓ |
+| `suite:review` | — | — | ✓ | — | ✓ | ✓ | ✓ |
+| `plan:review` | — | — | ✓ | — | ✓ | ✓ | ✓ |
+| `doc:review` | — | — | ✓ | — | ✓ | ✓ | ✓ |
+| `plan:create` | — | — | ✓ | — | ✓ | ✓ | ✓ |
+| `plan:edit` | — | — | ✓ | — | ✓ | ✓ | ✓ |
+| `plan:delete` | — | — | ✓ | — | ✓ | ✓ | ✓ |
+| `run:execute` | — | — | ✓ | — | ✓ | ✓ | ✓ |
+| `evidence:delete` | — | — | ✓ | — | ✓ | ✓ | ✓ |
+| `defect:create` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `workitem:manage` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `doc:edit` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `artifact:edit` | — | — | ✓ | — | ✓ | ✓ | ✓ |
+| `suite:delete` | — | — | ✓ | — | ✓ | ✓ | ✓ |
+| `artifact:delete` | — | — | ✓ | — | ✓ | ✓ | ✓ |
+| `run:close` | — | — | ✓ | — | ✓ | ✓ | ✓ |
+| `result:amend` | — | — | ✓ | — | ✓ | ✓ | ✓ |
+| `doc:publish` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `issue:create` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `issue:edit` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `time:log` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `issue:delete` | — | — | — | ✓ | ✓ | ✓ | ✓ |
+| `issue:workflow` | — | — | — | ✓ | ✓ | ✓ | ✓ |
+| `issue:import` | — | — | — | ✓ | ✓ | ✓ | ✓ |
+| `board:rank` | — | — | — | ✓ | — | ✓ | ✓ |
+| `board:configure` | — | — | — | ✓ | — | ✓ | ✓ |
+| `release:manage` | — | — | — | ✓ | — | ✓ | ✓ |
+| `release:publish` | — | — | — | ✓ | — | ✓ | ✓ |
+| `time:read` | — | — | — | ✓ | — | ✓ | ✓ |
+| `time:edit` | — | — | — | ✓ | — | ✓ | ✓ |
+| `time:approve` | — | — | — | ✓ | — | ✓ | ✓ |
+| `staffing:read` | — | — | — | ✓ | — | ✓ | ✓ |
+| `staffing:allocate` | — | — | — | ✓ | — | ✓ | ✓ |
+| `case:approve` | — | — | — | — | ✓ | ✓ | ✓ |
+| `suite:approve` | — | — | — | — | ✓ | ✓ | ✓ |
+| `plan:approve` | — | — | — | — | ✓ | ✓ | ✓ |
+| `project:audit` | — | — | — | ✓ | ✓ | ✓ | ✓ |
+| `project:settings` | — | — | — | ✓ | ✓ | ✓ | ✓ |
+| `project:members` | — | — | — | ✓ | ✓ | ✓ | ✓ |
+| `integration:manage` | — | — | — | ✓ | ✓ | ✓ | ✓ |
 
-**The seven rows with a `—` under Test Engineer are the whole tier line since `V52` (2026-08-15):
-giving approvals, and adding and managing permission on the project.** A Test Engineer creates,
-edits and deletes everything else in the project, whoever authored it. `artifact:edit` was
+**The ten rows with a `—` under Test Engineer and a `✓` under Test Lead are the whole tier line** —
+~~seven since `V52` (2026-08-15)~~ → **ten since `V2` (2026-08-30)**: giving approvals, adding and
+managing permission on the project, and managing its issues (`issue:delete`, `issue:workflow`,
+`issue:import`). A Test Engineer creates, edits and deletes everything else in the project, whoever
+authored it.
+
+**Project Manager is not a rung on that ladder** — the column sits between Test Engineer and Test
+Lead for readability, and the two roles are peers rather than tiers. A Project Manager runs the
+delivery of the project (issues, board, releases, time, this project's staffing, and every
+project-configuration key) and authors, approves and executes nothing in the test repository. `artifact:edit` was
 ~~`plan scope only`~~ until the same migration, which left **no grant in the catalogue carrying any
 qualifier**.
 
@@ -94,19 +122,35 @@ qualifier**.
 
 Answered from the SYSTEM + COMPANY terms only, so a PROJECT-scope role contributes nothing here.
 `company:read` reaches every member through the non-assignable **Company Member** baseline role
-(`V15`), not through the six.
+(`V15`), not through the per-role grants. **Account Manager and Finance** are the two `COMPANY`-scope
+roles `V2` added (2026-08-30); neither holds `project:read` or `report:view`, because at this scope
+either key would open every project in the company, present and future.
 
-| Permission | Every member | Company Admin | Instance Admin |
-|---|:--:|:--:|:--:|
-| `company:read` | ✓ | ✓ | ✓ |
-| `company:settings` | — | ✓ | ✓ |
-| `company:members` | — | ✓ | ✓ |
-| `company:teams` | — | ✓ | ✓ |
-| `company:vocabulary` | — | ✓ | ✓ |
-| `company:idp` | — | ✓ | ✓ |
-| `project:create` | — | ✓ | ✓ |
-| `token:issue` | — | ✓ | ✓ |
-| `audit:view` | — | ✓ | ✓ |
+| Permission | Every member | Account Manager | Finance | Company Admin | Instance Admin |
+|---|:--:|:--:|:--:|:--:|:--:|
+| `company:read` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `client:read` | — | ✓ | ✓ | ✓ | ✓ |
+| `staffing:directory` | — | ✓ | ✓ | ✓ | ✓ |
+| `client:create` | — | ✓ | — | ✓ | ✓ |
+| `client:edit` | — | ✓ | — | ✓ | ✓ |
+| `client:delete` | — | ✓ | — | ✓ | ✓ |
+| `staffing:profile` | — | ✓ | — | ✓ | ✓ |
+| `staffing:absence` | — | ✓ | — | ✓ | ✓ |
+| `ratecard:read` | — | — | ✓ | ✓ | ✓ |
+| `ratecard:manage` | — | — | ✓ | ✓ | ✓ |
+| `billing:read` | — | — | ✓ | ✓ | ✓ |
+| `billing:budget` | — | — | ✓ | ✓ | ✓ |
+| `billing:expense` | — | — | ✓ | ✓ | ✓ |
+| `billing:invoice` | — | — | ✓ | ✓ | ✓ |
+| `billing:issue` | — | — | ✓ | ✓ | ✓ |
+| `company:settings` | — | — | — | ✓ | ✓ |
+| `company:members` | — | — | — | ✓ | ✓ |
+| `company:teams` | — | — | — | ✓ | ✓ |
+| `company:vocabulary` | — | — | — | ✓ | ✓ |
+| `company:idp` | — | — | — | ✓ | ✓ |
+| `project:create` | — | — | — | ✓ | ✓ |
+| `token:issue` | — | — | — | ✓ | ✓ |
+| `audit:view` | — | — | — | ✓ | ✓ |
 
 ### `SYSTEM` scope
 
@@ -125,13 +169,15 @@ RLS would be permanently unreachable.
 
 ### Notes that change how the table reads
 
-- **The six roles are the complete set**, seeded and immutable — **no custom roles, not even
-  clone-and-edit**. A client needing something between two tiers gets the higher one. **Five of them
-  are assignable to a person**: `V41` made `Automation Service` non-assignable, since it is a
-  capability set a CI *credential* carries and the spec has said "never people" since M0.
-- **`Company Member` is a seventh row that is not one of the six**: exactly `company:read`, granted
+- ~~**The six roles are the complete set**~~ → **nine since `V2` (2026-08-30)**, seeded and
+  immutable — **no custom roles, not even clone-and-edit**. A client needing something between two
+  tiers gets the higher one. ~~**Five of them are assignable to a person**~~ **Eight are**: `V41`
+  made `Automation Service` non-assignable, since it is a capability set a CI *credential* carries
+  and the spec has said "never people" since M0. `V2` added **Project Manager** (`PROJECT`),
+  **Account Manager** and **Finance** (`COMPANY`), all three grantable.
+- **`Company Member` is a row that is not one of the nine**: exactly `company:read`, granted
   automatically on joining, filtered out of `GET /roles`, refused by `POST /role-assignments`.
-- **`Agent` is an eighth row that is not one of the six either** (`V40`): the ceiling an API token
+- **`Agent` is another row that is not one of the nine either** (`V40`): the ceiling an API token
   carries for agent access — **Test Engineer minus `library:manage`, `case:delete`,
   `evidence:delete`, `plan:delete` and `company:read`** (five since `V51`; the role gained nothing,
   Test Engineer gained `plan:delete`), enumerated in the roles spec §A6a. Like `Company Member`

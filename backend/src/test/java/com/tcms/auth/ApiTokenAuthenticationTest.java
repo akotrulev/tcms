@@ -258,10 +258,11 @@ class ApiTokenAuthenticationTest extends IntegrationTestBase {
 
             // Roles spec §A6, the exact grant. Asserted as a SET rather than by spot-checking one
             // key, because the failure being prevented is a cap that leaks a key nobody thought to
-            // look for.
+            // look for. Eight since V2 (2026-08-30): issue:read and board:read joined, and both
+            // are reads on a credential that already reads the project's cases.
             assertThat(held).containsExactlyInAnyOrder(
                     "project:read", "case:read", "run:create", "result:submit",
-                    "evidence:attach", "case:create");
+                    "evidence:attach", "case:create", "issue:read", "board:read");
             assertThat(permissionsOn(sessionFor(ADMIN), ATLAS)).contains("case:delete");
         }
 

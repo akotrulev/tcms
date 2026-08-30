@@ -137,9 +137,18 @@ const NARROWED_BY: Record<string, RegExp> = { OWN: /own/i, PLAN_SCOPE: /plan/i }
  */
 const PAST = /\b(?:was|were|been|used to|had|stopped|ceased|before)\b(?:[^.]{0,40})$/;
 
-/** How the six roles are spelled in prose, longest first so `Test Lead` wins over `lead`. */
+/**
+ * How the `PROJECT`-scope roles are spelled in prose, longest first so `Test Lead` wins over `lead`.
+ *
+ * **`AM` and `FIN` are deliberately absent.** Account Manager and Finance are `COMPANY` scope, and
+ * {@link roleMatrix} — which {@link say} indexes — is total over the `PROJECT` tables alone, for
+ * the reason its own header gives. A claim about a Finance user is therefore outside what this
+ * instrument can settle, and adding the spelling without the matrix behind it would index an
+ * undefined set and report nothing while looking like coverage.
+ */
 const NAMED: { role: Role; spellings: RegExp }[] = [
   { role: 'AS', spellings: /Automation Service|automation service|a CI token|CI credential/ },
+  { role: 'PM', spellings: /Project Managers?\b|\bPMs?\b/ },
   { role: 'V', spellings: /\bViewers?\b|\bviewers?\b/ },
   { role: 'TL', spellings: /Test Leads?\b|\bleads?\b|\bLeads?\b/ },
   { role: 'TE', spellings: /Test Engineers?\b|\bengineers?\b|\bcontributors?\b/ },
@@ -150,7 +159,10 @@ const NAMED: { role: Role; spellings: RegExp }[] = [
 /** A catalogue key, by its namespace — narrow enough not to match `note:` or a URL scheme. */
 const KEY = new RegExp(
   '\\b(?:suite|case|library|plan|run|result|evidence|doc|artifact|project|defect|workitem'
-  + '|report|integration|company|token|audit|user|role|system|instance):[a-z]+\\b',
+  + '|report|integration|company|token|audit|user|role|system|instance'
+  // `V2`'s eight namespaces (2026-08-30). Without them every claim written about a new key is
+  // silently unchecked, which reads exactly like prose nobody got wrong.
+  + '|issue|board|release|time|staffing|client|ratecard|billing):[a-z]+\\b',
   'g',
 );
 

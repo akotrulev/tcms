@@ -952,11 +952,13 @@ class RoleGrantEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("GET /roles is the six plus Agent — the membership baseline is neither")
+        @DisplayName("GET /roles is the nine plus Agent — the membership baseline is neither")
         void theRoleCatalogueIsWholeAndHasNoWildcard() throws Exception {
             List<JsonNode> roles = fetch("/api/v1/roles", LEAD, WEST);
 
-            assertThat(roles).hasSize(7);
+            // Ten since V2 (2026-08-30): the six V1 seeded, plus Agent, plus Project Manager,
+            // Account Manager and Finance. Eleven rows exist; Company Member is the one filtered.
+            assertThat(roles).hasSize(10);
             assertThat(roles.stream().map(role -> role.get("name").asText()).toList())
                     .as("""
                             Company Member (V15) is granted by joining, never chosen — offering it \

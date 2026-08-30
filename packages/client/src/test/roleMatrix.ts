@@ -59,35 +59,51 @@ import { REPO } from './corpus.js';
 
 export const ROLES_SPEC = 'docs/specs/2026-07-30-tcms-roles-permissions-naming.md';
 
-/** The column headings §A3 abbreviates the six roles to, in the order the tables print them. */
-const COLUMNS = ['IA', 'CA', 'TL', 'TE', 'AS', 'V'] as const;
+/**
+ * The column headings §A3 abbreviates its `PROJECT`-scope roles to, in the order the tables print
+ * them. Six until `V2` (2026-08-30) added **Project Manager** between Company Admin and Test Lead.
+ */
+const COLUMNS = ['IA', 'CA', 'PM', 'TL', 'TE', 'AS', 'V'] as const;
 
 export type Role = (typeof COLUMNS)[number];
 
 /**
- * Every column heading §A3 grants through, the six plus the one only its `COMPANY` table has.
+ * Every column heading §A3 grants through: the seven `PROJECT` columns plus the three only its
+ * `COMPANY` tables have.
  *
- * `Every member` is not a seventh tier — it is `V15`'s non-assignable **Company Member** baseline,
+ * `AM` and `FIN` are `V2`'s **Account Manager** and **Finance** — both `COMPANY` scope, so they
+ * appear in no `PROJECT` table and are deliberately outside {@link COLUMNS}, which is what
+ * {@link roleMatrix} is total over. `Every member` is not a tier at all — it is `V15`'s
+ * non-assignable **Company Member** baseline,
  * and the spec says so in the paragraph under the table. It is here because
  * {@link specMatrix} is total over the catalogue and that column carries `company:read`.
  */
-export const SPEC_ROLES = [...COLUMNS, 'Every member'] as const;
+export const SPEC_ROLES = [...COLUMNS, 'AM', 'FIN', 'Every member'] as const;
 
 export type SpecRole = (typeof SPEC_ROLES)[number];
 
 /** A column that grants nothing — the prose the `COMPANY` and `SYSTEM` tables end in. */
 const PROSE_COLUMN = 'Covers';
 
-/** The catalogue — 55 as §A3 printed it from `V3`, 56 since `V71` added `doc:review` (2026-08-28). */
-export const CATALOGUE_SIZE = 56;
+/**
+ * The catalogue — 55 as §A3 printed it from `V3`, 56 once `V71` added `doc:review` (2026-08-28),
+ * **89 since `V2`** (2026-08-30) seeded the project-management expansion's 33 keys.
+ */
+export const CATALOGUE_SIZE = 89;
 
 /**
- * Test Lead minus Test Engineer, as `V52` (§210) left it: giving approvals, and adding and managing
- * permission on the project. Asserted rather than assumed — see the header.
+ * Test Lead minus Test Engineer: giving approvals, and adding and managing permission on the
+ * project. Asserted rather than assumed — see the header.
+ *
+ * ~~Seven, as `V52` (§210) left it.~~ → **ten since `V2` (2026-08-30, plan 010)**: D3 gives Test
+ * Lead `issue:*` and Test Engineer three of the seven, so `issue:delete`, `issue:workflow` and
+ * `issue:import` join the delta. The *line* did not move — deleting an issue and configuring the
+ * project's workflow are "managing the project", which is the second clause it already had.
  */
 const LEAD_ONLY = [
   'case:approve', 'suite:approve', 'plan:approve',
   'project:audit', 'project:settings', 'project:members', 'integration:manage',
+  'issue:delete', 'issue:workflow', 'issue:import',
 ];
 
 const KEY = /`([a-z]+:[a-z]+)`/g;
@@ -99,7 +115,7 @@ export const NOT_GRANTED = '—';
 export interface MatrixRow {
   keys: string[];
   cells: Map<SpecRole, string>;
-  /** The table this row came from carries all six `PROJECT` columns. */
+  /** The table this row came from carries all seven `PROJECT` columns. */
   project: boolean;
 }
 
@@ -216,18 +232,18 @@ export function roleMatrix(): Record<Role, Set<string>> {
     }
   }
 
-  if (held.TE.size < 25 || held.TL.size < 30 || held.V.size < 5) {
+  if (held.TE.size < 30 || held.TL.size < 38 || held.V.size < 8) {
     throw new Error(
       `${ROLES_SPEC} §A3 parsed as TL=${held.TL.size} TE=${held.TE.size} V=${held.V.size} keys, `
         + 'which is too few to be the matrix. Either the tables changed shape or a `PROJECT` table '
-        + `stopped carrying all six of [${COLUMNS.join(', ')}], which is what marks one.`,
+        + `stopped carrying all seven of [${COLUMNS.join(', ')}], which is what marks one.`,
     );
   }
 
   const delta = [...held.TL].filter((key) => !held.TE.has(key)).sort();
   if (delta.join(',') !== [...LEAD_ONLY].sort().join(',')) {
     throw new Error(
-      `Test Lead minus Test Engineer parsed as [${delta.join(', ')}], and \`V52\` left exactly `
+      `Test Lead minus Test Engineer parsed as [${delta.join(', ')}], and \`V2\` left exactly `
         + `[${[...LEAD_ONLY].sort().join(', ')}]. If the catalogue really moved, this constant and `
         + '`SeedDataTest.testEngineerToTestLeadBoundary` move with it — that test is what pins the '
         + 'seeded rows, and this one only pins the prose against the spec.',

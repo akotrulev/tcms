@@ -53,7 +53,7 @@ import org.junit.jupiter.api.Test;
  * redundant: an equality says two documents differ, and they say <em>why</em> a cell is what it
  * is.
  */
-@DisplayName("Seed reference data — the permission catalogue and the six built-in roles (V3)")
+@DisplayName("Seed reference data — the permission catalogue and the nine built-in roles (V3, V2)")
 class SeedDataTest extends IntegrationTestBase {
 
     private static final String INSTANCE_ADMIN = "Instance Admin";
@@ -62,6 +62,11 @@ class SeedDataTest extends IntegrationTestBase {
     private static final String TEST_ENGINEER = "Test Engineer";
     private static final String AUTOMATION_SERVICE = "Automation Service";
     private static final String VIEWER = "Viewer";
+
+    /** `V2`'s three (2026-08-30, plan 010) — the project-management expansion's D3. */
+    private static final String PROJECT_MANAGER = "Project Manager";
+    private static final String ACCOUNT_MANAGER = "Account Manager";
+    private static final String FINANCE = "Finance";
 
     /** V15's non-assignable baseline — company:read for every member, at COMPANY scope. */
     private static final String COMPANY_MEMBER = "Company Member";
@@ -85,14 +90,17 @@ class SeedDataTest extends IntegrationTestBase {
      * <p>{@code Agent} is deliberately absent, because §A3 does not have a column for it. It is
      * §A6a's derived role and {@link #agentIsTestEngineerMinusNothingItCouldUse} is what pins it.
      */
-    private static final Map<String, String> SPEC_COLUMNS = Map.of(
-            "IA", INSTANCE_ADMIN,
-            "CA", COMPANY_ADMIN,
-            "TL", TEST_LEAD,
-            "TE", TEST_ENGINEER,
-            "AS", AUTOMATION_SERVICE,
-            "V", VIEWER,
-            "Every member", COMPANY_MEMBER);
+    private static final Map<String, String> SPEC_COLUMNS = Map.ofEntries(
+            Map.entry("IA", INSTANCE_ADMIN),
+            Map.entry("CA", COMPANY_ADMIN),
+            Map.entry("PM", PROJECT_MANAGER),
+            Map.entry("TL", TEST_LEAD),
+            Map.entry("TE", TEST_ENGINEER),
+            Map.entry("AS", AUTOMATION_SERVICE),
+            Map.entry("V", VIEWER),
+            Map.entry("AM", ACCOUNT_MANAGER),
+            Map.entry("FIN", FINANCE),
+            Map.entry("Every member", COMPANY_MEMBER));
 
     /** A `key` in the first cell of an §A3 row, of which there may be several. */
     private static final Pattern SPEC_KEY = Pattern.compile("`([a-z]+:[a-z]+)`");
@@ -122,7 +130,8 @@ class SeedDataTest extends IntegrationTestBase {
     private static final Map<String, String> MATRIX_DIVERGENCE_BY_DECISION = Map.of(
             TEST_LEAD + " / company:read", COMPANY_READ_IS_SEEDED_PER_ROLE,
             TEST_ENGINEER + " / company:read", COMPANY_READ_IS_SEEDED_PER_ROLE,
-            VIEWER + " / company:read", COMPANY_READ_IS_SEEDED_PER_ROLE);
+            VIEWER + " / company:read", COMPANY_READ_IS_SEEDED_PER_ROLE,
+            PROJECT_MANAGER + " / company:read", COMPANY_READ_IS_SEEDED_PER_ROLE);
 
     private static Connection connection;
 
@@ -177,7 +186,9 @@ class SeedDataTest extends IntegrationTestBase {
                         show them as universally ungranted and no grant can ever be made — add them \
                         to a corrective migration together with the roles that should hold them.""")
                 .isEmpty();
-        assertThat(seeded).as("the catalogue is 56 keys (spec Part A3: 55 at V3, doc:review at V71)").hasSize(56);
+        assertThat(seeded)
+                .as("the catalogue is 89 keys (spec Part A3: 55 at V3, doc:review at V71, 33 at V2)")
+                .hasSize(89);
     }
 
     @Test
@@ -304,16 +315,17 @@ class SeedDataTest extends IntegrationTestBase {
     }
 
     @Test
-    @DisplayName("exactly six built-in roles, plus two rows that are not among them")
-    void sixBuiltInRoles() throws SQLException {
+    @DisplayName("exactly nine built-in roles, plus two rows that are not among them")
+    void nineBuiltInRoles() throws SQLException {
         List<String> rows = queryStrings(
                 "SELECT name || ' / ' || scope FROM role WHERE built_in ORDER BY name");
 
         assertThat(rows)
                 .as("""
-                        No custom roles in v1 — these six are the complete role set (spec A2; \
-                        five of them are assignable to a person since V41 made Automation \
-                        Service a credential-only ceiling), and two further rows exist that \
+                        No custom roles in v1 — these NINE are the complete role set (spec A2; \
+                        eight of them are assignable to a person — V41 made Automation Service a \
+                        credential-only ceiling, and V2 added Project Manager, Account Manager \
+                        and Finance, all three grantable), and two further rows exist that \
                         nobody ever chooses for a person: \
                         Company Member (V15), the company:read baseline granted on joining, and \
                         Agent (V40), the ceiling an API token carries. An addition to this list is \
@@ -323,6 +335,9 @@ class SeedDataTest extends IntegrationTestBase {
                 .containsExactlyInAnyOrder(
                         INSTANCE_ADMIN + " / SYSTEM",
                         COMPANY_ADMIN + " / COMPANY",
+                        PROJECT_MANAGER + " / PROJECT",
+                        ACCOUNT_MANAGER + " / COMPANY",
+                        FINANCE + " / COMPANY",
                         TEST_LEAD + " / PROJECT",
                         TEST_ENGINEER + " / PROJECT",
                         AUTOMATION_SERVICE + " / PROJECT",
@@ -353,8 +368,8 @@ class SeedDataTest extends IntegrationTestBase {
     }
 
     @Test
-    @DisplayName("the five a person may hold are the five, and Instance Admin is among them")
-    void theAssignableRolesAreTheFive() throws SQLException {
+    @DisplayName("the eight a person may hold are the eight, and Instance Admin is among them")
+    void theAssignableRolesAreTheEight() throws SQLException {
         // The other direction, and it is not the complement restated: Instance Admin is
         // assignable = true and is STILL refused by POST /role-assignments, for a scope-shaped
         // reason (SYSTEM grants live in instance_role_assignment, ERD §0.1). Conflating the two
@@ -362,7 +377,8 @@ class SeedDataTest extends IntegrationTestBase {
         // so this assertion pins that Instance Admin is NOT quietly swept in with the ceilings.
         assertThat(queryStrings("SELECT name FROM role WHERE assignable ORDER BY name"))
                 .containsExactly(
-                        COMPANY_ADMIN, INSTANCE_ADMIN, TEST_ENGINEER, TEST_LEAD, VIEWER);
+                        ACCOUNT_MANAGER, COMPANY_ADMIN, FINANCE, INSTANCE_ADMIN, PROJECT_MANAGER,
+                        TEST_ENGINEER, TEST_LEAD, VIEWER);
     }
 
     @Test
@@ -506,14 +522,18 @@ class SeedDataTest extends IntegrationTestBase {
         leadOnly.removeAll(engineer);
         assertThat(leadOnly)
                 .as("""
-                        Everything a Test Lead may do that a Test Engineer may not. EXACTLY seven \
-                        keys, and they are the two things spec §A4 now names: giving approvals, and \
-                        adding and managing permission on the project. A key appearing here is a \
-                        capability taken away from contributors; a key disappearing is one handed to \
-                        them. Neither is a migration side effect worth discovering later.""")
+                        Everything a Test Lead may do that a Test Engineer may not. EXACTLY ten \
+                        keys since V2 (2026-08-30; it was seven from V52), and they are the two \
+                        things spec §A4 names: giving approvals, and adding and managing permission \
+                        on the project — of which deleting an issue, configuring the project's \
+                        issue workflow and importing from another tracker are the second clause \
+                        rather than a third category. A key appearing here is a capability taken \
+                        away from contributors; a key disappearing is one handed to them. Neither \
+                        is a migration side effect worth discovering later.""")
                 .containsExactly(
-                        "case:approve", "integration:manage", "plan:approve",
-                        "project:audit", "project:members", "project:settings", "suite:approve");
+                        "case:approve", "integration:manage", "issue:delete", "issue:import",
+                        "issue:workflow", "plan:approve", "project:audit", "project:members",
+                        "project:settings", "suite:approve");
 
         assertThat(lead)
                 .as("""
@@ -546,6 +566,40 @@ class SeedDataTest extends IntegrationTestBase {
         assertThat(engineer.stream().filter(key -> key.endsWith(":approve")).toList())
                 .as("author-cannot-approve-own-work is untouched, and so is who may approve at all")
                 .isEmpty();
+    }
+
+    @Test
+    @DisplayName("money is Finance and the two admins, and nobody else — the negative, asserted")
+    void moneyIsFinanceAndAdminsOnly() throws SQLException {
+        // Read off the catalogue's own namespaces rather than a literal list, so a tenth money key
+        // added later is covered by this rule on the day it is seeded rather than on the day
+        // somebody remembers it. §7 of the expansion scope asks for exactly this: "That needs a
+        // test asserting the negative, not a careful reading of the matrix."
+        List<String> leaks = queryStrings("""
+                SELECT r.name || ' / ' || rp.permission_key
+                  FROM role_permission rp
+                  JOIN role r ON r.id = rp.role_id
+                 WHERE (rp.permission_key LIKE 'billing:%' OR rp.permission_key LIKE 'ratecard:%')
+                   AND r.name NOT IN ('Instance Admin', 'Company Admin', 'Finance')
+                 ORDER BY 1
+                """);
+
+        assertThat(leaks)
+                .as("""
+                        A role outside Finance and the two admin tiers holds a money key. An \
+                        Account Manager who can see what an hour bills at, or a Test Engineer who \
+                        can see what theirs costs, is the boundary expansion scope §7 names as the \
+                        sharpest one in the catalogue.""")
+                .isEmpty();
+
+        // The vacuity half. An empty result and a namespace that was never seeded look identical
+        // from the assertion above, which is the shape §61 warns about.
+        assertThat(queryStrings("""
+                SELECT count(*)::text FROM permission
+                 WHERE key LIKE 'billing:%' OR key LIKE 'ratecard:%'
+                """))
+                .as("the money namespaces are seeded at all — seven keys since V2")
+                .containsExactly("7");
     }
 
     @Test
@@ -919,7 +973,7 @@ class SeedDataTest extends IntegrationTestBase {
     }
 
     @Test
-    @DisplayName("Automation Service is exactly the six permissions of spec A6")
+    @DisplayName("Automation Service is exactly the eight permissions of spec A6")
     void automationServiceIsTheSmallestRole() throws SQLException {
         // A leaked CI token is the realistic breach, so this grant is enumerated rather
         // than described: any addition here widens what a stolen token can do, and must be
@@ -928,10 +982,14 @@ class SeedDataTest extends IntegrationTestBase {
         // project:read joined the list in V16 and is the visibility precondition, not a sixth
         // capability — see that migration for why it does not widen §A6's argument about what a
         // stolen token can do. The five capabilities below are unchanged.
+        // issue:read and board:read joined at V2 (2026-08-30, expansion D3) and are the whole of
+        // what the project-management expansion gives this role. Both are reads on a credential
+        // that already reads the project's cases; issue:create was considered and refused, because
+        // a pipeline that can open work items can fill a backlog from a loop.
         assertThat(grantsOf(AUTOMATION_SERVICE))
                 .containsExactlyInAnyOrder(
                         "case:read", "case:create", "run:create", "result:submit", "evidence:attach",
-                        "project:read");
+                        "project:read", "issue:read", "board:read");
 
         assertThat(grantsOf(AUTOMATION_SERVICE))
                 .as("""
@@ -962,7 +1020,8 @@ class SeedDataTest extends IntegrationTestBase {
     @Test
     @DisplayName("company:read is an explicit grant on every member role, not implied by membership")
     void companyReadIsAlwaysExplicit() throws SQLException {
-        for (String role : List.of(COMPANY_ADMIN, TEST_LEAD, TEST_ENGINEER, VIEWER)) {
+        for (String role : List.of(COMPANY_ADMIN, PROJECT_MANAGER, ACCOUNT_MANAGER, FINANCE,
+                TEST_LEAD, TEST_ENGINEER, VIEWER)) {
             assertThat(grantsOf(role))
                     .as("%s must hold company:read explicitly — one uniform mechanism, so every "
                             + "check in the code is a real permission check (spec A3)", role)
@@ -1199,10 +1258,10 @@ class SeedDataTest extends IntegrationTestBase {
         }
 
         assertThat(keysSeen)
-                .as("§A3 parsed as %d keys and the catalogue is 56. Either a table stopped matching "
+                .as("§A3 parsed as %d keys and the catalogue is 89. Either a table stopped matching "
                         + "the parse or the spec lost a row — both are findings, and neither is "
                         + "fixed by relaxing this number.", keysSeen.size())
-                .hasSize(56);
+                .hasSize(89);
         held.forEach((role, keys) -> assertThat(keys)
                 .as("§A3 parsed no grant at all for %s, which no role in this product has", role)
                 .isNotEmpty());

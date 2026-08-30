@@ -15558,19 +15558,27 @@ export interface components {
          *     a boundary that was previously wrong (suite:delete out of suite:manage,
          *     project:audit out of audit:view, case:comment below the review tier).
          *
-         *     **56 since `V71` (2026-08-28), and `doc:review` is the only one added since `V3`
-         *     seeded the other 55.** It is the fourth `*:review` key, held by the same tier as
-         *     `plan:review`, and it exists because a documentation page became a reviewable
-         *     artifact (005 S9b). `V3` derived its role rows from the catalogue *as it stood
-         *     then*, so a later key needs its own `INSERT` — which is why 006's batching
-         *     corrected S9b's "no migration" and why this member was missed here for one wave:
-         *     the seed, the roles spec, `permission-matrix-summary.md`, `README.md` and
-         *     `lib/permissions.ts` all carried it while this enum did not, and nothing compares
-         *     this list to the seed. `SeedDataTest.catalogueMatchesTheContract` is what does,
-         *     from the server side.
+         *     **89 since `V2` of the project-management expansion (2026-08-30, plan 010).**
+         *     `V3` seeded 55, `V71` added `doc:review`, and `V2` adds 33 across eight new
+         *     namespaces — `issue:*`, `board:*`, `release:*`, `time:*`, `staffing:*`,
+         *     `client:*`, `ratecard:*` and `billing:*`. They are seeded before the
+         *     features that read them, once, rather than a namespace per module: the
+         *     catalogue is transcribed into four documents that a test pins byte-for-byte,
+         *     and eight rounds of that is eight chances for one of them to drift.
+         *     `SeedDataTest.catalogueMatchesTheContract` compares this list to the seeded
+         *     rows in both directions; nothing else does.
+         *
+         *     ~~56 since `V71` (2026-08-28), and `doc:review` is the only one added since
+         *     `V3` seeded the other 55.~~ It is still the fourth `*:review` key, held by the
+         *     same tier as `plan:review`, and it exists because a documentation page became
+         *     a reviewable artifact (005 S9b). `V3` derived its role rows from the catalogue
+         *     *as it stood then*, so a later key needs its own `INSERT` — which is why 006's
+         *     batching corrected S9b's "no migration" and why that member was missed here for
+         *     one wave: the seed, the roles spec, `permission-matrix-summary.md`, `README.md`
+         *     and `lib/permissions.ts` all carried it while this enum did not.
          * @enum {string}
          */
-        PermissionKey: "suite:manage" | "suite:delete" | "case:read" | "case:create" | "case:edit" | "case:delete" | "library:manage" | "case:comment" | "case:review" | "suite:review" | "plan:review" | "doc:review" | "case:approve" | "suite:approve" | "plan:approve" | "plan:create" | "plan:edit" | "plan:delete" | "run:create" | "run:execute" | "run:close" | "result:submit" | "result:amend" | "evidence:attach" | "evidence:delete" | "defect:create" | "workitem:manage" | "report:view" | "report:export" | "doc:read" | "doc:edit" | "doc:publish" | "artifact:read" | "artifact:edit" | "artifact:delete" | "project:read" | "project:audit" | "project:settings" | "project:members" | "integration:manage" | "company:read" | "company:settings" | "company:members" | "company:teams" | "company:vocabulary" | "company:idp" | "project:create" | "token:issue" | "audit:view" | "company:create" | "company:delete" | "company:suspend" | "user:manage" | "role:manage" | "system:settings" | "instance:audit";
+        PermissionKey: "suite:manage" | "suite:delete" | "case:read" | "case:create" | "case:edit" | "case:delete" | "library:manage" | "case:comment" | "case:review" | "suite:review" | "plan:review" | "doc:review" | "case:approve" | "suite:approve" | "plan:approve" | "plan:create" | "plan:edit" | "plan:delete" | "run:create" | "run:execute" | "run:close" | "result:submit" | "result:amend" | "evidence:attach" | "evidence:delete" | "defect:create" | "workitem:manage" | "report:view" | "report:export" | "doc:read" | "doc:edit" | "doc:publish" | "artifact:read" | "artifact:edit" | "artifact:delete" | "project:read" | "project:audit" | "project:settings" | "project:members" | "integration:manage" | "company:read" | "company:settings" | "company:members" | "company:teams" | "company:vocabulary" | "company:idp" | "project:create" | "token:issue" | "audit:view" | "company:create" | "company:delete" | "company:suspend" | "user:manage" | "role:manage" | "system:settings" | "instance:audit" | "issue:read" | "issue:create" | "issue:edit" | "issue:delete" | "issue:comment" | "issue:workflow" | "issue:import" | "board:read" | "board:rank" | "board:configure" | "release:read" | "release:manage" | "release:publish" | "time:log" | "time:read" | "time:edit" | "time:approve" | "staffing:read" | "staffing:allocate" | "staffing:directory" | "staffing:profile" | "staffing:absence" | "client:read" | "client:create" | "client:edit" | "client:delete" | "ratecard:read" | "ratecard:manage" | "billing:read" | "billing:budget" | "billing:expense" | "billing:invoice" | "billing:issue";
         RoleAssignment: {
             /** Format: uuid */
             id: string;

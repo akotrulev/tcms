@@ -83,7 +83,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  *
  * <h2>The fixture rows another test class asserts the absence of</h2>
  *
- * <p>{@code SeedDataTest.sixBuiltInRoles} asserts that {@code SELECT name FROM role WHERE NOT
+ * <p>{@code SeedDataTest.nineBuiltInRoles} asserts that {@code SELECT name FROM role WHERE NOT
  * built_in} is <strong>empty</strong>. A leaked custom role therefore reddens a class that has
  * nothing to do with reporting, in the full suite only, at a position that moves — §19's
  * fixture-collision defect through a mechanism no UUID prefix protects against. Hence

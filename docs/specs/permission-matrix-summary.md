@@ -3,12 +3,16 @@
 **Authoritative source is `docs/specs/2026-07-30-tcms-roles-permissions-naming.md` §A3** — this is a
 convenience copy, also in `README.md`. If they disagree the spec wins and the copies are the bug.
 ~~55 permissions, all seeded by `V3__seed_permissions_and_roles.sql`; no migration has added one since~~
-→ **56 since 2026-08-28: `V71` added `doc:review`** (plan 005 S9b), the first key seeded after `V3` —
+~~→ **56 since 2026-08-28: `V71` added `doc:review`** (plan 005 S9b), the first key seeded after `V3`~~
+→ **89 since 2026-08-30: `V2` added 33** for the project-management expansion (plan 010, module M0)
+across eight namespaces — `issue:*`, `board:*`, `release:*`, `time:*`, `staffing:*`, `client:*`,
+`ratecard:*` and `billing:*` — together with three roles, **Project Manager**, **Account Manager**
+and **Finance** —
 and `V51` **moved three grants between roles**, which is a different thing and the one this table
 gets wrong most easily.
-**Since §214 the spec's §A3 tables and the seeded rows are compared cell by cell, seven roles,
-both ways** — `SeedDataTest.theSeededMatrixIsTheSpecsMatrix`, with `MATRIX_DIVERGENCE_BY_DECISION`
-for the three that diverge on purpose (`company:read` seeded per role, where §A3's COMPANY table
+**Since §214 the spec's §A3 tables and the seeded rows are compared cell by cell, every role, both
+ways** — `SeedDataTest.theSeededMatrixIsTheSpecsMatrix`, with `MATRIX_DIVERGENCE_BY_DECISION`
+for the four that diverge on purpose (`company:read` seeded per role, where §A3's COMPANY table
 has only `Every member`). **The copies in CLAUDE.md and README are compared by
 `packages/client/src/test/matrixCopies.test.ts`** — it reads both tables and all three scopes of
 §A3, compares every cell both ways including qualifiers. `SYSTEM` scope below is a sentence rather
@@ -19,45 +23,66 @@ Roles are ordered least-permissioned first; rows run broadest-held to narrowest.
 
 `PROJECT` scope:
 
-| Permission | Viewer | Automation Service | Test Engineer | Test Lead | Company Admin | Instance Admin |
-|---|:--:|:--:|:--:|:--:|:--:|:--:|
-| `case:read` · `project:read` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `case:comment` · `report:view` · `report:export` · `doc:read` · `artifact:read` | ✓ | — | ✓ | ✓ | ✓ | ✓ |
-| `case:create` | — | quarantine only | ✓ | ✓ | ✓ | ✓ |
-| `run:create` · `result:submit` · `evidence:attach` | — | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `suite:manage` · `case:edit` · `library:manage` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `case:review` · `suite:review` · `plan:review` · `doc:review` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `plan:create` · `plan:edit` · `plan:delete` · `run:execute` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `defect:create` · `workitem:manage` · `doc:edit` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `case:delete` · `evidence:delete` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `artifact:edit` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `suite:delete` · `artifact:delete` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `run:close` · `result:amend` · `doc:publish` | — | — | ✓ | ✓ | ✓ | ✓ |
-| `case:approve` · `suite:approve` · `plan:approve` | — | — | — | ✓ | ✓ | ✓ |
-| `project:audit` · `project:settings` · `project:members` · `integration:manage` | — | — | — | ✓ | ✓ | ✓ |
+| Permission | Viewer | Automation Service | Test Engineer | Project Manager | Test Lead | Company Admin | Instance Admin |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| `case:read` · `project:read` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `case:comment` · `report:view` · `report:export` · `doc:read` · `artifact:read` | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `case:create` | — | quarantine only | ✓ | — | ✓ | ✓ | ✓ |
+| `run:create` · `result:submit` · `evidence:attach` | — | ✓ | ✓ | — | ✓ | ✓ | ✓ |
+| `suite:manage` · `case:edit` · `library:manage` | — | — | ✓ | — | ✓ | ✓ | ✓ |
+| `case:review` · `suite:review` · `plan:review` · `doc:review` | — | — | ✓ | — | ✓ | ✓ | ✓ |
+| `plan:create` · `plan:edit` · `plan:delete` · `run:execute` | — | — | ✓ | — | ✓ | ✓ | ✓ |
+| `defect:create` · `workitem:manage` · `doc:edit` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `case:delete` · `evidence:delete` | — | — | ✓ | — | ✓ | ✓ | ✓ |
+| `artifact:edit` | — | — | ✓ | — | ✓ | ✓ | ✓ |
+| `suite:delete` · `artifact:delete` | — | — | ✓ | — | ✓ | ✓ | ✓ |
+| `run:close` · `result:amend` | — | — | ✓ | — | ✓ | ✓ | ✓ |
+| `doc:publish` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `issue:read` · `board:read` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `issue:comment` | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `release:read` | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `issue:create` · `issue:edit` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `time:log` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `issue:delete` · `issue:workflow` · `issue:import` | — | — | — | ✓ | ✓ | ✓ | ✓ |
+| `board:rank` · `board:configure` · `release:manage` · `release:publish` | — | — | — | ✓ | — | ✓ | ✓ |
+| `time:read` · `time:edit` · `time:approve` · `staffing:read` · `staffing:allocate` | — | — | — | ✓ | — | ✓ | ✓ |
+| `case:approve` · `suite:approve` · `plan:approve` | — | — | — | — | ✓ | ✓ | ✓ |
+| `project:audit` · `project:settings` · `project:members` · `integration:manage` | — | — | — | ✓ | ✓ | ✓ | ✓ |
 
-**The last two rows are the whole Test Engineer → Test Lead line since `V52` (§210)** — giving
-approvals, and adding and managing permission on the project. Seven keys, and
+**The Test Engineer → Test Lead line is approvals, project configuration and issue management** —
+~~seven keys~~ → **ten since `V2` (2026-08-30)**: the three approvals, the four configuration keys,
+and `issue:delete` · `issue:workflow` · `issue:import`, which are the same second clause.
 `SeedDataTest.testEngineerToTestLeadBoundary` asserts that delta **exactly, in both directions**.
+
+**Project Manager is not a rung on that ladder and the column order should not be read as one.**
+The other six nest; a Project Manager runs the delivery of a project — issues, board, releases,
+time and this project's staffing, plus every project-configuration key — and authors, approves and
+executes nothing in the test repository. A project that needs both is granted both.
 
 `COMPANY` scope — answered from the SYSTEM + COMPANY terms only, so a PROJECT-scope role contributes
 nothing here. `company:read` reaches every member through the non-assignable **Company Member**
-baseline role (`V15`), not through the six:
+baseline role (`V15`), not through the per-role grants. **Account Manager and Finance are
+`COMPANY`-scope roles `V2` added (2026-08-30)** and neither holds `project:read` or `report:view`,
+deliberately: at this scope either key would open every project in the company, present and future.
 
-| Permission | Every member | Company Admin | Instance Admin |
-|---|:--:|:--:|:--:|
-| `company:read` | ✓ | ✓ | ✓ |
-| `company:settings` · `company:members` · `company:teams` · `company:vocabulary` · `company:idp` | — | ✓ | ✓ |
-| `project:create` · `token:issue` · `audit:view` | — | ✓ | ✓ |
+| Permission | Every member | Account Manager | Finance | Company Admin | Instance Admin |
+|---|:--:|:--:|:--:|:--:|:--:|
+| `company:read` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `client:read` | — | ✓ | ✓ | ✓ | ✓ |
+| `staffing:directory` | — | ✓ | ✓ | ✓ | ✓ |
+| `client:create` · `client:edit` · `client:delete` · `staffing:profile` · `staffing:absence` | — | ✓ | — | ✓ | ✓ |
+| `ratecard:read` · `ratecard:manage` · `billing:read` · `billing:budget` · `billing:expense` · `billing:invoice` · `billing:issue` | — | — | ✓ | ✓ | ✓ |
+| `company:settings` · `company:members` · `company:teams` · `company:vocabulary` · `company:idp` | — | — | — | ✓ | ✓ |
+| `project:create` · `token:issue` · `audit:view` | — | — | — | ✓ | ✓ |
 
 `SYSTEM` scope, Instance Admin only: `company:create` · `company:delete` · `company:suspend` ·
 `user:manage` · `role:manage` · `system:settings` · `instance:audit`.
 
 Five things that change how the table reads:
 
-- **The six are the complete role set** — seeded, immutable, **no custom roles, not even
-  clone-and-edit**. A client needing something between two tiers gets the higher one. **`V41`: five
-  are assignable.** `Automation Service` is a CI credential's capability set, which `V3` has said
+- ~~**The six are the complete role set**~~ → **nine since `V2` (2026-08-30)** — seeded, immutable,
+  **no custom roles, not even clone-and-edit**. A client needing something between two tiers gets the
+  higher one. ~~**`V41`: five are assignable.**~~ **Eight of the nine are;** `Automation Service` is a CI credential's capability set, which `V3` has said
   since M0 and nothing enforced until then.
 - **THREE seeded rows have `role.assignable = false` and only two of them are outside the six**
   (`V40`, `V41`).
