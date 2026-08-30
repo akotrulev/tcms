@@ -656,3 +656,47 @@ describe('a case cannot be recorded Failed without saying what happened', () => 
     await waitFor(() => expect(sent).toHaveLength(1))
   })
 })
+
+describe('the runner holds together, and the queue says what has been recorded', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('gives the procedure column a container to lay out against, not the viewport', async () => {
+    /*
+      Renders audit 3.2. §3's 74ch measure IS implemented and exact at 1680 (666px = 74ch), but
+      `max-width` is a cap and not a floor, so at 1280 the three-pane split squeezed the procedure
+      to 360px = 40ch — below which the runner stops being the document surface §4 collapses the
+      nav rail for. A media query cannot see the difference: at 1280 the same `lg:` state applies
+      whether 260px of queue is beside it or not. Asserted on the mechanism because jsdom measures
+      nothing.
+    */
+    mockReads()
+    await renderScreen(`${ROUTE}?mode=split`)
+
+    // `closest` with an escaped `@` is brittle across CSS parsers; walking the ancestors and
+    // reading the class list asserts the same thing and says what it is asserting.
+    let node: HTMLElement | null = screen.getByTestId('Execution.Actions')
+    let found = false
+    while (node && !found) {
+      found = node.classList.contains('@container')
+      node = node.parentElement
+    }
+    expect(found, 'the procedure and rail must lay out against a container, not the viewport').toBe(
+      true,
+    )
+  })
+
+  it('draws the run’s own bar and a visible status dot in the queue', async () => {
+    // The dot was already here — with a data-testid, an aria-label and no size, no colour and no
+    // class at all, so it rendered nothing. A screen reader was told every row's status and a
+    // sighted reader none (renders audit 3.4).
+    mockReads()
+    await renderScreen(`${ROUTE}?mode=split`)
+
+    expect(await screen.findByTestId('Execution.Queue.ResultBar')).toBeInTheDocument()
+    const dot = screen.getAllByTestId('Execution.Queue.Row.Status')[0]
+    expect(dot.className).toContain('rounded-full')
+    expect(dot).toHaveAttribute('data-status')
+  })
+})

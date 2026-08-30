@@ -14,6 +14,7 @@ import type {
   TestExecutionSummary,
 } from '../../api/types';
 import { useExecution, useProject, useRun, useStatuses, useSubmitResult } from '../../api/queries';
+import { HeaderActions } from '../../app/HeaderActions';
 import { TopStripSlot } from '../../app/topStripSlot';
 import { DataRegion } from '../../components/DataRegion';
 import {
@@ -40,7 +41,12 @@ import { EvidencePanel } from './EvidencePanel';
 import { ExecutionAssignee } from './ExecutionAssignee';
 import { ExecutionGrid } from './ExecutionGrid';
 import { ExecutionQueue } from './ExecutionQueue';
-import { durationSecondsField, formatDateTime, parseDurationSeconds } from '../../lib/format';
+import {
+  durationSecondsField,
+  formatDateTime,
+  formatDuration,
+  parseDurationSeconds,
+} from '../../lib/format';
 import { isRunClosed, statusLabels } from '../../lib/labels';
 import {
   EXECUTION_MODES,
@@ -178,11 +184,21 @@ export function ExecutionPage() {
       </TopStripSlot>
 
       <TopStripSlot>
-        <div className="flex flex-wrap items-center gap-2.5">
+        {/*
+          One row, and it does not wrap. `flex-wrap` inside a header the shell fixes at 52px does
+          not wrap inside it — at 1280px the audit found the `Case 5 of 10 · TC-5 v1` indicator
+          clipped off the TOP of the viewport and the Focus/Split/Grid control spilling below the
+          header's bottom border onto the content (renders audit 3.2, same mechanism as 2.1).
+
+          `min-w-0` on the group and on the indicator: the position and the identifiers give way
+          before the layout control does, because the control is the thing a tester reaches for and
+          the count is the thing they can also read from the queue.
+        */}
+        <HeaderActions data-testid="Execution.TopStrip">
           {execution.data && (
             <>
               {arrivalAt >= 0 && (
-                <span className="text-[12px] text-ink-4">
+                <span className="hidden min-w-0 truncate text-[12px] text-ink-4 md:block">
                   Case <b className="font-mono font-medium text-ink-2">{arrivalAt + 1}</b> of{' '}
                   <b className="font-mono font-medium text-ink-2">{arrivalQueue.length}</b>
                 </span>
@@ -199,15 +215,34 @@ export function ExecutionPage() {
               >
                 <Identifier variant="strong">{execution.data.caseKey}</Identifier>
               </RouterLink>
-              <span title="This execution is recorded against this version of the case. Later edits do not change it.">
+              <span
+                className="hidden md:inline"
+                title="This execution is recorded against this version of the case. Later edits do not change it."
+              >
                 <Identifier variant="muted">v{execution.data.caseVersionNo}</Identifier>
               </span>
               {execution.data.status?.kind && <StatusChip kind={execution.data.status.kind} />}
               {execution.data.quarantined && <QuarantineChip testId="Execution.Quarantined" />}
             </>
           )}
+          {/*
+            How long this run has been open — the render's top strip carries it, and a tester who
+            has been on a run for two hours reads it differently from one ten minutes in.
+
+            Driven by the RUN's `startedAt`, never by when this tab opened: a counter that starts on
+            mount measures the tab, and two testers on the same run would read two different
+            elapsed times for it.
+
+            The render also draws **Pause run** beside this, and it is deliberately not here: this
+            product's run lifecycle is `NOT_STARTED → IN_PROGRESS → COMPLETED → ABORTED` and has no
+            paused state, so the control would either lie or abort the run under a gentler word.
+            That divergence is recorded in the design language rather than invented in the client.
+          */}
+          {run.data?.startedAt && !isRunClosed(run.data.status) && (
+            <ElapsedSince startedAt={run.data.startedAt} />
+          )}
           <ModeSwitch mode={mode} onChange={setMode} />
-        </div>
+        </HeaderActions>
       </TopStripSlot>
 
       <Workspace
@@ -301,16 +336,58 @@ function Workspace({
   return (
     <div className="flex min-w-0 flex-1 items-start">
       {mode === 'split' && (
-        <ExecutionQueue
-          executions={executions}
-          currentExecutionId={executionId}
-          projectId={projectId}
-          runId={runId}
-          modeParam={modeParam}
-        />
+        <div className="w-[260px] shrink-0 border-r border-line">
+          <ExecutionQueue
+            executions={executions}
+            currentExecutionId={executionId}
+            projectId={projectId}
+            runId={runId}
+            modeParam={modeParam}
+          />
+        </div>
       )}
-      <div className="min-w-0 flex-1">{children}</div>
+      {/*
+        `@container`, and it is the point of this element rather than a wrapper that happened to be
+        here. Everything inside it — the procedure and the rail — has to lay itself out against the
+        space LEFT BY THE QUEUE, not against the viewport, and a media query cannot see that
+        difference: at 1280px in Split the same `lg:` state applies whether 260px of queue is there
+        or not. That is renders audit 3.2, measured: §3's 74ch measure is implemented and exact at
+        1680 (666px = 74ch), and at 1280 the three-pane grid squeezed the procedure to 360px = 40ch
+        — below which the runner stops being the document surface §4 collapses the rail for.
+
+        `max-width` is a cap, not a floor, so the cap alone could not prevent it. The fix is that
+        the rail stops competing for the width below `@[58rem]` and stacks under the procedure
+        instead, which is what the `lg:flex-row` inside `ExecutionForm` now keys on.
+      */}
+      <div className="@container min-w-0 flex-1">{children}</div>
     </div>
+  );
+}
+
+/**
+ * A live count of how long the run has been open.
+ *
+ * A minute is the tick, not a second: this sits in a fixed-height strip a tester glances at, and a
+ * seconds counter there is motion in the corner of the eye for the whole session. The first render
+ * is exact and the interval only keeps it so.
+ */
+function ElapsedSince({ startedAt }: { startedAt: string }) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const elapsed = Math.max(0, now - new Date(startedAt).getTime());
+  return (
+    <span
+      className="hidden font-mono text-[11.5px] tabular-nums text-ink-4 lg:inline"
+      title={`This run started at ${formatDateTime(startedAt)}`}
+      data-testid="Execution.Elapsed"
+    >
+      {formatDuration(elapsed)}
+    </span>
   );
 }
 
@@ -955,7 +1032,7 @@ function ExecutionForm({
   });
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col lg:flex-row">
+    <div className="flex min-w-0 flex-1 flex-col @[58rem]:flex-row">
       {/*
         THE DOCUMENT COLUMN — `renders/03-execution.html` frame A. The tester is reading a
         procedure, so it gets the case editor's own 74ch measure and the same ink: what a case
@@ -1092,7 +1169,7 @@ function ExecutionForm({
       </DocumentSurface>
 
       {/* THE RAIL — the render's right `.side`: record, describe, attach, assign. */}
-      <aside className="w-full shrink-0 border-line bg-panel lg:w-[300px] lg:border-l">
+      <aside className="w-full shrink-0 border-line bg-panel @[58rem]:w-[300px] @[58rem]:border-l">
         <RailSection
           title={
             failedStep
