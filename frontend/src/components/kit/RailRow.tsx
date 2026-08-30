@@ -26,6 +26,13 @@ import { cn } from '../../lib/cn';
  * was the opposite failure, a rail of full outlined selects with a helper paragraph each, which
  * reads as the nine-control form the redesign retired.
  *
+ * **The value column truncates rather than overflowing.** Renders audit 2.3 found three screens
+ * (`CaseDetailPage`, `CaseEditorPage`, `ExecutionPage`) where the value was cut off at the viewport
+ * edge with no scroll and no ellipsis — `Automation  Automated · checkout.saved_card.hap` — and
+ * rule 6 says long mono identifiers are exactly what lives in these rows. `title` carries the full
+ * value for anyone who needs it; the label stays `shrink-0`, because a truncated label is worse
+ * than a truncated value.
+ *
  * `readOnly` renders a non-interactive row for a value the author genuinely cannot change here —
  * inherited preconditions, a server-assigned id. It is not a disabled button: there is no action
  * behind it to enable.
@@ -53,7 +60,12 @@ export function RailRow({ label, value, onOpen, readOnly, className, ...rest }: 
     return (
       <div className={cn(ROW, 'opacity-[.72]', className)} data-testid={rest['data-testid']}>
         <span className="shrink-0 text-ink-3">{label}</span>
-        <span className="flex items-center gap-1.5 text-right font-normal text-ink">{value}</span>
+        <span
+          className="flex min-w-0 items-center gap-1.5 truncate text-right font-normal text-ink"
+          title={typeof value === 'string' ? value : undefined}
+        >
+          {value}
+        </span>
       </div>
     );
   }
@@ -72,7 +84,10 @@ export function RailRow({ label, value, onOpen, readOnly, className, ...rest }: 
       {...rest}
     >
       <span className="shrink-0 text-ink-3">{label}</span>
-      <span className="flex items-center gap-1.5 text-right font-normal text-ink">
+      <span
+        className="flex min-w-0 items-center gap-1.5 truncate text-right font-normal text-ink"
+        title={typeof value === 'string' ? value : undefined}
+      >
         {value}
         <ChevronDown aria-hidden className="size-3 shrink-0 text-ink-4" />
       </span>

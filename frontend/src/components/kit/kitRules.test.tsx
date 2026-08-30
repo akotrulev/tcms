@@ -4,8 +4,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Badge } from './Badge';
 import { Chip } from './Chip';
+import { FilterStrip } from './FilterStrip';
 import { RailRow } from './RailRow';
 import { ResultBar } from './ResultBar';
+import { TableFoot } from './TableFoot';
 
 /**
  * One test per rule the kit carries, from `docs/specs/2026-08-28-design-language.md` §5 and §6.
@@ -94,5 +96,62 @@ describe('the result bar', () => {
   it('reads an empty bar as never run rather than as zero passed', () => {
     render(<ResultBar />);
     expect(screen.getByRole('img')).toHaveAccessibleName('Never run');
+  });
+});
+
+describe('the table foot (rule 2)', () => {
+  it('states what is on screen, the sort, and the keys', () => {
+    render(
+      <TableFoot
+        summary="86 cases · 12 selected"
+        sort="sorted by Updated, newest first"
+        keys={['↑↓ move', 'Space select', 'Enter open']}
+        data-testid="Cases.Foot"
+      />,
+    );
+    const foot = screen.getByTestId('Cases.Foot');
+    expect(foot).toHaveTextContent('86 cases · 12 selected');
+    expect(foot).toHaveTextContent('sorted by Updated, newest first');
+    expect(foot).toHaveTextContent('Space select');
+  });
+
+  it('names no shortcut on a screen that has none, rather than inventing one', () => {
+    render(<TableFoot summary="10 cases" data-testid="Cases.Foot" />);
+    expect(screen.getByTestId('Cases.Foot').textContent).toBe('10 cases');
+  });
+});
+
+describe('the filter strip (rule 2, and §5\'s chip)', () => {
+  it('renders one chip per APPLIED filter, each removable and each named', async () => {
+    const remove = vi.fn();
+    render(
+      <FilterStrip
+        applied={[{ key: 'lifecycleStatus:APPROVED', label: 'Status · Approved', onRemove: remove }]}
+        summary="Showing 86 of 1 284"
+        onClear={vi.fn()}
+        data-testid="Cases.Filters"
+      />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Status · Approved' }));
+    expect(remove).toHaveBeenCalledOnce();
+  });
+
+  it('offers no clear affordance when nothing is applied', () => {
+    render(<FilterStrip applied={[]} summary="86 cases" data-testid="Cases.Filters" />);
+    expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument();
+  });
+
+  it('never renders a value the reader has not chosen', () => {
+    render(<FilterStrip applied={[]} summary="86 cases" data-testid="Cases.Filters" />);
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+});
+
+describe('the rail row does not clip its own value', () => {
+  it('truncates a long value and keeps it reachable as a title', () => {
+    render(<RailRow label="Test method" value="checkout.saved_card.happy_path_with_a_long_tail" />);
+    const value = screen.getByTitle('checkout.saved_card.happy_path_with_a_long_tail');
+    expect(value.className).toContain('truncate');
+    expect(value.className).toContain('min-w-0');
   });
 });

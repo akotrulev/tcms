@@ -44,6 +44,7 @@
     "src/api/contractOperations.test.ts",
     "src/api/contractFixtures.test.ts",
     "src/api/contractIntrospection.ts",
-    "src/app/tokenSystem.test.ts"
+    "src/app/tokenSystem.test.ts",
+    "src/app/statusPalette.test.ts"
   ]
 }

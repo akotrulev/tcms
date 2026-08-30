@@ -16,6 +16,12 @@ export interface ChipProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>,
   onClick: () => void;
   selected?: boolean;
   onRemove?: () => void;
+  /**
+   * The remove button's accessible name. Defaults to "Remove", which is enough for one chip and
+   * useless for five: a filter strip with four applied filters otherwise offers four buttons that
+   * a screen reader reads identically. Pass the chip's own subject — "Remove Status · Approved".
+   */
+  removeLabel?: string;
   variant?: 'add';
   children: ReactNode;
   'data-testid'?: string;
@@ -28,6 +34,7 @@ export function Chip({
   onClick,
   selected,
   onRemove,
+  removeLabel,
   variant,
   children,
   className,
@@ -70,7 +77,7 @@ export function Chip({
       <button
         type="button"
         onClick={onRemove}
-        aria-label="Remove"
+        aria-label={removeLabel ?? 'Remove'}
         className={cn('text-ink-4 hover:text-ink', FOCUS)}
       >
         <X aria-hidden className="size-3" />
