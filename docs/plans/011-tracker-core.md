@@ -3316,7 +3316,28 @@ as the row-backed one, and `derived_item_annotation` and its rows are untouched.
 - Delete: `work/WorkItem.java`, `WorkItemEdit.java`, `WorkItemRepository.java`,
   `WorkItemStatus.java`, `WorkItemStatusUpdateRequest.java`, `WorkItemView.java`,
   `WorkItemWriteRequest.java`, `Priority.java`
-- Create: `work/CardStatus.java`, `work/AnnotationController.java`
+- Create: `work/CardStatus.java`, `work/AnnotationController.java`,
+  **`backend/src/main/resources/db/migration/V4__retire_work_item.sql`**
+- Modify: `backend/src/test/java/com/tcms/tenancy/SchemaConventionTest.java` (policy count 84 -> 82)
+
+**T2 did not drop `work_item` and `work_item_link`, and this task does — in the same commit that
+deletes the entity.** Plan T2 Part D said to drop them there; that statement cannot stand alone.
+`com.tcms.work.WorkItem` maps `work_item` and `hibernate.ddl-auto` is `validate`, so a database
+without the table refuses to boot the Spring context and every integration test fails before its
+first assertion — and T2 could not delete the entity either, because `BoardService` reads
+`WorkItemRepository` until Part B below gives it `BoardFacts.assignedIssues`. So `V3` **copies** the
+rows and `V4` drops the tables, which is the expand-contract ordering the migration discipline asks
+for anyway. Between `V3` and `V4` a migrated task exists twice — once as the `work_item` the old
+board still renders, once as the issue it became; nothing user-facing ships in that window.
+`V4` is three statements and no data movement:
+
+```sql
+DROP TABLE work_item_link;
+DROP TABLE work_item;
+```
+
+`SchemaConventionTest`'s policy count moves **84 -> 82** in the same commit, and the comment beside
+it already says these two are waiting for this migration.
 - Test: `backend/src/test/java/com/tcms/work/BoardCompositionTest.java`
 
 **Read `work/package-info.java` in full before touching anything here.** It is 97 lines and it is
@@ -4500,7 +4521,10 @@ Then:
    reason: Flyway connects as tcms_owner, which holds no BYPASSRLS, so a plain INSERT ... SELECT
    FROM project with app.current_company unset reads ZERO ROWS and reports success.
 4. Part D — work_item → issue as parentless Stories (D12), carrying the ID forward so
-   derived_item_annotation still resolves. Then DROP both tables. Verify by COUNTING ROWS EITHER SIDE
+   derived_item_annotation still resolves. DO NOT DROP THE TWO TABLES — com.tcms.work.WorkItem still
+   maps work_item and ddl-auto is validate, so a database without it cannot boot the context, and T2
+   cannot delete that entity because BoardService reads WorkItemRepository until T4. The drop is V4,
+   in T4's commit that deletes the nine work classes. Verify by COUNTING ROWS EITHER SIDE
    on a container migrated to V2 — 009 requires this explicitly, "not by reading the SQL", because a
    project whose rows silently did not move produces a shorter result set and no error.
 5. Gates on shanks via ~/bin/tcms-remote (sync, then backend ./gradlew build). Read
@@ -4598,8 +4622,14 @@ Then:
    "the model rather than an omission" is now false; delete it rather than leaving it describing what
    changed. Then delete the nine classes, move Priority to com.tcms.api (grep for importers first), and
    add the annotation endpoint — derived_item_annotation survives and D11 says it matters more, not
-   less.
-3. Gate on shanks: sync, backend ./gradlew build. FlakeScoreTest's six are pre-existing.
+   less. THEN write V4__retire_work_item.sql — two DROP TABLEs, nothing else — and move
+   SchemaConventionTest's policy count 84 -> 82. V3 deliberately did NOT drop those tables: the
+   entity still maps work_item and ddl-auto is validate, so the drop can only land in the commit
+   that deletes the entity. `ls backend/src/main/resources/db/migration/` first; out-of-order is
+   unset, so a lower number arriving after a higher one is silently not applied.
+3. Gate on shanks: sync, backend ./gradlew build. FlakeScoreTest's six are pre-existing, and so are
+   the six contract failures (ContractConventionTest x4, contract enums, contract bindings) that T1
+   left for T3 and this task to repair — measured on 2026-08-30 with T2 complete.
 4. One commit per part, `git add <paths>` only. Note in the commit that moving a derived card now
    answers 404 from /issues/{key} rather than the old 409 that named the action that does work — that
    is a REGRESSION, it is recorded in T7's built-and-unverified list, and M2's board restores it.
