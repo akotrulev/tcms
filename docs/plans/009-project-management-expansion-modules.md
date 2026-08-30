@@ -11,6 +11,12 @@
 > [Prompts — one per module](#prompts--one-per-module), and finish it with the
 > [hand-off protocol](#prompt-hand-off-protocol) — the status table there is the only record of
 > what is done. **The UI source of truth is `docs/mockups/`.**
+>
+> **The executable sequence lives in [009-execution-breakdown.md](009-execution-breakdown.md)** —
+> which module runs when, cut into agent-bound tasks with acceptance criteria and file lists. `Mc`'s
+> task cut is in [009-mc-clients-execution-breakdown.md](009-mc-clients-execution-breakdown.md).
+> Those two files own **order and task shape**; this one owns **content and the status table**. Start
+> a module from its prompt here; take its task list from there.
 
 **Goal:** Deliver the expansion in `docs/specs/2026-08-30-project-management-expansion-scope.md` as
 modules that are **complete on arrival** — each one lands its own migration, its own endpoints and
@@ -61,13 +67,18 @@ would mean eight edits to three documents that a test pins byte-for-byte. It is 
 | **M1** | Tracker core | `V3` | run a project's work — epics, stories, tasks, statuses, comments, spec links — and see it all on My Work | M0 | not started |
 | **M2** | Board & backlog | `V4` | work the board, rank the backlog, filter once across every view | M1 | not started |
 | **M3** | Releases, roadmap & readiness | `V5` | plan versions, see the roadmap, and answer "can we ship 2.4?" | M2 | not started |
-| **M4** | Jira offramp | `V6` | move a Jira project in, keys intact, with a preview and a report | M1 | not started |
-| **M5** | Agent execution | `V7` | connect their own assistant and have it work a task, but never close it | M1 | not started |
-| **M6** | Time | `V8` | log hours, submit a period, and have a PM approve it | M1 | not started |
-| **M7** | Staffing | `V9` | allocate people, see capacity, and find who is free | ~~M6~~ → **M0** (review R11) | not started |
-| **M8** | Billing | `V10` | price approved time and issue an invoice | M6 · Mc | not started |
+| **M4** | Jira offramp | ~~`V6`~~ → `V7` | move a Jira project in, keys intact, with a preview and a report | M1 | not started |
+| **M5** | Agent execution | ~~`V7`~~ → `V6` | connect their own assistant and have it work a task, but never close it | M1 | not started |
+| **M6** | Time | ~~`V8`~~ → `V10` | log hours, submit a period, and have a PM approve it | M1 | not started |
+| **M7** | Staffing | `V9` (unchanged) | allocate people, see capacity, and find who is free | ~~M6~~ → **M0** (review R11) | not started |
+| **M8** | Billing | ~~`V10`~~ → `V11` | price approved time and issue an invoice | M6 · Mc | not started |
 | **M9** | Delivery analytics | none | read burn-up, cycle time and flow | M3 | not started |
-| **Mc** | Clients | *next free* | record a client and attach projects to it | M0 | not started |
+| **Mc** | Clients | `V8` | record a client and attach projects to it | M0 | not started |
+
+**The `V` column was re-derived on 2026-08-30** from the confirmed landing order in
+[009-execution-breakdown.md](009-execution-breakdown.md) — `M1 → M2 → M3 → M5 → M4 → Mc → M7 → M6 → M8 → M9`.
+The strikethroughs are what this table reserved when it was written in module-number order, before
+M5 was placed ahead of M4 and `Mc` sixth. **These are still reservations** — see the section below.
 
 **Status** is one of `not started` · `in progress — plan 0NN` · `done YYYY-MM-DD @ <sha>` ·
 `deferred`. The agent that finishes a module writes it, per the
@@ -94,6 +105,15 @@ two modules, defer one, or slip `Mc` in between, and the module that starts seco
 free number at the time it starts** — not the number this table reserved for it. Re-read
 `backend/src/main/resources/db/migration/` before writing the file, every time.
 
+**The order was confirmed on 2026-08-30** — `M1 → M2 → M3 → M5 → M4 → Mc → M7 → M6 → M8 → M9`, one
+lane, in [009-execution-breakdown.md](009-execution-breakdown.md) — and the `V` column above was
+re-derived from it. That does not promote the column from reservation to fact. Defer a module, stop
+after one, or hoist `Mc` (which plan-wise may sit anywhere after M0), and every number below the
+change is wrong. The directory is the authority. The same rule governs plan numbers: `010` is M0's
+(`010-foundation.md`), so the sequence runs `011` M1, `012` M2, `013` M3, `014` M5, `015` M4,
+`016` Mc, `017` M7, `018` M6, `019` M8, `020` M9 — **projected**, taken next-free at start time,
+never renumbered.
+
 ---
 
 ## What every module carries — the tax, per module rather than per phase
@@ -115,6 +135,7 @@ cleanup pass afterwards:
 | CLI + MCP | The module's verbs, and `docs/specs/2026-08-08-mcp-tool-and-command-surface.md` updated with them. |
 | Gates | `./gradlew build`, `npm run build && npm run lint && npm run test:run`, `npm run build` in `packages/` — **run on `shanks` via `~/bin/tcms-remote`**, per the standing directive. |
 | `docs/features.md` | The section the module replaces, rewritten — struck through and superseded, not deleted. |
+| Task cut | **One stack, one agent, one session, 150k-token budget** — see [How a module's plan is cut into tasks](#how-a-modules-plan-is-cut-into-tasks--one-stack-one-agent-one-session). A task mixing `be` and `fe` is two tasks. |
 
 **The frontend reference is `docs/mockups/`.** Each module below names the mockup files it ports.
 Four are named by no module on purpose: `test-suites.html`, `test-plans.html` and `test-runs.html`
@@ -506,10 +527,51 @@ Test that absence — a company building its own products is the owner's own cas
 
 ---
 
+## How a module's plan is cut into tasks — one stack, one agent, one session
+
+*Added 2026-08-30 by owner directive, and it supersedes nothing above — it constrains the shape of
+each module's own plan, which this document never specified.* The same rule is in the owner's global
+`CLAUDE.md`, so it applies to every plan in every project; it is restated here because a module plan
+is written from this document and should not have to go looking.
+
+**A task is one tech stack, one agent, one session.**
+
+1. **Never mix stacks in one task.** A task is `be` (backend / database / migrations), `fe` (the
+   SPA), `ts` (the shared packages — `@tcms/client`, `@tcms/cli`, `@tcms/mcp`) or `docs`. A task
+   needing two of those is two tasks.
+2. **Every task names its stack and its agent** on the task itself, beside its deliverable.
+3. **Fill the session, then stop.** Merge consecutive same-stack work into one task until it would
+   exceed a **150k-token context**, then start the next. The goal is the *fewest sessions*, not the
+   smallest tasks — an agent switch costs a whole context reload, and twenty small tasks re-read
+   the same files twenty times.
+4. **Budget the 150k before writing the task, and show the budget in the plan.** Count the plan
+   section, `CLAUDE.md`, the pattern files the session must read, the files it writes and the build
+   output it reads back. Over budget: split **along a seam inside the same stack**, never by handing
+   half to another one.
+5. **The tree still builds at every task boundary**, and each task still states one deliverable.
+6. **Order:** the contract and the schema first (both stacks bind to them), then `be`, then `ts`,
+   then `fe`, then the documentation and verification pass.
+
+**What this costs, accepted deliberately:** no user-facing capability works until both its `be` and
+its `fe` task have landed, so a module cannot be stopped mid-feature and still be demonstrated.
+That is the price of one agent switch per stack instead of one per capability. The module's own
+*deliverable* is unchanged — "a person can now …" is still what closes it, and it is still the last
+task in the module that makes it true.
+
+**`009-execution-breakdown.md` already cuts this way** — `t3`–`t8` are contract → `data-architect`
+→ `be-java` → `tooling-engineer` → `fe-react` × 2, one agent each. What this section adds is that
+the *module plan* below it must do the same, rather than cutting by capability and leaving the
+stack switches inside a task.
+
+---
+
 ## How a module is executed
 
 1. **Write its plan.** `ep-writing-plans` → `docs/plans/0NN-<module>.md`, flat `T1…Tn`, one
    deliverable each, actual code in every step. Take the next free `NNN`; never renumber.
+   **Cut the tasks one stack / one agent / one session** per the section above — a task mixing
+   `be` and `fe` is two tasks, and consecutive same-stack work is merged until it would exceed
+   150k tokens.
 2. **Check the migration number against the directory**, not against this document's table.
 3. **Contract first, in one commit** — `openapi.yaml`, both generated clients, `contractBodies.ts`
    in both copies.
@@ -579,9 +641,22 @@ stops. This is part of the module's definition of done.
 The next agent trusts the status table and its prompt, and nothing else in this file is re-verified
 by it — which is why steps 1 and 4 are not optional.
 
-### M0 — Foundation
+### ~~M0 — Foundation~~ → **done. Do not run this prompt.**
+
+**M0 landed 2026-08-30 at `24f997bb`** — `V2__pm_foundation.sql`, plan `010-foundation.md`. Its
+closure is written up in [the M0 section above](#m0--foundation): the V actually taken, the
+built-and-unverified list (33 permission rows granted and read by nothing until M1/M2/M8;
+`ProjectKeys` with no production caller; `doc_link.source_type = 'ISSUE'` written by nothing;
+`project.client_id` unmapped until `Mc`), and what was and was not clicked through on the lab.
+
+The prompt is kept, not deleted, so a reader can see what the module was asked to do. **Running it
+again would re-seed a catalogue three documents already pin byte-for-byte.** The one instruction in
+it that is still live — *grep `frontend/src` and `packages/` for a hardcoded role name*, because M0's
+"no screen changes" claim rests on the admin surface staying data-driven — has been folded into M1's
+first task in [009-execution-breakdown.md](009-execution-breakdown.md).
 
 ````text
+[DONE 2026-08-30 @ 24f997bb — kept for the record, not for execution]
 You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
 (backend → /be-java with be-java-database-code and data-postgresql / data-migrations).
 Build module M0 — Foundation — of docs/plans/009-project-management-expansion-modules.md.
@@ -636,8 +711,9 @@ with no clients — an acceptance criterion, not a separate screen). The mockups
 truth for what a screen shows; the plan and the scope spec for what the system does. Record every
 disagreement in your module plan.
 
-Confirm M0 reads `done` in the plan's status table before starting. If another module is in
-progress, read "What can run in parallel" — only Mc may run beside M1.
+M0 reads `done` in the plan's status table (2026-08-30 @ 24f997bb) — that gate is satisfied.
+M1 runs FIRST, and takes `V3` and plan `011`. ~~Only Mc may run beside M1.~~ Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel".
+Your task list is docs/plans/009-execution-breakdown.md, phase 1.
 
 M0 landed on 2026-08-30 (`V2`, plan 010). What it gives you, and what it costs you:
 
@@ -727,7 +803,8 @@ work-table.html (one filter, in the URL, across every view). The mockups are the
 for the screen: every card has a `⋮ Move to…`, every rankable row a `↑ ↓` pair, chip rows wrap,
 tables scroll inside themselves. The plan and the scope spec are the source of truth for behaviour.
 
-Confirm M1 reads `done` in the status table before starting. Only M6 or M7 may run beside M2.
+Confirm M1 reads `done` in the status table before starting. ~~Only M6 or M7 may run beside M2.~~
+Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M2 runs SECOND; task list in docs/plans/009-execution-breakdown.md, phase 2.
 
 This is the hardest frontend in the expansion and your module plan must say so: optimistic
 reordering on a fractional rank, swimlanes by epic, WIP limits that report a breach rather than
@@ -770,7 +847,8 @@ and test-health panels of project-overview.html that M1 left out, solo-overview.
 no-client rendering, and test-cases.html for its new "verifies which stories" column. Mockups win
 on what a screen shows; the plan and scope spec on what the system does.
 
-Confirm M2 reads `done` in the status table before starting. Only M6 or M7 may run beside M3.
+Confirm M2 reads `done` in the status table before starting. ~~Only M6 or M7 may run beside M3.~~
+Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M3 runs THIRD; task list in docs/plans/009-execution-breakdown.md, phase 3.
 
 Then:
 1. Write docs/plans/0NN-releases.md with ep-writing-plans — next free NNN, next free V from the
@@ -806,7 +884,9 @@ import-connect.html → import-preview.html → import-mapping.html → import-r
 settings-import.html. The mockups are the source of truth for the screens; the plan and scope
 spec for behaviour.
 
-Confirm M1 reads `done` in the status table before starting. Only M7 may run beside M4.
+Confirm M1 reads `done` in the status table before starting. ~~Only M7 may run beside M4.~~
+Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M4 runs FIFTH, AFTER M5 — so M4 takes `V7` and M5 takes `V6`, the reverse of what the
+status table originally reserved. Task list in docs/plans/009-execution-breakdown.md, phase 5.
 
 Review R14 is yours to close in your module plan: whether the importer may reuse the per-person
 credential in integration.tracker (TrackerIdentity / TrackerCredential). Reusing it is a forbidden
@@ -852,7 +932,9 @@ of truth for the screens; the plan and scope spec for behaviour — in particula
 principal, no orchestrator, no runner, no forge adapter, no model credential. The API token is the
 identity; actions attribute to "<person>, via <assistant>".
 
-Confirm M1 reads `done` in the status table before starting. Only M7 may run beside M5.
+Confirm M1 reads `done` in the status table before starting. ~~Only M7 may run beside M5.~~
+Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M5 runs FOURTH, BEFORE M4 — so M5 takes `V6` and M4 takes `V7`, the reverse of what
+the status table originally reserved. Task list in docs/plans/009-execution-breakdown.md, phase 4.
 
 Then:
 1. Write docs/plans/0NN-agent-execution.md with ep-writing-plans — next free NNN, next free V from
@@ -890,8 +972,10 @@ timesheets.html and timesheet-approvals.html, and the estimate-vs-actual figures
 epic.html. The mockups are the source of truth for the screens; the plan and scope spec for
 behaviour.
 
-Confirm M1 reads `done` in the status table before starting. This module may run beside M2 or M3
-(it touches no tracker file); check "What can run in parallel" and the status table.
+Confirm M1 reads `done` in the status table before starting. ~~This module may run beside M2 or M3
+(it touches no tracker file).~~ Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M6 runs EIGHTH, after M7; task list in
+docs/plans/009-execution-breakdown.md, phase 8. M6 takes `V10`, not the `V8` the status table
+originally reserved — five modules and Mc land migrations before it.
 
 Then:
 1. Write docs/plans/0NN-time.md with ep-writing-plans — next free NNN, next free V from the
@@ -928,8 +1012,9 @@ staffing.html and directory.html, and teams.html / member.html for where profile
 surface. The mockups are the source of truth for the screens; the plan and scope spec for
 behaviour.
 
-Confirm M0 reads `done` in the status table before starting. This module touches no tracker file
-and may run beside M2–M5; check "What can run in parallel" and the status table.
+M0 reads `done` in the status table (2026-08-30 @ 24f997bb) — that gate is satisfied.
+~~This module touches no tracker file and may run beside M2–M5.~~ Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M7 runs SEVENTH,
+after Mc; task list in docs/plans/009-execution-breakdown.md, phase 7. M7 keeps `V9`.
 
 M0 landed on 2026-08-30 (`V2`, plan 010). Staffing's five keys are split across two scopes and the
 split is load-bearing, not cosmetic:
@@ -987,7 +1072,10 @@ switcher in the mockups: Billing is ABSENT from the sidebar for everyone but Fin
 Admin — absent, not greyed out. The mockups are the source of truth for the screens; the plan and
 scope spec for behaviour.
 
-Confirm M6 AND Mc both read `done` in the status table before starting. Only M9 may run beside M8.
+Confirm M6 AND Mc both read `done` in the status table before starting. ~~Only M9 may run beside M8.~~
+Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M8 runs NINTH; task list in docs/plans/009-execution-breakdown.md, phase 9. Mc's
+closure task rewrites this prompt with the client endpoints and the client page's hours-and-invoices
+slot as they actually landed — trust that rewrite over anything this block says about them today.
 
 Then:
 1. Write docs/plans/0NN-billing.md with ep-writing-plans — next free NNN, next free V from the
@@ -1023,7 +1111,8 @@ no sprint to measure it over); story P1 in
 docs/specs/2026-08-30-project-management-expansion-user-stories.md; and the mockup reports.html.
 The mockup is the source of truth for the screen; the plan and scope spec for what is computed.
 
-Confirm M3 reads `done` in the status table before starting. Only M8 may run beside M9.
+Confirm M3 reads `done` in the status table before starting. ~~Only M8 may run beside M9.~~
+Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M9 runs LAST; task list in docs/plans/009-execution-breakdown.md, phase 10.
 
 Then:
 1. Write docs/plans/0NN-delivery-analytics.md with ep-writing-plans — next free NNN. Report types
@@ -1056,9 +1145,15 @@ projects.html, the Client field on project-new.html and settings-general.html, a
 solo-overview.html against project-overview.html — the same overview with nothing client-shaped on
 it. The mockups are the source of truth for the screens; the plan and scope spec for behaviour.
 
-Confirm M0 reads `done` in the status table before starting. Mc may run beside M1 (it touches
-`crm`, the projects list and project's edit form, nothing in tracker); check "What can run in
-parallel" and the status table.
+M0 reads `done` in the status table (2026-08-30 @ 24f997bb) — that gate is satisfied.
+
+Your task list is docs/plans/009-mc-clients-execution-breakdown.md — nine tasks in four phases,
+cut against this checkout's real file paths. Read it before you plan. Two numbers in it are already
+corrected there and are worth repeating: Mc does NOT take V3 (M1 does) and does NOT take plan 011
+(M1 does); take the next free of each from disk, projected V8 and 016.
+
+Mc runs SIXTH, after M4, in one lane — not beside M1. The two-lane shape was declined on 2026-08-30;
+see "What can run in parallel" and the status table.
 
 M0 landed on 2026-08-30 (`V2`, plan 010). Three things it decided that Mc must honour:
 
@@ -1121,7 +1216,22 @@ table says. What is disjoint by *module and file*:
 **Never beside each other:** M0 and anything (it edits the three pinned matrix copies and the
 `Role` enum); M2 / M3 / M4 / M5 with one another; M8 before Mc has landed.
 
-**The practical shape is two lanes at most, in two checkouts:**
+### ~~Two lanes~~ → **one lane. Decided 2026-08-30.**
+
+The two-lane shape below was offered and **declined**. Both lanes provably touch `openapi.yaml`, both
+generated clients, `contractBodies.ts` ×2, `keys.ts`, `labels.ts`, `permissions.ts`, the router,
+`devFaults.ts`, `docs/features.md` and the MCP surface doc — the list this section itself ends with —
+so under the rule that tasks sharing files share a lane, it is one lane. CLAUDE.md's *Running work in
+parallel — don't* is the standing directive, earned from four attempts, four reversals and three
+silent losses of committed work with a clean `git status`.
+
+**The order actually being executed is `M1 → M2 → M3 → M5 → M4 → Mc → M7 → M6 → M8 → M9`**, one lane,
+in [009-execution-breakdown.md](009-execution-breakdown.md). Cost accepted: wall-clock is the sum of
+every module, and M8 — which needs both M6 and `Mc` — sits near the end. The analysis below is kept
+because it is still the correct answer to *which modules are disjoint by file*, which is what a
+reader needs the day this is revisited.
+
+~~**The practical shape is two lanes at most, in two checkouts:**~~
 
 - **Lane A — the tracker spine:** `M0 → M1 → M2 → M3 → M5 → M4 → M9`.
 - **Lane B — people and money:** `Mc → M7 → M6 → M8`, starting once M0 has merged; M6 waits for M1,
