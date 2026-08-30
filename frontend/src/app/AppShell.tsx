@@ -1115,14 +1115,22 @@ function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
  * **Contact support stays out.** Its destination is still per-deployment configuration rather than
  * a constant — a self-hosted instance's support contact is not something this repository knows —
  * so it belongs with the instance settings that release, not hard-coded here.
+ *
+ * The link reads ~~"Documentation"~~ **"Help & documentation"**, the account menu's wording, because
+ * the rail already spends that word on the project's own doc pages (`Repository → Documentation`,
+ * `/projects/:projectId/docs`) and the render fixes that label. One shell cannot name two
+ * destinations the same thing and expect a reader to guess which one holds the CLI instructions.
+ *
+ * The gutter is the shell's 22px, matching `main` and the kit's `.foot` rather than the 16px it
+ * drew before — a footer inset differently from every strip above it reads as a rendering slip.
  */
 function AppFooter() {
   return (
     <footer
       data-testid="AppFooter"
-      className="border-t border-line px-2 py-2 text-ink-3 md:px-4"
+      className="border-t border-line px-3 py-2.5 text-ink-3 md:px-[22px]"
     >
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-3">
         <span className="text-[12px]">
           TCMS <Identifier variant="muted">{__APP_VERSION__}</Identifier>
         </span>
@@ -1131,7 +1139,7 @@ function AppFooter() {
           data-testid="AppFooter.HelpLink"
           className="text-[12px] text-steel underline-offset-4 hover:underline"
         >
-          Documentation
+          Help &amp; documentation
         </RouterLink>
       </div>
     </footer>

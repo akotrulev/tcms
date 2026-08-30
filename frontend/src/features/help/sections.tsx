@@ -237,11 +237,6 @@ export const helpSections: HelpSection[] = [
                 'Your own dimensions and values — Priority, Component, whatever this client calls them, including nested values. Guessing a value from another project will be refused; the vocabulary is per-project.',
             },
             {
-              term: 'Execution statuses',
-              detail:
-                'Name your own result statuses and set the order they appear in. "Passed" and "Failed" are not fixed vocabulary.',
-            },
-            {
               term: 'Review',
               detail:
                 'Whether review and approval gating is on, and what it applies to. Everyone who can see the project can read this page; changing it costs project:settings.',
@@ -251,8 +246,20 @@ export const helpSections: HelpSection[] = [
               detail:
                 'Email or webhook channels, and who gets told what. The reads cost integration:manage, so this page shows a contributor nothing — that is the page working, not a fault.',
             },
+            {
+              term: 'Issue tracker',
+              detail:
+                'Which tracker this project files defects to — a Jira Cloud, Jira Data Center or Azure DevOps site, and the project key or team project inside it. This page holds no credential; each person connects with their own. It also lists who on the team has connected, so "why can nobody file defects?" is answerable from one screen. The reads cost integration:manage, like Notifications.',
+            },
           ]}
         />
+        <Note>
+          <strong>Execution statuses are per project but not yet editable.</strong> Each project
+          carries its own result vocabulary and the order it reads in — the app never assumes
+          &quot;Passed&quot; and &quot;Failed&quot; — but the six are seeded when the project is
+          provisioned and there is no screen or endpoint that adds to them. Name your own statuses
+          when it is built; today, read them and use them.
+        </Note>
         <P>
           <strong>Access &amp; roles</strong> is the per-project view of the access model: what this
           project granted, and what it inherits from the company. <strong>Audit trail</strong>{' '}
@@ -285,6 +292,7 @@ export const helpSections: HelpSection[] = [
           items={[
             'Priority, tags, classification values, automation status, and the automation key that binds it to its automated test.',
             'Links out to an external system — a spec, a ticket, a source file at a specific commit.',
+            'Issues from your tracker, kept in their own list rather than mixed into those links: a traceability link says what the case covers, an issue says what is wrong with it, and the two have different lifetimes. You search the tracker and pick a result rather than typing a key — a key moves, so what gets stored is the issue’s own id — which, like filing, needs a tracker you have connected. The rows are ours, so the list still renders when the tracker is unreachable.',
             'File attachments.',
             'Preconditions and postconditions taken from the project-wide condition library, rather than retyped. Cases also inherit the conditions their suite imposes.',
           ]}
@@ -407,13 +415,36 @@ export const helpSections: HelpSection[] = [
           items={[
             "Record a result per case using your project's own status vocabulary, with per-step outcomes.",
             'Attach evidence files to a result, and remove them.',
-            'Link a failed result out to a defect in your tracker.',
+            'Link a failed result out to a defect in your tracker, or file a new one without leaving the run.',
             'Assign executions to people — individually, or split a selection across a list of people round-robin.',
             'Clone a run to repeat it, and close it when it is done.',
             'Runs carry release version, build number, commit SHA and branch, so a run traces back to what was built.',
             'Runs move Not Started → In Progress → Completed → Aborted.',
           ]}
         />
+
+        <H>Filing a defect</H>
+        <P>
+          A failure can become an issue in the project&apos;s tracker from the execution screen, with
+          the case, the step that failed and what was recorded already written into the body. The
+          defect is filed <strong>as you, with your own credential</strong> — not with a shared
+          service account — so the issue in the tracker is reported by the person who saw the
+          failure.
+        </P>
+        <Note severity="warning">
+          <strong>That is why the button can be disabled when you hold every permission there is.</strong>{' '}
+          Filing needs three things: <Code>defect:create</Code>, a run that is still open, and{' '}
+          <strong>a tracker you have connected</strong>. The third is not a permission and nobody
+          can grant it to you — connect under <strong>your name → Tracker connections</strong> with
+          an API token you create in the tracker itself. The control says which of the three is
+          missing before you click rather than failing afterwards.
+        </Note>
+        <P>
+          Your connections are yours: one per tracker site, each showing when it was last used, what
+          the tracker last said about it, and — for Jira Cloud, which caps a token at a year — the
+          date it dies. A project&apos;s settings page shows leads <em>who</em> has connected, never
+          the credential and never the reason somebody&apos;s needs attention.
+        </P>
 
         <H>Seeing the work</H>
         <Definitions

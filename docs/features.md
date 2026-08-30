@@ -42,10 +42,16 @@ Written for a reader deciding what the product does. Implementation detail is co
 ## Projects
 
 - Create projects, edit them, and archive ones that are finished
-- Name your own execution statuses per project and set the order they appear in
+- Each project carries its own execution-status vocabulary and the order it reads in — the app
+  never assumes "Passed" and "Failed" — but the six are seeded at provisioning and
+  ~~naming your own~~ is not built: `GET /projects/{projectId}/statuses` is the only verb in
+  the contract, and there is no screen. Listed under Phase 1 below.
 - Define your own classification dimensions and values — Priority, Component, whatever the client
   calls them — including nested values
 - Turn review and approval gating on or off per project, and choose what it applies to
+- Bind the project to an issue tracker — a Jira Cloud, Jira DC or Azure DevOps site and the
+  project key or team project inside it. The binding holds no credential; the settings page
+  also lists which team members have connected one of their own
 - Manage who is on the project and what role they hold
 - A dashboard per project showing what needs attention, how cases break down by lifecycle and
   classification, and how execution is trending
@@ -133,7 +139,11 @@ use them to drive suite membership.
   see later what the run was *meant* to cover
 - Record a result per case using your project's own status vocabulary, with per-step outcomes
 - Attach evidence files to a result, and remove them
-- Link a failed result out to a defect in your tracker
+- Link a failed result out to a defect in your tracker, or file a new one from the execution
+  screen with the case, the failed step and what was recorded composed into the body
+- Filing and issue search happen **as the caller, with their own credential**, so the control
+  is disabled — with the reason, before the click — for anyone who has connected no tracker,
+  however many permissions they hold. Connections live on the person's own account page
 - Assign executions to people
 - Clone a run to repeat it
 - Close a run when it is done
@@ -334,7 +344,14 @@ SAML as pending work) were removed outright as wrong.*
 
 ### Phase 2 — Not started
 
-- Issue tracker integration (Jira, GitHub Issues, GitLab Issues, Azure DevOps) — link cases ↔ issues, one-click defect creation from a failed step, status sync-back, inline status hover-cards
+- **~~Issue tracker integration (Jira, GitHub Issues, GitLab Issues, Azure DevOps) — link cases ↔
+  issues, one-click defect creation from a failed step, status sync-back, inline status
+  hover-cards~~** → **partly superseded 2026-08-29 (plan 004, Phases 1 and 3).** Built: Jira
+  Cloud, Jira DC and Azure DevOps bindings per project, a per-person credential (D2's
+  inversion — the credential belongs to the user, not the project), case ↔ issue links, and
+  filing a defect from a failed execution. **Not built:** GitHub Issues and GitLab Issues
+  providers, and status sync-back — `defect_link.statusCache` is rendered when present and
+  nothing writes it, so the hover-card has no source yet
 - `.feature` export/import — generate `.feature` files from Gherkin cases, import existing ones, direction-of-truth per project *(§6a)*
 - Cucumber step-level result mapping in CI ingestion
 - Git traceability, remaining half — **the run half is implemented**: `test_run` carries `commit_sha`, `branch`, `build_number` and `release_version`, `RunCreateDialog` collects them and the run detail returns them. Not built: PR linkage and case↔requirement linking
@@ -354,6 +371,9 @@ SAML as pending work) were removed outright as wrong.*
 ### Phase 1 — Planned but incomplete
 
 - Gherkin syntax-aware editing — **the format itself is implemented**: a `STRUCTURED`/`GHERKIN` toggle, a seeded `Feature:` template, non-empty validation, and `GherkinView` keyword rendering on the detail view. Not built: keyword autocomplete, server-side parse/validation, Background/Scenario Outline handling, `.feature` preview
+- Editing the execution-status vocabulary — the data model and the read exist (a project's
+  statuses are its own, ordered, and every screen reads them); the six are seeded at
+  provisioning and no endpoint or screen adds, renames or reorders them
 - Test plan templates — reusable plan skeletons (plan cloning exists; templates do not) *(§6v)*
 - Per-configuration matrix **view** in plans — the data model exists (a plan carries a `configurations` array, a run carries its `configuration`); the matrix screen does not *(§6p)*
 - Paste-from-clipboard and drag-drop evidence UX
