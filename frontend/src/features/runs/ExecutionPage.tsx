@@ -552,6 +552,15 @@ function ExecutionForm({
   );
   const [blockedDialog, setBlockedDialog] = useState(false);
   const [conflict, setConflict] = useState<string | null>(null);
+
+  /*
+    "Failed has been asked for, and nothing about it has been said yet."
+
+    Set by the first press of Failed when no step carries that verdict, and cleared when the screen
+    moves to another case. It exists because the refusal has to be reachable from the CASE verdict
+    and not only from a step's — see `failedStepIndex` below for what that cost before.
+  */
+  const [pendingFailure, setPendingFailure] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   /* The notes box, so `n` can put the caret in it and `Escape` can take it back out. A ref rather
@@ -615,7 +624,22 @@ function ExecutionForm({
         // here. It was sent in the BODY until the server existed to read it, which is exactly how
         // a divergence survives: both sides agreed, and both were wrong.
         lockVersion: execution.lockVersion,
-        stepResults: Object.entries(stepResults)
+        /*
+          The adopted step is merged in, not left out. A case recorded Failed whose steps say
+          nothing is the artefact renders audit 3.3 found on the run detail — *"0 of 3 steps
+          failed · 3 not marked"* under a Failed verdict — so when the failure panel adopted the
+          current step, that step's verdict travels with the description the panel collected.
+
+          Merged here rather than written into `stepResults` when the panel opens, deliberately:
+          the panel is a question, and a tester who opens it and then presses Passed instead must
+          not leave a failed step behind them.
+        */
+        stepResults: Object.entries({
+          ...stepResults,
+          ...(pendingFailure && failedStep?.stepId
+            ? { [failedStep.stepId]: (byKind('FAILED')?.id ?? null) }
+            : {}),
+        })
           .filter(([, value]) => value !== null)
           .map(([stepId, value]) => ({
             stepId,
@@ -655,23 +679,89 @@ function ExecutionForm({
   const currentStepIndex = steps.findIndex((step) => stepResults[step.stepId ?? ''] === null);
 
   /*
-    The failure panel's subject — the first step marked Failed, and `null` when there is none.
+    The failure panel's subject, and there are TWO ways to become one.
 
     The render puts this in the rail *in place of* the recording section rather than in a dialog:
     the step the failure is about stays on screen and re-readable while its description is typed,
     which is UX#55's *error near the problem*, and which a modal would have covered.
+
+      1. **A STEP was marked Failed.** The original path, and the only one until 2026-08-30.
+      2. **The CASE is being recorded Failed with no step marked** — renders audit 3.3, and a High.
+         `failedStep` was `null` on that path, so `failureNeedsDescription` below was false, the
+         disabled guard on the verdict button passed, and one click produced
+         *"TC-4 · Failed · 0 of 3 steps failed · 3 not marked"* with no reason and no defect. That
+         is precisely the record the render's refusal exists to prevent, reachable in one click,
+         and it is what the run detail then showed two lines later.
+
+    In case 2 the panel adopts the step the tester is standing on. "Which step" is part of the
+    record — a case marked Failed with zero failed steps is the artefact being removed here — and
+    `currentStepIndex` above already knows it.
   */
-  const failedStepIndex = steps.findIndex(
+  const markedFailedIndex = steps.findIndex(
     (step) => kindOfStatusId(stepResults[step.stepId ?? ''] ?? null) === 'FAILED',
   );
+  const failedStepIndex =
+    markedFailedIndex >= 0
+      ? markedFailedIndex
+      : pendingFailure && steps.length > 0
+        ? Math.max(currentStepIndex, 0)
+        : -1;
   const failedStep = failedStepIndex >= 0 ? steps[failedStepIndex] : null;
-  const failureDescription = failedStep ? (stepComments[failedStep.stepId ?? ''] ?? '') : '';
+
+  /*
+    Where the description goes, and it is not always a step.
+
+    A case with NO steps is an ordinary case — an exploratory charter, an imported one-liner — and
+    it can be recorded Failed like any other. There is no step to hang the sentence on, so it goes
+    on the case's own comment, which is the field that already exists for exactly that. Without
+    this branch a stepless case would slip past the refusal the same way a stepped one did before
+    2026-08-30, which is the hole the fix would have left behind it.
+  */
+  const failureOnTheCase = pendingFailure && failedStep === null;
+  const failureAsked = failedStep !== null || failureOnTheCase;
+  const failureDescription = failedStep
+    ? (stepComments[failedStep.stepId ?? ''] ?? '')
+    : failureOnTheCase
+      ? comment
+      : '';
   /* A failure without a description is refused, and says so — the render's note, and §258's rule
      that a refusal path which cannot be seen is no refusal path. The sentence is rendered under
      the field it is about and announced to the keyboard, never collected into a summary. */
-  const failureNeedsDescription = failedStep !== null && failureDescription.trim() === '';
+  const failureNeedsDescription = failureAsked && failureDescription.trim() === '';
   const failureRefusal =
     'A failure needs a description. This is what the next person reads, and what a defect is filed from.';
+
+  /**
+   * The one path a case verdict travels, whichever control asked for it.
+   *
+   * It exists because there were two. The keyboard handler carried the Blocked checklist and the
+   * failure refusal; the verdict BUTTONS called `record` directly and carried neither in their
+   * `onClick` — only in their `disabled`. That is why renders audit 3.3 was reachable by mouse: a
+   * disabled attribute cannot express "press this to open the panel", so Failed with no marked
+   * step was enabled, and enabled meant recorded.
+   */
+  const requestVerdict = (kind: VerdictKind, statusId: string) => {
+    if (kind === 'BLOCKED') {
+      // Blocked is never one keystroke — it opens the checklist, in every mode. See
+      // `executionKeys.ts` and this file's own header for the rule.
+      setBlockedDialog(true);
+      announce('Blocked. Say which precondition did not hold.');
+      return;
+    }
+    if (kind === 'FAILED' && !pendingFailure && markedFailedIndex < 0) {
+      // Nor is Failed. The first press opens the panel and adopts the step the tester is on; the
+      // second, once a description is there, records.
+      setPendingFailure(true);
+      announce('Failed. Say what actually happened.');
+      return;
+    }
+    if (failureNeedsDescription) {
+      announce(failureRefusal);
+      return;
+    }
+    announce(`Recording ${statusLabels[kind]} for ${execution.caseKey}.`);
+    void record(statusId);
+  };
 
   /*
     The verdict the steps propose — a suggestion, never a decision. The rules and the argument
@@ -736,6 +826,10 @@ function ExecutionForm({
       return;
     }
     const suffix = modeParam ? `?mode=${modeParam}` : '';
+    // An asked-for failure does not follow the tester to the next case. The panel is about a step
+    // of THIS case, and arriving on the next one with a failure description box already demanding
+    // an answer would be asking about something the reader has not looked at yet.
+    setPendingFailure(false);
     // The arrival announcement belongs to the destination and is raised on arrival — see
     // `arrival` above. Announcing here as well was the defect: this sentence was replaced by the
     // destination's a moment later, so the progress it carries never reached anybody.
@@ -815,21 +909,9 @@ function ExecutionForm({
     }
     if (submit.isPending) return;
 
-    if (action.verdict === 'BLOCKED') {
-      // Blocked is never one keystroke — it opens the checklist, in every mode. See
-      // `executionKeys.ts` and this file's own header for the rule.
-      setBlockedDialog(true);
-      announce('Blocked. Say which precondition did not hold.');
-      return;
-    }
-    if (failureNeedsDescription) {
-      announce(failureRefusal);
-      return;
-    }
     const status = byKind(action.verdict);
     if (!status) return;
-    announce(`Recording ${statusLabels[action.verdict]} for ${execution.caseKey}.`);
-    void record(status.id);
+    requestVerdict(action.verdict, status.id);
   };
 
   /*
@@ -1012,9 +1094,17 @@ function ExecutionForm({
       {/* THE RAIL — the render's right `.side`: record, describe, attach, assign. */}
       <aside className="w-full shrink-0 border-line bg-panel lg:w-[300px] lg:border-l">
         <RailSection
-          title={failedStep ? `Failed at step ${failedStepIndex + 1}` : 'Record the result'}
+          title={
+            failedStep
+              ? `Failed at step ${failedStepIndex + 1}`
+              : failureOnTheCase
+                ? 'Failed'
+                : 'Record the result'
+          }
           testId="Execution.Actions"
-          className={failedStep ? 'bg-[color-mix(in_oklab,var(--color-failed)_6%,transparent)]' : undefined}
+          className={
+            failureAsked ? 'bg-[color-mix(in_oklab,var(--color-failed)_6%,transparent)]' : undefined
+          }
         >
           {frozen && (
             <Banner tone="warn" data-testid="Execution.RunClosed" className="mb-2.5">
@@ -1083,7 +1173,7 @@ function ExecutionForm({
                         || durationIsNonsense
                         || (failureNeedsDescription && !isBlocked)
                       }
-                      onClick={() => (isBlocked ? setBlockedDialog(true) : void record(status.id))}
+                      onClick={() => requestVerdict(kind, status.id)}
                       data-testid={`Execution.Action.${kind}`}
                       style={
                         lit || suggested
@@ -1119,25 +1209,34 @@ function ExecutionForm({
             })}
           </div>
 
-          {failedStep ? (
-            <div className="mt-3">
+          {failureAsked ? (
+            <div className="mt-3" data-testid="Execution.Failure">
               <Field
                 label="What actually happened"
                 htmlFor="Execution.FailureDescription"
                 error={failureNeedsDescription ? failureRefusal : undefined}
-                help="This travels with the step, not with the case, so the next reader finds it where it happened."
+                help={
+                  failedStep
+                    ? 'This travels with the step, not with the case, so the next reader finds it where it happened.'
+                    : 'This case has no steps, so the description travels with the case itself.'
+                }
               >
                 <Textarea
                   id="Execution.FailureDescription"
+                  required
                   rows={4}
                   value={failureDescription}
-                  onChange={(event) =>
-                    setStepComments((previous) => ({
-                      ...previous,
-                      [failedStep.stepId ?? '']: event.target.value,
-                    }))
-                  }
-                  data-testid="Execution.Steps.Row.CommentField"
+                  onChange={(event) => {
+                    if (failedStep) {
+                      setStepComments((previous) => ({
+                        ...previous,
+                        [failedStep.stepId ?? '']: event.target.value,
+                      }));
+                      return;
+                    }
+                    setComment(event.target.value);
+                  }}
+                  data-testid="Execution.Failure.Description"
                 />
               </Field>
             </div>

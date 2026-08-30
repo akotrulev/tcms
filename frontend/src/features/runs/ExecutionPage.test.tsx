@@ -565,9 +565,94 @@ describe('ExecutionPage number keys', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(screen.getByTestId('Execution.Action.FAILED')).toBeDisabled()
 
-    await user.type(screen.getByTestId('Execution.Steps.Row.CommentField'), 'the ledger accepted it twice')
+    await user.type(screen.getByTestId('Execution.Failure.Description'), 'the ledger accepted it twice')
 
     expect(screen.getByTestId('Execution.Action.FAILED')).toBeEnabled()
     expect(sent).toHaveLength(0)
+  })
+})
+
+/**
+ * The render's most-specified moment, and the one the 2026-08-30 audit reached in one click.
+ *
+ * Render B: *"what '2' opens — the only modal-ish moment, and it is a rail section, not a dialog"*,
+ * and its own note, *"A failure without a description is refused, and says so."* The panel and the
+ * refusal were both implemented; the gate keyed on a STEP carrying the Failed verdict, so pressing
+ * the CASE verdict with nothing marked walked straight past it and produced
+ * *"TC-4 · Failed · 0 of 3 steps failed · 3 not marked"* — a failure with no reason and no defect.
+ *
+ * Both controls are exercised, because they were two paths: the button called `record` directly
+ * and carried the refusal only in its `disabled`, which cannot express "press this to open".
+ */
+describe('a case cannot be recorded Failed without saying what happened', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('opens the panel instead of recording, when no step is marked', async () => {
+    mockReads()
+    const sent = mockSubmit()
+    await renderScreen()
+
+    await userEvent.click(screen.getByTestId('Execution.Action.FAILED'))
+
+    expect(sent).toHaveLength(0)
+    expect(await screen.findByTestId('Execution.Failure')).toBeInTheDocument()
+    expect(screen.getByTestId('Execution.Failure.Description')).toBeRequired()
+  })
+
+  it('refuses the second press while the description is empty', async () => {
+    mockReads()
+    const sent = mockSubmit()
+    await renderScreen()
+
+    await userEvent.click(screen.getByTestId('Execution.Action.FAILED'))
+    await screen.findByTestId('Execution.Failure')
+
+    expect(screen.getByTestId('Execution.Action.FAILED')).toBeDisabled()
+    expect(sent).toHaveLength(0)
+  })
+
+  it('records once the description is there, and carries it', async () => {
+    // This fixture's case has no steps, which is an ordinary case and the branch that would
+    // otherwise be the hole left behind the fix: with nothing to hang the sentence on, it goes on
+    // the case's own comment rather than being skipped.
+    mockReads()
+    const sent = mockSubmit()
+    await renderScreen()
+
+    await userEvent.click(screen.getByTestId('Execution.Action.FAILED'))
+    await userEvent.type(
+      await screen.findByTestId('Execution.Failure.Description'),
+      'The price filter reset when the sort changed.',
+    )
+    await userEvent.click(screen.getByTestId('Execution.Action.FAILED'))
+
+    await waitFor(() => expect(sent).toHaveLength(1))
+    expect(sent[0].comment).toContain('The price filter reset')
+  })
+
+  it('refuses the keyboard by the same path', async () => {
+    // `f`, the screen's own binding for the case verdict — 1–4 mark the STEP the tester is on.
+    mockReads()
+    const sent = mockSubmit()
+    await renderScreen()
+
+    await userEvent.keyboard('f')
+
+    expect(sent).toHaveLength(0)
+    expect(await screen.findByTestId('Execution.Failure')).toBeInTheDocument()
+  })
+
+  it('leaves Passed one press away, because only Failed owes an explanation', async () => {
+    // The guard. Without it every assertion above is satisfied by a screen that refuses
+    // everything, which would be a worse bug than the one being fixed.
+    mockReads()
+    const sent = mockSubmit()
+    await renderScreen()
+
+    await userEvent.click(screen.getByTestId('Execution.Action.PASSED'))
+
+    await waitFor(() => expect(sent).toHaveLength(1))
   })
 })
