@@ -10,6 +10,7 @@ import type { SsoProviderChoice } from '../../api/types';
 import { Banner } from '../../components/kit';
 import { Button, Input, Switch } from '../../components/ui';
 import { useAuth } from '../../auth/useAuth';
+import { cn } from '../../lib/cn';
 import { offerToSaveCredentials } from '../../lib/credentials';
 import { socialProviderLabels } from '../../lib/labels';
 import { rememberSsoReturnPath } from './ssoReturnPath';
@@ -152,7 +153,7 @@ export function LoginPage() {
     handleSubmit,
     setError,
     setFocus,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isSubmitted },
   } = useForm<LoginInput>({
     resolver: zodResolver(LoginSchema),
     defaultValues: {
@@ -244,6 +245,33 @@ export function LoginPage() {
 
   const emailField = register('email');
   const passwordLabel = directory ? 'Directory password' : 'Password';
+
+  /**
+   * Whether to ask for a password yet.
+   *
+   * Render A's caption is the flow: *"the SSO discovery that fires on the email, **before a
+   * password is ever asked for**"*, and render B is the password path as a second frame. Discovery
+   * has fired on blur since this screen was built — what shipped drew the password field beside the
+   * email from the first paint, so the address never visibly decided the method (renders audit
+   * 8.1). Mounting it after discovery has answered is the whole change: no new request, no new
+   * state, and the same three outcomes as before.
+   *
+   * Four ways to be asked, and the last two are the ones that make this safe:
+   *
+   *   1. **Directory mode.** An LDAP provider was chosen, so the password is the directory's.
+   *   2. **Discovery answered and named no provider.** The ordinary local account.
+   *   3. **Discovery failed.** A screen that cannot reach the discovery endpoint must still let
+   *      somebody sign in; refusing to show the field would turn one endpoint being down into
+   *      nobody being able to log in at all.
+   *   4. **A submitted form.** A password manager fills both fields and submits without ever
+   *      blurring the email, and it does that against the DOM as it finds it. This is the honest
+   *      cost of deferring the field and it is why the submit path below already re-runs discovery
+   *      on a rejected attempt: the manager's first attempt can miss, the field then appears, and
+   *      the second one is a normal typed sign-in. Keeping the field mounted for that case would
+   *      cost the render's whole point on every ordinary load.
+   */
+  const askForPassword =
+    directory !== null || discovery.isSuccess || discovery.isError || isSubmitted;
 
   return (
     <ThresholdLayout
@@ -339,29 +367,34 @@ export function LoginPage() {
           {errors.email && <FieldError id="email-error">{errors.email.message}</FieldError>}
         </div>
 
-        <div className="mb-[15px]">
-          <FieldLabel htmlFor="current-password">{passwordLabel}</FieldLabel>
-          <Input
-            type="password"
-            autoComplete="current-password"
-            id="current-password"
-            className="min-h-[38px]"
-            aria-invalid={!!errors.password}
-            aria-describedby={errors.password ? 'current-password-error' : undefined}
-            data-testid={`${TestIdPrefix}.PasswordField`}
-            {...register('password')}
-          />
-          {errors.password && (
-            <FieldError id="current-password-error">{errors.password.message}</FieldError>
-          )}
-        </div>
+        {askForPassword && (
+          <div className="mb-[15px]">
+            <FieldLabel htmlFor="current-password">{passwordLabel}</FieldLabel>
+            <Input
+              type="password"
+              autoComplete="current-password"
+              id="current-password"
+              className="min-h-[38px]"
+              aria-invalid={!!errors.password}
+              aria-describedby={errors.password ? 'current-password-error' : undefined}
+              data-testid={`${TestIdPrefix}.PasswordField`}
+              {...register('password')}
+            />
+            {errors.password && (
+              <FieldError id="current-password-error">{errors.password.message}</FieldError>
+            )}
+          </div>
+        )}
 
         {/*
-          The render puts this on the password path only — a switch for a flow that will not
-          happen is noise at the moment noise costs most. It stays unconditional here because the
-          password field does; see the note above `Login.PasswordField`'s sibling in the report.
+          The render puts this on the password path only — a switch for a flow that will not happen
+          is noise at the moment noise costs most. ~~It stays unconditional here because the
+          password field does.~~ → the password field no longer does, so neither does this: it
+          follows `askForPassword` for exactly the reason the render gives.
         */}
-        <div className="mb-[15px] flex items-center gap-[9px]">
+        <div
+          className={cn('mb-[15px] flex items-center gap-[9px]', !askForPassword && 'hidden')}
+        >
           <Controller
             name="rememberMe"
             control={control}

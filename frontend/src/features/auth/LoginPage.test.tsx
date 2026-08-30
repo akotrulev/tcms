@@ -199,13 +199,24 @@ describe('LoginPage — single sign-on', () => {
       providers: [anSsoProviderChoice({ displayName: 'Acme SSO' })],
     })
 
-    // A password manager fills both fields and submits — no blur ever fires. At a company whose
-    // accounts exist only through its issuer, this 401 is the person's everyday experience.
+    /*
+      A password manager fills both fields and submits — no blur ever fires. At a company whose
+      accounts exist only through its issuer, this 401 is the person's everyday experience.
+
+      The manager's fill is emulated through the field it finds, which since audit 8.1 means the
+      email alone on the first paint. `{enter}` from the email submits the form; that submit is
+      what mounts the password field (`isSubmitted`), and the same handler asks discovery — so the
+      person ends up with their buttons AND somewhere to type, which is the outcome this arm has
+      always been about.
+    */
     renderLogin(undefined, async () => {
       throw new ApiError(401, '')
     })
-    await user.type(screen.getByTestId('Login.EmailField'), 'kim@acme.test')
-    await user.type(screen.getByTestId('Login.PasswordField'), 'not-their-password{enter}')
+    await user.type(screen.getByTestId('Login.EmailField'), 'kim@acme.test{enter}')
+    await user.type(
+      await screen.findByTestId('Login.PasswordField'),
+      'not-their-password{enter}',
+    )
 
     expect(
       await screen.findByRole('button', { name: /continue with acme sso/i }),
@@ -415,8 +426,19 @@ describe('LoginPage — where a password sign-in lands', () => {
   }
 
   async function signIn(user: ReturnType<typeof userEvent.setup>) {
+    /*
+      Type the address, then leave the field — which is what a person does, and what the render
+      describes: *"the SSO discovery that fires on the email, before a password is ever asked
+      for"*. The password field mounts once discovery has answered (renders audit 8.1), so a helper
+      that reached for it without ever leaving the email field was asserting a screen no reader
+      sees.
+    */
     await user.type(screen.getByTestId('Login.EmailField'), 'kim@acme.test')
-    await user.type(screen.getByTestId('Login.PasswordField'), 'correct-horse-battery')
+    await user.tab()
+    await user.type(
+      await screen.findByTestId('Login.PasswordField'),
+      'correct-horse-battery',
+    )
     await user.click(screen.getByTestId('Login.SubmitButton'))
   }
 
@@ -436,5 +458,44 @@ describe('LoginPage — where a password sign-in lands', () => {
     await signIn(user)
 
     expect(await screen.findByTestId('Landing.Default')).toBeInTheDocument()
+  })
+})
+
+describe('LoginPage — the email decides the method before a password is asked for', () => {
+  it('asks for the address alone on the first paint', () => {
+    // Render A's caption: "the SSO discovery that fires on the email, before a password is ever
+    // asked for", with render B the password path as a SECOND frame. Discovery has fired on blur
+    // since this screen was built; what shipped drew the password field beside the email from the
+    // first paint, so the address never visibly decided anything (renders audit 8.1).
+    vi.spyOn(api, 'post').mockResolvedValue({ providers: [] })
+    renderLogin()
+
+    expect(screen.getByTestId('Login.EmailField')).toBeInTheDocument()
+    expect(screen.queryByTestId('Login.PasswordField')).not.toBeInTheDocument()
+  })
+
+  it('asks for a password once discovery says this address uses one', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(api, 'post').mockResolvedValue({ providers: [] })
+    renderLogin()
+
+    await user.type(screen.getByTestId('Login.EmailField'), 'kim@acme.test')
+    await user.tab()
+
+    expect(await screen.findByTestId('Login.PasswordField')).toBeInTheDocument()
+  })
+
+  it('still asks when discovery cannot be reached', async () => {
+    // One endpoint being down must not become nobody being able to sign in — so the refused
+    // discovery IS this arm's subject, and the screen must reach the password field through it.
+    drivingAFailedWrite()
+    const user = userEvent.setup()
+    vi.spyOn(api, 'post').mockRejectedValue(new ApiError(503, ''))
+    renderLogin()
+
+    await user.type(screen.getByTestId('Login.EmailField'), 'kim@acme.test')
+    await user.tab()
+
+    expect(await screen.findByTestId('Login.PasswordField')).toBeInTheDocument()
   })
 })
