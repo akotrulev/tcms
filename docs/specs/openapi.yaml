@@ -54,6 +54,7 @@ tags:
   - name: admin
   - name: audit
   - name: work
+  - name: tracker
 
 # =============================================================================
 # PATHS
@@ -1072,7 +1073,7 @@ paths:
           nothing until it is redeemed.
 
         **This is the same predicate the write side enforces**, not an approximation of it.
-        `POST /work-items` validates `assigneeId` against exactly this set, so a picker
+        `POST /issues` validates `assigneeId` against exactly this set, so a picker
         built from this list can never offer somebody the server will refuse — which is the
         §31 rule (disable-don't-hide) applied to a *set* rather than to a button.
 
@@ -3539,7 +3540,7 @@ paths:
         that project's grant; this one returns rows from many. The bound is the **caller's own**
         project visibility (`project:read`, per project) — never the company's project list. Two
         colleagues searching the same word legitimately receive different results and different
-        totals; that is the design, and it is the same rule `/work-items`' team board states.
+        totals; that is the design, and it is the same rule `GET /board`'s team board states.
 
         **A project you hold no grant on contributes no hit and no count.** The `total` is computed
         over the same narrowed set as the page, so it can never report the size of a result set you
@@ -3551,7 +3552,7 @@ paths:
         question the empty answer exists to withhold.
 
         **At least one of `q`, `ownerId` or `tag` is required** — see the 400. There is no search
-        that is every case in every project, for `/work-items`' reason: it is a company-sized
+        that is every case in every project, for `GET /board`'s reason: it is a company-sized
         response no screen can work from.
 
         A `q` matching the case-key pattern (`TC-412`) short-circuits to an exact lookup, as on the
@@ -6107,7 +6108,7 @@ paths:
       description: |
         **Yours, not the project's.** A definition is owned by the person who saved it
         (`report_definition.owner_id`) and v1 has no way to share one, so two people asking for the
-        same project's saved reports receive different lists — the same design `GET /work-items`
+        same project's saved reports receive different lists — the same design `GET /board`
         states for the team board, and the reason it is stated here too is that a list endpoint
         which quietly means "mine" is otherwise indistinguishable from one that means "everyone's"
         on a project where only one person has ever saved anything.
@@ -8264,14 +8265,20 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
 
   # ---------------------------------------------------------------- work ----
-  /work-items:
+  /board:
     # No parameters block on the path item, per §50: query parameters written here are
-    # inherited by every operation beneath, so the board's filters would land on the POST.
+    # inherited by every operation beneath, so the board's filters would land elsewhere.
     get:
       tags: [work]
-      summary: Kanban board contents
+      summary: Board contents — a project's, your own, or a team's
+      operationId: getBoard
       description: |
-        Returns real tasks AND derived items in one list. Derived items carry
+        **Renamed from `GET /work-items` in M1 (011 D-a).** The path named a table that no longer
+        exists; the operation is unchanged in shape and in every one of its three board semantics.
+        `POST /work-items` and `PATCH /work-items/{workItemId}` are gone outright — creating and
+        moving an issue is `POST /issues` and `POST /issues/{key}/transitions`.
+
+        Returns real issues AND derived items in one list. Derived items carry
         sourceType/sourceId and are NOT stored — their status is computed from the
         source on every read, so a card can never diverge from its execution (plan §6l).
 
@@ -8343,7 +8350,7 @@ paths:
       responses:
         '200':
           description: |
-            Work items. **An empty array is a reachable board with nothing on it** — for a
+            Cards. **An empty array is a reachable board with nothing on it** — for a
             team board that means either a team with no members or members with no work the
             caller can see, and the two are deliberately indistinguishable on the wire: both
             are "this team has nothing for you", and a client able to tell them apart would
@@ -8352,7 +8359,7 @@ paths:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/WorkItem' }
+                items: { $ref: '#/components/schemas/BoardCard' }
         '400':
           # Two shapes, one status, and both are refusals to GUESS which board was meant:
           #  - neither a project nor a person: no projectId, no teamId, mine=false;
@@ -8370,93 +8377,404 @@ paths:
           # company are the same 404, or this operation becomes a company-wide team-existence
           # oracle answerable by anybody with a session and a guessed UUID (§6t).
           $ref: '#/components/responses/NotFound'
-    post:
-      tags: [work]
-      summary: Create a task
-      description: |
-        `workitem:manage` — Instance Admin, Company Admin, Test Lead and Test Engineer
-        (roles spec §A6). Viewer and Automation Service do not hold it.
 
-        **`kind` is not a field on the request.** Every row this creates is a `TASK`.
-        A client able to POST `kind: EXECUTION` could materialise a derived item, which
-        is the one thing §6l's design exists to prevent: the moment a card's status is
-        stored separately from its execution's, the two diverge and the board stops being
-        trusted. Derived items have no create endpoint because they are not stored.
-      # Idempotency-Key arrives in §54, TOGETHER WITH THE COLUMN THAT HONOURS IT (V17) —
-      # which is the whole point of how it was left. §53 refused to declare it while
-      # `work_item` had no created_idempotency_key column, because that is §50's defect in
-      # its worse direction: the header would sit in the reviewed spec, in schema.d.ts and
-      # in autocomplete while the server ignored it, so a client would believe its retries
-      # were deduplicated when every one of them created another card. The scope here is
-      # (company_id, project_id, key) as it is everywhere else — and the project comes from
-      # the BODY on this operation rather than from a path segment, which changes nothing
-      # about the constraint and everything about where the handler reads it from.
+  /board/annotations/{sourceType}/{sourceId}:
+    parameters:
+      - { name: sourceType, in: path, required: true, schema: { type: string } }
+      - { name: sourceId, in: path, required: true, schema: { type: string } }
+    put:
+      tags: [work]
+      summary: Your own note and personal due date on a card
+      operationId: putCardAnnotation
+      description: |
+        Story B5's second criterion. Writes `derived_item_annotation`, keyed on the CALLER — a
+        teammate looking at the same issue does not see this. No permission beyond seeing the
+        card: annotating something is not editing it, which is the whole reason the table is
+        separate from the row.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CardAnnotationInput' }
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CardAnnotation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ------------------------------------------------------------- tracker ----
+  /issues:
+    get:
+      tags: [tracker]
+      summary: A project's issues
+      operationId: listIssues
+      description: |
+        `issue:read`. **Test Engineer, Test Lead, Project Manager, Viewer and Automation Service
+        all hold it** (roles spec §A3). The work table (`work-table.html`) is this operation.
+      parameters:
+        - { name: projectId, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: level, in: query, schema: { $ref: '#/components/schemas/IssueLevel' } }
+        - { name: epicKey, in: query, schema: { type: string } }
+        - { name: parentKey, in: query, schema: { type: string } }
+        - { name: statusId, in: query, schema: { type: array, items: { type: string, format: uuid } } }
+        - { name: assigneeId, in: query, schema: { type: array, items: { type: string, format: uuid } } }
+        - name: unparented
+          in: query
+          description: |
+            Story-level issues with no epic — the overview's "Unscheduled backlog" reads this.
+            A separate flag rather than `epicKey=null`, because an absent parameter already
+            means "don't filter" and a client cannot spell the difference.
+          schema: { type: boolean }
+        - { name: sort, in: query, schema: { type: string, enum: [key, title, status, dueDate, estimateHours] } }
+      responses:
+        '200':
+          description: Issues, newest key first unless `sort` says otherwise.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/IssueSummary' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [tracker]
+      summary: Create an issue
+      operationId: createIssue
+      description: |
+        `issue:create` — Instance Admin, Company Admin, Project Manager, Test Lead and Test
+        Engineer. **Test Engineer holds it (D28)**: a developer *is* a Test Engineer here, and
+        one who cannot create an issue cannot file a bug or break a story into tasks.
+
+        The key is allocated server-side from the project's own counter — `ACME-1`, `ACME-2` —
+        and is never a field on the request.
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/WorkItemInput' }
+            schema: { $ref: '#/components/schemas/IssueInput' }
       responses:
         '201':
           description: Created
           headers:
-            Location:
-              schema: { type: string }
-              description: The new work item's canonical URL.
+            Location: { schema: { type: string }, description: The new issue's canonical URL. }
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/WorkItem' }
+              schema: { $ref: '#/components/schemas/Issue' }
         '200':
-          description: |
-            **A replay.** The `Idempotency-Key` had already created this task, so nothing was
-            created by this request — which is why it is not a 201 and carries no `Location`.
+          description: A replay — the `Idempotency-Key` had already created this issue.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/WorkItem' }
-        '400': { $ref: '#/components/responses/BadRequest' }
+              schema: { $ref: '#/components/schemas/Issue' }
+        '400':
+          description: |
+            Includes the depth rule: a `TASK`-level type with no `parentKey`, an `EPIC`-level
+            type with one, or a parent more than one level above the child. The message names
+            the level, not the type — the rule is about levels (scope §4).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
-  /work-items/{workItemId}:
+  /issues/{key}:
     parameters:
-      - name: workItemId
+      - name: key
         in: path
         required: true
         description: |
-          A stored task's UUID. Derived items carry a synthetic, non-UUID id
-          (`execution:{uuid}`), which is deliberately not addressable here — see the 409.
+          The issue's display key — `ACME-124`. Addressed by key rather than by UUID because it
+          is what a person types into a commit message and what every screen shows, and because
+          `project.key` is unique per company and the counter is per project, so the pair is
+          unique in the only scope RLS lets a caller see.
         schema: { type: string }
+    get:
+      tags: [tracker]
+      summary: One issue, with its children, watchers and legal moves
+      operationId: getIssue
+      responses:
+        '200':
+          description: The issue
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Issue' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
     patch:
-      tags: [work]
-      summary: Move a card to another column
+      tags: [tracker]
+      summary: Edit an issue's fields
+      operationId: updateIssue
       description: |
-        `workitem:manage`. The only mutable field is `status`, because the board is the
-        only screen that writes here; editing a task's title or due date is a separate
-        slice with no affordance yet.
+        `issue:edit`. **Not status** — that is `POST /issues/{key}/transitions`, the one path the
+        workflow's legal-move set is checked on.
 
-        **A derived item's id is refused with a `409`, not a `404`.** The card exists and
-        the caller can see it; what is impossible is *storing* a status for it. Answering
-        404 would read as "that card is gone" and invite a reload that brings it straight
-        back. The message names the action that does work — move the execution.
+        **An Epic refuses `parentKey`.** Epics are top level; there is no level above one.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/WorkItemStatusUpdate' }
+            schema: { $ref: '#/components/schemas/IssueUpdate' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Issue' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [tracker]
+      summary: Delete an issue
+      operationId: deleteIssue
+      description: |
+        `issue:delete` — **Test Engineer does not hold it**, Test Lead and above do (§A3).
+
+        Soft delete: `issue` inherits ~~`work_item`~~'s `deleted_at`. That is the mitigation
+        scope §3 names for the price of the module rule — a downstream `time_entry` holds an id
+        into this table with no foreign key, so a hard delete would orphan it silently.
+
+        **An issue with children is refused with a 409.** Deleting an epic that holds seventeen
+        stories is either a cascade nobody asked for or seventeen orphans; the message says to
+        move or delete the children first.
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: This issue has children.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /issues/{key}/transitions:
+    parameters:
+      - { name: key, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [tracker]
+      summary: Move an issue to another status
+      operationId: transitionIssue
+      description: |
+        `issue:edit`. **There is no `board:move` permission** — dragging a card changes the
+        issue's status and costs exactly this.
+
+        Only the moves the project's workflow allows are accepted; a forbidden one is a **409**
+        and the card does not move (story H5). The board refuses the drop and says why rather
+        than snapping back in silence.
+
+        **An Epic is refused with a 409 whatever the target**: D31 derives an epic's status from
+        its stories and it is not editable. The message says so.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IssueTransitionInput' }
       responses:
         '200':
           description: Moved
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/WorkItem' }
+              schema: { $ref: '#/components/schemas/Issue' }
         '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
-          description: |
-            This card mirrors a source and its status is not stored. Also the answer when
-            the requested column is not in the card's `allowedTransitions`.
+          description: The workflow forbids this move, or the issue is an Epic.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /issues/{key}/comments:
+    parameters:
+      - { name: key, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [tracker]
+      summary: An issue's comments
+      operationId: listIssueComments
+      responses:
+        '200':
+          description: Comments, oldest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/IssueComment' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [tracker]
+      summary: Comment on an issue
+      operationId: createIssueComment
+      description: |
+        `issue:comment` — and **Viewer holds it** (§A3). A reader who can see the work can say
+        something about it without being able to change it, which is the whole point of the
+        separate key.
+
+        Commenting adds the author as a watcher. Story H8: watchers are notified of status and
+        assignee changes, so a person who has said something is following it by default.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IssueCommentInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IssueComment' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /issues/{key}/watchers:
+    parameters:
+      - { name: key, in: path, required: true, schema: { type: string } }
+    put:
+      tags: [tracker]
+      summary: Watch or stop watching
+      operationId: putIssueWatch
+      description: |
+        `issue:read` — watching is not editing. Idempotent in both directions, which is why it
+        is a PUT with a boolean rather than a POST and a DELETE: the star on the screen has two
+        states and the request says which one the person wants, not which one they think it is in.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [watching]
+              properties:
+                watching: { type: boolean }
+      responses:
+        '200':
+          description: The issue's watchers after the change.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/UserRef' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /issues/{key}/doc-links:
+    parameters:
+      - { name: key, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [tracker]
+      summary: The specification blocks this issue links to
+      operationId: listIssueDocLinks
+      description: |
+        `issue:read`. **Read-only, and there is no write here** — creating the link is
+        `documentation`'s `POST /projects/{projectId}/documents/{pageId}/blocks/{blockId}/links`
+        with `sourceType: ISSUE`, because that module owns `doc_link` and this one may not
+        import it. What is served here is `tracker`'s own projection, `issue_doc_link`, which is
+        what carries `stale`.
+      responses:
+        '200':
+          description: Links, with the excerpt as it was when linked.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/IssueDocLink' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{projectId}/workflow:
+    parameters:
+      - { name: projectId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [tracker]
+      summary: The project's statuses, types and legal moves
+      operationId: getProjectWorkflow
+      description: |
+        `issue:read` — every screen that renders a status picker needs this, including the
+        read-only ones, so it is not gated on `issue:workflow`.
+      responses:
+        '200':
+          description: The workflow
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectWorkflow' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [tracker]
+      summary: Replace the project's workflow
+      operationId: putProjectWorkflow
+      description: |
+        `issue:workflow` — **Test Engineer does not hold it**; Project Manager, Test Lead and
+        above do (§A3). Story B1: add, rename, reorder and mark each status not started / in
+        progress / done.
+
+        **Whole-document PUT rather than per-status PATCH.** Reordering is a statement about the
+        set, and a sequence of single-status writes has an intermediate state where two statuses
+        claim one position — which is exactly what the screen's ↑/↓ would generate.
+
+        **Removing a status that issues hold is refused here with a 409** naming the count. The
+        removal that names where they go is `DELETE .../workflow/statuses/{statusId}`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectWorkflow' }
+      responses:
+        '200':
+          description: The workflow as stored.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectWorkflow' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: A removed status still holds issues.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /projects/{projectId}/workflow/statuses/{statusId}:
+    parameters:
+      - { name: projectId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: statusId, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      tags: [tracker]
+      summary: Remove a status, moving its issues
+      operationId: deleteWorkflowStatus
+      description: |
+        `issue:workflow`. Story B1's third criterion: *"I am asked which status those issues move
+        to"*. The body names it, so the move and the removal are one transaction and there is no
+        window where an issue points at a status that is gone.
+
+        **The last `DONE`-kind status cannot be removed.** Every percentage in the product is
+        computed from that kind (D8); a project with none has no expressible completion, and the
+        screens would render a percentage of nothing rather than an error.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StatusRemovalInput' }
+      responses:
+        '204': { description: Removed, and its issues moved. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: This is the project's last `DONE` status.
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -11350,7 +11668,7 @@ components:
           description: |
             Required by `SET_OWNER`; `null` clears the owner. Validated against the project's
             member list — the same *active member ∧ project grant* predicate `GET /members` and
-            `POST /work-items` use (§54), so the picker offers exactly the set the server accepts.
+            `POST /issues` use (§54), so the picker offers exactly the set the server accepts.
         suiteId:
           type: string
           format: uuid
@@ -15681,39 +15999,65 @@ components:
           description: Null grants the role across every project in the company, present and future.
 
     # ---------------------------------------------------------------- work ---
-    WorkItem:
+    BoardCard:
       type: object
-      required: [id, derived, kind, title, status, priority, overdue, projectId, projectKey, allowedTransitions]
+      required: [id, derived, kind, title, status, projectId, projectKey, overdue, allowedTransitions]
+      description: |
+        Real issues AND derived items in one list. **Only one of them is a row.** A derived card
+        is a view over something else — an assigned execution, a case the health computation
+        flagged, a review somebody asked of you — and its status is computed from its source on
+        every read, so a card can never diverge from its execution (plan §6l).
+
+        **`ISSUE` is the row-backed kind since M1**, replacing `TASK`. `work_item` is gone;
+        ~~`WorkItem`~~'s javadoc rule — "*a task somebody typed* is the only kind of board card
+        that is a row" — is kept, with `issue` as the row (011 D11).
       properties:
-        id: { type: string }
+        id:
+          type: string
+          description: |
+            An issue's KEY (`ACME-124`) for an `ISSUE` card; a synthetic `execution:{uuid}` for
+            a derived one, which has no row to have an id.
         derived:
           type: boolean
           description: |
-            True for projections of an execution, review, or stale case. Derived items
-            are NOT stored and their status comes from the source, so a card can never
-            diverge from its execution (plan §6l).
+            True for projections of an execution, review, or stale case. Derived items are NOT
+            stored and their status comes from the source, so a card can never diverge from its
+            execution (plan §6l).
         sourceType: { type: string, nullable: true, example: EXECUTION }
         sourceId: { type: string, format: uuid, nullable: true }
         kind:
           type: string
           description: |
-            What the card is, which is what the SPA labels and groups by. Six of these
-            were declared in §53 ahead of their generators so a new one would need no
-            contract change; `QUARANTINE` is the seventh and it needed one, because §6l's
-            "quarantined flaky test" is not any of the six.
+            What the card is, which is what the SPA labels and groups by.
 
-            **It is deliberately not `CASE_MAINTENANCE`, and that is a rendering fact
-            rather than a taxonomy preference.** A `CASE_MAINTENANCE` card's `description`
-            is a comma-separated list of raw `HealthSignal` codes that the SPA labels from
-            the contract's own enum (`BoardPage.describeCard`). A quarantine card's
-            description is a sentence a person wrote. Filed under the same kind it would be
-            split on commas and label-looked-up word by word, so "Quarantined by Ana —
-            flaky on Firefox, sometimes" renders as its own fragments joined by a middot,
-            with nothing failing anywhere.
-          enum: [TASK, EXECUTION, REVIEW, DOC_UPDATE, CASE_MAINTENANCE, DEFECT, QUARANTINE]
+            **`ISSUE` replaces `TASK` in M1** — the row-backed kind is now a `tracker` issue.
+            `DOC_UPDATE` and `DEFECT` need features nothing computes or writes yet and are
+            **absent rather than empty** — a generator that always yields nothing is
+            indistinguishable from a broken one — and the enum keeps them so the SPA's labels
+            stay complete for the day they land.
+
+            **`QUARANTINE` is deliberately not `CASE_MAINTENANCE`, and that is a rendering fact
+            rather than a taxonomy preference.** A `CASE_MAINTENANCE` card's `description` is a
+            comma-separated list of raw `HealthSignal` codes that the SPA labels from the
+            contract's own enum (`BoardPage.describeCard`). A quarantine card's description is a
+            sentence a person wrote. Filed under the same kind it would be split on commas and
+            label-looked-up word by word.
+          enum: [ISSUE, EXECUTION, REVIEW, DOC_UPDATE, CASE_MAINTENANCE, DEFECT, QUARANTINE]
         title: { type: string }
         description: { type: string, nullable: true }
-        status: { $ref: '#/components/schemas/WorkItemStatus' }
+        status:
+          type: object
+          required: [name, kind]
+          description: |
+            **An object since M1, and ~~`WorkItemStatus`~~ is gone (011 D-c).** An issue's status
+            is a per-project `issue_status` row, so a fixed five-member enum cannot spell it
+            without a mapping table — and a card carrying both spellings is the
+            two-contradictory-numbers failure this repo has shipped once. Derived generators
+            supply their own names with the matching kind; M2 builds board columns from `kind`
+            plus the project's statuses.
+          properties:
+            name: { type: string, example: In Review }
+            kind: { $ref: '#/components/schemas/IssueStatusKind' }
         priority: { $ref: '#/components/schemas/Priority' }
         dueDate: { type: string, format: date, nullable: true }
         overdue: { type: boolean }
@@ -15721,88 +16065,360 @@ components:
           allOf: [{ $ref: '#/components/schemas/UserRef' }]
           nullable: true
           description: |
-            Null for work nobody has taken — an execution in a run nobody has divided up,
-            a stale case with no owner. `WorkItemView.assignee` is a record component, so
-            the key is always present and the value is what carries the answer.
+            Null for work nobody has taken — an execution in a run nobody has divided up, a stale
+            case with no owner.
 
-            **It was a bare `$ref` until §196**, which generates as optional-and-not-null,
-            so the one shape this field takes most often was the one the contract could not
-            spell. Found from the client end: a board fixture wrote `assignee: null` behind
-            an `as WorkItem` cast, and removing the cast is what made the disagreement a
-            compile error. Same family as §148 — the contract was wrong and both sides had
-            quietly arranged themselves around it.
+            **It was a bare `$ref` until §196**, which generates as optional-and-not-null, so the
+            one shape this field takes most often was the one the contract could not spell. Found
+            from the client end: a board fixture wrote `assignee: null` behind a cast, and
+            removing the cast is what made the disagreement a compile error.
         projectId: { type: string, format: uuid }
         projectKey: { type: string }
         linkedKey: { type: string, nullable: true, example: TC-42 }
+        annotation:
+          allOf: [{ $ref: '#/components/schemas/CardAnnotation' }]
+          nullable: true
+          description: |
+            The viewer's OWN note, personal due date and flag — `derived_item_annotation`, which
+            survives M1 and matters more, not less (011 D11): personal metadata on a card you do
+            not own is exactly right for a board mixing your issues with reviews somebody else
+            asked of you. **Never another viewer's**; two people reading one card get different
+            values here and that is the feature.
         allowedTransitions:
           type: array
           description: |
-            Columns this card may legally move to; others reject the drop. Empty for a
-            derived card whose source offers no board-driven action.
-          items: { $ref: '#/components/schemas/WorkItemStatus' }
+            Statuses this card may legally move to; others reject the drop. Empty for a derived
+            card whose source offers no board-driven action, and empty for an Epic (011 D31).
+          items: { $ref: '#/components/schemas/IssueStatusRef' }
 
-    WorkItemStatus:
+    CardAnnotation:
+      type: object
+      required: [flagged]
+      description: |
+        A `derived_item_annotation` row as the CALLER sees it. Keyed on the viewer, never on the
+        card's owner — annotating something is not editing it, which is the whole reason the
+        table is separate from the row.
+      properties:
+        note: { type: string, nullable: true }
+        personalDueDate: { type: string, format: date, nullable: true }
+        flagged: { type: boolean }
+
+    CardAnnotationInput:
+      type: object
+      required: []
+      description: Every field optional; an absent key is "leave it".
+      properties:
+        note: { type: string, nullable: true }
+        personalDueDate: { type: string, format: date, nullable: true }
+        flagged: { type: boolean }
+
+    # ------------------------------------------------------------- tracker ---
+    IssueLevel:
       type: string
       description: |
-        A board column, as a stable code rather than its English label.
+        Where a type sits in the hierarchy. The depth rule is expressed in LEVELS, not in type
+        names (scope §4): a type may only parent to a type one level above it. Story, Bug and
+        Spike all sit at `STORY`, so all three hold Tasks and all three may sit under an Epic —
+        and a fourth story-level type is a ROW, not a migration.
+      enum: [EPIC, STORY, TASK]
 
-        **It was an unconstrained `string` until §53, and that was the defect.** The SPA
-        compared it against display text (`'To do'`), the mock served the same display
-        text, and mock mode therefore agreed with itself perfectly — while any server that
-        chose `TODO` would have filed every card into no column at all and rendered an
-        empty board with no error. Same family as §52's `runs`/`entries`, one level down:
-        not a field the two sides spelled differently, but a field whose *vocabulary* the
-        contract never fixed, so neither side could be wrong.
+    IssueStatusKind:
+      type: string
+      description: |
+        What a status MEANS, so a percentage can be computed without knowing what a project
+        called its columns (D2). Every completion figure in the product is `DONE` over the
+        counted total; `IN_PROGRESS` is not partial credit, it is simply not done (D8).
+      enum: [NOT_STARTED, IN_PROGRESS, DONE]
 
-        The label lives in `frontend/src/lib/labels.ts`, where a new member is a compile
-        error until it is labelled. §6l's per-board configurable columns therefore become
-        configuration over this enum rather than a contract change per column.
-
-        **`BLOCKED` arrived in §54 and it is the fifth column, not merely a fifth value.**
-        §53 left it out on purpose and said why: the board renders exactly the columns this
-        enum names, so a status with no column would be a card that exists, is returned by
-        this API, and appears **nowhere on screen** — invisible rather than misplaced, which
-        is the worse of the two failures. That made adding it a contract change *plus* a
-        label *plus* a grid column, and shipping only the first is how the invisible card
-        gets there. All three land together, and since §54 the third piece cannot be
-        forgotten separately: `workItemColumns` in `frontend/src/lib/labels.ts` is the keys
-        of a map declared `satisfies Record<WorkItemStatus, string>`, so labelling a new
-        member gives it a column in the same edit, and `BoardPage.tsx` asserts the result
-        still covers the enum. Both are compile errors, not tests — stated that way because
-        §205's rule found this sentence naming a ~~boardColumns.test.ts~~ that has never
-        existed, while the check it describes had been real in two places all along.
-
-        Ordered as §6l lists them, and the order on the wire is not the display order —
-        `BoardPage`'s `COLUMNS` owns that. The enum's job is the vocabulary.
-      enum: [TODO, IN_PROGRESS, BLOCKED, IN_REVIEW, DONE]
-
-    WorkItemInput:
+    IssueTypeRef:
       type: object
-      required: [projectId, title]
+      required: [id, name, level, countsTowardCompletion]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, example: Story }
+        level: { $ref: '#/components/schemas/IssueLevel' }
+        countsTowardCompletion:
+          type: boolean
+          description: |
+            False for Spike and for every `EPIC`-level type. A spike produces knowledge, not
+            shippable work, so counting it would let an epic read 40% done having shipped
+            nothing (D8) — it still consumes hours and still counts toward budget burn, which
+            is a different question and is allowed to disagree.
+
+    IssueStatusRef:
+      type: object
+      required: [id, name, kind, position]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, example: In Review }
+        kind: { $ref: '#/components/schemas/IssueStatusKind' }
+        position: { type: integer, description: Order in the project's workflow, from 0. }
+
+    IssueCompletion:
+      type: object
+      required: [percent, basis, done, total, excludedSpikes]
+      description: |
+        D8, and **the basis is on the wire — never inferred by the client.** An unestimated epic
+        gets a coarser number rather than a wrong one, and the page always names which it got.
+      properties:
+        percent: { type: integer, minimum: 0, maximum: 100 }
+        basis:
+          type: string
+          description: |
+            `ESTIMATE` when EVERY counted issue carries one, `COUNT` otherwise. The moment one
+            estimate is removed this flips, and the page says so — a percentage never changes
+            meaning silently.
+          enum: [COUNT, ESTIMATE]
+        done: { type: integer, description: Counted issues in a `DONE` status. }
+        total: { type: integer, description: Counted issues. Zero is a real answer, and `percent` is then 0. }
+        estimatedHoursDone: { type: number, format: double, nullable: true }
+        estimatedHoursTotal: { type: number, format: double, nullable: true }
+        excludedSpikes:
+          type: integer
+          description: How many issues were left out of both numerator and denominator, so the page can say so.
+
+    IssueSummary:
+      type: object
+      required: [key, title, type, status, projectId, projectKey]
+      description: A row in a list — the work table, an epic's children, a story's sub-tasks.
+      properties:
+        key: { type: string, example: ACME-124 }
+        title: { type: string }
+        type: { $ref: '#/components/schemas/IssueTypeRef' }
+        status: { $ref: '#/components/schemas/IssueStatusRef' }
+        projectId: { type: string, format: uuid }
+        projectKey: { type: string, example: ACME }
+        parentKey: { type: string, nullable: true }
+        epicKey: { type: string, nullable: true, description: The story-level ancestor's epic, carried so a table need not walk the tree. }
+        epicTitle: { type: string, nullable: true }
+        assignee:
+          allOf: [{ $ref: '#/components/schemas/UserRef' }]
+          nullable: true
+        dueDate: { type: string, format: date, nullable: true }
+        overdue: { type: boolean }
+        estimateHours: { type: number, format: double, nullable: true }
+
+    Issue:
+      type: object
+      required:
+        [key, title, type, status, projectId, projectKey, watchers, children,
+         allowedTransitions, createdAt, seq]
+      properties:
+        key: { type: string, example: ACME-118 }
+        seq:
+          type: integer
+          format: int64
+          description: |
+            The number behind the key, and **the only column that may order issue keys**.
+            Sorting on the key string puts `ACME-100` before `ACME-2`.
+        title: { type: string }
+        description: { type: string, nullable: true }
+        acceptanceCriteria:
+          type: array
+          description: |
+            Story H1/H4. Ordered, and each carries its own done flag — the story page renders
+            "3 of 4" from this and nothing else.
+          items:
+            type: object
+            required: [id, text, done, position]
+            properties:
+              id: { type: string, format: uuid }
+              text: { type: string }
+              done: { type: boolean }
+              position: { type: integer }
+        type: { $ref: '#/components/schemas/IssueTypeRef' }
+        status: { $ref: '#/components/schemas/IssueStatusRef' }
+        statusEnteredAt: { type: string, format: date-time }
+        projectId: { type: string, format: uuid }
+        projectKey: { type: string }
+        parentKey: { type: string, nullable: true }
+        parentTitle: { type: string, nullable: true }
+        epicKey: { type: string, nullable: true }
+        epicTitle: { type: string, nullable: true }
+        assignee:
+          allOf: [{ $ref: '#/components/schemas/UserRef' }]
+          nullable: true
+        reporter:
+          allOf: [{ $ref: '#/components/schemas/UserRef' }]
+          nullable: true
+        priority: { $ref: '#/components/schemas/Priority' }
+        estimateHours: { type: number, format: double, nullable: true, description: Hours, never points (D8) — the same unit a budget and an invoice use. }
+        startDate: { type: string, format: date, nullable: true, description: Epics only. Null on every other level. }
+        targetDate: { type: string, format: date, nullable: true, description: Epics only. }
+        dueDate: { type: string, format: date, nullable: true }
+        overdue: { type: boolean }
+        completion:
+          allOf: [{ $ref: '#/components/schemas/IssueCompletion' }]
+          nullable: true
+          description: |
+            **Epics only** — null on every other level, because D8 counts story-level issues
+            and an epic is the only thing that has them. Computed server-side and read
+            everywhere; never recomputed in a component (D8, "one number, one place").
+        children:
+          type: array
+          description: An epic's stories, or a story's sub-tasks. Empty for a Task.
+          items: { $ref: '#/components/schemas/IssueSummary' }
+        watchers:
+          type: array
+          items: { $ref: '#/components/schemas/UserRef' }
+        allowedTransitions:
+          type: array
+          description: |
+            Statuses this issue may legally move to, from where it stands. **Disabled, not
+            hidden** on the screen (`task.html`) — a caller can see the move exists. Empty for
+            an Epic: D31 derives an epic's status from its stories and it is not editable.
+          items: { $ref: '#/components/schemas/IssueStatusRef' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time, nullable: true }
+        doneAt: { type: string, format: date-time, nullable: true }
+
+    IssueInput:
+      type: object
+      required: [projectId, typeId, title]
+      description: |
+        **No `status` field**, for ~~`WorkItemInput`~~'s reason and `TestPlan.create`'s: a create
+        that could choose its column is a move no move was recorded for, and "create it directly
+        in Done" is the shape that lets a board show completed work nobody did. A new issue
+        enters the project's first status by position.
       properties:
         projectId: { type: string, format: uuid }
-        title: { type: string, minLength: 1, maxLength: 300 }
+        typeId: { type: string, format: uuid }
+        title: { type: string, minLength: 1, maxLength: 500 }
         description: { type: string, nullable: true }
-        priority: { $ref: '#/components/schemas/Priority' }
-        dueDate: { type: string, format: date, nullable: true }
+        parentKey:
+          type: string
+          nullable: true
+          description: |
+            **Required for a `TASK`-level type and refused for an `EPIC`-level one.** A Task is a
+            breakdown *of* something; an Epic is top level. A story-level type takes an OPTIONAL
+            epic here — requiring one would force a junk epic per stray bug (scope §4).
         assigneeId:
           type: string
           format: uuid
           nullable: true
           description: |
-            Omit to leave the task unassigned. **Unassigned, not "assigned to me"** — a
-            board where every task silently belongs to whoever typed it cannot express the
-            unclaimed pool §6l calls for, and the correction is invisible once made.
-      description: |
-        A new task. `status` is absent on purpose: a task starts in `TODO`, and letting a
-        create choose its column would allow "create it in Done", which is a move without
-        a move ever being recorded.
+            Omit to leave the issue unassigned. **Unassigned, not "assigned to me"** — a board
+            where every issue silently belongs to whoever typed it cannot express the unclaimed
+            pool §6l calls for. Validated against the project's *active member ∧ project grant*
+            set, the same predicate `GET /members` publishes.
+        priority: { $ref: '#/components/schemas/Priority' }
+        estimateHours: { type: number, format: double, nullable: true }
+        startDate: { type: string, format: date, nullable: true }
+        targetDate: { type: string, format: date, nullable: true }
+        dueDate: { type: string, format: date, nullable: true }
+        acceptanceCriteria:
+          type: array
+          items: { type: string }
 
-    WorkItemStatusUpdate:
+    IssueUpdate:
       type: object
-      required: [status]
+      required: []
+      description: |
+        Every field optional; an absent key is "leave it". **`status` is not here** — a move goes
+        through `POST /issues/{key}/transitions`, which is the only path the workflow's legal-move
+        set is checked on. A PATCH that could set a status would be a second, unchecked spelling
+        of the one rule this module exists to enforce.
       properties:
-        status: { $ref: '#/components/schemas/WorkItemStatus' }
+        title: { type: string, minLength: 1, maxLength: 500 }
+        description: { type: string, nullable: true }
+        parentKey: { type: string, nullable: true }
+        assigneeId: { type: string, format: uuid, nullable: true }
+        priority: { $ref: '#/components/schemas/Priority' }
+        estimateHours: { type: number, format: double, nullable: true }
+        startDate: { type: string, format: date, nullable: true }
+        targetDate: { type: string, format: date, nullable: true }
+        dueDate: { type: string, format: date, nullable: true }
+        acceptanceCriteria:
+          type: array
+          items:
+            type: object
+            required: [text, done]
+            properties:
+              text: { type: string }
+              done: { type: boolean }
+
+    IssueTransitionInput:
+      type: object
+      required: [statusId]
+      properties:
+        statusId: { type: string, format: uuid }
+
+    IssueComment:
+      type: object
+      required: [id, body, author, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        body: { type: string }
+        author: { $ref: '#/components/schemas/UserRef' }
+        createdAt: { type: string, format: date-time }
+        editedAt: { type: string, format: date-time, nullable: true }
+
+    IssueCommentInput:
+      type: object
+      required: [body]
+      properties:
+        body: { type: string, minLength: 1 }
+
+    IssueDocLink:
+      type: object
+      required: [id, targetKind, relationship, stale]
+      description: |
+        `tracker`'s projection of a `doc_link` row, mirroring `case_doc_link` field for field.
+        **Read-only here** — the write is `documentation`'s existing
+        `POST /projects/{projectId}/documents/{pageId}/blocks/{blockId}/links`, because `tracker`
+        may not import `documentation` and does not own this edge.
+      properties:
+        id: { type: string, format: uuid }
+        targetKind: { type: string, enum: [DOC_BLOCK, EXTERNAL_GIT, EXTERNAL_URL, EXTERNAL_ISSUE] }
+        relationship: { type: string, enum: [VERIFIES, DERIVED_FROM, REFERENCES] }
+        pageId: { type: string, format: uuid, nullable: true }
+        pageKey: { type: string, nullable: true, example: DOC-1 }
+        pageTitle: { type: string, nullable: true }
+        blockId: { type: string, format: uuid, nullable: true }
+        blockExcerpt:
+          type: string
+          nullable: true
+          description: |
+            **What you linked**, not what the block says now — which is the whole point of
+            `stale`. Re-confirming replaces this with the current text and clears the flag.
+        stale:
+          type: boolean
+          description: |
+            The linked page changed after this issue last did. `case_doc_link.stale`'s rule
+            exactly: newest `doc_page_version` against the issue's own `updated_at`, PAGE
+            granularity, and **always false for an external target**.
+        externalUrl: { type: string, nullable: true }
+
+    ProjectWorkflow:
+      type: object
+      required: [projectId, statuses, types, transitions]
+      properties:
+        projectId: { type: string, format: uuid }
+        statuses:
+          type: array
+          items: { $ref: '#/components/schemas/IssueStatusRef' }
+        types:
+          type: array
+          items: { $ref: '#/components/schemas/IssueTypeRef' }
+        transitions:
+          type: array
+          description: The legal moves, as pairs. A move not in this list is refused with a 409.
+          items:
+            type: object
+            required: [fromStatusId, toStatusId]
+            properties:
+              fromStatusId: { type: string, format: uuid }
+              toStatusId: { type: string, format: uuid }
+
+    StatusRemovalInput:
+      type: object
+      required: [reassignToStatusId]
+      description: |
+        Story B1: removing a status that issues hold cannot silently orphan them, so the caller
+        names where they go. Sent on the DELETE as a body — the alternative, a query parameter,
+        makes a destructive decision look like a filter.
+      properties:
+        reassignToStatusId: { type: string, format: uuid }
 
     # ------------------------------------------------------- integration ---
     NotificationChannel:

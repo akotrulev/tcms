@@ -1401,7 +1401,7 @@ export interface paths {
          *       nothing until it is redeemed.
          *
          *     **This is the same predicate the write side enforces**, not an approximation of it.
-         *     `POST /work-items` validates `assigneeId` against exactly this set, so a picker
+         *     `POST /issues` validates `assigneeId` against exactly this set, so a picker
          *     built from this list can never offer somebody the server will refuse — which is the
          *     §31 rule (disable-don't-hide) applied to a *set* rather than to a button.
          *
@@ -4706,7 +4706,7 @@ export interface paths {
          *     that project's grant; this one returns rows from many. The bound is the **caller's own**
          *     project visibility (`project:read`, per project) — never the company's project list. Two
          *     colleagues searching the same word legitimately receive different results and different
-         *     totals; that is the design, and it is the same rule `/work-items`' team board states.
+         *     totals; that is the design, and it is the same rule `GET /board`'s team board states.
          *
          *     **A project you hold no grant on contributes no hit and no count.** The `total` is computed
          *     over the same narrowed set as the page, so it can never report the size of a result set you
@@ -4718,7 +4718,7 @@ export interface paths {
          *     question the empty answer exists to withhold.
          *
          *     **At least one of `q`, `ownerId` or `tag` is required** — see the 400. There is no search
-         *     that is every case in every project, for `/work-items`' reason: it is a company-sized
+         *     that is every case in every project, for `GET /board`'s reason: it is a company-sized
          *     response no screen can work from.
          *
          *     A `q` matching the case-key pattern (`TC-412`) short-circuits to an exact lookup, as on the
@@ -7863,7 +7863,7 @@ export interface paths {
          * Saved report definitions
          * @description **Yours, not the project's.** A definition is owned by the person who saved it
          *     (`report_definition.owner_id`) and v1 has no way to share one, so two people asking for the
-         *     same project's saved reports receive different lists — the same design `GET /work-items`
+         *     same project's saved reports receive different lists — the same design `GET /board`
          *     states for the team board, and the reason it is stated here too is that a list endpoint
          *     which quietly means "mine" is otherwise indistinguishable from one that means "everyone's"
          *     on a project where only one person has ever saved anything.
@@ -10090,7 +10090,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/work-items": {
+    "/board": {
         parameters: {
             query?: never;
             header?: never;
@@ -10098,8 +10098,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Kanban board contents
-         * @description Returns real tasks AND derived items in one list. Derived items carry
+         * Board contents — a project's, your own, or a team's
+         * @description **Renamed from `GET /work-items` in M1 (011 D-a).** The path named a table that no longer
+         *     exists; the operation is unchanged in shape and in every one of its three board semantics.
+         *     `POST /work-items` and `PATCH /work-items/{workItemId}` are gone outright — creating and
+         *     moving an issue is `POST /issues` and `POST /issues/{key}/transitions`.
+         *
+         *     Returns real issues AND derived items in one list. Derived items carry
          *     sourceType/sourceId and are NOT stored — their status is computed from the
          *     source on every read, so a card can never diverge from its execution (plan §6l).
          *
@@ -10127,211 +10132,286 @@ export interface paths {
          *     to this team" would render the case keys, titles and project names of every project
          *     any member was granted, to a reader granted none of them.
          */
-        get: {
-            parameters: {
-                query?: {
-                    projectId?: string;
-                    /**
-                     * @description §6l's **team board** — items assigned to any member of this team.
-                     *
-                     *     Membership is expanded **on every read**, never stored: somebody who joins the
-                     *     team today finds the team's work today, and somebody who leaves stops seeing it.
-                     *     Direct members only — a parent team does not inherit its children's members.
-                     *
-                     *     **Bounded by the caller's own project visibility.** Cards from projects the
-                     *     caller holds no grant on are absent, whatever the team was assigned.
-                     *
-                     *     **Combinable with `projectId`** (the team's work within one project — §6l's
-                     *     "swimlanes by member"), and **refused together with `mine=true`**: they select
-                     *     two different boards.
-                     */
-                    teamId?: string;
-                    /**
-                     * @description Restrict to items assigned to the caller — the personal board.
-                     *
-                     *     **Required when `projectId` is omitted** and no `teamId` is given. §6l's
-                     *     cross-project board is the *personal* one; there is no board that is every
-                     *     project's work unfiltered, and silently forcing this on would answer a request
-                     *     nobody made with a list the client cannot tell apart from a company that only
-                     *     has the caller's work in it.
-                     */
-                    mine?: boolean;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /**
-                 * @description Work items. **An empty array is a reachable board with nothing on it** — for a
-                 *     team board that means either a team with no members or members with no work the
-                 *     caller can see, and the two are deliberately indistinguishable on the wire: both
-                 *     are "this team has nothing for you", and a client able to tell them apart would
-                 *     be reading team membership out of a board.
-                 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["WorkItem"][];
-                    };
-                };
-                400: components["responses"]["BadRequest"];
-                401: components["responses"]["Unauthorized"];
-                404: components["responses"]["NotFound"];
-            };
-        };
+        get: operations["getBoard"];
         put?: never;
-        /**
-         * Create a task
-         * @description `workitem:manage` — Instance Admin, Company Admin, Test Lead and Test Engineer
-         *     (roles spec §A6). Viewer and Automation Service do not hold it.
-         *
-         *     **`kind` is not a field on the request.** Every row this creates is a `TASK`.
-         *     A client able to POST `kind: EXECUTION` could materialise a derived item, which
-         *     is the one thing §6l's design exists to prevent: the moment a card's status is
-         *     stored separately from its execution's, the two diverge and the board stops being
-         *     trusted. Derived items have no create endpoint because they are not stored.
-         */
-        post: {
-            parameters: {
-                query?: never;
-                header?: {
-                    /**
-                     * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
-                     *     already succeeded answers **200** with the resource that intent created, instead of creating
-                     *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
-                     *     §136; the parameter has been shared by six other creates since `V14`, and by report generation since `V66`.)
-                     *
-                     *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
-                     *     it across retries. A key generated per attempt is the mistake that makes the header look
-                     *     right and do nothing.
-                     *
-                     *     Scoped to the project the request is addressed to, which is the scope the uniqueness
-                     *     constraint behind it uses. Optional: omitted, every call creates. At most 200 characters.
-                     */
-                    "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
-                };
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["WorkItemInput"];
-                };
-            };
-            responses: {
-                /**
-                 * @description **A replay.** The `Idempotency-Key` had already created this task, so nothing was
-                 *     created by this request — which is why it is not a 201 and carries no `Location`.
-                 */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["WorkItem"];
-                    };
-                };
-                /** @description Created */
-                201: {
-                    headers: {
-                        /** @description The new work item's canonical URL. */
-                        Location?: string;
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["WorkItem"];
-                    };
-                };
-                400: components["responses"]["BadRequest"];
-                403: components["responses"]["Forbidden"];
-                404: components["responses"]["NotFound"];
-            };
-        };
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/work-items/{workItemId}": {
+    "/board/annotations/{sourceType}/{sourceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sourceType: string;
+                sourceId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Your own note and personal due date on a card
+         * @description Story B5's second criterion. Writes `derived_item_annotation`, keyed on the CALLER — a
+         *     teammate looking at the same issue does not see this. No permission beyond seeing the
+         *     card: annotating something is not editing it, which is the whole reason the table is
+         *     separate from the row.
+         */
+        put: operations["putCardAnnotation"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/issues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A project's issues
+         * @description `issue:read`. **Test Engineer, Test Lead, Project Manager, Viewer and Automation Service
+         *     all hold it** (roles spec §A3). The work table (`work-table.html`) is this operation.
+         */
+        get: operations["listIssues"];
+        put?: never;
+        /**
+         * Create an issue
+         * @description `issue:create` — Instance Admin, Company Admin, Project Manager, Test Lead and Test
+         *     Engineer. **Test Engineer holds it (D28)**: a developer *is* a Test Engineer here, and
+         *     one who cannot create an issue cannot file a bug or break a story into tasks.
+         *
+         *     The key is allocated server-side from the project's own counter — `ACME-1`, `ACME-2` —
+         *     and is never a field on the request.
+         */
+        post: operations["createIssue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/issues/{key}": {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 /**
-                 * @description A stored task's UUID. Derived items carry a synthetic, non-UUID id
-                 *     (`execution:{uuid}`), which is deliberately not addressable here — see the 409.
+                 * @description The issue's display key — `ACME-124`. Addressed by key rather than by UUID because it
+                 *     is what a person types into a commit message and what every screen shows, and because
+                 *     `project.key` is unique per company and the counter is per project, so the pair is
+                 *     unique in the only scope RLS lets a caller see.
                  */
-                workItemId: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        /** One issue, with its children, watchers and legal moves */
+        get: operations["getIssue"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete an issue
+         * @description `issue:delete` — **Test Engineer does not hold it**, Test Lead and above do (§A3).
+         *
+         *     Soft delete: `issue` inherits ~~`work_item`~~'s `deleted_at`. That is the mitigation
+         *     scope §3 names for the price of the module rule — a downstream `time_entry` holds an id
+         *     into this table with no foreign key, so a hard delete would orphan it silently.
+         *
+         *     **An issue with children is refused with a 409.** Deleting an epic that holds seventeen
+         *     stories is either a cascade nobody asked for or seventeen orphans; the message says to
+         *     move or delete the children first.
+         */
+        delete: operations["deleteIssue"];
+        options?: never;
+        head?: never;
+        /**
+         * Edit an issue's fields
+         * @description `issue:edit`. **Not status** — that is `POST /issues/{key}/transitions`, the one path the
+         *     workflow's legal-move set is checked on.
+         *
+         *     **An Epic refuses `parentKey`.** Epics are top level; there is no level above one.
+         */
+        patch: operations["updateIssue"];
+        trace?: never;
+    };
+    "/issues/{key}/transitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move an issue to another status
+         * @description `issue:edit`. **There is no `board:move` permission** — dragging a card changes the
+         *     issue's status and costs exactly this.
+         *
+         *     Only the moves the project's workflow allows are accepted; a forbidden one is a **409**
+         *     and the card does not move (story H5). The board refuses the drop and says why rather
+         *     than snapping back in silence.
+         *
+         *     **An Epic is refused with a 409 whatever the target**: D31 derives an epic's status from
+         *     its stories and it is not editable. The message says so.
+         */
+        post: operations["transitionIssue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/issues/{key}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        /** An issue's comments */
+        get: operations["listIssueComments"];
+        put?: never;
+        /**
+         * Comment on an issue
+         * @description `issue:comment` — and **Viewer holds it** (§A3). A reader who can see the work can say
+         *     something about it without being able to change it, which is the whole point of the
+         *     separate key.
+         *
+         *     Commenting adds the author as a watcher. Story H8: watchers are notified of status and
+         *     assignee changes, so a person who has said something is following it by default.
+         */
+        post: operations["createIssueComment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/issues/{key}/watchers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Watch or stop watching
+         * @description `issue:read` — watching is not editing. Idempotent in both directions, which is why it
+         *     is a PUT with a boolean rather than a POST and a DELETE: the star on the screen has two
+         *     states and the request says which one the person wants, not which one they think it is in.
+         */
+        put: operations["putIssueWatch"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/issues/{key}/doc-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * The specification blocks this issue links to
+         * @description `issue:read`. **Read-only, and there is no write here** — creating the link is
+         *     `documentation`'s `POST /projects/{projectId}/documents/{pageId}/blocks/{blockId}/links`
+         *     with `sourceType: ISSUE`, because that module owns `doc_link` and this one may not
+         *     import it. What is served here is `tracker`'s own projection, `issue_doc_link`, which is
+         *     what carries `stale`.
+         */
+        get: operations["listIssueDocLinks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/workflow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * The project's statuses, types and legal moves
+         * @description `issue:read` — every screen that renders a status picker needs this, including the
+         *     read-only ones, so it is not gated on `issue:workflow`.
+         */
+        get: operations["getProjectWorkflow"];
+        /**
+         * Replace the project's workflow
+         * @description `issue:workflow` — **Test Engineer does not hold it**; Project Manager, Test Lead and
+         *     above do (§A3). Story B1: add, rename, reorder and mark each status not started / in
+         *     progress / done.
+         *
+         *     **Whole-document PUT rather than per-status PATCH.** Reordering is a statement about the
+         *     set, and a sequence of single-status writes has an intermediate state where two statuses
+         *     claim one position — which is exactly what the screen's ↑/↓ would generate.
+         *
+         *     **Removing a status that issues hold is refused here with a 409** naming the count. The
+         *     removal that names where they go is `DELETE .../workflow/statuses/{statusId}`.
+         */
+        put: operations["putProjectWorkflow"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/workflow/statuses/{statusId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                statusId: string;
             };
             cookie?: never;
         };
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Remove a status, moving its issues
+         * @description `issue:workflow`. Story B1's third criterion: *"I am asked which status those issues move
+         *     to"*. The body names it, so the move and the removal are one transaction and there is no
+         *     window where an issue points at a status that is gone.
+         *
+         *     **The last `DONE`-kind status cannot be removed.** Every percentage in the product is
+         *     computed from that kind (D8); a project with none has no expressible completion, and the
+         *     screens would render a percentage of nothing rather than an error.
+         */
+        delete: operations["deleteWorkflowStatus"];
         options?: never;
         head?: never;
-        /**
-         * Move a card to another column
-         * @description `workitem:manage`. The only mutable field is `status`, because the board is the
-         *     only screen that writes here; editing a task's title or due date is a separate
-         *     slice with no affordance yet.
-         *
-         *     **A derived item's id is refused with a `409`, not a `404`.** The card exists and
-         *     the caller can see it; what is impossible is *storing* a status for it. Answering
-         *     404 would read as "that card is gone" and invite a reload that brings it straight
-         *     back. The message names the action that does work — move the execution.
-         */
-        patch: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    /**
-                     * @description A stored task's UUID. Derived items carry a synthetic, non-UUID id
-                     *     (`execution:{uuid}`), which is deliberately not addressable here — see the 409.
-                     */
-                    workItemId: string;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["WorkItemStatusUpdate"];
-                };
-            };
-            responses: {
-                /** @description Moved */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["WorkItem"];
-                    };
-                };
-                400: components["responses"]["BadRequest"];
-                403: components["responses"]["Forbidden"];
-                404: components["responses"]["NotFound"];
-                /**
-                 * @description This card mirrors a source and its status is not stored. Also the answer when
-                 *     the requested column is not in the card's `allowedTransitions`.
-                 */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["Problem"];
-                    };
-                };
-            };
-        };
+        patch?: never;
         trace?: never;
     };
 }
@@ -12248,7 +12328,7 @@ export interface components {
              * Format: uuid
              * @description Required by `SET_OWNER`; `null` clears the owner. Validated against the project's
              *     member list — the same *active member ∧ project grant* predicate `GET /members` and
-             *     `POST /work-items` use (§54), so the picker offers exactly the set the server accepts.
+             *     `POST /issues` use (§54), so the picker offers exactly the set the server accepts.
              */
             ownerId?: string | null;
             /**
@@ -15632,12 +15712,26 @@ export interface components {
              */
             projectId: string | null;
         };
-        WorkItem: {
+        /**
+         * @description Real issues AND derived items in one list. **Only one of them is a row.** A derived card
+         *     is a view over something else — an assigned execution, a case the health computation
+         *     flagged, a review somebody asked of you — and its status is computed from its source on
+         *     every read, so a card can never diverge from its execution (plan §6l).
+         *
+         *     **`ISSUE` is the row-backed kind since M1**, replacing `TASK`. `work_item` is gone;
+         *     ~~`WorkItem`~~'s javadoc rule — "*a task somebody typed* is the only kind of board card
+         *     that is a row" — is kept, with `issue` as the row (011 D11).
+         */
+        BoardCard: {
+            /**
+             * @description An issue's KEY (`ACME-124`) for an `ISSUE` card; a synthetic `execution:{uuid}` for
+             *     a derived one, which has no row to have an id.
+             */
             id: string;
             /**
-             * @description True for projections of an execution, review, or stale case. Derived items
-             *     are NOT stored and their status comes from the source, so a card can never
-             *     diverge from its execution (plan §6l).
+             * @description True for projections of an execution, review, or stale case. Derived items are NOT
+             *     stored and their status comes from the source, so a card can never diverge from its
+             *     execution (plan §6l).
              */
             derived: boolean;
             /** @example EXECUTION */
@@ -15645,40 +15739,50 @@ export interface components {
             /** Format: uuid */
             sourceId?: string | null;
             /**
-             * @description What the card is, which is what the SPA labels and groups by. Six of these
-             *     were declared in §53 ahead of their generators so a new one would need no
-             *     contract change; `QUARANTINE` is the seventh and it needed one, because §6l's
-             *     "quarantined flaky test" is not any of the six.
+             * @description What the card is, which is what the SPA labels and groups by.
              *
-             *     **It is deliberately not `CASE_MAINTENANCE`, and that is a rendering fact
-             *     rather than a taxonomy preference.** A `CASE_MAINTENANCE` card's `description`
-             *     is a comma-separated list of raw `HealthSignal` codes that the SPA labels from
-             *     the contract's own enum (`BoardPage.describeCard`). A quarantine card's
-             *     description is a sentence a person wrote. Filed under the same kind it would be
-             *     split on commas and label-looked-up word by word, so "Quarantined by Ana —
-             *     flaky on Firefox, sometimes" renders as its own fragments joined by a middot,
-             *     with nothing failing anywhere.
+             *     **`ISSUE` replaces `TASK` in M1** — the row-backed kind is now a `tracker` issue.
+             *     `DOC_UPDATE` and `DEFECT` need features nothing computes or writes yet and are
+             *     **absent rather than empty** — a generator that always yields nothing is
+             *     indistinguishable from a broken one — and the enum keeps them so the SPA's labels
+             *     stay complete for the day they land.
+             *
+             *     **`QUARANTINE` is deliberately not `CASE_MAINTENANCE`, and that is a rendering fact
+             *     rather than a taxonomy preference.** A `CASE_MAINTENANCE` card's `description` is a
+             *     comma-separated list of raw `HealthSignal` codes that the SPA labels from the
+             *     contract's own enum (`BoardPage.describeCard`). A quarantine card's description is a
+             *     sentence a person wrote. Filed under the same kind it would be split on commas and
+             *     label-looked-up word by word.
              * @enum {string}
              */
-            kind: "TASK" | "EXECUTION" | "REVIEW" | "DOC_UPDATE" | "CASE_MAINTENANCE" | "DEFECT" | "QUARANTINE";
+            kind: "ISSUE" | "EXECUTION" | "REVIEW" | "DOC_UPDATE" | "CASE_MAINTENANCE" | "DEFECT" | "QUARANTINE";
             title: string;
             description?: string | null;
-            status: components["schemas"]["WorkItemStatus"];
-            priority: components["schemas"]["Priority"];
+            /**
+             * @description **An object since M1, and ~~`WorkItemStatus`~~ is gone (011 D-c).** An issue's status
+             *     is a per-project `issue_status` row, so a fixed five-member enum cannot spell it
+             *     without a mapping table — and a card carrying both spellings is the
+             *     two-contradictory-numbers failure this repo has shipped once. Derived generators
+             *     supply their own names with the matching kind; M2 builds board columns from `kind`
+             *     plus the project's statuses.
+             */
+            status: {
+                /** @example In Review */
+                name: string;
+                kind: components["schemas"]["IssueStatusKind"];
+            };
+            priority?: components["schemas"]["Priority"];
             /** Format: date */
             dueDate?: string | null;
             overdue: boolean;
             /**
-             * @description Null for work nobody has taken — an execution in a run nobody has divided up,
-             *     a stale case with no owner. `WorkItemView.assignee` is a record component, so
-             *     the key is always present and the value is what carries the answer.
+             * @description Null for work nobody has taken — an execution in a run nobody has divided up, a stale
+             *     case with no owner.
              *
-             *     **It was a bare `$ref` until §196**, which generates as optional-and-not-null,
-             *     so the one shape this field takes most often was the one the contract could not
-             *     spell. Found from the client end: a board fixture wrote `assignee: null` behind
-             *     an `as WorkItem` cast, and removing the cast is what made the disagreement a
-             *     compile error. Same family as §148 — the contract was wrong and both sides had
-             *     quietly arranged themselves around it.
+             *     **It was a bare `$ref` until §196**, which generates as optional-and-not-null, so the
+             *     one shape this field takes most often was the one the contract could not spell. Found
+             *     from the client end: a board fixture wrote `assignee: null` behind a cast, and
+             *     removing the cast is what made the disagreement a compile error.
              */
             assignee?: components["schemas"]["UserRef"] | null;
             /** Format: uuid */
@@ -15687,68 +15791,332 @@ export interface components {
             /** @example TC-42 */
             linkedKey?: string | null;
             /**
-             * @description Columns this card may legally move to; others reject the drop. Empty for a
-             *     derived card whose source offers no board-driven action.
+             * @description The viewer's OWN note, personal due date and flag — `derived_item_annotation`, which
+             *     survives M1 and matters more, not less (011 D11): personal metadata on a card you do
+             *     not own is exactly right for a board mixing your issues with reviews somebody else
+             *     asked of you. **Never another viewer's**; two people reading one card get different
+             *     values here and that is the feature.
              */
-            allowedTransitions: components["schemas"]["WorkItemStatus"][];
+            annotation?: components["schemas"]["CardAnnotation"] | null;
+            /**
+             * @description Statuses this card may legally move to; others reject the drop. Empty for a derived
+             *     card whose source offers no board-driven action, and empty for an Epic (011 D31).
+             */
+            allowedTransitions: components["schemas"]["IssueStatusRef"][];
         };
         /**
-         * @description A board column, as a stable code rather than its English label.
-         *
-         *     **It was an unconstrained `string` until §53, and that was the defect.** The SPA
-         *     compared it against display text (`'To do'`), the mock served the same display
-         *     text, and mock mode therefore agreed with itself perfectly — while any server that
-         *     chose `TODO` would have filed every card into no column at all and rendered an
-         *     empty board with no error. Same family as §52's `runs`/`entries`, one level down:
-         *     not a field the two sides spelled differently, but a field whose *vocabulary* the
-         *     contract never fixed, so neither side could be wrong.
-         *
-         *     The label lives in `frontend/src/lib/labels.ts`, where a new member is a compile
-         *     error until it is labelled. §6l's per-board configurable columns therefore become
-         *     configuration over this enum rather than a contract change per column.
-         *
-         *     **`BLOCKED` arrived in §54 and it is the fifth column, not merely a fifth value.**
-         *     §53 left it out on purpose and said why: the board renders exactly the columns this
-         *     enum names, so a status with no column would be a card that exists, is returned by
-         *     this API, and appears **nowhere on screen** — invisible rather than misplaced, which
-         *     is the worse of the two failures. That made adding it a contract change *plus* a
-         *     label *plus* a grid column, and shipping only the first is how the invisible card
-         *     gets there. All three land together, and since §54 the third piece cannot be
-         *     forgotten separately: `workItemColumns` in `frontend/src/lib/labels.ts` is the keys
-         *     of a map declared `satisfies Record<WorkItemStatus, string>`, so labelling a new
-         *     member gives it a column in the same edit, and `BoardPage.tsx` asserts the result
-         *     still covers the enum. Both are compile errors, not tests — stated that way because
-         *     §205's rule found this sentence naming a ~~boardColumns.test.ts~~ that has never
-         *     existed, while the check it describes had been real in two places all along.
-         *
-         *     Ordered as §6l lists them, and the order on the wire is not the display order —
-         *     `BoardPage`'s `COLUMNS` owns that. The enum's job is the vocabulary.
+         * @description A `derived_item_annotation` row as the CALLER sees it. Keyed on the viewer, never on the
+         *     card's owner — annotating something is not editing it, which is the whole reason the
+         *     table is separate from the row.
+         */
+        CardAnnotation: {
+            note?: string | null;
+            /** Format: date */
+            personalDueDate?: string | null;
+            flagged: boolean;
+        };
+        /** @description Every field optional; an absent key is "leave it". */
+        CardAnnotationInput: {
+            note?: string | null;
+            /** Format: date */
+            personalDueDate?: string | null;
+            flagged?: boolean;
+        };
+        /**
+         * @description Where a type sits in the hierarchy. The depth rule is expressed in LEVELS, not in type
+         *     names (scope §4): a type may only parent to a type one level above it. Story, Bug and
+         *     Spike all sit at `STORY`, so all three hold Tasks and all three may sit under an Epic —
+         *     and a fourth story-level type is a ROW, not a migration.
          * @enum {string}
          */
-        WorkItemStatus: "TODO" | "IN_PROGRESS" | "BLOCKED" | "IN_REVIEW" | "DONE";
+        IssueLevel: "EPIC" | "STORY" | "TASK";
         /**
-         * @description A new task. `status` is absent on purpose: a task starts in `TODO`, and letting a
-         *     create choose its column would allow "create it in Done", which is a move without
-         *     a move ever being recorded.
+         * @description What a status MEANS, so a percentage can be computed without knowing what a project
+         *     called its columns (D2). Every completion figure in the product is `DONE` over the
+         *     counted total; `IN_PROGRESS` is not partial credit, it is simply not done (D8).
+         * @enum {string}
          */
-        WorkItemInput: {
+        IssueStatusKind: "NOT_STARTED" | "IN_PROGRESS" | "DONE";
+        IssueTypeRef: {
+            /** Format: uuid */
+            id: string;
+            /** @example Story */
+            name: string;
+            level: components["schemas"]["IssueLevel"];
+            /**
+             * @description False for Spike and for every `EPIC`-level type. A spike produces knowledge, not
+             *     shippable work, so counting it would let an epic read 40% done having shipped
+             *     nothing (D8) — it still consumes hours and still counts toward budget burn, which
+             *     is a different question and is allowed to disagree.
+             */
+            countsTowardCompletion: boolean;
+        };
+        IssueStatusRef: {
+            /** Format: uuid */
+            id: string;
+            /** @example In Review */
+            name: string;
+            kind: components["schemas"]["IssueStatusKind"];
+            /** @description Order in the project's workflow */
+            position: number;
+        };
+        /**
+         * @description D8, and **the basis is on the wire — never inferred by the client.** An unestimated epic
+         *     gets a coarser number rather than a wrong one, and the page always names which it got.
+         */
+        IssueCompletion: {
+            percent: number;
+            /**
+             * @description `ESTIMATE` when EVERY counted issue carries one, `COUNT` otherwise. The moment one
+             *     estimate is removed this flips, and the page says so — a percentage never changes
+             *     meaning silently.
+             * @enum {string}
+             */
+            basis: "COUNT" | "ESTIMATE";
+            /** @description Counted issues in a `DONE` status. */
+            done: number;
+            /** @description Counted issues. Zero is a real answer */
+            total: number;
+            /** Format: double */
+            estimatedHoursDone?: number | null;
+            /** Format: double */
+            estimatedHoursTotal?: number | null;
+            /** @description How many issues were left out of both numerator and denominator, so the page can say so. */
+            excludedSpikes: number;
+        };
+        /** @description A row in a list — the work table, an epic's children, a story's sub-tasks. */
+        IssueSummary: {
+            /** @example ACME-124 */
+            key: string;
+            title: string;
+            type: components["schemas"]["IssueTypeRef"];
+            status: components["schemas"]["IssueStatusRef"];
             /** Format: uuid */
             projectId: string;
-            title: string;
-            description?: string | null;
-            priority?: components["schemas"]["Priority"];
+            /** @example ACME */
+            projectKey: string;
+            parentKey?: string | null;
+            /** @description The story-level ancestor's epic */
+            epicKey?: string | null;
+            epicTitle?: string | null;
+            assignee?: components["schemas"]["UserRef"] | null;
             /** Format: date */
             dueDate?: string | null;
+            overdue?: boolean;
+            /** Format: double */
+            estimateHours?: number | null;
+        };
+        Issue: {
+            /** @example ACME-118 */
+            key: string;
+            /**
+             * Format: int64
+             * @description The number behind the key, and **the only column that may order issue keys**.
+             *     Sorting on the key string puts `ACME-100` before `ACME-2`.
+             */
+            seq: number;
+            title: string;
+            description?: string | null;
+            /**
+             * @description Story H1/H4. Ordered, and each carries its own done flag — the story page renders
+             *     "3 of 4" from this and nothing else.
+             */
+            acceptanceCriteria?: {
+                /** Format: uuid */
+                id: string;
+                text: string;
+                done: boolean;
+                position: number;
+            }[];
+            type: components["schemas"]["IssueTypeRef"];
+            status: components["schemas"]["IssueStatusRef"];
+            /** Format: date-time */
+            statusEnteredAt?: string;
+            /** Format: uuid */
+            projectId: string;
+            projectKey: string;
+            parentKey?: string | null;
+            parentTitle?: string | null;
+            epicKey?: string | null;
+            epicTitle?: string | null;
+            assignee?: components["schemas"]["UserRef"] | null;
+            reporter?: components["schemas"]["UserRef"] | null;
+            priority?: components["schemas"]["Priority"];
+            /**
+             * Format: double
+             * @description Hours
+             */
+            estimateHours?: number | null;
+            /**
+             * Format: date
+             * @description Epics only. Null on every other level.
+             */
+            startDate?: string | null;
+            /**
+             * Format: date
+             * @description Epics only.
+             */
+            targetDate?: string | null;
+            /** Format: date */
+            dueDate?: string | null;
+            overdue?: boolean;
+            /**
+             * @description **Epics only** — null on every other level, because D8 counts story-level issues
+             *     and an epic is the only thing that has them. Computed server-side and read
+             *     everywhere; never recomputed in a component (D8, "one number, one place").
+             */
+            completion?: components["schemas"]["IssueCompletion"] | null;
+            /** @description An epic's stories, or a story's sub-tasks. Empty for a Task. */
+            children: components["schemas"]["IssueSummary"][];
+            watchers: components["schemas"]["UserRef"][];
+            /**
+             * @description Statuses this issue may legally move to, from where it stands. **Disabled, not
+             *     hidden** on the screen (`task.html`) — a caller can see the move exists. Empty for
+             *     an Epic: D31 derives an epic's status from its stories and it is not editable.
+             */
+            allowedTransitions: components["schemas"]["IssueStatusRef"][];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt?: string | null;
+            /** Format: date-time */
+            doneAt?: string | null;
+        };
+        /**
+         * @description **No `status` field**, for ~~`WorkItemInput`~~'s reason and `TestPlan.create`'s: a create
+         *     that could choose its column is a move no move was recorded for, and "create it directly
+         *     in Done" is the shape that lets a board show completed work nobody did. A new issue
+         *     enters the project's first status by position.
+         */
+        IssueInput: {
+            /** Format: uuid */
+            projectId: string;
+            /** Format: uuid */
+            typeId: string;
+            title: string;
+            description?: string | null;
+            /**
+             * @description **Required for a `TASK`-level type and refused for an `EPIC`-level one.** A Task is a
+             *     breakdown *of* something; an Epic is top level. A story-level type takes an OPTIONAL
+             *     epic here — requiring one would force a junk epic per stray bug (scope §4).
+             */
+            parentKey?: string | null;
             /**
              * Format: uuid
-             * @description Omit to leave the task unassigned. **Unassigned, not "assigned to me"** — a
-             *     board where every task silently belongs to whoever typed it cannot express the
-             *     unclaimed pool §6l calls for, and the correction is invisible once made.
+             * @description Omit to leave the issue unassigned. **Unassigned, not "assigned to me"** — a board
+             *     where every issue silently belongs to whoever typed it cannot express the unclaimed
+             *     pool §6l calls for. Validated against the project's *active member ∧ project grant*
+             *     set, the same predicate `GET /members` publishes.
              */
             assigneeId?: string | null;
+            priority?: components["schemas"]["Priority"];
+            /** Format: double */
+            estimateHours?: number | null;
+            /** Format: date */
+            startDate?: string | null;
+            /** Format: date */
+            targetDate?: string | null;
+            /** Format: date */
+            dueDate?: string | null;
+            acceptanceCriteria?: string[];
         };
-        WorkItemStatusUpdate: {
-            status: components["schemas"]["WorkItemStatus"];
+        /**
+         * @description Every field optional; an absent key is "leave it". **`status` is not here** — a move goes
+         *     through `POST /issues/{key}/transitions`, which is the only path the workflow's legal-move
+         *     set is checked on. A PATCH that could set a status would be a second, unchecked spelling
+         *     of the one rule this module exists to enforce.
+         */
+        IssueUpdate: {
+            title?: string;
+            description?: string | null;
+            parentKey?: string | null;
+            /** Format: uuid */
+            assigneeId?: string | null;
+            priority?: components["schemas"]["Priority"];
+            /** Format: double */
+            estimateHours?: number | null;
+            /** Format: date */
+            startDate?: string | null;
+            /** Format: date */
+            targetDate?: string | null;
+            /** Format: date */
+            dueDate?: string | null;
+            acceptanceCriteria?: {
+                text: string;
+                done: boolean;
+            }[];
+        };
+        IssueTransitionInput: {
+            /** Format: uuid */
+            statusId: string;
+        };
+        IssueComment: {
+            /** Format: uuid */
+            id: string;
+            body: string;
+            author: components["schemas"]["UserRef"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            editedAt?: string | null;
+        };
+        IssueCommentInput: {
+            body: string;
+        };
+        /**
+         * @description `tracker`'s projection of a `doc_link` row, mirroring `case_doc_link` field for field.
+         *     **Read-only here** — the write is `documentation`'s existing
+         *     `POST /projects/{projectId}/documents/{pageId}/blocks/{blockId}/links`, because `tracker`
+         *     may not import `documentation` and does not own this edge.
+         */
+        IssueDocLink: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            targetKind: "DOC_BLOCK" | "EXTERNAL_GIT" | "EXTERNAL_URL" | "EXTERNAL_ISSUE";
+            /** @enum {string} */
+            relationship: "VERIFIES" | "DERIVED_FROM" | "REFERENCES";
+            /** Format: uuid */
+            pageId?: string | null;
+            /** @example DOC-1 */
+            pageKey?: string | null;
+            pageTitle?: string | null;
+            /** Format: uuid */
+            blockId?: string | null;
+            /**
+             * @description **What you linked**, not what the block says now — which is the whole point of
+             *     `stale`. Re-confirming replaces this with the current text and clears the flag.
+             */
+            blockExcerpt?: string | null;
+            /**
+             * @description The linked page changed after this issue last did. `case_doc_link.stale`'s rule
+             *     exactly: newest `doc_page_version` against the issue's own `updated_at`, PAGE
+             *     granularity, and **always false for an external target**.
+             */
+            stale: boolean;
+            externalUrl?: string | null;
+        };
+        ProjectWorkflow: {
+            /** Format: uuid */
+            projectId: string;
+            statuses: components["schemas"]["IssueStatusRef"][];
+            types: components["schemas"]["IssueTypeRef"][];
+            /** @description The legal moves, as pairs. A move not in this list is refused with a 409. */
+            transitions: {
+                /** Format: uuid */
+                fromStatusId: string;
+                /** Format: uuid */
+                toStatusId: string;
+            }[];
+        };
+        /**
+         * @description Story B1: removing a status that issues hold cannot silently orphan them, so the caller
+         *     names where they go. Sent on the DELETE as a body — the alternative, a query parameter,
+         *     makes a destructive decision look like a filter.
+         */
+        StatusRemovalInput: {
+            /** Format: uuid */
+            reassignToStatusId: string;
         };
         /**
          * @description Where one project sends its notices — **without its credential, and there is deliberately
@@ -19600,6 +19968,547 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    getBoard: {
+        parameters: {
+            query?: {
+                projectId?: string;
+                /**
+                 * @description §6l's **team board** — items assigned to any member of this team.
+                 *
+                 *     Membership is expanded **on every read**, never stored: somebody who joins the
+                 *     team today finds the team's work today, and somebody who leaves stops seeing it.
+                 *     Direct members only — a parent team does not inherit its children's members.
+                 *
+                 *     **Bounded by the caller's own project visibility.** Cards from projects the
+                 *     caller holds no grant on are absent, whatever the team was assigned.
+                 *
+                 *     **Combinable with `projectId`** (the team's work within one project — §6l's
+                 *     "swimlanes by member"), and **refused together with `mine=true`**: they select
+                 *     two different boards.
+                 */
+                teamId?: string;
+                /**
+                 * @description Restrict to items assigned to the caller — the personal board.
+                 *
+                 *     **Required when `projectId` is omitted** and no `teamId` is given. §6l's
+                 *     cross-project board is the *personal* one; there is no board that is every
+                 *     project's work unfiltered, and silently forcing this on would answer a request
+                 *     nobody made with a list the client cannot tell apart from a company that only
+                 *     has the caller's work in it.
+                 */
+                mine?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description Cards. **An empty array is a reachable board with nothing on it** — for a
+             *     team board that means either a team with no members or members with no work the
+             *     caller can see, and the two are deliberately indistinguishable on the wire: both
+             *     are "this team has nothing for you", and a client able to tell them apart would
+             *     be reading team membership out of a board.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BoardCard"][];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putCardAnnotation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sourceType: string;
+                sourceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardAnnotationInput"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardAnnotation"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listIssues: {
+        parameters: {
+            query: {
+                projectId: string;
+                level?: components["schemas"]["IssueLevel"];
+                epicKey?: string;
+                parentKey?: string;
+                statusId?: string[];
+                assigneeId?: string[];
+                /**
+                 * @description Story-level issues with no epic — the overview's "Unscheduled backlog" reads this.
+                 *     A separate flag rather than `epicKey=null`, because an absent parameter already
+                 *     means "don't filter" and a client cannot spell the difference.
+                 */
+                unparented?: boolean;
+                sort?: "key" | "title" | "status" | "dueDate" | "estimateHours";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Issues, newest key first unless `sort` says otherwise. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueSummary"][];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createIssue: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
+                 *     already succeeded answers **200** with the resource that intent created, instead of creating
+                 *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
+                 *     §136; the parameter has been shared by six other creates since `V14`, and by report generation since `V66`.)
+                 *
+                 *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
+                 *     it across retries. A key generated per attempt is the mistake that makes the header look
+                 *     right and do nothing.
+                 *
+                 *     Scoped to the project the request is addressed to, which is the scope the uniqueness
+                 *     constraint behind it uses. Optional: omitted, every call creates. At most 200 characters.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueInput"];
+            };
+        };
+        responses: {
+            /** @description A replay — the `Idempotency-Key` had already created this issue. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Issue"];
+                };
+            };
+            /** @description Created */
+            201: {
+                headers: {
+                    /** @description The new issue's canonical URL. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Issue"];
+                };
+            };
+            /**
+             * @description Includes the depth rule: a `TASK`-level type with no `parentKey`, an `EPIC`-level
+             *     type with one, or a parent more than one level above the child. The message names
+             *     the level, not the type — the rule is about levels (scope §4).
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getIssue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The issue's display key — `ACME-124`. Addressed by key rather than by UUID because it
+                 *     is what a person types into a commit message and what every screen shows, and because
+                 *     `project.key` is unique per company and the counter is per project, so the pair is
+                 *     unique in the only scope RLS lets a caller see.
+                 */
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The issue */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Issue"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteIssue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The issue's display key — `ACME-124`. Addressed by key rather than by UUID because it
+                 *     is what a person types into a commit message and what every screen shows, and because
+                 *     `project.key` is unique per company and the counter is per project, so the pair is
+                 *     unique in the only scope RLS lets a caller see.
+                 */
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description This issue has children. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    updateIssue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The issue's display key — `ACME-124`. Addressed by key rather than by UUID because it
+                 *     is what a person types into a commit message and what every screen shows, and because
+                 *     `project.key` is unique per company and the counter is per project, so the pair is
+                 *     unique in the only scope RLS lets a caller see.
+                 */
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueUpdate"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Issue"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    transitionIssue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueTransitionInput"];
+            };
+        };
+        responses: {
+            /** @description Moved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Issue"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The workflow forbids this move, or the issue is an Epic. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listIssueComments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Comments, oldest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueComment"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createIssueComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueCommentInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueComment"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putIssueWatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    watching: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description The issue's watchers after the change. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserRef"][];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listIssueDocLinks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Links, with the excerpt as it was when linked. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueDocLink"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getProjectWorkflow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The workflow */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectWorkflow"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putProjectWorkflow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectWorkflow"];
+            };
+        };
+        responses: {
+            /** @description The workflow as stored. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectWorkflow"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description A removed status still holds issues. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteWorkflowStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                statusId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StatusRemovalInput"];
+            };
+        };
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description This is the project's last `DONE` status. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
 }
