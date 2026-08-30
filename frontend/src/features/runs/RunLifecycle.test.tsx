@@ -37,6 +37,14 @@ function runBody(
   status: TestRunDetail['status'],
   startedAt: string | null,
   git: { commitSha: string | null; branch: string | null } = { commitSha: null, branch: null },
+  counts: TestRunDetail['counts'] = {
+    total: 1,
+    passed: 0,
+    failed: 0,
+    blocked: 0,
+    skipped: 0,
+    notRun: 1,
+  },
 ): TestRunDetail {
   return {
     id: RUN,
@@ -55,7 +63,7 @@ function runBody(
     source: 'MANUAL',
     startedAt,
     completedAt: status === 'COMPLETED' || status === 'ABORTED' ? '2026-08-02T10:00:00Z' : null,
-    counts: { total: 1, passed: 0, failed: 0, blocked: 0, skipped: 0, notRun: 1 },
+    counts,
     // No request recorded — B7's ordinary state for a fixture built by hand.
     scopeRequest: null,
     executions: [],
@@ -67,10 +75,11 @@ function mockReads(
   startedAt: string | null,
   permissions: PermissionKey[] = ['project:read', 'run:close', 'result:submit'],
   git: { commitSha: string | null; branch: string | null } = { commitSha: null, branch: null },
+  counts?: TestRunDetail['counts'],
 ) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
-    if (path.includes(`/runs/${RUN}`)) return runBody(status, startedAt, git)
+    if (path.includes(`/runs/${RUN}`)) return runBody(status, startedAt, git, counts)
     if (/^\/projects\/[^/]+$/.test(path)) return aProject({ id: PROJECT, name: 'Banking' })
     return []
   }) as never)
@@ -222,5 +231,42 @@ describe('RunDetailPage — the code a run tested (§177)', () => {
     // unresolved one — the shape that makes a "queryBy...toBeNull" assertion pass for free.
     await screen.findByTestId('RunDetail.Status')
     expect(screen.queryByTestId('RunDetail.Code')).toBeNull()
+  })
+})
+
+describe('RunDetailPage — the legend names every segment the bar draws', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('accounts for all ten of ten, skipped included', async () => {
+    /*
+      Renders audit 2.2, and the "two contradictory numbers on one screen" class CLAUDE.md's
+      working agreement warns about. On TR-1 the bar drew four segments and its own aria-label read
+      "6 passed, 2 failed, 1 blocked, 1 skipped of 10", while the legend under it printed nine of
+      ten and ended `0 not run` — which invites the reader to conclude the list is complete.
+      `PlanStatisticsPage` states all five on the same data, which is what makes this a defect
+      rather than a decision.
+
+      Asserted as a SUM rather than as five string matches, so a sixth status added to the wire
+      fails this the moment the bar can draw it.
+    */
+    mockReads('COMPLETED', '2026-08-02T09:00:00Z', undefined, undefined, {
+      total: 10,
+      passed: 6,
+      failed: 2,
+      blocked: 1,
+      skipped: 1,
+      notRun: 0,
+    })
+    renderPage()
+
+    const region = await screen.findByTestId('RunDetail.ResultBar')
+    const named = [
+      ...region.textContent!.matchAll(/(\d+)\s+(?:passed|failed|blocked|skipped|not run)/g),
+    ].reduce((total, match) => total + Number(match[1]), 0)
+
+    expect(region).toHaveTextContent('skipped')
+    expect(named).toBe(10)
   })
 })

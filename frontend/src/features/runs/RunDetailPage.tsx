@@ -407,6 +407,18 @@ function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: s
             <span style={{ color: 'var(--color-passed)' }}>{formatCount(data.counts.passed)} passed</span>
             <span style={{ color: 'var(--color-failed)' }}>{formatCount(data.counts.failed)} failed</span>
             <span style={{ color: 'var(--color-blocked)' }}>{formatCount(data.counts.blocked)} blocked</span>
+            {/*
+              One entry per segment the bar can draw, in the bar's own fill order.
+
+              A legend shorter than the bar is renders audit 2.2: on TR-1 the bar drew four
+              segments and its own aria-label read "6 passed, 2 failed, 1 blocked, 1 skipped of
+              10", while this line printed nine of ten and ended `0 not run` — which invites the
+              reader to conclude the list is complete. `PlanStatisticsPage` states all five on the
+              same data, which is what makes this a defect rather than a decision.
+            */}
+            <span style={{ color: 'var(--color-skipped)' }}>
+              {formatCount(data.counts.skipped)} skipped
+            </span>
             <span className="text-ink-4">{formatCount(data.counts.notRun)} not run</span>
           </div>
         </div>

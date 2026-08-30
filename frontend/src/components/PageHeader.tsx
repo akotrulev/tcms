@@ -166,6 +166,13 @@ export function PageHeader({
  * The render's `.card` (`tcms.css:251`) is the same object at kit values: `--panel` ground, a
  * hairline border, `--r` corners. `overflow-hidden` is what the rounded corners need and is why
  * `ScrollX` exists — a table wider than this box is clipped at the border unless it is wrapped.
+ *
+ * `plain` keeps the heading and drops the surface. Design language rule 1 forbids a card around the
+ * subject of the page, and the renders audit (2.4) found that rule applied to four of six blocks on
+ * one screen: the case detail's Preconditions, Steps, Postconditions and Traceability are bare
+ * while Attachments, Issues, Reliability and Version history sat in cards — two idioms for one kind
+ * of thing, on one column. A caller inside a document surface or a rail passes `plain`; a caller
+ * where the panel genuinely is one region among several on a page does not.
  */
 export function Panel({
   title,
@@ -173,23 +180,29 @@ export function Panel({
   children,
   testId,
   dense,
+  plain,
 }: {
   title?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
   testId?: string;
   dense?: boolean;
+  /** Heading kept, surface dropped — for a block inside a document column or a rail. */
+  plain?: boolean;
 }) {
   return (
     <section
       data-testid={testId}
-      className="overflow-hidden rounded-lg border border-line bg-panel"
+      className={
+        plain ? undefined : 'overflow-hidden rounded-lg border border-line bg-panel'
+      }
     >
       {(title || actions) && (
         <div
           className={cn(
-            'flex items-center justify-between gap-2 border-b border-line',
-            dense ? 'px-3 py-2' : 'px-4 py-3',
+            'flex items-center justify-between gap-2',
+            plain ? 'mb-2' : 'border-b border-line',
+            plain ? '' : dense ? 'px-3 py-2' : 'px-4 py-3',
           )}
         >
           {typeof title === 'string' ? (
@@ -200,7 +213,7 @@ export function Panel({
           {actions && <div className="flex items-center gap-1">{actions}</div>}
         </div>
       )}
-      <div className={dense ? '' : 'p-4'}>{children}</div>
+      <div className={plain ? '' : dense ? '' : 'p-4'}>{children}</div>
     </section>
   );
 }

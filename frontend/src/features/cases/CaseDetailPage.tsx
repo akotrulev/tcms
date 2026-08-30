@@ -800,6 +800,9 @@ function CaseAttachments({
 
   return (
     <AttachmentsPanel
+      // Rule 1: this sits in the case's document column beside Steps and Traceability, which are
+      // bare. A card around four of six blocks in one column is renders audit 2.4.
+      plain
       projectId={projectId}
       // `case:edit`, with NO author arm — the slice's decision, argued in the plan, in the
       // endpoint's description and in `AttachmentList`'s header. Not `case:delete`, which is the

@@ -39,7 +39,7 @@ export function CaseVersionPanel({
   const versions = useCaseVersions(projectId, caseId);
 
   return (
-    <Panel title="Version history" testId="CaseDetail.Versions">
+    <Panel title="Version history" testId="CaseDetail.Versions" plain>
       <DataRegion
         testId="CaseDetail.Versions.Region"
         state={{ ...versions, refetch: () => void versions.refetch() }}

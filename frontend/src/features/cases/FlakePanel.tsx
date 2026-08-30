@@ -49,7 +49,7 @@ export function FlakePanel({ projectId, testCase }: { projectId: string; testCas
   const quarantined = flake?.quarantined ?? false;
 
   return (
-    <Panel title="Reliability" testId="CaseDetail.Flake">
+    <Panel title="Reliability" testId="CaseDetail.Flake" plain>
       <div className="flex flex-col gap-3">
         {quarantined && flake && (
           <div data-testid="CaseDetail.Flake.Quarantined">

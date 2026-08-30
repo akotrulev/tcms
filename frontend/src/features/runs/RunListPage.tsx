@@ -194,9 +194,17 @@ function RunTable({ rows, projectId }: { rows: TestRun[]; projectId: string }) {
                 */}
                 <span
                   data-testid="Runs.Row.ResultBar"
+                  /*
+                    Every segment the bar can draw, in the bar's fill order — `skipped` included.
+                    The same omission as the run detail's legend (renders audit 2.2): the bar drew
+                    a fourth segment that this title never named, and ending on "not run" reads as
+                    a complete account.
+                  */
                   title={`${formatCount(run.counts.passed)} passed \u00b7 ${formatCount(run.counts.failed)} failed \u00b7 ${formatCount(
                     run.counts.blocked,
-                  )} blocked \u00b7 ${formatCount(run.counts.notRun)} not run`}
+                  )} blocked \u00b7 ${formatCount(run.counts.skipped)} skipped \u00b7 ${formatCount(
+                    run.counts.notRun,
+                  )} not run`}
                 >
                   <ResultBar
                     passed={run.counts.passed}

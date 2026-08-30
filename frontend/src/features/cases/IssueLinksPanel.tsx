@@ -56,6 +56,7 @@ export function IssueLinksPanel({
 
   return (
     <Panel
+      plain
       title="Issues"
       testId="CaseDetail.IssueLinks"
       actions={

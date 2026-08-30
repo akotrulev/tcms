@@ -64,6 +64,7 @@ export function AttachmentsPanel({
   deleting,
   testId,
   emptyBody,
+  plain,
 }: {
   projectId: string;
   /**
@@ -79,6 +80,8 @@ export function AttachmentsPanel({
   attachError: unknown;
   onDelete: (attachmentId: string) => void;
   deleting: boolean;
+  /** Drop the card and keep the heading — rule 1, for a caller inside a document column. */
+  plain?: boolean;
   /** Locator root. Every control below hangs off it. */
   testId: string;
   /** What this owner's empty list says — a case's sentence is not a page's. */
@@ -100,6 +103,9 @@ export function AttachmentsPanel({
 
   return (
     <Panel
+      // Rule 1: bare inside a document column, a card where it is one region among several on a
+      // page. The case detail passes `plain`; the documentation tree does not.
+      plain={plain}
       title="Attachments"
       testId={testId}
       actions={
