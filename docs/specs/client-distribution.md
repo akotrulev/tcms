@@ -34,11 +34,22 @@ tcms help
 
 ### The MCP server, hosted — nothing to install
 
-The instance serves it over Streamable HTTP. Point an MCP host at the URL and send the API token as
-the bearer:
+The instance serves it over Streamable HTTP. ~~Point an MCP host at the URL — `https://tcms.example.com/mcp`
+— and send the API token as the bearer.~~ → **superseded: the endpoint is given as the host
+configuration it goes into.** Naming the URL and the bearer left the reader to assemble the block
+themselves for the shape this document calls *preferred*, while the local shape below got a
+complete one — so the recommended path had the most work in it:
 
-```
-https://tcms.example.com/mcp
+```json
+{
+  "mcpServers": {
+    "tcms": {
+      "type": "http",
+      "url": "https://tcms.example.com/mcp",
+      "headers": { "Authorization": "Bearer …" }
+    }
+  }
+}
 ```
 
 The server holds no credential of its own; the whole tool list and the instructions are built **per
@@ -64,6 +75,25 @@ npm install -g https://tcms.example.com/downloads/tcms-mcp-latest.tgz
   }
 }
 ```
+
+### Neither block is copied by hand any more
+
+Both shapes are rendered by `frontend/src/lib/clientSetup.ts` and handed over filled in, from the
+two screens that have something to hand over:
+
+| Screen | What it renders | The token in it |
+|---|---|---|
+| Help → **AI agent access (MCP)** and **The command-line tool** | both MCP shapes, the CLI's install-and-export block | `<your token>` — the reader pastes their own |
+| **Company → API tokens → Issue token**, reveal step, `Agent` role only | both MCP shapes | **the real secret**, at the one moment it exists |
+
+The instance's address comes from `window.location.origin` rather than a placeholder: the guide is
+only ever read *from* the instance it describes, and the SPA, `/api`, `/mcp` and `/downloads` are
+one origin behind the same Caddy site. A token pinned to a project gets `TCMS_PROJECT` filled in
+with that project's **key**, which is what `resolveProject` matches on.
+
+Both surfaces render from the same module so the configuration a user copies out of the dialog and
+the configuration the guide documents cannot disagree — the drift this page's own §140 warns about,
+one layer up from the API.
 
 ### Which copy to install
 

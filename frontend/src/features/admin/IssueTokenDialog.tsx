@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import { useIssueApiToken, useProjects, useRoles } from '../../api/queries';
 import type { IssuedApiToken } from '../../api/types';
@@ -12,9 +13,15 @@ import {
   DialogHeader,
   DialogTitle,
   Input,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
 } from '../../components/ui';
 import { NativeSelect } from '../../components/ui/native-select';
 import { describeError } from '../../lib/describeError';
+import { mcpInstallCommand, mcpServerConfig } from '../../lib/clientSetup';
+import { CopyBlock } from '../../components/CopyBlock';
 import { CopyField } from '../../components/CopyField';
 
 /**
@@ -116,6 +123,20 @@ export function IssueTokenDialog({ open, onClose }: { open: boolean; onClose: ()
   const agentSelected = selectedRole?.name === 'Agent';
 
   /*
+    The KEY of the project a pinned token is bound to, for `TCMS_PROJECT` in the local MCP shape.
+    Resolved from the list this form already loaded, because the response carries the project's id
+    and `TCMS_PROJECT` is matched on the key a person types (`packages/client/src/core/project.ts`).
+
+    `undefined` covers both an unpinned token and a pinned one whose project the list has not
+    answered for, and the config simply omits the line — which is correct rather than degraded: a
+    token bound to one project resolves that project server-side from `GET /projects` anyway, and
+    the variable exists for the token that can see several.
+  */
+  const issuedProjectKey = (projects.data ?? []).find(
+    (project) => project.id === issued?.token.projectId,
+  )?.key;
+
+  /*
     The default the server's rule needs to be a nudge rather than an obstacle. `expiresAt` is
     required for an Agent token — it lives on somebody's machine, where the realistic end is that
     nobody ever revokes it — and a required date field with no default is a form that stops the
@@ -181,6 +202,14 @@ export function IssueTokenDialog({ open, onClose }: { open: boolean; onClose: ()
   };
 
   if (issued) {
+    /*
+      The MCP configuration is offered for an `Agent` token and no other, because this is the only
+      credential the surface is for: an Automation Service token belongs in a pipeline's secret
+      store, and printing an agent config beside it would suggest a use it was not issued for. The
+      name is matched rather than an id because ids are seeded data this client does not hold — the
+      same reason `agentSelected` above does it.
+    */
+    const isAgent = issued.token.roleName === 'Agent';
     return (
       <Dialog open={open}>
         {/*
@@ -190,7 +219,15 @@ export function IssueTokenDialog({ open, onClose }: { open: boolean; onClose: ()
           exit and it says what pressing it costs.
         */}
         <DialogContent
-          className="max-w-lg"
+          /*
+            The agent reveal is the tallest thing this dialog renders — a warning, the secret, and
+            a configuration block — and `DialogContent` is centred with no height of its own, so
+            content taller than the viewport is clipped at both ends with nothing to scroll and the
+            only exit button off screen. Capped and scrolled here rather than in the kit: every
+            other dialog in the app fits, and giving all of them a scroll container would change
+            their overlay behaviour for a problem they do not have.
+          */
+          className={isAgent ? 'max-h-[85vh] max-w-2xl overflow-y-auto' : 'max-w-lg'}
           onEscapeKeyDown={(event) => event.preventDefault()}
           onInteractOutside={(event) => event.preventDefault()}
           data-testid={`${TestId}.Secret`}
@@ -227,6 +264,8 @@ export function IssueTokenDialog({ open, onClose }: { open: boolean; onClose: ()
               which CI configuration this row belongs to. If you lose the token, revoke this one and
               issue another.
             </p>
+
+            {isAgent && <AgentSetup issued={issued} projectKey={issuedProjectKey} />}
           </div>
 
           <DialogFooter>
@@ -380,5 +419,89 @@ export function IssueTokenDialog({ open, onClose }: { open: boolean; onClose: ()
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * The finished MCP configuration, with the token already in it — the reason this dialog is the
+ * fastest way to connect an agent.
+ *
+ * ## Why the secret is rendered a second time, in a second shape
+ *
+ * Everything above about the reveal applies unchanged: this is the same value on the same screen,
+ * in the same component that is unmounted when the dialog closes, and nothing persists it — no
+ * cache write, no `localStorage`, no URL. What it adds is the part a user would otherwise do by
+ * hand, badly: read the instance's own address, know that the hosted endpoint hangs off it at
+ * `/mcp`, and paste a 64-character secret into a JSON file without losing a character. A guide
+ * that says "replace &lt;your token&gt;" is three chances to get it wrong at the one moment the
+ * value cannot be looked up again.
+ *
+ * The blocks come from `lib/clientSetup.ts`, which the help page renders from too — so the shape
+ * an administrator copies here and the shape the guide documents cannot disagree.
+ *
+ * **Hosted is the default tab and may not be switched on.** The endpoint is behind a compose
+ * profile (`docs/specs/client-distribution.md`), which is the operator's decision and not
+ * something this screen can see; the local tab needs nothing from them, so the note names both
+ * rather than guessing which one this instance can serve.
+ */
+function AgentSetup({
+  issued,
+  projectKey,
+}: {
+  issued: IssuedApiToken;
+  projectKey: string | undefined;
+}) {
+  const origin = window.location.origin;
+  const token = issued.secret;
+
+  return (
+    <div className="border-t border-line pt-4" data-testid={`${TestId}.Secret.Mcp`}>
+      <h3 className="mb-1 text-[14px] font-semibold text-ink">Connect your agent</h3>
+      <p className="mb-3 text-[12.5px] leading-[1.55] text-ink-3">
+        The configuration for your MCP host, with this token already in it. Copy one of these
+        instead of the token above — it carries the secret, so paste it where a credential belongs.
+      </p>
+
+      <Tabs defaultValue="hosted">
+        <TabsList className="mb-3">
+          <TabsTrigger value="hosted" data-testid={`${TestId}.Secret.Mcp.Tab.Hosted`}>
+            Hosted — nothing to install
+          </TabsTrigger>
+          <TabsTrigger value="stdio" data-testid={`${TestId}.Secret.Mcp.Tab.Stdio`}>
+            Local, over stdio
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="hosted">
+          <CopyBlock
+            label="MCP configuration"
+            value={mcpServerConfig({ transport: 'hosted', origin, token })}
+            testId={`${TestId}.Secret.Mcp.Hosted`}
+          />
+        </TabsContent>
+
+        <TabsContent value="stdio">
+          <CopyBlock
+            label="Install"
+            value={mcpInstallCommand(origin)}
+            testId={`${TestId}.Secret.Mcp.Install`}
+          />
+          <CopyBlock
+            label="MCP configuration"
+            value={mcpServerConfig({ transport: 'stdio', origin, token, project: projectKey })}
+            testId={`${TestId}.Secret.Mcp.Stdio`}
+          />
+        </TabsContent>
+      </Tabs>
+
+      <p className="text-[12.5px] leading-[1.55] text-ink-3">
+        Hosted needs the endpoint switched on for this instance; local needs the server installed
+        from the line above. What each tool can do, and what an agent deliberately cannot, is in{' '}
+        <RouterLink to="/help/mcp" className="text-steel no-underline hover:underline">
+          Help → AI agent access
+        </RouterLink>
+        .
+      </p>
+    </div>
   );
 }

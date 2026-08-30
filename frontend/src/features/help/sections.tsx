@@ -1,6 +1,9 @@
 import type { ReactNode } from 'react';
+import { CliSetup } from './CliSetup';
+import { McpSetup } from './McpSetup';
 import { Code, Definitions, H, List, Note, P, Terminal } from './prose';
 import { RoleMatrix } from './RoleMatrix';
+import { TokenSteps } from './TokenSteps';
 
 /**
  * The user guide, as a list of sections.
@@ -646,22 +649,13 @@ export const helpSections: HelpSection[] = [
         </P>
 
         <H>Setup</H>
-        <List
-          ordered
-          items={[
-            <>
-              Issue a token: <strong>Company → API tokens → Issue token</strong>. Copy the secret —
-              it is shown once.
-            </>,
-            <>Install it from this instance, which serves the tarball itself:</>,
-          ]}
-        />
-        <Terminal>{`npm install -g <your-tcms-url>/downloads/tcms-cli-latest.tgz
-
-export TCMS_URL=<your-tcms-url>
-export TCMS_TOKEN=<the token you were shown once>
-
-tcms whoami`}</Terminal>
+        <P>First issue the credential it runs as:</P>
+        <TokenSteps purpose="ci" />
+        <P>
+          Then install it from this instance, which serves the tarball itself, and give it the two
+          values it needs:
+        </P>
+        <CliSetup />
         <Note>
           <strong>Install the copy from the instance you use.</strong> The CLI is an adapter over
           that instance&apos;s API contract, and the tarball is built by the same release as the
@@ -780,7 +774,7 @@ tcms review comment    # a remark on an open review`}</Terminal>
   {
     id: 'mcp',
     title: 'AI agent access (MCP)',
-    summary: 'Connecting an AI assistant, the 23 tools, and the limits that make it safe.',
+    summary: 'Connecting an AI assistant, the 25 tools, and the limits that make it safe.',
     body: (
       <>
         <P>
@@ -789,40 +783,26 @@ tcms review comment    # a remark on an open review`}</Terminal>
           and the first needs no installation.
         </P>
 
-        <H>Hosted — nothing to install</H>
+        <H>First, issue a token</H>
         <P>
-          Point your MCP host at the instance and send your API token as the bearer credential:
+          An agent connects as a credential of its own — never as your sign-in session — so the
+          setup starts with issuing one. It takes about a minute.
         </P>
-        <Terminal>{`<your-tcms-url>/mcp`}</Terminal>
-        <P>
-          This is the shape to prefer. The server holds no credential of its own — the whole tool
-          list and the instructions are built <em>per session</em> from your token, so what a session
-          can see is exactly what that token can reach. It is upgraded by your operator along with
-          the instance, so it cannot drift from the API it adapts.
-        </P>
-        <Note severity="warning">
-          The hosted endpoint is off unless your operator turned it on for this instance. If the URL
-          does not answer, that is what to ask them about.
+        <TokenSteps purpose="agent" />
+        <Note>
+          <strong>The quickest path skips the copying below.</strong> The dialog that issues an{' '}
+          <em>Agent</em> token hands you the finished configuration with the token already in it,
+          at the one moment the secret exists. Copy that and you are done — what follows is the
+          same thing with <Code>&lt;your token&gt;</Code> left to fill in.
         </Note>
 
-        <H>Local, over stdio</H>
-        <P>For an agent running on your own machine:</P>
-        <Terminal>{`npm install -g <your-tcms-url>/downloads/tcms-mcp-latest.tgz`}</Terminal>
-        <Terminal>{`{
-  "mcpServers": {
-    "tcms": {
-      "command": "tcms-mcp",
-      "env": {
-        "TCMS_URL": "<your-tcms-url>",
-        "TCMS_TOKEN": "<your token>"
-      }
-    }
-  }
-}`}</Terminal>
+        <H>Then point your agent at this instance</H>
         <P>
-          Set <Code>TCMS_PROJECT</Code> as well to bind every session to one project when the token
-          can see several.
+          Two shapes, both complete and both filled in with this instance&apos;s own address.{' '}
+          <strong>Hosted is the one to prefer</strong> — it installs nothing and is upgraded by your
+          operator along with the instance, so it cannot drift from the API it adapts.
         </P>
+        <McpSetup />
 
         <H>The tools</H>
         <Definitions

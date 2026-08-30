@@ -98,6 +98,20 @@ const ISSUED = {
   secret: 'tcms_abc123_the_only_time_this_is_ever_shown',
 }
 
+/** The same response for the one role the MCP configuration is offered for, pinned to a project. */
+const ISSUED_AGENT = {
+  token: {
+    ...ISSUED.token,
+    id: 'tok-2',
+    name: 'Cursor on my laptop',
+    roleId: 'role-agent',
+    roleName: 'Agent',
+    projectId: 'p1',
+    expiresAt: '2026-11-05T09:00:00Z',
+  },
+  secret: ISSUED.secret,
+}
+
 function mockReads() {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(['token:issue'], {}, null)
@@ -324,6 +338,69 @@ describe('IssueTokenDialog', () => {
     await userEvent.click(screen.getByTestId('Admin.TokenIssue.Submit'))
 
     expect(await screen.findByTestId('Admin.TokenIssue.Error')).toBeInTheDocument()
+  })
+
+  it('hands an agent token the finished MCP configuration, with the secret already in it', async () => {
+    /*
+      The point of the block: the alternative is a user reading their own base URL, knowing the
+      hosted endpoint hangs off it at `/mcp`, and pasting a 64-character secret by hand at the one
+      moment it cannot be looked up again.
+    */
+    vi.spyOn(api, 'post').mockResolvedValue(ISSUED_AGENT)
+    renderDialog()
+
+    await userEvent.type(screen.getByTestId('Admin.TokenIssue.Name'), 'Cursor on my laptop')
+    await chooseFrom('Admin.TokenIssue.Role', 'Agent')
+    await chooseFrom('Admin.TokenIssue.Project', 'Acme Online Banking')
+    await userEvent.click(screen.getByTestId('Admin.TokenIssue.Submit'))
+
+    const hosted = await screen.findByTestId('Admin.TokenIssue.Secret.Mcp.Hosted.Value')
+    const config = JSON.parse(hosted.textContent ?? '') as {
+      mcpServers: { tcms: { url: string; headers: Record<string, string> } }
+    }
+    // Parsed rather than matched: this is pasted into a file another program reads, so "it
+    // contains the secret" is not the assertion — "it is a config carrying the secret" is.
+    expect(config.mcpServers.tcms.headers.Authorization).toBe(`Bearer ${ISSUED_AGENT.secret}`)
+    expect(config.mcpServers.tcms.url).toBe(`${window.location.origin}/mcp`)
+  })
+
+  it('binds the local shape to the project the token was pinned to, by key', async () => {
+    // `TCMS_PROJECT` is matched on the key a person types, and the response carries only the id —
+    // so this is the assertion that fails if the id is written into the config verbatim.
+    vi.spyOn(api, 'post').mockResolvedValue(ISSUED_AGENT)
+    renderDialog()
+
+    await userEvent.type(screen.getByTestId('Admin.TokenIssue.Name'), 'Cursor on my laptop')
+    await chooseFrom('Admin.TokenIssue.Role', 'Agent')
+    await chooseFrom('Admin.TokenIssue.Project', 'Acme Online Banking')
+    await userEvent.click(screen.getByTestId('Admin.TokenIssue.Submit'))
+
+    await userEvent.click(await screen.findByTestId('Admin.TokenIssue.Secret.Mcp.Tab.Stdio'))
+    const local = await screen.findByTestId('Admin.TokenIssue.Secret.Mcp.Stdio.Value')
+    const env = (
+      JSON.parse(local.textContent ?? '') as {
+        mcpServers: { tcms: { env: Record<string, string> } }
+      }
+    ).mcpServers.tcms.env
+
+    expect(env.TCMS_PROJECT).toBe('OLB')
+    expect(env.TCMS_PROJECT).not.toBe('p1')
+    expect(env.TCMS_TOKEN).toBe(ISSUED_AGENT.secret)
+  })
+
+  it('offers no agent configuration for a CI token, which is not what the surface is for', async () => {
+    // An Automation Service token belongs in a pipeline's secret store. Printing an MCP block
+    // beside it would suggest a use it was not issued for — and the reveal is the one screen with
+    // no room for a suggestion the reader has to rule out.
+    vi.spyOn(api, 'post').mockResolvedValue(ISSUED)
+    renderDialog()
+
+    await userEvent.type(screen.getByTestId('Admin.TokenIssue.Name'), 'Nightly regression')
+    await chooseFrom('Admin.TokenIssue.Role', 'Automation Service')
+    await userEvent.click(screen.getByTestId('Admin.TokenIssue.Submit'))
+
+    await screen.findByTestId('Admin.TokenIssue.Secret.Value.Value')
+    expect(screen.queryByTestId('Admin.TokenIssue.Secret.Mcp')).not.toBeInTheDocument()
   })
 
   it('says up front that the token cannot exceed the issuer', async () => {

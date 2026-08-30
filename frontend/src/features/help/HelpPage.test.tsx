@@ -1,6 +1,7 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { Route, Routes } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api/client';
 import type { Role } from '../../api/types';
 import { allPermissions } from '../../lib/permissions';
@@ -204,5 +205,139 @@ describe('HelpPage — the role matrix', () => {
     await screen.findByTestId('Help.RoleMatrix.Table');
     expect(screen.getByText('Credentials only — never granted to a person')).toBeInTheDocument();
     expect(screen.getByText(AGENT.description)).toBeInTheDocument();
+  });
+});
+
+/**
+ * The setup blocks — the part of the guide a reader does not read but *takes*.
+ *
+ * Three things are locked here and none is visible to the build:
+ *
+ *   1. **No placeholder base URL survives.** The guide is only ever read from the instance it
+ *      describes, so `<your-tcms-url>` asked the reader to supply a value the browser already had
+ *      — three times, without a typo, in a JSON file another program parses.
+ *   2. **The blocks are configuration, not prose.** They are copied whole into an MCP host, so
+ *      they are asserted by parsing rather than by matching a sentence.
+ *   3. **Both surfaces render the same artefact.** These come from `lib/clientSetup.ts`, which the
+ *      issue-token dialog renders too; the assertion that they agree is that file's unit test, and
+ *      this one is what fails if a section goes back to hand-writing a block.
+ */
+describe('HelpPage — the setup blocks', () => {
+  /*
+    `navigator.clipboard` is replaced outright rather than spied on, because the case worth testing
+    is the one where the whole object is missing — so the original descriptor is put back by hand:
+    `restoreAllMocks` knows nothing about a `defineProperty`, and a leaked `undefined` clipboard
+    would make every later copy test in this file pass for the wrong reason.
+  */
+  const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    if (clipboardDescriptor) Object.defineProperty(navigator, 'clipboard', clipboardDescriptor);
+    else Reflect.deleteProperty(navigator, 'clipboard');
+  });
+
+  it('fills the MCP configuration in with this instance’s own address', async () => {
+    mockApi();
+    renderAt('/help/mcp');
+
+    const block = await screen.findByTestId('Help.Mcp.Hosted.Value');
+    const config = JSON.parse(block.textContent ?? '') as {
+      mcpServers: { tcms: { url: string; headers: Record<string, string> } };
+    };
+
+    expect(config.mcpServers.tcms.url).toBe(`${window.location.origin}/mcp`);
+    // The token is the one thing left to fill in, and it is named as such rather than left blank:
+    // an empty string in a config file is a host that connects as nobody and says nothing.
+    expect(config.mcpServers.tcms.headers.Authorization).toBe('Bearer <your token>');
+  });
+
+  it('gives the hosted shape as a config block, not as a bare URL to assemble', async () => {
+    // The distribution spec calls hosted the shape to prefer, and the guide used to print it as a
+    // URL while the local shape got a block — so the recommended path had more work in it.
+    mockApi();
+    renderAt('/help/mcp');
+
+    await screen.findByTestId('Help.Mcp.Hosted');
+    expect(screen.getByTestId('Help.Mcp.Hosted.Copy')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId('Help.Mcp.Tab.Stdio'));
+    const local = await screen.findByTestId('Help.Mcp.Stdio.Value');
+    const env = (
+      JSON.parse(local.textContent ?? '') as {
+        mcpServers: { tcms: { command: string; env: Record<string, string> } };
+      }
+    ).mcpServers.tcms;
+    expect(env.command).toBe('tcms-mcp');
+    expect(env.env.TCMS_URL).toBe(window.location.origin);
+  });
+
+  it('installs both clients from the instance being read, never from a registry', async () => {
+    mockApi();
+    renderAt('/help/mcp');
+
+    await userEvent.click(await screen.findByTestId('Help.Mcp.Tab.Stdio'));
+    expect(await screen.findByTestId('Help.Mcp.Install.Value')).toHaveTextContent(
+      `${window.location.origin}/downloads/tcms-mcp-latest.tgz`,
+    );
+
+    renderAt('/help/cli');
+    expect(await screen.findByTestId('Help.Cli.Setup.Value')).toHaveTextContent(
+      `${window.location.origin}/downloads/tcms-cli-latest.tgz`,
+    );
+  });
+
+  it('tells a reader how to get the token both surfaces start by requiring', async () => {
+    // The step the guide left out entirely: both sections opened by telling the reader to use a
+    // credential and neither said where one comes from.
+    mockApi();
+    renderAt('/help/mcp');
+
+    const section = await screen.findByTestId('Help.Section.mcp');
+    expect(within(section).getByRole('link', { name: /API tokens/i })).toHaveAttribute(
+      'href',
+      '/admin/tokens',
+    );
+    expect(section).toHaveTextContent(/shown once/i);
+    // Named for the reader who cannot follow that link — the thing they take to an administrator.
+    expect(section).toHaveTextContent(/token:issue/);
+  });
+
+  it('copies the whole configuration in one press', async () => {
+    mockApi();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+    renderAt('/help/mcp');
+
+    await userEvent.click(await screen.findByTestId('Help.Mcp.Hosted.Copy'));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    const copied = JSON.parse(writeText.mock.calls[0][0] as string) as {
+      mcpServers: { tcms: { url: string } };
+    };
+    expect(copied.mcpServers.tcms.url).toBe(`${window.location.origin}/mcp`);
+    expect(await screen.findByTestId('Help.Mcp.Hosted.Status')).toHaveTextContent('Copied.');
+  });
+
+  it('says what to do instead when the browser has no clipboard', async () => {
+    // A self-hosted first install is reached over plain HTTP, where `navigator.clipboard` is
+    // absent entirely — a missing capability, not a rejected promise. The block is still readable
+    // and the button has to say so rather than doing nothing.
+    mockApi();
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    renderAt('/help/mcp');
+
+    await userEvent.click(await screen.findByTestId('Help.Mcp.Hosted.Copy'));
+
+    expect(await screen.findByTestId('Help.Mcp.Hosted.Status')).toHaveTextContent(
+      /select the text/i,
+    );
+    expect(screen.getByTestId('Help.Mcp.Hosted.Value')).toHaveTextContent('mcpServers');
   });
 });

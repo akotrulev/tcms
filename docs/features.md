@@ -251,14 +251,15 @@ library) · `suite list` · `suite show` · `plan list` · `run list` · `doc li
 
 ## AI Agent Access (MCP Server)
 
-An MCP server exposing **23 tools**, over stdio or HTTP, so an AI assistant can work with TCMS
+An MCP server exposing **25 tools**, over stdio or HTTP, so an AI assistant can work with TCMS
 directly.
 
-*Orientation* — `tcms_whoami` · `tcms_orient` (project summary with vocabularies and capabilities)
+*Orientation (3)* — `tcms_whoami` · `tcms_orient` (project summary with vocabularies and
+capabilities) · `tcms_shape` (what a payload of a given kind must look like, reaching no instance)
 
 *Reading (11)* — `tcms_search_cases` · `tcms_open_case` · `tcms_list_suites` · `tcms_list_library` ·
 `tcms_list_artifacts` · `tcms_doc_tree` · `tcms_open_doc_page` · `tcms_list_plans` · `tcms_open_run` ·
-`tcms_triage`
+`tcms_list_proposals` · `tcms_triage`
 
 *Writing (11)* — `tcms_write_case` · `tcms_write_suite` · `tcms_write_doc_page` · `tcms_write_plan` ·
 `tcms_write_run` · `tcms_record_result` · `tcms_review_comment` · `tcms_review_verdict` ·
@@ -270,6 +271,10 @@ What makes it safe to point at real data:
   front what that credential can actually reach — so it does not attempt work it will be refused
 - Destructive operations prompt for consent, and **refuse outright when the host cannot ask**
 - Tools are filtered by permission, so a narrowly-scoped token sees a narrower tool list
+
+Connecting one is handed over rather than described: the guide and the token-issuing dialog both
+render the finished `mcpServers` block for this instance, and the dialog's carries the new token
+already in it — the one moment the secret exists.
 
 ## Running It
 
