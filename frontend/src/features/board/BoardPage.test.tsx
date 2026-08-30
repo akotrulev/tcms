@@ -150,16 +150,23 @@ describe('Moving a card', () => {
       }),
     ])
 
-    await userEvent.hover(screen.getByTestId('Board.Card.MoveTo.DONE').parentElement!)
+    /*
+      The destinations moved into one menu (renders audit 4.1 — four buttons stacked three deep at
+      1280 turned a one-line task into a ~290px card). The refusal is easier to reach for it: a
+      disabled MENU ITEM renders its reason as its own second line, where a disabled BUTTON could
+      not be hovered at all — `disabled:pointer-events-none` meant no tooltip ever opened on the 14
+      of 24 buttons that were refused.
+    */
+    await userEvent.click(screen.getByTestId('Board.Card.Move'))
 
-    const tip = await screen.findByRole('tooltip')
-    expect(tip.textContent).toContain('TC-42')
+    const refused = await screen.findByTestId('Board.Card.MoveTo.DONE')
+    expect(refused.textContent).toContain('TC-42')
     // The sentence has to point somewhere. "You can't do that" leaves the user with a card they
     // believe is broken rather than one that is following its source.
-    expect(tip.textContent).toContain('follows')
+    expect(refused.textContent).toContain('follows')
   })
 
-  it('disables the move buttons a card is not allowed to make', () => {
+  it('disables the moves a card is not allowed to make', async () => {
     renderBoard([
       card({
         id: 'execution:abc',
@@ -171,17 +178,35 @@ describe('Moving a card', () => {
       }),
     ])
 
-    // Disabled, not absent — §31's disable-don't-hide. An absent button teaches that the board
-    // cannot move cards at all.
-    expect(screen.getByTestId('Board.Card.MoveTo.DONE').hasAttribute('disabled')).toBe(true)
+    // Disabled, not absent — §31's disable-don't-hide. An absent destination teaches that the
+    // board cannot move cards at all.
+    await userEvent.click(screen.getByTestId('Board.Card.Move'))
+    expect(await screen.findByTestId('Board.Card.MoveTo.DONE')).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
   })
 
-  it('offers the moves a task IS allowed to make', () => {
+  it('offers the moves a task IS allowed to make', async () => {
     renderBoard([card({ id: '1', title: 'Movable', status: 'TODO' })])
 
-    expect(screen.getByTestId('Board.Card.MoveTo.DONE').hasAttribute('disabled')).toBe(false)
-    // Never a button back to the column it is already in — it would do nothing and read as broken.
+    await userEvent.click(screen.getByTestId('Board.Card.Move'))
+    const done = await screen.findByTestId('Board.Card.MoveTo.DONE')
+    expect(done).not.toHaveAttribute('aria-disabled', 'true')
+    // Never a destination back to the column it is already in — it would do nothing and read as
+    // broken.
     expect(screen.queryByTestId('Board.Card.MoveTo.TODO')).toBeNull()
+  })
+
+  it('keeps WCAG 2.2 satisfied — every destination reachable without a drag', async () => {
+    // The property the shape change must not cost. Audit 4.2 records this board as the product's
+    // only conformant answer to 2.2's drag rule; a menu satisfies it exactly as four buttons did.
+    renderBoard([card({ id: '1', title: 'Movable', status: 'TODO' })])
+
+    await userEvent.click(screen.getByTestId('Board.Card.Move'))
+    for (const column of ['IN_PROGRESS', 'BLOCKED', 'IN_REVIEW', 'DONE']) {
+      expect(await screen.findByTestId(`Board.Card.MoveTo.${column}`)).toBeInTheDocument()
+    }
   })
 })
 
@@ -365,12 +390,14 @@ describe('Refusing a review card’s move (§81)', () => {
       }),
     ])
 
-    // Read off the disabled button's tooltip, for the reason the refusal test above records: a
-    // `@dnd-kit` drag cannot be driven in jsdom, and the drop path is pinned to produce this exact
-    // string in `cardMove.test.ts`.
-    await userEvent.hover(screen.getByTestId('Board.Card.MoveTo.DONE').parentElement!)
+    // Read off the disabled MENU ITEM, for the reason the refusal test above records: a `@dnd-kit`
+    // drag cannot be driven in jsdom, and the drop path is pinned to produce this exact string in
+    // `cardMove.test.ts`. The item carries the sentence inline now — a disabled button could not be
+    // hovered at all, which is the trap this card's own comment spent a paragraph on.
+    await userEvent.click(screen.getByTestId('Board.Card.Move'))
 
-    expect((await screen.findByRole('tooltip')).textContent).toContain('TC-20 mirrors a review')
+    const refused = await screen.findByTestId('Board.Card.MoveTo.DONE')
+    expect(refused.textContent).toContain('TC-20 mirrors a review')
   })
 })
 
@@ -435,6 +462,7 @@ describe('Moving a card writes optimistically and rolls back (§106)', () => {
     )
 
     renderPage()
+    await userEvent.click(await screen.findByTestId('Board.Card.Move'))
     await userEvent.click(await screen.findByTestId('Board.Card.MoveTo.DONE'))
 
     await waitFor(() =>
@@ -455,6 +483,7 @@ describe('Moving a card writes optimistically and rolls back (§106)', () => {
     )
 
     renderPage()
+    await userEvent.click(await screen.findByTestId('Board.Card.Move'))
     await userEvent.click(await screen.findByTestId('Board.Card.MoveTo.DONE'))
 
     /*

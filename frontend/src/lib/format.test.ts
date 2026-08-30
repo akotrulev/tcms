@@ -10,6 +10,7 @@ import {
   formatRatio,
   formatSeconds,
   formatTimeOfDay,
+  joinMeta,
   durationSecondsField,
   parseDurationSeconds,
   percentOf,
@@ -235,5 +236,19 @@ describe('timestamps always carry their zone', () => {
     expect(formatDateTime(null)).toBe(EM_DASH)
     expect(formatTimeOfDay(null)).toBe(EM_DASH)
     expect(formatTimeOfDay(undefined)).toBe(EM_DASH)
+  })
+})
+
+describe('joinMeta', () => {
+  it('never emits a separator against an absent value', () => {
+    // Renders audit 4.1: at 1280 the board's metadata line wraps AFTER the middot, so a card with
+    // an assignee and no due date read `Marco Ferreira ·` with nothing following it.
+    expect(joinMeta('Marco Ferreira', null)).toBe('Marco Ferreira')
+    expect(joinMeta(null, 'due 2026-09-13')).toBe('due 2026-09-13')
+    expect(joinMeta('Aiko Tanaka', 'due 2026-09-13')).toBe('Aiko Tanaka · due 2026-09-13')
+  })
+
+  it('is empty when there is nothing to say', () => {
+    expect(joinMeta(null, undefined, '', false)).toBe('')
   })
 })

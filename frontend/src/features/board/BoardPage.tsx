@@ -22,7 +22,13 @@ import { PermissionGate } from '../../components/PermissionGate';
 import { Badge, Banner } from '../../components/kit';
 import { Button, Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui';
 import { cn } from '../../lib/cn';
-import { formatCount } from '../../lib/format';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../../components/ui/dropdown-menu';
+import { formatCount, joinMeta } from '../../lib/format';
 import { healthLabels, priorityLabels, workItemColumns, workItemStatusLabels } from '../../lib/labels';
 import { toast } from '../../notifications/toast';
 import { boardKeyboardCoordinates } from './boardKeyboard';
@@ -736,15 +742,24 @@ function WorkCard({
         </RouterLink>
       )}
 
-      <div className="mt-1.5 flex flex-wrap items-center gap-[7px] text-[11px] text-ink-4">
-        {item.assignee && <span>{item.assignee.displayName}</span>}
-        {item.assignee && item.dueDate && <span aria-hidden>·</span>}
-        {item.dueDate && (
-          <span className={cn('font-mono', item.overdue && 'text-[color:var(--color-failed)]')}>
-            due {item.dueDate}
-          </span>
-        )}
-      </div>
+      {/*
+        One string, joined — never a separator rendered between a present value and an absent one.
+        That was the defect: at 1280 the line wraps AFTER the middot, so a card with an assignee and
+        no due date read `Marco Ferreira ·` with nothing following it (renders audit 4.1). The
+        overdue colour moved onto the whole line because the date is no longer its own element;
+        `overdue` is a property of the card, and the line is the only place it is stated in words.
+      */}
+      {(item.assignee || item.dueDate) && (
+        <p
+          data-testid="Board.Card.Meta"
+          className={cn(
+            'm-0 mt-1.5 text-[11px] text-ink-4',
+            item.overdue && item.dueDate && 'text-[color:var(--color-failed)]',
+          )}
+        >
+          {joinMeta(item.assignee?.displayName, item.dueDate && `due ${item.dueDate}`)}
+        </p>
+      )}
 
       {/*
         Dragging is not the only way to move a card. A keyboard user gets the same capability
@@ -760,46 +775,66 @@ function WorkCard({
         already documents this trap and solves it with a span anchor; the same solution belongs
         here rather than a second invention.
       */}
-      <div className="mt-2 flex flex-wrap gap-1">
-        {COLUMNS.filter((column) => column !== item.status).map((column) => {
-          const allowed = item.allowedTransitions.includes(column);
-          const button = (
-            <Button
-              size="sm"
-              disabled={!allowed}
-              aria-disabled={!allowed}
-              onClick={() => onMove(column)}
-              data-testid={`Board.Card.MoveTo.${column}`}
-              className="min-h-6 px-2 py-0.5 text-[11px]"
-            >
-              → {workItemStatusLabels[column]}
-            </Button>
-          );
+      {/*
+        Dragging is not the only way to move a card, and one control offers every destination.
 
-          // The same sentence a refused DROP produces (`cardMove.refusalFor`). Two affordances,
-          // one rule, one wording — they were two hand-written strings until §106 and had already
-          // drifted apart in tense and in what they named.
-          const title = allowed ? `Move to ${workItemStatusLabels[column]}` : refusalFor(item, column);
+        ~~A button per destination, in a row.~~ → **superseded 2026-08-30 (renders audit 4.1).**
+        Four buttons stacked three deep at 1280px and turned a one-line task into a ~290px card —
+        which is card height traded for nothing, since a menu offers the same destinations.
 
-          return (
-            <Tooltip key={column}>
-              <TooltipTrigger asChild>
-                {allowed ? (
-                  button
-                ) : (
-                  // The anchor that actually receives the hover. `role="none"` because it is
-                  // scaffolding, and `cursor: not-allowed` states the verdict before the tooltip
-                  // has had time to open.
-                  <span role="none" className="inline-flex cursor-not-allowed">
-                    {button}
-                  </span>
-                )}
-              </TooltipTrigger>
-              <TooltipContent>{title}</TooltipContent>
-            </Tooltip>
-          );
-        })}
-      </div>
+        **WCAG 2.2's drag rule is the thing that must not regress**, and it does not: every
+        destination is still reachable without a pointer gesture, which is what 2.2 requires. The
+        audit named this board as the product's only conformant answer to that rule (4.2), so the
+        capability is preserved exactly and only its shape changed.
+
+        **The refusal is still reachable, and it is now easier.** The comment this replaces spent a
+        paragraph on the disabled-tooltip trap — `disabled:pointer-events-none` means no hover ever
+        reaches a tooltip wrapped around a disabled control, so 14 of 24 buttons greyed out and
+        explained nothing. A menu item does not need the trick: a disabled item renders its reason
+        as its own second line, in the menu, where the reader is already looking.
+      */}
+      {!overlay && (
+        <div className="mt-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                disabled={!movable}
+                aria-label={`Move ${item.title}`}
+                data-testid="Board.Card.Move"
+                className="min-h-6 px-2 py-0.5 text-[11px]"
+              >
+                Move to…
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {COLUMNS.filter((column) => column !== item.status).map((column) => {
+                const allowed = item.allowedTransitions.includes(column);
+                return (
+                  <DropdownMenuItem
+                    key={column}
+                    disabled={!allowed}
+                    onSelect={() => onMove(column)}
+                    data-testid={`Board.Card.MoveTo.${column}`}
+                  >
+                    <span className="flex flex-col">
+                      <span>{workItemStatusLabels[column]}</span>
+                      {/*
+                        The same sentence a refused DROP produces (`cardMove.refusalFor`). Two
+                        affordances, one rule, one wording — they were two hand-written strings
+                        until §106 and had already drifted apart in tense and in what they named.
+                      */}
+                      {!allowed && (
+                        <span className="text-[10.5px] text-ink-4">{refusalFor(item, column)}</span>
+                      )}
+                    </span>
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
     </article>
   );
 }

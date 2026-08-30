@@ -233,6 +233,19 @@ export function plural(n: number, noun: string): string {
 }
 
 /**
+ * Joins the parts of a metadata line, dropping the empty ones.
+ *
+ * A card with an assignee and no due date reads `Aiko Tanaka`, not `Aiko Tanaka ·`. The renders
+ * audit found both spellings of that on the board at 1280px (4.1), where the line wraps after the
+ * separator and the orphan ends up alone on the second row — `Marco Ferreira ·` with nothing after
+ * it at all. Emitting the separator between a present value and an absent one is the bug; a join
+ * over the present ones cannot express it.
+ */
+export function joinMeta(...parts: (string | null | undefined | false)[]): string {
+  return parts.filter((part): part is string => !!part).join(' · ');
+}
+
+/**
  * The noun half of `plural`, for the call sites that render the number themselves — the projects
  * list and the dashboard both wrap the count in `<Identifier>`, so they cannot take the whole
  * string. The inflection rule lives in one place; only its packaging differs.
