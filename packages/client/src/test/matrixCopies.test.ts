@@ -75,7 +75,7 @@ const COPY_COLUMNS: Record<string, SpecRole> = {
  *
  * One instance: the matrix file prints `SYSTEM` scope as a single line, because seven keys held by
  * one role is a list and a three-column table of ✓ would be worse to read. It is still a copy of
- * the table §A3 prints, and leaving it out would leave seven of the 55 keys uncompared — so the
+ * the table §A3 prints, and leaving it out would leave seven of the catalogue's keys uncompared — so the
  * sentence is declared here rather than excused.
  */
 interface ProseRow {

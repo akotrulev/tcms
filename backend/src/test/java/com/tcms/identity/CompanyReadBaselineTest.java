@@ -28,7 +28,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * every member and nobody below Company Admin could answer for.</strong>
  *
  * <p>Roles spec §A3 grants {@code company:read} to "every member", and {@code V3} seeds it onto
- * five of the six built-in roles saying exactly that. Four of those five are PROJECT-scope, and
+ * most of the built-in roles saying exactly that. Most of them are PROJECT-scope, and
  * {@link PermissionEvaluator#evaluateCompanyWide} answers from the SYSTEM and COMPANY terms only —
  * by design, because "held on any project" would make {@code case:delete} on one project read as a
  * company-wide capability. So the permission was unreachable at the only scope that asks about the

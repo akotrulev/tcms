@@ -325,7 +325,7 @@ class ProjectCreateEndpointTest extends IntegrationTestBase {
          *
          * <p>{@link ProjectCreateService} does not mint a project grant for the creator because every
          * role that can reach the endpoint already sees every project in the company. That is true of
-         * the six built-in roles and nothing enforces it — so if a later migration seeds a role with
+         * the built-in roles and nothing enforces it — so if a later migration seeds a role with
          * {@code project:create} and not {@code project:read}, this fails and whoever wrote it is
          * told that their new role would create projects it cannot see. Handoff §6 lesson 9: a
          * catalogue-wide invariant needs a computed check.

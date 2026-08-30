@@ -6248,7 +6248,8 @@ export interface paths {
          *     Ordered by name. Visible to **anybody who can see the project**, the same gate the run
          *     list uses; the three writes below cost `run:create`, because a schedule is delegated run
          *     creation and a caller who may create a run now may create one every Monday. **No new
-         *     permission was added for this** and the catalogue is unchanged at 55 keys.
+         *     permission was added for this** and the catalogue was unchanged at 55 keys (89 since
+         *     `V2`, which added none of them for this).
          *
          *     **The runs a schedule creates are ordinary runs.** They carry `source: SCHEDULED`, a
          *     **null `createdBy`**, and an audit row with no actor at all — because at 03:00 nobody

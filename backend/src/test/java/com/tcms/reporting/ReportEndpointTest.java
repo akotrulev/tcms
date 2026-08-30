@@ -49,7 +49,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * together to Instance Admin, Company Admin, Test Lead, Test Engineer and Viewer; the only built-in
  * withheld from them is Automation Service, which is attached to API tokens (M3, unbuilt) and which
  * also holds no {@code project:read}, so it 404s on the visibility gate one step earlier and never
- * reaches a permission check at all. Every gate assertion available from the six built-ins is
+ * reaches a permission check at all. Every gate assertion available from the built-in roles is
  * therefore satisfied by an implementation with <em>no gate</em>, and the mutation that deletes one
  * reddens nothing.
  *
@@ -110,7 +110,7 @@ class ReportEndpointTest extends IntegrationTestBase {
     private static final UUID RUN = UUID.fromString("ae002000-0000-4000-8000-000000000001");
     private static final UUID SIBLING_RUN = UUID.fromString("ae002000-0000-4000-8000-000000000002");
 
-    /** Test Lead — holds both report keys, as four of the six built-ins do. */
+    /** Test Lead — holds both report keys, as most of the built-ins do. */
     private static final UUID LEAD = UUID.fromString("ae003000-0000-4000-8000-000000000001");
     /** Custom role: {@code report:view} and NOT {@code report:export}. */
     private static final UUID SCREEN_ONLY = UUID.fromString("ae003000-0000-4000-8000-000000000002");

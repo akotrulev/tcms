@@ -106,7 +106,8 @@ class SeedDataTest extends IntegrationTestBase {
     private static final Pattern SPEC_KEY = Pattern.compile("`([a-z]+:[a-z]+)`");
 
     private static final String COMPANY_READ_IS_SEEDED_PER_ROLE = """
-            V3 seeds company:read onto five of the six built-in roles and §A3's COMPANY table has \
+            V3 seeds company:read onto five of the six built-in roles — and V2 onto Project \
+            Manager, a sixth — while §A3's COMPANY table has \
             no column that can say so — it says `Every member`, which is V15's baseline role. The \
             paragraph under that table records both halves: "The per-role grants above are \
             unchanged and still correct; what carries the permission company-wide is the Company \
@@ -203,7 +204,7 @@ class SeedDataTest extends IntegrationTestBase {
         //
         // The three checks around it do NOT cover this. catalogueMatchesTheContract compares the
         // KEYS to openapi.yaml, and the SPA's own `satisfies Record<PermissionKey, Area>` holds its
-        // keys to the same contract at compile time — so both ends are pinned to the same 55 keys
+        // keys to the same contract at compile time — so both ends are pinned to the same keys
         // and NEITHER looks at the value. A permission moved from 'repository' to 'project' on one
         // side alone typechecks, seeds, and passes every one of them.
         //
@@ -225,7 +226,7 @@ class SeedDataTest extends IntegrationTestBase {
         assertThat(seeded)
                 .as("""
                         The seeded permission areas and the SPA's permissionAreas disagree. Both \
-                        sides group the same 55 keys for humans and two different groupings are two \
+                        sides group the same catalogue for humans and two different groupings are two \
                         different products — V3's header and Permission's javadoc have claimed they \
                         match since M0, and this is the first thing to check it. Nothing in the \
                         backend READS permission.area (ArchitectureRulesTest.READERLESS_BY_DECISION), \
@@ -688,7 +689,7 @@ class SeedDataTest extends IntegrationTestBase {
         // add the two missing comment keys to the catalogue and key the gate off the subject type
         // like the review keys; never to delete this check.
         //
-        // Written over the catalogue rather than over the six roles by name, so a seventh role
+        // Written over the catalogue rather than over the roles by name, so a tenth role
         // added in a later migration is covered without anyone remembering this reasoning exists.
         assertThat(queryStrings("""
                 SELECT DISTINCT r.name

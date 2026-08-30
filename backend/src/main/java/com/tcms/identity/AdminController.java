@@ -138,7 +138,7 @@ public class AdminController {
         };
     }
 
-    /** The six built-in roles, with their permissions expanded. */
+    /** The built-in roles a person or a token may be given, with their permissions expanded. */
     @GetMapping("/roles")
     public List<RoleView> roles(@AuthenticationPrincipal Jwt jwt) {
         return directory.listRoles(caller(jwt));

@@ -27,14 +27,16 @@ Written for a reader deciding what the product does. Implementation detail is co
 
 ## Who Can Do What
 
-- Six built-in roles, from most to least restricted: **Viewer**, **Automation Service**,
-  **Test Engineer**, **Test Lead**, **Company Admin**, **Instance Admin**
+- Nine built-in roles: **Viewer**, **Automation Service**, **Test Engineer**, **Test Lead** and
+  **Project Manager** on a project; **Account Manager**, **Finance** and **Company Admin** across a
+  company; **Instance Admin** across the instance
 - Roles are fixed and cannot be edited or cloned — a client needing something between two tiers
   gets the higher one
-- 55 distinct permissions, granted per project, per company, or instance-wide
+- 89 distinct permissions, granted per project, per company, or instance-wide
 - Grant a role to a person on a project, or to a whole team at once — everyone in the team inherits it
-- Test Lead adds exactly seven things over Test Engineer: the three approvals, and permission to
-  change a project's settings, members, integrations and audit log
+- Test Lead adds exactly ten things over Test Engineer: the three approvals, permission to manage
+  the project and its integrations, the project audit trail, and deleting issues, configuring the
+  issue workflow and importing from another tracker
 - Nobody can approve their own work, by default
 - Buttons you lack permission for are **visible but disabled**, so the product never hides that a
   capability exists
@@ -394,7 +396,7 @@ SAML as pending work) were removed outright as wrong.*
 - Cross-company "all my work everywhere" view *(Phase 4)*
 - Storage-quota management — deferred until real contention *(Phase 4)*
 - SAML 2.0 — ruled out of scope by resolved question #40. `IdentityProviderKind` has **no** SAML member and `V53` says so explicitly; OIDC and LDAP cover the enterprise case
-- Custom roles / clone-and-edit — deliberately rejected; six immutable roles only
+- Custom roles / clone-and-edit — deliberately rejected; nine immutable roles only
 - Elasticsearch — deferred until Postgres FTS proves insufficient *(§4)*
 
 ---

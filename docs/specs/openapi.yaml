@@ -27,7 +27,7 @@ info:
         boundary (plan §6s). Multi-company routing (/c/{slug}), the company switcher
         and per-company branding land with backend M6 and are deliberately NOT in
         this contract yet. What IS here is the shape those decisions already changed:
-        the display-key format, the six built-in roles, and the permission catalogue.
+        the display-key format, the nine built-in roles, and the permission catalogue.
       * List endpoints return { items, page, size, total } and accept composable
         filters. Filter state is expected to live in the URL (plan §6o/§6q).
       * Timestamps are RFC 3339 with offset.
@@ -4839,7 +4839,8 @@ paths:
         Ordered by name. Visible to **anybody who can see the project**, the same gate the run
         list uses; the three writes below cost `run:create`, because a schedule is delegated run
         creation and a caller who may create a run now may create one every Monday. **No new
-        permission was added for this** and the catalogue is unchanged at 55 keys.
+        permission was added for this** and the catalogue was unchanged at 55 keys (89 since
+        `V2`, which added none of them for this).
 
         **The runs a schedule creates are ordinary runs.** They carry `source: SCHEDULED`, a
         **null `createdBy`**, and an audit row with no actor at all — because at 03:00 nobody

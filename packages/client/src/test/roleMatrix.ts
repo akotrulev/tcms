@@ -5,7 +5,7 @@
  * — CLAUDE.md and README carry convenience copies and say in as many words that the spec wins and
  * the copies are the bug. So a rule about what the prose may claim reads **the spec**, not a third
  * copy of the matrix. ~~And nothing compares the two copies to it.~~ → **§215 does**
- * (`packages/client/src/test/matrixCopies.test.ts`), over all three scopes and all 55 keys, which
+ * (`packages/client/src/test/matrixCopies.test.ts`), over all three scopes and every key, which
  * is what {@link specMatrix} is here for: {@link roleMatrix} answers *who holds what* and takes the
  * `PROJECT` tables alone, and a rule about a **copy** has to read every cell of every table,
  * including the qualifier text a boolean throws away.
@@ -47,7 +47,7 @@
  *
  * A parser that silently reads nothing looks exactly like a repository whose prose is clean, which
  * is the failure mode every check in this package is written against. So {@link roleMatrix} asserts
- * its own yield: the six roles, a floor on the keys found, and — the guard that actually catches a
+ * its own yield: the seven `PROJECT` columns, a floor on the keys found, and — the guard that actually catches a
  * table renamed or re-columned — that the two roles this repository argues about most, Test Lead
  * and Test Engineer, differ by **exactly the seven keys `V52` left between them**. That set is the
  * product decision §210 took, and if the parse drifts it is the first thing to stop matching.

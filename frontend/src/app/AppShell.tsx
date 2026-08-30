@@ -273,8 +273,10 @@ function projectNav(
 
           **Ungated, like every other item in this rail.** The plan's F1 line asked for a gate on
           `report:view`; the `Review` item above records the argument against it, and it applies
-          more strongly here — `V3` grants `report:view` to five of the six built-in roles, and the
-          sixth is Automation Service, which is API-token only and never renders a rail. So the gate
+          more strongly here — `report:view` is held by every project-scoped role that renders a
+          rail at all, the one exception being Automation Service, which is API-token only and
+          renders none. (`V2`'s Account Manager and Finance are company-scoped and hold it not, for
+          the same reason they hold no `project:read`.) So the gate
           would hide the entry from nobody who can reach it, while teaching that rail items come
           and go by permission, which is the opposite of §31's disable-don't-hide.
         */

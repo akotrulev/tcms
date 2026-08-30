@@ -41,8 +41,12 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>The gate that matters here is the one that is easy to get wrong in the other direction. Reads
  * in this module borrow {@link ProjectService#readVisible}, which asks {@code project:read} — and
- * <strong>every one of the six built-in roles holds it</strong>, because that is what makes a granted
- * project visible. A write gated the same way is a write a Viewer may perform, and a Viewer is
+ * <strong>every {@code PROJECT}-scope role holds it</strong>, because that is what makes a granted
+ * project visible, and {@code SeedDataTest.everyProjectScopeRoleHoldsTheVisibilityPrecondition}
+ * derives that from the catalogue rather than restating it. (Since {@code V2} the two
+ * {@code COMPANY}-scope roles it added, Account Manager and Finance, hold it deliberately NOT — a
+ * company-wide {@code project:read} would open every project in the company, which is the boundary
+ * roles spec §A1 draws.) A write gated the same way is a write a Viewer may perform, and a Viewer is
  * specifically the client's own stakeholder, invited to read coverage without touching it. So this
  * calls {@link ProjectService#writeGranted} instead, and the difference is visible in the diff
  * because the permission has to be named to call it.

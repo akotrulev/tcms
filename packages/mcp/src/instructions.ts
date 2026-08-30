@@ -85,7 +85,7 @@ export function renderInstructions(reach: Reach, tools: readonly ToolDefinition[
 
       The fallback keeps the half the module header argues is the actionable one: the permission
       key is what a user takes to an administrator, the tool titles are context. Bounded by
-      construction — 55 keys is the whole catalogue — so this cannot overflow again as tools are
+      construction — the catalogue is the ceiling — so this cannot overflow again as tools are
       added, only as permissions are, and there have been none since `V3`.
     */
     const spare = INSTRUCTIONS_BUDGET - bytes(sections.join(SEPARATOR)) - SEPARATOR.length;

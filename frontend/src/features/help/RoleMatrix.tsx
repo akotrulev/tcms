@@ -47,7 +47,7 @@ import {
  * third view of the catalogue is ever wanted, it is worth asking which of these two it really is.
  *
  * **The ordering is the catalogue's, not the response's.** Roles arrive in whatever order the
- * server lists them; sorting by how much each holds puts the six built-ins in the tier order the
+ * server lists them; sorting by how much each holds puts the built-ins in roughly the tier order the
  * roles spec states them in, and makes the staircase down the table legible as a staircase.
  */
 export function RoleMatrix() {
@@ -60,7 +60,7 @@ export function RoleMatrix() {
       isEmpty={(data) => data.length === 0}
       empty={{
         title: 'No roles to show',
-        body: 'This instance returned no roles. That is unexpected — the six built-in roles are seeded.',
+        body: 'This instance returned no roles. That is unexpected — the nine built-in roles are seeded.',
       }}
     >
       {(data) => <Matrix roles={data} />}

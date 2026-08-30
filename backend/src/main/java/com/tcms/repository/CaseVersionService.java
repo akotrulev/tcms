@@ -29,7 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
  * <h2>The gate is the read gate, unchanged and borrowed</h2>
  *
  * <p>{@link ProjectService#readVisible} — company membership, then the explicit project grant,
- * asking {@code project:read}, which every one of the six built-in roles holds. That is correct
+ * asking {@code project:read}, which every {@code PROJECT}-scope role holds. That is correct
  * <strong>here</strong> and would be wrong for a write: a version list discloses exactly what the
  * case detail already discloses to the same caller (§23's shared gate, §28's argument for why a
  * write needs its own). Nothing in this class asks what a caller holds.
