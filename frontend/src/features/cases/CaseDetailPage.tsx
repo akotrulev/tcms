@@ -19,6 +19,7 @@ import {
   useSetCaseStatus,
   useUnlinkCaseExternal,
 } from '../../api/queries';
+import { HeaderActions } from '../../app/HeaderActions';
 import { TopStripSlot } from '../../app/topStripSlot';
 import { AttachmentsPanel } from '../../components/AttachmentList';
 import { DataRegion } from '../../components/DataRegion';
@@ -207,11 +208,28 @@ export function CaseDetailPage() {
         {(data) => (
           <>
             <TopStripSlot>
-              <div className="flex flex-wrap items-center gap-2" data-testid="CaseDetail.Actions">
-                <Button asChild size="sm" data-testid="CaseDetail.HistoryLink">
-                  <RouterLink to={`/projects/${projectId}/cases/${caseId}/history`}>
+              {/*
+                One row, and it does not wrap. It used to be `flex flex-wrap` inside a header the
+                shell fixes at 52px and states does not collapse, so it wrapped THROUGH the header:
+                the renders audit measured Delete's bottom at 57.5 against the header's 52 — a
+                second row of buttons on top of the page content, with the breadcrumb truncated to
+                `Test cases / Checko…` behind them.
+
+                The width came back from the three secondary actions, which are now icon-only with
+                an `aria-label` and a native `title`. Deliberately not an overflow menu: this group
+                is three `PermissionGate` children, and that component's whole argument is that a
+                Viewer seeing a greyed Delete learns the capability exists — folding it behind a
+                menu is the hiding it exists to refuse. Only `Edit case`, the one primary action,
+                keeps its label, which is what the render draws.
+              */}
+              <HeaderActions data-testid="CaseDetail.Actions">
+                <Button asChild size="icon" data-testid="CaseDetail.HistoryLink">
+                  <RouterLink
+                    to={`/projects/${projectId}/cases/${caseId}/history`}
+                    aria-label="Execution history"
+                    title="Execution history"
+                  >
                     <History aria-hidden className="size-3.5" />
-                    Execution history
                   </RouterLink>
                 </Button>
 
@@ -227,13 +245,14 @@ export function CaseDetailPage() {
                 <PermissionGate projectId={projectId} permission="case:create">
                   {({ allowed }) => (
                     <Button
-                      size="sm"
+                      size="icon"
                       disabled={!allowed}
                       onClick={() => setCloning(true)}
+                      aria-label="Clone"
+                      title="Clone"
                       data-testid="CaseDetail.CloneButton"
                     >
                       <Copy aria-hidden className="size-3.5" />
-                      Clone
                     </Button>
                   )}
                 </PermissionGate>
@@ -291,18 +310,19 @@ export function CaseDetailPage() {
                 >
                   {({ allowed }) => (
                     <Button
-                      size="sm"
+                      size="icon"
                       variant="danger"
                       disabled={!allowed}
                       onClick={() => setConfirmingDelete(true)}
+                      aria-label="Delete"
+                      title="Delete"
                       data-testid="CaseDetail.DeleteButton"
                     >
                       <Trash2 aria-hidden className="size-3.5" />
-                      Delete
                     </Button>
                   )}
                 </PermissionGate>
-              </div>
+              </HeaderActions>
             </TopStripSlot>
 
             {/*

@@ -1011,7 +1011,14 @@ function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
         to zero and the search keeps its `max-w`, and when a page fills it the two share what is
         left. It stays right-aligned either way.
       */}
-      <TopStripTarget className="flex flex-1 items-center justify-end gap-2" />
+      {/*
+        `min-w-0` and no `flex-wrap`. The audit's finding 2.1 was a page filling this slot with a
+        `flex-wrap` group, which in a header this file fixes at 52px wraps THROUGH the header onto
+        the content. The slot cannot stop a page doing that on its own, but it can stop being the
+        thing that refuses to shrink: with `min-w-0` the breadcrumb and the search give way before
+        the actions do. `app/HeaderActions.tsx` is the group shape that belongs in here.
+      */}
+      <TopStripTarget className="flex min-w-0 flex-1 items-center justify-end gap-2" />
 
       <Tooltip>
         <TooltipTrigger asChild>
