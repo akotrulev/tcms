@@ -9974,6 +9974,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/permissions/{permission}/grantees": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Who in this company can grant this permission
+         * @description **Who to ask.** Design language rule 7 and §7 both require a refusal to name *"the
+         *     permission's real id **and the name of somebody in this company who holds it**"*. The
+         *     second half was unanswerable from the client: the only endpoint that knows who holds
+         *     what is `GET /org-chart`, and a caller who has just been refused by definition may not
+         *     be able to read it usefully — so a refusal screen could offer a role ("a company
+         *     administrator") and never a person.
+         *
+         *     **Readable by any authenticated member of the company, deliberately.** The gate is
+         *     membership and nothing more, because the whole point is to answer a caller who lacks
+         *     the permission being asked about. That is safe for the same reason `GET /org-chart` is
+         *     readable by every member (plan §6k): org structure is not sensitive *within* a company.
+         *
+         *     **It answers one question and returns display names only** — no email, no id, no role,
+         *     no count of how many others hold it. That is the boundary that keeps this from being a
+         *     directory of the company reachable through a permission error: a refusal needs a name
+         *     to ask, and anything past a name is a different endpoint's business.
+         *
+         *     At most three names, ordered so the most reachable comes first — a company-wide grant
+         *     before a project one. An empty list is an ordinary answer and means what it says:
+         *     nobody in this company holds it, so the screen must not promise the reader anybody to
+         *     ask.
+         */
+        get: operations["listPermissionGrantees"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/audit-events": {
         parameters: {
             query?: never;
@@ -15230,6 +15270,26 @@ export interface components {
                 roleName: string;
             }[];
         };
+        GranteeList: {
+            /**
+             * @description Echoed back, so a cached answer cannot be rendered under another key.
+             * @example token:issue
+             */
+            permission: string;
+            /**
+             * @description At most three, most reachable first — a company-wide grant before a project one.
+             *     Empty is an ordinary answer: nobody in this company holds it.
+             */
+            grantees: {
+                /**
+                 * @description The §6u display name, and nothing else. No id, no email, no role — a refusal
+                 *     needs somebody to ask, and anything past a name turns a permission error into
+                 *     a directory of the company.
+                 * @example Dana Whitfield
+                 */
+                displayName: string;
+            }[];
+        };
         OrgChart: {
             /**
              * @description The EXISTING `Team` shape, unchanged — so the chart and `/admin/teams` cannot draw
@@ -19500,6 +19560,30 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listPermissionGrantees: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The permission key as the catalogue spells it — `token:issue`. */
+                permission: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description At most three names, most reachable first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GranteeList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
 }

@@ -36,6 +36,9 @@ export type TeamMemberInput = S['TeamMemberInput'];
 export type OrgChart = S['OrgChart'];
 export type OrgChartPerson = S['OrgChartPerson'];
 export type OrgChartProject = S['OrgChartProject'];
+
+/** Who can grant a permission — what a refusal prints. Display names only, at most three. */
+export type GranteeList = S['GranteeList'];
 export type OrgChartAssignment = S['OrgChartAssignment'];
 /**
  * A permission **no active member of a project holds** (005 N6/S6) — the fourth gap, and the only

@@ -156,6 +156,62 @@ public interface RoleAssignmentRepository extends JpaRepository<RoleAssignment, 
             @Param("companyId") UUID companyId, @Param("userId") UUID userId);
 
     /**
+     * The people in this company who hold {@code permission}, most reachable first.
+     *
+     * <p>This is what a <em>refusal</em> reads. Design language rule 7 requires a refused screen to
+     * name the permission and <strong>a person who can grant it</strong>, and the second half was
+     * unanswerable: the only company-wide grant list on the wire is the org chart, and the caller
+     * asking has just been told they may not do something. So the question is asked here directly
+     * and answered with ids, which {@code GranteeLookupService} turns into display names and
+     * nothing else.
+     *
+     * <h2>Ordered by how reachable the holder is, not by name</h2>
+     *
+     * <p>A company-wide grant ({@code project_id IS NULL}) comes before a project one. Somebody who
+     * holds the key everywhere can grant it wherever the reader is standing; somebody who holds it
+     * on one project may not be able to help at all. Sorting alphabetically would put the least
+     * useful name first as often as not.
+     *
+     * <p>Team grants are included by the same subquery every other method here uses — a permission
+     * held through a team is held, and a refusal that skipped those would name nobody in a company
+     * that grants by team.
+     *
+     * <p>Users are filtered to live memberships: a REMOVED member is not somebody to ask.
+     */
+    @Query(nativeQuery = true, value = """
+            SELECT u.user_id AS userId
+              FROM (
+                    SELECT ra.user_id AS user_id,
+                           MIN(CASE WHEN ra.project_id IS NULL THEN 0 ELSE 1 END) AS reach
+                      FROM role_assignment ra
+                      JOIN role_permission rp ON rp.role_id = ra.role_id
+                     WHERE ra.company_id = :companyId
+                       AND rp.permission_key = :permission
+                       AND ra.user_id IS NOT NULL
+                     GROUP BY ra.user_id
+                     UNION ALL
+                    SELECT tm.user_id AS user_id,
+                           MIN(CASE WHEN ra.project_id IS NULL THEN 0 ELSE 1 END) AS reach
+                      FROM role_assignment ra
+                      JOIN role_permission rp ON rp.role_id = ra.role_id
+                      JOIN team_membership tm ON tm.team_id = ra.team_id
+                                             AND tm.company_id = ra.company_id
+                     WHERE ra.company_id = :companyId
+                       AND rp.permission_key = :permission
+                       AND ra.team_id IS NOT NULL
+                     GROUP BY tm.user_id
+                   ) u
+              JOIN company_membership cm ON cm.user_id = u.user_id
+                                        AND cm.company_id = :companyId
+                                        AND cm.status <> 'REMOVED'
+             GROUP BY u.user_id
+             ORDER BY MIN(u.reach), u.user_id
+             LIMIT 3
+            """)
+    List<UUID> findGrantees(
+            @Param("companyId") UUID companyId, @Param("permission") String permission);
+
+    /**
      * Whether this caller has <strong>any</strong> grant naming this project — the switch that
      * decides whether the inherited company-wide role applies here.
      *

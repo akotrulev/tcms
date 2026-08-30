@@ -14,6 +14,7 @@ import type {
   IdentityProvider,
   IdentityProviderInput,
   IssuedApiToken,
+  GranteeList,
   OrgChart,
   Role,
   RoleAssignment,
@@ -59,6 +60,31 @@ export function useOrgChart(): UseQueryResult<OrgChart> {
   return useQuery({
     queryKey: keys.orgChart,
     queryFn: ({ signal }) => api.get<OrgChart>('/org-chart', { signal }),
+  });
+}
+
+/**
+ * Who in this company can grant a permission — the read a **refusal** makes.
+ *
+ * Design language rule 7: a refusal names the permission's real id *and the name of somebody in
+ * this company who holds it*. The second half was unanswerable from the client until this endpoint
+ * existed — the only company-wide grant list on the wire is the org chart, and the caller reading a
+ * refusal is by definition somebody who has just been told they may not do something.
+ *
+ * **Gated on nothing**, like `useOrgChart` and for the same reason: the whole point is to answer a
+ * caller who lacks the permission being asked about. The endpoint returns display names and nothing
+ * else, capped at three.
+ *
+ * `staleTime` is long because the answer is a fact about the company's grants, not about the
+ * caller: who the administrator is does not change between two renders of a refusal, and a screen
+ * that is already telling somebody they cannot do a thing should not also be busy.
+ */
+export function useGrantees(permission: string): UseQueryResult<GranteeList> {
+  return useQuery({
+    queryKey: keys.grantees(permission),
+    queryFn: ({ signal }) =>
+      api.get<GranteeList>(`/permissions/${permission}/grantees`, { signal }),
+    staleTime: 10 * 60_000,
   });
 }
 

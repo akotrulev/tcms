@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useApiTokens, useProjects, useUsers } from '../../api/queries';
+import { useApiTokens, useGrantees, useProjects, useUsers } from '../../api/queries';
 import type { ApiToken } from '../../api/types';
 import { useCanInCompany } from '../../auth/useCan';
 import { DataRegion } from '../../components/DataRegion';
@@ -89,6 +89,13 @@ const STATE_TONE = {
 export function ApiTokensPage() {
   const gate = useCanInCompany();
   const allowed = gate.can('token:issue');
+
+  /*
+    Read only while the refusal is what is on screen. A caller who HOLDS `token:issue` never sees
+    the sentence this feeds, so fetching it for them is a request whose answer is discarded.
+  */
+  const grantees = useGrantees('token:issue');
+  const grantee = gate.pending || allowed ? undefined : grantees.data?.grantees[0]?.displayName;
   const tokens = useApiTokens(allowed);
   const projects = useProjects();
   const users = useUsers();
@@ -154,11 +161,25 @@ export function ApiTokensPage() {
         </h2>
         {gate.pending ? null : !allowed ? (
           <Banner tone="neutral" data-testid={`${TestId}.Denied`}>
-            {/* The permission and the role that can grant it — a person cannot be named here. */}
+            {/*
+              The permission's real id AND a person who holds it — design language rule 7 and §7
+              state the requirement twice, and this sentence met four of its five clauses and
+              stopped one short: ~~"A company administrator can issue one for you."~~ is a ROLE,
+              not a name (renders audit 7.1).
+
+              It stopped there for a structural reason rather than an oversight — the only endpoint
+              that knew who held what was the org chart, and the caller reading this has just been
+              refused. `GET /permissions/{permission}/grantees` exists to answer exactly this, to
+              exactly this reader, and returns display names and nothing else.
+
+              It degrades to the old sentence rather than to a blank: a slow lookup, an empty
+              company, or a company that grants only by a role nobody holds all land on the role
+              wording, which is worse than a name and better than nothing.
+            */}
             <span>
               Issuing API tokens needs <Identifier variant="muted">token:issue</Identifier>, which
-              you do not hold, so this list is not shown. A company administrator can issue one for
-              you.
+              you do not hold, so this list is not shown.{' '}
+              {grantee ? `Ask ${grantee} to grant it.` : 'A company administrator can issue one for you.'}
             </span>
           </Banner>
         ) : (

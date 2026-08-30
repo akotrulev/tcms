@@ -85,6 +85,14 @@ function mockApi(permissions: PermissionKey[], tokens: ApiToken[] = [LIVE, EXPIR
     if (path.startsWith('/api-tokens')) return tokens
     if (path.startsWith('/projects')) return PROJECTS
     if (path.startsWith('/users')) return USERS
+    /*
+      Who to ask. The refusal names a person now (renders audit 7.1), which costs this screen one
+      read — deliberately unconditional in the double even though the page only makes it while the
+      refusal is on screen, so an arm that starts making it cannot silently fall through.
+    */
+    if (path.startsWith('/permissions/')) {
+      return { permission: 'token:issue', grantees: [{ displayName: 'Dana Whitfield' }] }
+    }
     throw new Error(`unmocked read: ${path}`)
   }) as never)
 }
@@ -207,5 +215,41 @@ describe('ApiTokensPage', () => {
     renderPage()
 
     expect(await screen.findByTestId('Admin.Tokens.List.Empty')).toHaveTextContent(/no tokens yet/i)
+  })
+})
+
+describe('the refusal names a person, not a role', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('asks the reader to ask somebody by name', async () => {
+    // Design language rule 7 and §7 state it twice: a refusal names "the permission's real id AND
+    // the name of somebody in this company who holds it". This sentence met four of five clauses —
+    // neutral colour, no retry, the real key in mono, the action disabled rather than hidden — and
+    // said "A company administrator", which is a role (renders audit 7.1).
+    mockApi(['project:read'], [])
+    renderPage()
+
+    const denied = await screen.findByTestId('Admin.Tokens.Denied')
+    expect(denied).toHaveTextContent('token:issue')
+    expect(denied).toHaveTextContent('Ask Dana Whitfield to grant it.')
+  })
+
+  it('falls back to the role when nobody in this company holds it', async () => {
+    // An empty company, a slow lookup, or a key held only through a role nobody has: all land on
+    // the old wording, which is worse than a name and better than a blank or an invented one.
+    vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
+      if (path.startsWith('/me/permissions')) return heldPermissions(['project:read'], {}, null)
+      if (path.startsWith('/permissions/')) return { permission: 'token:issue', grantees: [] }
+      if (path.startsWith('/api-tokens')) return []
+      if (path.startsWith('/projects')) return PROJECTS
+      if (path.startsWith('/users')) return USERS
+      throw new Error(`unmocked read: ${path}`)
+    }) as never)
+    renderPage()
+
+    const denied = await screen.findByTestId('Admin.Tokens.Denied')
+    expect(denied).toHaveTextContent('A company administrator can issue one for you.')
   })
 })

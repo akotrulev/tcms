@@ -244,6 +244,7 @@ export {
   useInviteUser,
   useIdentityProviders,
   useIssueApiToken,
+  useGrantees,
   useOrgChart,
   useRevokeApiToken,
   useSaveEmailDomains,

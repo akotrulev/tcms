@@ -331,6 +331,13 @@ export const keys = {
    * restaffed a project, which is the moment they opened it.
    */
   orgChart: ['org-chart'] as const,
+  /**
+   * Who can grant one permission — what a REFUSAL renders (`kit/StateBlock`'s `grantee`).
+   *
+   * Keyed on the permission alone and not on a project: the endpoint answers for the company, and
+   * a company-wide holder is who a refused reader should be sent to wherever they are standing.
+   */
+  grantees: (permission: string) => ['grantees', permission] as const,
   roles: ['roles'] as const,
   /**
    * One key, no project segment — and it was a function taking an optional project until §63.

@@ -8153,6 +8153,47 @@ paths:
               schema: { $ref: '#/components/schemas/OrgChart' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /permissions/{permission}/grantees:
+    get:
+      tags: [admin]
+      operationId: listPermissionGrantees
+      summary: Who in this company can grant this permission
+      description: |
+        **Who to ask.** Design language rule 7 and §7 both require a refusal to name *"the
+        permission's real id **and the name of somebody in this company who holds it**"*. The
+        second half was unanswerable from the client: the only endpoint that knows who holds
+        what is `GET /org-chart`, and a caller who has just been refused by definition may not
+        be able to read it usefully — so a refusal screen could offer a role ("a company
+        administrator") and never a person.
+
+        **Readable by any authenticated member of the company, deliberately.** The gate is
+        membership and nothing more, because the whole point is to answer a caller who lacks
+        the permission being asked about. That is safe for the same reason `GET /org-chart` is
+        readable by every member (plan §6k): org structure is not sensitive *within* a company.
+
+        **It answers one question and returns display names only** — no email, no id, no role,
+        no count of how many others hold it. That is the boundary that keeps this from being a
+        directory of the company reachable through a permission error: a refusal needs a name
+        to ask, and anything past a name is a different endpoint's business.
+
+        At most three names, ordered so the most reachable comes first — a company-wide grant
+        before a project one. An empty list is an ordinary answer and means what it says:
+        nobody in this company holds it, so the screen must not promise the reader anybody to
+        ask.
+      parameters:
+        - name: permission
+          in: path
+          required: true
+          description: The permission key as the catalogue spells it — `token:issue`.
+          schema: { type: string, example: token:issue }
+      responses:
+        '200':
+          description: At most three names, most reachable first
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GranteeList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   # --------------------------------------------------------------- audit ----
   # The company's own trail. The *instance* trail (instance_audit_event, instance:audit) is a
   # different table with no company on it and is deliberately absent from this contract: it
@@ -15076,6 +15117,36 @@ components:
               roleName: { type: string }
 
     # ------------------------------------------------------------ org chart ---
+    GranteeList:
+      type: object
+      # `required` on the envelope AND on the item. `required` does not descend, and without it
+      # every generated property is optional — which for a screen whose whole job is to print
+      # ONE name would mean the name itself was `string | undefined` and the refusal would have
+      # to hedge about its own data.
+      required: [permission, grantees]
+      properties:
+        permission:
+          type: string
+          description: Echoed back, so a cached answer cannot be rendered under another key.
+          example: token:issue
+        grantees:
+          type: array
+          maxItems: 3
+          description: |
+            At most three, most reachable first — a company-wide grant before a project one.
+            Empty is an ordinary answer: nobody in this company holds it.
+          items:
+            type: object
+            required: [displayName]
+            properties:
+              displayName:
+                type: string
+                description: |
+                  The §6u display name, and nothing else. No id, no email, no role — a refusal
+                  needs somebody to ask, and anything past a name turns a permission error into
+                  a directory of the company.
+                example: Dana Whitfield
+
     OrgChart:
       type: object
       # One document, one snapshot. Three queries assembled client-side would render a grid

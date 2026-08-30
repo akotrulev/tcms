@@ -29,15 +29,36 @@ function makeState(overrides: Partial<CaseFilterState> = {}): CaseFilterState {
   } as CaseFilterState;
 }
 
+/*
+  Declared, never cast — `contractFixtures.test.ts`'s rule, and its reason: a cast tells the
+  compiler the object already IS the type, so the next required field the contract gains is a
+  runtime failure in every test that reads it rather than one build error here.
+*/
 const FEATURE: ClassificationDimension = {
+  id: 'dim-feature',
   key: 'feature',
   name: 'Feature',
-  values: [{ id: 'f1', name: 'Checkout', path: 'checkout' }],
-} as unknown as ClassificationDimension;
+  cardinality: 'SINGLE',
+  hierarchical: false,
+  locked: false,
+  values: [
+    {
+      id: 'f1',
+      parentId: null,
+      name: 'Checkout',
+      path: 'checkout',
+      color: null,
+    },
+  ],
+};
 
 const FACETS: Facet[] = [
-  { key: 'lifecycleStatus', values: [{ id: 'APPROVED', count: 12 }] },
-] as unknown as Facet[];
+  {
+    key: 'lifecycleStatus',
+    label: 'Status',
+    values: [{ id: 'APPROVED', label: 'Approved', count: 12 }],
+  },
+];
 
 function renderBar(props: Partial<Parameters<typeof CaseFilterBar>[0]> = {}) {
   return render(
