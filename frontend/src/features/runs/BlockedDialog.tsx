@@ -96,7 +96,7 @@ export function BlockedDialog({
 
         {ownChecklist && (conditions ?? []).length > 0 && (
           <div className="mt-4 flex flex-col gap-2" data-testid="Execution.BlockedDialog.Conditions">
-            <p className="m-0 text-xs text-ink-4">Tick the preconditions that did not hold</p>
+            <p className="m-0 text-[12px] text-ink-4">Tick the preconditions that did not hold</p>
             {(conditions ?? []).map((condition) => (
               <div key={condition.id} className="flex items-start gap-2">
                 {/*

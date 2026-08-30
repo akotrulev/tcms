@@ -448,7 +448,7 @@ function EnumFilter({
             }
           : undefined
       }
-      className="inline-flex items-center gap-1.5 rounded-[5px] border border-line px-2.5 py-[3px] font-sans text-xs text-ink-2"
+      className="inline-flex items-center gap-1.5 rounded-[5px] border border-line px-2.5 py-[3px] font-sans text-[12px] text-ink-2"
     >
       <DropdownMenu>
         <DropdownMenuTrigger

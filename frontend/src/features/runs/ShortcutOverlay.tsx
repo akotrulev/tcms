@@ -34,7 +34,7 @@ export function ShortcutOverlay({ open, onClose }: { open: boolean; onClose: () 
           <DialogTitle>Keyboard shortcuts</DialogTitle>
         </DialogHeader>
 
-        <p className="mt-4 mb-4 text-sm text-ink-2">
+        <p className="mt-4 mb-4 text-[13px] text-ink-2">
           Every one of these has a button on the screen too — they are a faster route, never the
           only one. Nothing here fires while you are typing in a box.
         </p>
@@ -44,7 +44,7 @@ export function ShortcutOverlay({ open, onClose }: { open: boolean; onClose: () 
           if (rows.length === 0) return null;
           return (
             <div key={scope} className="mb-4">
-              <span className="text-xs tracking-[0.05em] text-ink-2 uppercase">
+              <span className="text-[12px] tracking-[.06em] text-ink-2 uppercase">
                 {SCOPE_HEADINGS[scope]}
               </span>
               <dl className="m-0 mt-2 flex flex-col gap-2">
@@ -54,10 +54,10 @@ export function ShortcutOverlay({ open, onClose }: { open: boolean; onClose: () 
                     className="flex items-baseline gap-3"
                     data-testid="Execution.Shortcuts.Row"
                   >
-                    <dt className="min-w-10 shrink-0 rounded-[2px] border border-line px-1.5 py-0.5 text-center font-mono text-xs font-semibold text-ink">
+                    <dt className="min-w-10 shrink-0 rounded-sm border border-line px-1.5 py-0.5 text-center font-mono text-[12px] font-semibold text-ink">
                       {shortcut.display}
                     </dt>
-                    <dd className="m-0 text-sm text-ink">{shortcut.description}</dd>
+                    <dd className="m-0 text-[13px] text-ink">{shortcut.description}</dd>
                   </div>
                 ))}
               </dl>

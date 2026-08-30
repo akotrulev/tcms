@@ -253,7 +253,7 @@ export function AssignExecutionsDialog({
                   ))}
                 </div>
               )}
-              <span className="m-0 text-xs text-ink-2 block mt-1">
+              <span className="m-0 text-[12px] text-ink-2 block mt-1">
                 Rows are handed out in this order, wrapping round — so the people at the top take
                 the remainder.
               </span>
@@ -261,7 +261,7 @@ export function AssignExecutionsDialog({
           )}
 
           {fieldErrors.executionIds && (
-            <span className="m-0 text-xs text-[color:var(--color-failed)]" role="alert">
+            <span className="m-0 text-[12px] text-[color:var(--color-failed)]" role="alert">
               {fieldErrors.executionIds}
             </span>
           )}
@@ -324,9 +324,9 @@ function AssignPreview({ result, order }: { result: ExecutionBulkResult; order: 
         tone={result.skipped.length > 0 ? 'warn' : 'steel'}
         className="[&>div]:w-full"
       >
-        <p className="m-0 mb-1 text-sm font-semibold text-ink">Preview</p>
+        <p className="m-0 mb-1 text-[13px] font-semibold text-ink">Preview</p>
         <div className="flex flex-col gap-2">
-          <p className="m-0 text-sm">
+          <p className="m-0 text-[13px]">
             <strong>{formatCount(result.changed.length)}</strong> will move ·{' '}
             <strong>{formatCount(result.unchanged.length)}</strong> already assigned to that person ·{' '}
             <strong>{formatCount(result.skipped.length)}</strong> will be skipped
@@ -334,13 +334,13 @@ function AssignPreview({ result, order }: { result: ExecutionBulkResult; order: 
 
           {tally.length > 0 && (
             <div data-testid={`${TestIdPrefix}.Preview.Tally`}>
-              <span className="m-0 text-xs font-semibold">
+              <span className="m-0 text-[12px] font-semibold">
                 The split
               </span>
               <div className="flex flex-col m-0 mt-1 pl-4 gap-0.5">
                 {tally.map((share) => (
                   <li key={share.assigneeId} data-testid={`${TestIdPrefix}.Preview.Share`}>
-                    <span className="m-0 text-xs">
+                    <span className="m-0 text-[12px]">
                       {share.assigneeName ?? 'Unknown'} — {formatCount(share.count)}
                     </span>
                   </li>
@@ -351,20 +351,20 @@ function AssignPreview({ result, order }: { result: ExecutionBulkResult; order: 
 
           {result.changed.length > 0 && (
             <div data-testid={`${TestIdPrefix}.Preview.Rows`}>
-              <span className="m-0 text-xs font-semibold">
+              <span className="m-0 text-[12px] font-semibold">
                 Moving
               </span>
               <div className="flex flex-col m-0 mt-1 pl-4 gap-0.5">
                 {result.changed.slice(0, 20).map((change) => (
                   <li key={change.executionId}>
-                    <span className="m-0 text-xs">
+                    <span className="m-0 text-[12px]">
                       <Identifier variant="muted">{change.caseKey}</Identifier> →{' '}
                       {change.assigneeName ?? 'nobody'}
                     </span>
                   </li>
                 ))}
                 {result.changed.length > 20 && (
-                  <span className="m-0 text-xs">+{result.changed.length - 20} more</span>
+                  <span className="m-0 text-[12px]">+{result.changed.length - 20} more</span>
                 )}
               </div>
             </div>
@@ -374,13 +374,13 @@ function AssignPreview({ result, order }: { result: ExecutionBulkResult; order: 
               out which two, or what to do about them. */}
           {result.skipped.length > 0 && (
             <div>
-              <span className="m-0 text-xs font-semibold">
+              <span className="m-0 text-[12px] font-semibold">
                 Skipped
               </span>
               <div className="flex flex-col m-0 mt-1 pl-4 gap-0.5">
                 {result.skipped.map((item) => (
                   <li key={item.executionId}>
-                    <span className="m-0 text-xs">
+                    <span className="m-0 text-[12px]">
                       <Identifier variant="muted">{item.executionId}</Identifier> — {item.reason}
                     </span>
                   </li>

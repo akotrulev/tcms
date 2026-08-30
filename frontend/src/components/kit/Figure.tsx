@@ -27,7 +27,7 @@ export function Tile({ label, value, detail, alert, onClick, className, ...rest 
       onClick={onClick}
       style={alert ? { borderColor: 'color-mix(in oklab, var(--color-failed) 26%, transparent)' } : undefined}
       className={cn(
-        'rounded-lg border border-line bg-panel px-[15px] py-[13px] text-left hover:border-line-strong',
+        'rounded-[8px] border border-line bg-panel px-[15px] py-[13px] text-left hover:border-line-strong',
         className,
       )}
       {...rest}
@@ -70,7 +70,7 @@ export function HBar({ label, value, fraction, passed, failed, blocked, untested
       {...rest}
     >
       <span className="truncate text-ink-2">{label}</span>
-      <span className="flex h-2 gap-0.5 overflow-hidden rounded bg-field">
+      <span className="flex h-2 gap-0.5 overflow-hidden rounded-sm bg-field">
         {isStack ? (
           segments.map((segment) => (
             <i

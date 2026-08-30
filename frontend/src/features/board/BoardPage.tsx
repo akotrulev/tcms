@@ -159,7 +159,7 @@ export function BoardPage() {
             `.lens` — the render's segmented scope switch, not two chips. The two options are one
             choice with two states, and a pair of independent-looking chips says otherwise.
           */}
-          <div className="inline-flex gap-0.5 rounded-lg bg-wash-1 p-0.5">
+          <div className="inline-flex gap-0.5 rounded-[8px] bg-wash-1 p-0.5">
             {[
               { value: false, label: 'Everyone' },
               { value: true, label: 'Assigned to me' },
@@ -176,10 +176,10 @@ export function BoardPage() {
                   setParams(next, { replace: true });
                 }}
                 className={cn(
-                  'flex cursor-pointer items-center gap-1.5 rounded-md border-0 px-[11px] py-1 text-xs font-medium',
+                  'flex cursor-pointer items-center gap-1.5 rounded-md border-0 px-[11px] py-1 text-[12px] font-medium',
                   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
                   mine === option.value
-                    ? 'bg-panel text-ink shadow-[0_1px_2px_rgb(0_0_0/40%)]'
+                    ? 'bg-panel text-ink shadow-e1'
                     : 'bg-transparent text-ink-3 hover:text-ink-2',
                 )}
               >
@@ -470,7 +470,7 @@ export function Board({ items, crossProject = false }: { items: WorkItem[]; cros
                 dragging={dragging !== null}
               >
                 {columnItems.length === 0 ? (
-                  <p className="m-0 px-1 py-2.5 text-xs text-ink-4">Nothing here</p>
+                  <p className="m-0 px-1 py-2.5 text-[12px] text-ink-4">Nothing here</p>
                 ) : (
                   columnItems.map((item) => (
                     <WorkCard
@@ -493,8 +493,8 @@ export function Board({ items, crossProject = false }: { items: WorkItem[]; cros
           about something.
         */}
         {dragging && (
-          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-line bg-[rgb(14_19_26/92%)] px-4 py-2.5">
-            <span className="flex-1 text-xs text-ink-4">
+          <div className="flex flex-wrap items-center gap-3 rounded-[8px] border border-line bg-[rgb(14_19_26/92%)] px-4 py-2.5">
+            <span className="flex-1 text-[12px] text-ink-4">
               Dragging <b className="font-medium text-ink-3">{dragging.title}</b> · drop to move, or
               press <b className="font-medium text-ink-3">Esc</b> to cancel
             </span>
@@ -552,7 +552,7 @@ function BoardColumn({
       data-testid={`Board.Column.${column}`}
       data-over={isOver ? 'true' : undefined}
       className={cn(
-        'flex min-h-0 flex-col rounded-lg border border-line bg-panel',
+        'flex min-h-0 flex-col rounded-[8px] border border-line bg-panel',
         'transition-colors duration-150 motion-reduce:transition-none',
         isOver && canAccept && 'border-[color:var(--color-steel)]',
         // Not colour alone: a column that cannot accept the card also dims, and the card's own
@@ -614,13 +614,13 @@ function WorkCard({
       ref={overlay ? undefined : setNodeRef}
       data-testid="Board.Card"
       className={cn(
-        'rounded-[5px] border border-line bg-paper px-[11px] py-2.5 text-[13px] leading-[1.45]',
+        'rounded-[5px] border border-line bg-paper px-[11px] py-2.5 text-[13px] leading-[1.5]',
         'hover:border-line-strong',
         item.status === 'BLOCKED' && 'border-[color:color-mix(in_oklab,var(--color-blocked)_26%,transparent)]',
         // The original stays in place and fades while the overlay copy follows the cursor;
         // removing it would collapse the column under the pointer mid-drag.
         isDragging && 'opacity-40',
-        overlay && 'shadow-[0_16px_32px_-8px_rgb(0_0_0/60%)]',
+        overlay && 'shadow-e3',
       )}
     >
       <div className="mb-1.5 flex flex-wrap items-center gap-[7px]">
@@ -639,7 +639,7 @@ function WorkCard({
                 aria-label={`Move ${item.title}`}
                 data-testid="Board.Card.DragHandle"
                 className={cn(
-                  '-ml-1 flex cursor-grab touch-none items-center rounded-[4px] border-0 bg-transparent p-0.5 text-ink-4',
+                  '-ml-1 flex cursor-grab touch-none items-center rounded-sm border-0 bg-transparent p-0.5 text-ink-4',
                   'hover:text-ink-2 focus-visible:outline-2 focus-visible:outline-[color:var(--color-given)]',
                 )}
               >

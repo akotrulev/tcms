@@ -91,7 +91,7 @@ export function FileDownloadLink({
         aria-label={`Download ${filename}`}
         data-testid={testId}
         className={cn(
-          'cursor-pointer border-0 bg-transparent p-0 text-left text-sm text-steel underline-offset-4 hover:underline',
+          'cursor-pointer border-0 bg-transparent p-0 text-left text-[13px] text-steel underline-offset-4 hover:underline',
           'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
           downloading && 'cursor-default opacity-60',
           className,

@@ -156,7 +156,7 @@ export function PasteGherkinDialog({
             <div className="flex flex-col gap-4" data-testid="PasteGherkin.Result">
               <div>
             <Banner tone="steel">
-                <p className="m-0 mb-1 text-sm font-semibold text-ink">
+                <p className="m-0 mb-1 text-[13px] font-semibold text-ink">
                   {plural(result.steps.length, 'step')} read
                   {result.title ? ` from “${result.title}”` : ''}
                 </p>
@@ -178,12 +178,12 @@ export function PasteGherkinDialog({
               <div>
                 {result.steps.map((step, index) => (
                   <div className="flex gap-2 items-baseline" key={index} data-testid="PasteGherkin.Step">
-                    <span className="m-0 text-xs text-steel font-semibold" style={{ minWidth: 44 }}>
+                    <span className="m-0 text-[12px] text-steel font-semibold" style={{ minWidth: 44 }}>
                       {/* `*` is Gherkin's own spelling for a step with no keyword, which is what a
                           bare step list parses to — not a blank, which reads as a missing value. */}
                       {step.keyword ? stepKeywordLabels[step.keyword] : '*'}
                     </span>
-                    <p className="m-0 text-sm">{step.action}</p>
+                    <p className="m-0 text-[13px]">{step.action}</p>
                   </div>
                 ))}
               </div>
@@ -191,10 +191,10 @@ export function PasteGherkinDialog({
               {result.background.length > 0 && (
                 <div data-testid="PasteGherkin.Background">
             <Banner tone="steel">
-                  <p className="m-0 mb-1 text-sm font-semibold text-ink">
+                  <p className="m-0 mb-1 text-[13px] font-semibold text-ink">
                     {plural(result.background.length, 'Background step')} — one precondition each
                   </p>
-                  <p className="m-0 text-sm mb-2">
+                  <p className="m-0 text-[13px] mb-2">
                     A Background is setup every scenario in the file shares, which is what a
                     precondition is here. Each becomes a library entry other cases can attach.
                   </p>
@@ -241,7 +241,7 @@ export function PasteGherkinDialog({
                     ))}
                   </div>
                   {createCondition.error && (
-                    <p className="m-0 text-sm text-[color:var(--color-failed)] mt-2" role="alert" data-testid="PasteGherkin.Background.Error">
+                    <p className="m-0 text-[13px] text-[color:var(--color-failed)] mt-2" role="alert" data-testid="PasteGherkin.Background.Error">
                       {describeError(createCondition.error).body}
                     </p>
                   )}

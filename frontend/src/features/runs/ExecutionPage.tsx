@@ -479,11 +479,11 @@ function ModeSwitch({ mode, onChange }: { mode: ExecutionMode; onChange: (next: 
             // silently share a locator with a third (`test-ids` rule 7).
             data-testid={`Execution.Mode.${option}`}
             className={cn(
-              'cursor-pointer rounded-[6px] px-2.5 py-1 text-[12px] capitalize',
+              'cursor-pointer rounded-md px-2.5 py-1 text-[12px] capitalize',
               'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
               // Weight and background, not colour alone — the active-state rule the rail and the
               // nav already follow.
-              active ? 'bg-panel font-medium text-ink shadow-[0_1px_2px_rgb(0_0_0/40%)]' : 'text-ink-3 hover:text-ink',
+              active ? 'bg-panel font-medium text-ink shadow-e1' : 'text-ink-3 hover:text-ink',
             )}
           >
             {option}
@@ -1439,7 +1439,7 @@ function ExecutionForm({
             ref={commentRef}
             data-testid="Execution.CommentField"
           />
-          <p className="m-0 mt-1 text-xs text-ink-4">
+          <p className="m-0 mt-1 text-[12px] text-ink-4">
             An error message, the data you used, what you tried.
           </p>
         </RailSection>
@@ -1649,7 +1649,7 @@ function StepLine({
                       `aria-hidden`: the button's `aria-label` is its whole accessible name, so a
                       bare digit inside it would be read out as part of the label or not at all. */}
                   {current && key && (
-                    <span aria-hidden className="ml-1 text-[9px] font-normal text-ink-4">
+                    <span aria-hidden className="ml-1 text-[10px] font-normal text-ink-4">
                       {key}
                     </span>
                   )}

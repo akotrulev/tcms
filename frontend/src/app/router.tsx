@@ -195,9 +195,9 @@ function KeyedByCase({ children }: { children: ReactNode }) {
 function RouteFallback() {
   return (
     <div className="flex flex-col gap-4" data-testid="Route.Loading" aria-busy="true">
-      <Skeleton className="h-10 w-60 rounded" />
-      <Skeleton className="h-[120px] rounded" />
-      <Skeleton className="h-[320px] rounded" />
+      <Skeleton className="h-10 w-60 rounded-sm" />
+      <Skeleton className="h-[120px] rounded-sm" />
+      <Skeleton className="h-[320px] rounded-sm" />
     </div>
   );
 }

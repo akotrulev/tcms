@@ -83,14 +83,14 @@ export function CaseDraftStatus({
       data-testid={testId}
     >
       {autosave.status === 'failed' ? (
-        <span className="text-xs text-[color:var(--color-failed)]">
+        <span className="text-[12px] text-[color:var(--color-failed)]">
           Could not save a backup of your changes. Your work is still here — use {commitLabel} to
           keep it.
         </span>
       ) : autosave.status === 'saving' ? (
-        <span className="text-xs text-ink-2">Saving a backup…</span>
+        <span className="text-[12px] text-ink-2">Saving a backup…</span>
       ) : autosave.status === 'saved' ? (
-        <span className="text-xs text-ink-2">
+        <span className="text-[12px] text-ink-2">
           Backup saved {formatTimeOfDay(autosave.savedAt)}. This is not the case itself — use{' '}
           {commitLabel} to publish your work.
         </span>

@@ -92,7 +92,7 @@ export function TableHeaderCell({
         sortable ? (sortDirection === 'asc' ? 'ascending' : sortDirection === 'desc' ? 'descending' : 'none') : undefined
       }
       className={cn(
-        'sticky top-0 whitespace-nowrap border-b border-line-strong bg-paper px-3.5 py-2.5',
+        'sticky top-0 whitespace-nowrap border-b border-line-strong bg-paper px-3.5 py-[9px]',
         'font-mono text-[11px] font-medium uppercase tracking-[.07em] text-ink-3',
         align === 'right' ? 'text-right' : 'text-left',
         className,
@@ -154,7 +154,7 @@ export function TableCell({
         'border-b border-line px-3.5 py-2.5 align-top text-ink-2 group-hover:bg-wash-1',
         wraps ? 'whitespace-normal' : 'whitespace-nowrap',
         align === 'right' ? 'text-right' : 'text-left',
-        variant === 'title' && 'font-normal text-ink',
+        variant === 'title' && 'font-[450] text-ink',
         className,
       )}
       {...rest}

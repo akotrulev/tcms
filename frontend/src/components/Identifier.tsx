@@ -30,7 +30,7 @@ export function Identifier({
     <span
       className={cn(
         'identifier whitespace-nowrap',
-        variant === 'muted' && 'text-xs text-ink-2',
+        variant === 'muted' && 'text-[12px] text-ink-2',
         variant === 'strong' && 'font-semibold text-ink',
         className,
       )}

@@ -79,7 +79,7 @@ export function CaseDeleteDialog({
             keep resolving the version they executed. What is true — and what the reader needs —
             is that nothing in the product brings it back.
           */}
-          <p className="m-0 text-sm text-ink-2">
+          <p className="m-0 text-[13px] text-ink-2">
             Past runs keep the version they executed. Nothing here restores a deleted case.
           </p>
           {remove.isError && (

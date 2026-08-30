@@ -270,16 +270,128 @@ describe('lines and washes are tokens, not literals', () => {
   }
 
   /**
+   * A hit is only a hit in shipped code. Tests and `index.css` are where these values legitimately
+   * live, and a comment explaining why a literal was removed must not re-trip the check that
+   * removed it.
+   */
+  const isSource = (line: string) =>
+    !/\.(test\.tsx?|css):/.test(line) && !/:\s*(\*|\/\/|\/\*)/.test(line);
+
+  /**
    * White alphas only. A black alpha is still legitimate for a modal scrim and a shadow, because
    * those dim whatever is behind them and are the same gesture in either palette; a white alpha
    * has no such reading — it is always a light-on-dark assumption.
    */
   it('no component draws a border, fill or divider with a raw white alpha', () => {
-    const offenders = sourceGrep(/(border|bg|divide|ring|outline)-white\//).filter(
-      (line) => !/\.(test\.tsx?|css):/.test(line),
-    );
+    const offenders = sourceGrep(/(border|bg|divide|ring|outline)-white\//).filter(isSource);
 
     expect(offenders, 'use border-line / border-line-strong / bg-wash-1..3 / bg-line').toEqual([]);
+  });
+
+  /**
+   * Elevation is a token in both palettes, and no component spells a drop shadow itself.
+   *
+   * The dark set is pure black at 40–60%, chosen against `--color-surface-ground` (`#0a0e14`).
+   * Fourteen files had `0 16px 32px -8px rgb(0 0 0/60%)` inlined verbatim and four more had the
+   * `--e1` value, so eighteen shadows sat outside the palette swap: on the light scheme — which is
+   * now reachable as a nested island, not only as a whole-app choice — a 60% black shadow over
+   * `#f7f9fc` is a smudge rather than an elevation cue. Same defect as the white-alpha family
+   * above, one property along.
+   */
+  it.each(['--elevation-1', '--elevation-2', '--elevation-3'])(
+    '%s is declared in both palettes',
+    (token) => {
+      expect(cssBlock(':root'), `${token} missing from :root`).toContain(`${token}:`);
+      expect(
+        cssBlock("[data-color-scheme='dark']"),
+        `${token} missing from the dark palette`,
+      ).toContain(`${token}:`);
+    },
+  );
+
+  it('no component spells a shadow COLOUR itself', () => {
+    // The geometry may be spelled inline — a one-off offset is not a palette decision. The colour
+    // may not: that is the half the scheme swap has to be able to move.
+    const offenders = sourceGrep(/shadow-\[[^\]]*(rgb|#[0-9a-f]{3})/i).filter(isSource);
+
+    expect(offenders, 'use shadow-e1 / shadow-e2 / shadow-e3, or a var() for the colour').toEqual([]);
+  });
+
+  /**
+   * The accent's ring and glow follow the palette.
+   *
+   * `rgb(107 168 196 / …)` is the DARK palette's `--color-action-primary` (`#6ba8c4`). The primary
+   * button had it hardcoded, so in the light scheme — where the accent is `#2b6883` — it drew a
+   * pale-blue ring around a dark-teal fill.
+   */
+  it.each(['--color-action-line', '--color-action-glow'])(
+    '%s is declared in both palettes',
+    (token) => {
+      expect(cssBlock(':root'), `${token} missing from :root`).toContain(`${token}:`);
+      expect(
+        cssBlock("[data-color-scheme='dark']"),
+        `${token} missing from the dark palette`,
+      ).toContain(`${token}:`);
+    },
+  );
+
+  it('no component hardcodes a palette hue', () => {
+    const offenders = sourceGrep(
+      /rgb\(107[ _]168[ _]196|#6ba8c4|#2b6883|#e07568|#7ec8a0|#e0b95f/,
+    ).filter(isSource);
+
+    expect(offenders, 'use the token — a literal cannot follow the palette swap').toEqual([]);
+  });
+});
+
+/**
+ * `index.css` must not redefine a name Tailwind's own `@theme` uses for its scale.
+ *
+ * This is the trap that made the 2026-08-30 styling audit's numbers wrong before it made the app's
+ * wrong. The palette block is UNLAYERED and Tailwind's theme is in `@layer theme`, and unlayered
+ * wins the cascade — so `--text-2xl: 1.75rem` sitting in `:root` silently redefined `text-2xl` from
+ * 24px to 28px, and set the document title of five screens outside the range design language §3
+ * gives it. `--text-sm` did the same to 14px (→13), `--text-base` to 16px (→14), `--radius-lg` to
+ * 8px (→6) and `--leading-tight` to 1.25 (→1.2).
+ *
+ * Nothing read the tokens; everything read the utilities. That is what made it invisible: at the
+ * call site `text-sm` looks like Tailwind's `text-sm`, and the shadowing declaration looks like
+ * dead code. A `--color-*` name is fine and is the whole point of the bridge — this only forbids
+ * the SCALE namespaces, which the bridge has no business redefining outside `@theme`.
+ */
+describe('the app does not shadow Tailwind\'s own scale', () => {
+  // Tailwind's own names, read from its stylesheet rather than listed here — a hand-kept list
+  // would go stale on the next minor and report this invariant as held.
+  const tailwindTheme = readFileSync(
+    resolve(HERE, '../../node_modules/tailwindcss/theme.css'),
+    'utf8',
+  );
+  const tailwindNames = new Set(
+    [...tailwindTheme.matchAll(/^\s*(--[a-z0-9-]+):/gm)].map((match) => match[1]),
+  );
+
+  // Everything outside the app's own `@theme` block, which is where redefining a name is the
+  // documented mechanism rather than an accident.
+  const outsideTheme = css.replace(/@theme[^{]*\{[\s\S]*?\n\}/, '');
+  const shadowed = [
+    ...new Set(
+      [...outsideTheme.matchAll(/^\s*(--[a-z0-9-]+):/gm)]
+        .map((match) => match[1])
+        .filter((name) => tailwindNames.has(name)),
+    ),
+  ];
+
+  it('parsed both stylesheets at all', () => {
+    expect(css.length).toBeGreaterThan(1000);
+    expect(tailwindNames.size).toBeGreaterThan(50);
+  });
+
+  it('declares no scale token outside @theme', () => {
+    expect(
+      shadowed,
+      'an unlayered --text-*/--radius-*/--leading-* in :root overrides the utility of the same ' +
+        'name; give it a name of its own (--tracking-identifier) or set the value at the call site',
+    ).toEqual([]);
   });
 });
 

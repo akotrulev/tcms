@@ -74,7 +74,7 @@ export function CriteriaStrip({
 
   if (criteria.length === 0) {
     return (
-      <span className="text-xs text-ink-2" data-testid={`${composedTestId}.Empty`}>
+      <span className="text-[12px] text-ink-2" data-testid={`${composedTestId}.Empty`}>
         {emptyLabel}
       </span>
     );
@@ -121,7 +121,7 @@ export function CriteriaStrip({
               <TooltipTrigger asChild>
                 <span
                   data-testid={`${composedTestId}.Mark`}
-                  className="h-1 w-3.5 shrink-0 rounded-[2px]"
+                  className="h-1 w-3.5 shrink-0 rounded-[1px]"
                   style={{
                     backgroundColor: criterionColor(state),
                     // A grey mark on a grey row is invisible at 4px, and "invisible" would read
@@ -137,7 +137,7 @@ export function CriteriaStrip({
         })}
       </div>
       <span
-        className="text-xs whitespace-nowrap text-ink-2"
+        className="text-[12px] whitespace-nowrap text-ink-2"
         data-testid={`${composedTestId}.Summary`}
       >
         {summary}

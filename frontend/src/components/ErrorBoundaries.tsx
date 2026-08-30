@@ -67,7 +67,7 @@ function SkewFallback({ mode, testId }: { mode: 'recovering' | 'manual'; testId:
     <div className="my-4" data-testid={`${testId}.Skew`}>
       <Banner tone="steel">
         <div className="min-w-0">
-          <p className="m-0 text-sm font-semibold text-ink">A newer version is available</p>
+          <p className="m-0 text-[13px] font-semibold text-ink">A newer version is available</p>
           <p className={mode === 'manual' ? 'mt-1 mb-3' : 'mt-1 mb-0'}>
             {mode === 'recovering'
               ? 'Reloading to pick up the latest version…'
@@ -157,7 +157,7 @@ function RootFallback({ error, resetErrorBoundary }: FallbackProps) {
             <h1 className="m-0 mb-2 text-[19px] font-semibold tracking-[-.018em] text-ink">
               TCMS ran into a problem
             </h1>
-            <p className="mt-0 mb-4 text-sm text-ink-2">
+            <p className="mt-0 mb-4 text-[13px] text-ink-2">
               Something went wrong loading the application. The problem has been reported. Trying
               again is usually enough; if it keeps happening, reload the page.
             </p>
@@ -201,7 +201,7 @@ function RouteFallback({ error, resetErrorBoundary }: FallbackProps) {
     <div className="my-4" data-testid="Route.Error">
       <Banner tone="bad">
         <div className="min-w-0">
-          <p className="m-0 text-sm font-semibold text-ink">This page didn't load</p>
+          <p className="m-0 text-[13px] font-semibold text-ink">This page didn't load</p>
           <p className="mt-1 mb-3">
             Something went wrong rendering this page, and the problem has been reported. The rest
             of the application still works — you can try again, or use the navigation to go

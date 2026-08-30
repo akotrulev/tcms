@@ -11,7 +11,7 @@ function Checkbox({ className, ...props }: ComponentProps<typeof CheckboxPrimiti
   return (
     <CheckboxPrimitive.Root
       className={cn(
-        'peer flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-[4px] ' +
+        'peer flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-sm ' +
           'border border-line-strong bg-field transition-colors ' +
           'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)] ' +
           'disabled:cursor-not-allowed disabled:opacity-45 ' +

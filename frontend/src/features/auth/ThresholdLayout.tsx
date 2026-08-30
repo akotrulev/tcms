@@ -49,12 +49,12 @@ export function ThresholdLayout({ headline, blurb, footnote, children, className
           'md:border-b-0 md:border-r md:px-[46px] md:py-11'
         }
       >
-        <span className="font-mono text-xs uppercase tracking-[.14em] text-steel">TCMS</span>
+        <span className="font-mono text-[12px] uppercase tracking-[.1em] text-steel">TCMS</span>
         <div>
           <h2 className="m-0 mb-3 max-w-[22ch] text-[26px] font-[620] leading-[1.25] tracking-[-.022em] text-balance">
             {headline}
           </h2>
-          {blurb && <p className="m-0 max-w-[44ch] text-sm leading-[1.6] text-ink-3">{blurb}</p>}
+          {blurb && <p className="m-0 max-w-[44ch] text-[13px] leading-[1.6] text-ink-3">{blurb}</p>}
         </div>
         <p className="m-0 font-mono text-[11px] text-ink-4">{footnote}</p>
       </div>
@@ -96,7 +96,7 @@ export function FieldError({ id, children }: { id?: string; children: ReactNode 
     <p
       id={id}
       role="alert"
-      className="mt-[5px] flex items-start gap-1.5 text-xs text-[color:var(--color-failed)]"
+      className="mt-[5px] flex items-start gap-1.5 text-[12px] text-[color:var(--color-failed)]"
     >
       <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="mt-px size-[13px] shrink-0">
         <circle cx="12" cy="12" r="9" />
@@ -109,7 +109,7 @@ export function FieldError({ id, children }: { id?: string; children: ReactNode 
 
 /** `.help` — the quiet line under a field that is not an error. */
 export function FieldHelp({ id, children }: { id?: string; children: ReactNode }) {
-  return <p id={id} className="mt-[5px] text-xs leading-[1.5] text-ink-4">{children}</p>;
+  return <p id={id} className="mt-[5px] text-[12px] leading-[1.5] text-ink-4">{children}</p>;
 }
 
 /** `.or` — the mono rule between the password path and the buttons that skip it. */
@@ -125,5 +125,5 @@ export function OrRule({ children = 'or' }: { children?: ReactNode }) {
 
 /** `.quiet` — the sentence under the form. Small, faint, and the last thing read. */
 export function ThresholdFootnote({ children, className }: { children: ReactNode; className?: string }) {
-  return <p className={cn('m-0 text-xs leading-[1.55] text-ink-4', className)}>{children}</p>;
+  return <p className={cn('m-0 text-[12px] leading-[1.55] text-ink-4', className)}>{children}</p>;
 }

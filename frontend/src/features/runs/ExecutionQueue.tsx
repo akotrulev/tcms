@@ -75,7 +75,7 @@ export function ExecutionQueue({
   return (
     <nav aria-label="Cases in this run" data-testid="Execution.Queue">
       <div className="border-b border-line px-4 py-3">
-        <span className="m-0 text-xs text-ink-2" data-testid="Execution.Queue.Position">
+        <span className="m-0 text-[12px] text-ink-2" data-testid="Execution.Queue.Position">
           {position >= 0
             ? `Case ${position + 1} of ${ordered.length}`
             : `${plural(ordered.length, 'case')} in this run`}
@@ -133,14 +133,14 @@ export function ExecutionQueue({
                   <p
                     data-testid={`${RowTestId}.Title`}
                     className={cn(
-                      'm-0 overflow-hidden text-sm text-ellipsis whitespace-nowrap',
+                      'm-0 overflow-hidden text-[13px] text-ellipsis whitespace-nowrap',
                       current ? 'font-semibold text-ink' : 'font-normal text-ink-2',
                     )}
                   >
                     {execution.caseTitle}
                   </p>
                   <div className="flex items-center gap-1.5">
-                    <Identifier variant="muted" className="text-[0.6875rem]">
+                    <Identifier variant="muted" className="text-[11px]">
                       {execution.caseKey}
                     </Identifier>
                     {/* The rail is 260px, so this is the one surface where the chip has to earn
@@ -157,7 +157,7 @@ export function ExecutionQueue({
                     */}
                     {execution.durationMs !== null && (
                       <span
-                        className="ml-auto font-mono text-[0.6875rem] tabular-nums text-ink-4"
+                        className="ml-auto font-mono text-[11px] tabular-nums text-ink-4"
                         data-testid={`${RowTestId}.Duration`}
                       >
                         {formatDuration(execution.durationMs)}

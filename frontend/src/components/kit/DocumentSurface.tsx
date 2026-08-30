@@ -40,7 +40,7 @@ export interface DocumentTitleProps {
 export function DocumentTitle({ children, why, whyLabel = 'Why', className }: DocumentTitleProps) {
   return (
     <div className={className}>
-      <h1 className="m-0 mb-1.5 max-w-[36ch] text-2xl leading-[1.25] font-[620] tracking-[-.02em] text-balance">
+      <h1 className="m-0 mb-1.5 max-w-[36ch] text-[24px] leading-[1.25] font-[620] tracking-[-.02em] text-balance">
         {children}
       </h1>
       {why && (
@@ -108,7 +108,7 @@ export function ProcedureLine({ line, keyword, keywordTestId, children, classNam
           <span
             data-testid={keywordTestId}
             style={KEYWORD_COLOR[keyword] ? { color: KEYWORD_COLOR[keyword] } : undefined}
-            className={cn('mr-[7px] font-mono text-sm font-medium', !KEYWORD_COLOR[keyword] && 'text-ink-3')}
+            className={cn('mr-[7px] font-mono text-[13px] font-medium', !KEYWORD_COLOR[keyword] && 'text-ink-3')}
           >
             {KEYWORD_LABEL[keyword]}
           </span>

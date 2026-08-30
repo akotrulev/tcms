@@ -99,11 +99,11 @@ export function ArtifactTable({
                     URLs, which is the failure the register exists to prevent.
                   */}
                   {artifact.kind === 'DOC_PAGE_REF' && artifact.docPageId ? (
-                    <RouterLink className="font-medium text-[0.8125rem]" to={`/projects/${projectId}/docs/${artifact.docPageId}`} data-testid="Artifacts.Row.PageLink">
+                    <RouterLink className="font-medium text-[13px]" to={`/projects/${projectId}/docs/${artifact.docPageId}`} data-testid="Artifacts.Row.PageLink">
                       {artifact.title}
                     </RouterLink>
                   ) : artifact.kind === 'EXTERNAL_URL' && artifact.url ? (
-                    <a className="font-medium text-[0.8125rem]" href={artifact.url} target="_blank" rel="noopener noreferrer" data-testid="Artifacts.Row.Link">
+                    <a className="font-medium text-[13px]" href={artifact.url} target="_blank" rel="noopener noreferrer" data-testid="Artifacts.Row.Link">
                       {artifact.title}
                       <span className="ml-1" aria-hidden="true">
                         ↗
@@ -133,12 +133,12 @@ export function ArtifactTable({
                       // invented from the media type would not be.
                       filename={artifact.filename ?? artifact.title}
                       testId="Artifacts.Row.Download"
-                      className="font-medium text-[0.8125rem]"
+                      className="font-medium text-[13px]"
                     >
                       {artifact.title}
                     </FileDownloadLink>
                   ) : (
-                    <p className="m-0 text-sm font-medium" data-testid="Artifacts.Row.Title">
+                    <p className="m-0 text-[13px] font-medium" data-testid="Artifacts.Row.Title">
                       {artifact.title}
                     </p>
                   )}
@@ -193,7 +193,7 @@ export function ArtifactTable({
                 </div>
   
                 {artifact.description && (
-                  <span className="m-0 text-xs text-ink-2 block">
+                  <span className="m-0 text-[12px] text-ink-2 block">
                     {artifact.description}
                   </span>
                 )}
@@ -384,7 +384,7 @@ function ArtifactRowActions({ artifact, projectId }: { artifact: Artifact; proje
           the menu is read by the person who just found both acts greyed.
         */}
         {frozen && (
-          <span className="m-0 text-xs block px-4 py-2 text-ink-2" style={{ maxWidth: 280 }} data-testid="Artifacts.Row.WriteOnce">
+          <span className="m-0 text-[12px] block px-4 py-2 text-ink-2" style={{ maxWidth: 280 }} data-testid="Artifacts.Row.WriteOnce">
             {frozenReason}
           </span>
         )}

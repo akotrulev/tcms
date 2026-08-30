@@ -17,7 +17,7 @@ function Switch({ className, ...props }: ComponentProps<typeof SwitchPrimitive.R
     >
       <SwitchPrimitive.Thumb
         className={cn(
-          'pointer-events-none block size-3.5 translate-x-0.5 rounded-full bg-ground shadow ' +
+          'pointer-events-none block size-3.5 translate-x-0.5 rounded-full bg-ground shadow-e1 ' +
             'transition-transform data-[state=checked]:translate-x-[18px]',
         )}
       />

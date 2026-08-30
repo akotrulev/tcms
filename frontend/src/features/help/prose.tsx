@@ -32,7 +32,7 @@ export function P({ children }: { children: ReactNode }) {
 
 /** A sub-heading inside a section. `h3`, because the section itself renders the `h2`. */
 export function H({ children }: { children: ReactNode }) {
-  return <h3 className="mt-7 mb-2 text-[17px] font-[620] tracking-[-.015em] text-ink">{children}</h3>;
+  return <h3 className="mt-7 mb-2 text-[18px] font-[620] tracking-[-.015em] text-ink">{children}</h3>;
 }
 
 /**
@@ -73,7 +73,7 @@ export function Code({ children }: { children: ReactNode }) {
  */
 export function Terminal({ children }: { children: string }) {
   return (
-    <div className="mb-4 rounded-lg border border-line bg-field">
+    <div className="mb-4 rounded-[8px] border border-line bg-field">
       <ScrollX>
         <pre className="m-0 px-4 py-3 font-mono text-[12.5px] leading-[1.6] text-ink-2">{children}</pre>
       </ScrollX>

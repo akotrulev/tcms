@@ -162,7 +162,7 @@ export function PlanStatisticsPage() {
                   setParams(next, { replace: true });
                 }}
                 data-testid="PlanStats.AggregationSelect"
-                className="w-full rounded-[6px] border border-line bg-field px-2.5 py-1.5 text-[12.5px] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]"
+                className="w-full rounded-[8px] border border-line bg-field px-2.5 py-1.5 text-[12.5px] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]"
               >
                 {Object.entries(aggregationLabels).map(([value, label]) => (
                   <option key={value} value={value}>
@@ -185,7 +185,9 @@ export function PlanStatisticsPage() {
       <div
         role="tablist"
         aria-label="Plan"
-        className="mb-4 flex gap-1 overflow-x-auto border-b border-line"
+        // `.lens` — the render kit's only tab idiom. This screen drew underline tabs, which the
+        // kit does not have, so the product had two ways of saying "pick a view".
+        className="mb-4 inline-flex max-w-full gap-0.5 overflow-x-auto rounded-[8px] bg-wash-1 p-0.5"
         data-testid="PlanStats.Tabs"
       >
         {PLAN_TABS.map((id) => (
@@ -198,8 +200,8 @@ export function PlanStatisticsPage() {
             data-testid={`PlanStats.Tab.${id}`}
             className={
               tab === id
-                ? 'whitespace-nowrap border-b-2 border-steel px-3 py-2 text-[13px] font-medium text-ink focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)]'
-                : 'whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-[13px] text-ink-3 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)]'
+                ? 'cursor-pointer whitespace-nowrap rounded-md bg-panel px-[11px] py-1 text-[12px] font-medium text-ink shadow-e1 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)]'
+                : 'cursor-pointer whitespace-nowrap rounded-md px-[11px] py-1 text-[12px] font-medium text-ink-3 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)]'
             }
           >
             {planTabLabels[id]}
@@ -997,8 +999,8 @@ function ResultLegend({ counts }: { counts: PlanStatistics['counts'] }) {
             style={entry.color ? { backgroundColor: entry.color } : undefined}
             className={
               entry.color
-                ? 'block size-2.5 rounded-[2px]'
-                : 'block size-2.5 rounded-[2px] border border-line-strong bg-field'
+                ? 'block size-2.5 rounded-[1px]'
+                : 'block size-2.5 rounded-[1px] border border-line-strong bg-field'
             }
           />
           {entry.label} <Identifier variant="muted">{formatCount(entry.count)}</Identifier>
@@ -1204,7 +1206,7 @@ function TrendChart({ trend }: { trend: NonNullable<PlanStatistics['trend']> }) 
       testId="PlanStats.Trend"
     >
       <div className="flex items-baseline gap-2.5">
-        <span className="font-mono text-[30px] leading-none font-medium tracking-[-.03em] tabular-nums text-ink">
+        <span className="font-mono text-[26px] leading-[1.1] font-medium tracking-[-.02em] tabular-nums text-ink">
           {formatPercent(latest.passRate)}
         </span>
         <span

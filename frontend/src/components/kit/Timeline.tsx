@@ -54,7 +54,7 @@ export function TimelineEvent({ when, children, detail, highlighted, className, 
       </span>
       <span className="min-w-0 pl-3 text-[13px] leading-[1.55] text-ink-2">
         {children}
-        {detail && <span className="mt-[3px] block text-xs text-ink-4">{detail}</span>}
+        {detail && <span className="mt-[3px] block text-[12px] text-ink-4">{detail}</span>}
       </span>
     </li>
   );

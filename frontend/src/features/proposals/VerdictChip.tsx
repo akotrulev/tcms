@@ -67,7 +67,7 @@ export function VerdictChip({
         is not available to somebody skimming, and "who checked" is the half a skimmer most needs:
         the failure mode this component exists for is reading `Grounded` and stopping there.
       */}
-      <span className="text-xs text-ink-2" data-testid="Proposals.VerdictSource">
+      <span className="text-[12px] text-ink-2" data-testid="Proposals.VerdictSource">
         {verdictSourceLabels[source]}
       </span>
     </span>

@@ -73,7 +73,7 @@ export function IssueChip({
     ?? link.provider;
 
   if (preview.isPending && link.bindingId !== null) {
-    return <Skeleton className="h-6 w-[220px] rounded" data-testid={`${testId}.Loading`} />;
+    return <Skeleton className="h-6 w-[220px] rounded-sm" data-testid={`${testId}.Loading`} />;
   }
 
   const issue = preview.data?.state === 'AVAILABLE' ? preview.data.issue : null;
@@ -162,7 +162,7 @@ export function IssueChip({
       {preview.data?.state === 'NOT_CONNECTED' && (
         <RouterLink
           to="/account/trackers"
-          className="text-xs text-steel underline-offset-4 hover:underline"
+          className="text-[12px] text-steel underline-offset-4 hover:underline"
           data-testid={`${testId}.Connect`}
         >
           Connect

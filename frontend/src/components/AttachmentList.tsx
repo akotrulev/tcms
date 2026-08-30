@@ -163,7 +163,7 @@ export function AttachmentsPanel({
       )}
 
       {attachments.length === 0 ? (
-        <p className="m-0 text-sm text-ink-2" data-testid={`${testId}.Empty`}>
+        <p className="m-0 text-[13px] text-ink-2" data-testid={`${testId}.Empty`}>
           {emptyBody}
         </p>
       ) : (
@@ -218,7 +218,7 @@ function AttachmentRow({
             testId={`${testId}.Download`}
             className="overflow-hidden text-ellipsis whitespace-nowrap"
           />
-          <span className="text-xs text-ink-2">
+          <span className="text-[12px] text-ink-2">
             {formatBytes(item.sizeBytes)}
             {item.uploadedBy ? ` · ${item.uploadedBy.displayName}` : ''}
             {` · ${formatDateTime(item.uploadedAt)}`}

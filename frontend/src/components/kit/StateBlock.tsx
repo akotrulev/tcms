@@ -103,9 +103,9 @@ function Shell({
   return (
     <div className={cn('mx-auto max-w-[56ch] px-[34px] py-[52px] text-center', className)} {...rest}>
       <Icon aria-hidden style={iconColor ? { color: iconColor } : undefined} className="mx-auto mb-3.5 size-[34px] text-ink-4" />
-      <h3 className="mb-[7px] text-base font-semibold text-ink-2">{title}</h3>
+      <h3 className="mb-[7px] text-[16px] font-semibold text-ink-2">{title}</h3>
       <p className="mb-[18px] text-[13.5px] leading-[1.6] text-ink-4">{description}</p>
-      {actions && <div className="flex flex-wrap justify-center gap-2.5">{actions}</div>}
+      {actions && <div className="flex flex-wrap justify-center gap-[9px]">{actions}</div>}
     </div>
   );
 }
@@ -200,7 +200,7 @@ export function StateBlock(props: StateBlockProps) {
         borderColor: 'color-mix(in oklab, var(--color-blocked) 26%, transparent)',
         backgroundColor: 'color-mix(in oklab, var(--color-blocked) 7%, transparent)',
       }}
-      className={cn('flex items-center gap-2.5 rounded-lg border px-3.5 py-2.5 text-[13px] text-ink-2', className)}
+      className={cn('flex items-center gap-2.5 rounded-[8px] border px-3.5 py-2.5 text-[13px] text-ink-2', className)}
       data-testid={rest['data-testid']}
     >
       <RefreshCcw aria-hidden style={{ color: 'var(--color-blocked)' }} className="size-4 shrink-0" />

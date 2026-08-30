@@ -15,12 +15,18 @@ import { cva } from 'class-variance-authority';
  * disappears at exactly the moment it is needed. Green is the only accent that reads against both
  * the ghost and the primary variant.
  *
+ * **The primary's ring and glow are tokens, not literals.** They were
+ * `rgb(107 168 196/30%)` and `/35%` inline — `#6ba8c4`, which is the DARK palette's accent. In the
+ * light scheme `--color-action-primary` is `#2b6883`, so the button drew a pale-blue ring around a
+ * dark-teal fill: two blues on one control, in the scheme least able to hide it. `--steel-line` /
+ * `--steel-glow` follow the palette, and the ring is back at the kit's 22%.
+ *
  * **`ghost` is the default variant, not `primary`.** The renders put one primary action on a
  * screen and everything else in outline or quiet — a default of `primary` would make the common
  * case the loud one and invert the page's hierarchy by omission.
  */
 export const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 rounded-[6px] font-sans font-medium ' +
+  'inline-flex items-center justify-center gap-[7px] rounded-[8px] font-sans font-medium ' +
     'transition-colors cursor-pointer whitespace-nowrap ' +
     'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)] ' +
     'disabled:pointer-events-none disabled:opacity-45',
@@ -30,16 +36,16 @@ export const buttonVariants = cva(
         ghost: 'border border-line text-ink-2 hover:bg-wash-2 hover:text-ink',
         primary:
           'bg-steel text-[color:var(--color-on-action)] font-semibold ' +
-          'shadow-[0_0_0_1px_rgb(107_168_196/30%),0_4px_14px_-4px_rgb(107_168_196/35%)] ' +
+          'shadow-[0_0_0_1px_var(--color-steel-line),0_4px_14px_-4px_var(--color-steel-glow)] ' +
           'hover:brightness-110',
         quiet: 'text-ink-2 hover:bg-wash-2 hover:text-ink',
         danger:
-          'border border-line text-[color:var(--color-failed)] hover:bg-[color:var(--color-failed)]/10',
+          'border border-[color:var(--color-failed)]/30 text-[color:var(--color-failed)] hover:bg-[color:var(--color-failed)]/10',
         link: 'text-steel underline-offset-4 hover:underline p-0 min-h-0',
       },
       size: {
-        default: 'text-[13px] px-3.5 py-1.5 min-h-8',
-        sm: 'text-xs px-2.5 py-1 min-h-7',
+        default: 'text-[13px] px-[13px] py-1.5 min-h-8',
+        sm: 'text-[12px] px-2.5 py-1 min-h-[26px]',
         icon: 'size-8 p-0',
       },
     },

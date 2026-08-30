@@ -116,7 +116,7 @@ export function PlanCloneDialog({
           <DialogTitle>Clone this test plan</DialogTitle>
         </DialogHeader>
         <div className="mt-4 flex flex-col gap-4">
-            <p className="m-0 text-sm text-ink-2">
+            <p className="m-0 text-[13px] text-ink-2">
               <Identifier>{plan.key}</Identifier> {plan.name}
             </p>
 
@@ -145,7 +145,7 @@ export function PlanCloneDialog({
               />
             </Field>
 
-            <p className="m-0 text-xs text-ink-2">
+            <p className="m-0 text-[12px] text-ink-2">
               The whole scope comes across — the suites, cases and tags, every section, the scope
               prose and both criteria lists. The runs and their results stay with{' '}
               <Identifier variant="muted">{plan.key}</Identifier>, and the copy starts as a draft

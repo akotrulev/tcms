@@ -307,7 +307,7 @@ export function FeatureImportPage() {
       */}
       <div className="flex flex-col items-start gap-4 lg:flex-row">
         {/* ── The render's left `.side`: what was picked, and how it will be filed ───────── */}
-        <aside className="w-full shrink-0 rounded-lg border border-line bg-panel p-4 lg:w-[280px]">
+        <aside className="w-full shrink-0 rounded-[8px] border border-line bg-panel p-4 lg:w-[280px]">
           <section className="mb-5" data-testid="FeatureImport.FilesPanel">
             <h2 className={SECTION_HEADING}>
               Files
@@ -332,11 +332,11 @@ export function FeatureImportPage() {
               onDragLeave={() => setDragging(false)}
               onDrop={(event) => void handleDrop(event)}
               className={cn(
-                'rounded-lg border-2 border-dashed p-4 text-center',
+                'rounded-[8px] border-2 border-dashed p-4 text-center',
                 dragging ? 'border-steel bg-wash-2' : 'border-line-strong',
               )}
             >
-              <Upload aria-hidden className="mx-auto size-5 text-ink-4" />
+              <Upload aria-hidden className="mx-auto size-[34px] text-ink-4" />
               <p className="m-0 mt-1.5 text-[12.5px] text-ink-2">
                 Drop a folder of <Identifier>.feature</Identifier> files here.
               </p>
@@ -490,7 +490,7 @@ export function FeatureImportPage() {
               <p
                 role="alert"
                 data-testid="FeatureImport.SuiteError"
-                className="m-0 mt-1 text-xs text-[color:var(--color-failed)]"
+                className="m-0 mt-1 text-[12px] text-[color:var(--color-failed)]"
               >
                 {suiteErrors.join(' ')}
               </p>
@@ -502,7 +502,7 @@ export function FeatureImportPage() {
             <div
               role="group"
               aria-label="What to do with a scenario that already has a case"
-              className="inline-flex gap-0.5 rounded-lg bg-wash-1 p-0.5"
+              className="inline-flex gap-0.5 rounded-[8px] bg-wash-1 p-0.5"
             >
               {(
                 [
@@ -520,10 +520,10 @@ export function FeatureImportPage() {
                   }}
                   data-testid={`FeatureImport.OnExisting.${option.value}`}
                   className={cn(
-                    'cursor-pointer rounded-md border-0 px-[11px] py-1 text-xs font-medium',
+                    'cursor-pointer rounded-md border-0 px-[11px] py-1 text-[12px] font-medium',
                     'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
                     onExisting === option.value
-                      ? 'bg-panel text-ink shadow-[0_1px_2px_rgb(0_0_0/40%)]'
+                      ? 'bg-panel text-ink shadow-e1'
                       : 'bg-transparent text-ink-3 hover:text-ink-2',
                   )}
                 >
@@ -563,7 +563,7 @@ export function FeatureImportPage() {
               {(current) => <ImportPlanView plan={current} />}
             </DataRegion>
           ) : (
-            <p className="m-0 rounded-lg border border-line bg-panel p-4 text-[13px] text-ink-3">
+            <p className="m-0 rounded-[8px] border border-line bg-panel p-4 text-[13px] text-ink-3">
               Pick some files and press Preview. Every scenario in them gets a card here saying what
               would happen to it and why, before anything is written.
             </p>
@@ -596,7 +596,7 @@ function ImportPlanView({ plan }: { plan: FeatureImportPlan }) {
 
       {plan.suites.length > 0 && (
         <section
-          className="rounded-lg border border-line bg-panel p-4"
+          className="rounded-[8px] border border-line bg-panel p-4"
           data-testid="FeatureImport.Suites"
         >
           <h2 className={SECTION_HEADING}>Suites</h2>
@@ -608,7 +608,7 @@ function ImportPlanView({ plan }: { plan: FeatureImportPlan }) {
 
       {plan.conditions.length > 0 && (
         <section
-          className="rounded-lg border border-line bg-panel p-4"
+          className="rounded-[8px] border border-line bg-panel p-4"
           data-testid="FeatureImport.Conditions"
         >
           <h2 className={SECTION_HEADING}>Preconditions from the Background</h2>
@@ -657,7 +657,7 @@ function ScenarioCard({ row }: { row: ImportRow }) {
       data-testid="FeatureImport.Row"
       data-action={row.action}
       className={cn(
-        'overflow-hidden rounded-lg border border-line bg-panel',
+        'overflow-hidden rounded-[8px] border border-line bg-panel',
         row.action === 'SKIP' && 'opacity-60',
       )}
       style={
@@ -728,7 +728,7 @@ function ScenarioCard({ row }: { row: ImportRow }) {
 
         {row.preconditions.length > 0 && (
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            <span className="font-mono text-[10.5px] tracking-[.04em] text-ink-4 uppercase">
+            <span className="font-mono text-[10.5px] tracking-[.06em] text-ink-4 uppercase">
               Preconditions
             </span>
             {/*
@@ -817,7 +817,7 @@ function ImportCost({ plan }: { plan: FeatureImportPlan }) {
   const { create, update, skip, refuse } = plan.totals;
 
   return (
-    <aside className="w-full shrink-0 rounded-lg border border-line bg-panel p-4 lg:w-[260px]">
+    <aside className="w-full shrink-0 rounded-[8px] border border-line bg-panel p-4 lg:w-[260px]">
       <section className="mb-5" data-testid="FeatureImport.Totals" aria-live="polite">
         <h2 className={SECTION_HEADING}>What this import does</h2>
         <CostRow

@@ -273,7 +273,7 @@ export function ExternalLinkDialog({
             the other direction — a link somebody else made, or one made from the documentation
             page, which arrives on the next refresh rather than now.
           */}
-          <p className="m-0 text-sm text-ink-2">
+          <p className="m-0 text-[13px] text-ink-2">
             Links made elsewhere can take a minute to appear on this panel.
           </p>
 

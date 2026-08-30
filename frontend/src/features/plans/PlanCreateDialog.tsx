@@ -239,8 +239,8 @@ export function PlanCreateDialog({
             </Field>
 
             <div className="flex flex-col gap-1">
-              <p className="m-0 text-sm font-medium">Scope</p>
-              <span className="m-0 text-xs text-ink-2">
+              <p className="m-0 text-[13px] font-medium">Scope</p>
+              <span className="m-0 text-[12px] text-ink-2">
                 A folder covers everything beneath it, now and as cases are added. You can leave
                 this empty and add folders later.
               </span>
@@ -262,13 +262,13 @@ export function PlanCreateDialog({
                     />
                     <span className="flex items-baseline gap-2">
                       <Identifier variant="muted">{suite.key}</Identifier>
-                      <span className="text-sm text-ink">{suite.name}</span>
-                      <span className="text-xs text-ink-2">{plural(suite.caseCount, 'case')}</span>
+                      <span className="text-[13px] text-ink">{suite.name}</span>
+                      <span className="text-[12px] text-ink-2">{plural(suite.caseCount, 'case')}</span>
                     </span>
                   </label>
                 ))}
                 {suites.data?.length === 0 && (
-                  <p className="m-0 text-sm text-ink-2">
+                  <p className="m-0 text-[13px] text-ink-2">
                     This project has no suites yet.
                   </p>
                 )}

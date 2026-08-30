@@ -63,7 +63,7 @@ export function PlanDeleteDialog({
             Not "this cannot be undone" — the delete is soft and the row survives — but nothing in
             the product brings the plan back, which is the part the reader has to act on.
           */}
-          <p className="m-0 text-sm text-ink-2">
+          <p className="m-0 text-[13px] text-ink-2">
             A plan that runs were executed against cannot be deleted; close it instead.
           </p>
           {remove.isError && (

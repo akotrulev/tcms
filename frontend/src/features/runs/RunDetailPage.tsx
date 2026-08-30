@@ -386,7 +386,7 @@ function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: s
         data-testid="RunDetail.Summary"
       >
         <div data-testid="RunDetail.PassRate">
-          <span className="font-mono text-[26px] leading-none font-semibold tabular-nums text-ink">
+          <span className="font-mono text-[26px] leading-[1.1] font-medium tracking-[-.02em] tabular-nums text-ink">
             {formatPercent(passRate(data.counts, 'EXECUTED'))}
           </span>
           <span className="mt-1 block text-[12px] text-ink-4">

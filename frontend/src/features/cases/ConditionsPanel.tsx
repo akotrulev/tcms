@@ -114,7 +114,7 @@ function SortableCondition({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        'relative rounded border bg-panel p-2',
+        'relative rounded-sm border bg-panel p-2',
         isDragging ? 'border-steel opacity-85' : 'border-line opacity-100',
       )}
     >
@@ -251,7 +251,7 @@ export function ConditionsPanel({
 
   return (
     <div className="flex flex-col gap-2" data-testid={testId}>
-      <p className="m-0 text-sm font-medium">{LABELS[kind].title}</p>
+      <p className="m-0 text-[13px] font-medium">{LABELS[kind].title}</p>
 
       {inherited.length > 0 && (
         <div className="flex flex-col gap-1" data-testid={`${testId}.Inherited`}>
@@ -262,12 +262,12 @@ export function ConditionsPanel({
                 key={ref.id}
                 data-testid={`${testId}.Inherited.Item`}
                 data-declined={isDeclined ? 'true' : 'false'}
-                className="rounded border border-dashed border-line p-2"
+                className="rounded-sm border border-dashed border-line p-2"
               >
                 <div className="flex gap-2 items-center">
                   <p
                     className={cn(
-                      'm-0 text-sm',
+                      'm-0 text-[13px]',
                       isDeclined ? 'text-ink-4 line-through' : 'text-ink',
                     )}
                   >
@@ -302,7 +302,7 @@ export function ConditionsPanel({
                         aria-label={`Applies to this case: ${ref.title}`}
                         onCheckedChange={(next: boolean) => onToggleDecline?.(ref.id, !next)}
                       />
-                      <span className="m-0 text-xs text-ink-2">
+                      <span className="m-0 text-[12px] text-ink-2">
                         {isDeclined ? 'Not applicable' : 'Applies'}
                       </span>
                     </label>
@@ -352,7 +352,7 @@ export function ConditionsPanel({
                       </Button>
 
                       <div className="grow min-w-0">
-                        <p className="m-0 text-sm">
+                        <p className="m-0 text-[13px]">
                           {/* A library read in flight is not an empty condition. Falling back to
                               the id would render a UUID at the author; naming the state is the
                               honest rendering of "we have the attachment, not yet the text". */}
@@ -436,8 +436,8 @@ export function ConditionsPanel({
             optionKey={(option) => option.id}
             optionLabel={(option) => (
               <span className="flex flex-col">
-                <span className="text-sm text-ink">{option.title}</span>
-                <span className="text-xs text-ink-2">{impactSummary(option)}</span>
+                <span className="text-[13px] text-ink">{option.title}</span>
+                <span className="text-[12px] text-ink-2">{impactSummary(option)}</span>
               </span>
             )}
             optionText={(option) => option.title}

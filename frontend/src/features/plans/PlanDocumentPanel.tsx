@@ -105,7 +105,7 @@ function LinkPagePanel({ projectId, planId }: { projectId: string; planId: strin
     <Panel testId="PlanDocument.Empty">
       <div className="flex flex-col gap-3 items-start">
         <h6 className="m-0 text-[13px] font-semibold">No page is linked to this plan</h6>
-        <p className="m-0 text-sm text-ink-2" style={{ maxWidth: 640 }}>
+        <p className="m-0 text-[13px] text-ink-2" style={{ maxWidth: 640 }}>
           A plan&rsquo;s requirements are an ordinary documentation page that this plan adopts —
           written where specifications are written, keeping its own history, its links and its place
           in search. Link one that exists, or write it in the documentation section first.
@@ -251,7 +251,7 @@ function DocumentBody({
       >
         <div className="flex flex-col gap-1">
           {page.blocks.length === 0 ? (
-            <p className="m-0 text-sm text-ink-2">
+            <p className="m-0 text-[13px] text-ink-2">
               This page has no content yet. Open it in documentation to write it.
             </p>
           ) : (
@@ -320,7 +320,7 @@ function BlockView({
                     ? `/projects/${projectId}/cases/${link.sourceId}`
                     : `/projects/${projectId}/suites/${link.sourceId}`
                 }
-                className="inline-flex items-center gap-1.5 rounded-[5px] border border-line px-2.5 py-[3px] text-xs text-ink-2 no-underline hover:border-line-strong hover:bg-wash-1 hover:text-ink"
+                className="inline-flex items-center gap-1.5 rounded-[5px] border border-line px-2.5 py-[3px] text-[12px] text-ink-2 no-underline hover:border-line-strong hover:bg-wash-1 hover:text-ink"
               >
                 <Identifier>{link.sourceKey}</Identifier>
                 <span>{link.sourceTitle}</span>

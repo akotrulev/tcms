@@ -7,7 +7,7 @@ function Toaster(props: ToasterProps) {
       toastOptions={{
         classNames: {
           toast:
-            'group toast bg-panel! text-ink! border! border-line! shadow-[0_16px_32px_-8px_rgb(0_0_0/60%)]!',
+            'group toast bg-panel! text-ink! border! border-line! shadow-e3!',
           description: 'text-ink-3!',
           actionButton: 'bg-steel! text-[color:var(--color-on-action)]!',
           cancelButton: 'bg-wash-3! text-ink-2!',

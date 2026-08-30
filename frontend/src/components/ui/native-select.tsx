@@ -20,7 +20,7 @@ export function NativeSelect({ className, children, ...props }: ComponentProps<'
   return (
     <select
       className={cn(
-        'w-full rounded-[6px] border border-line bg-field px-2.5 py-1.5 text-[12.5px] text-ink ' +
+        'w-full rounded-[8px] border border-line bg-field px-2.5 py-1.5 text-[12.5px] text-ink ' +
           'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)] ' +
           'disabled:cursor-not-allowed disabled:opacity-45',
         className,

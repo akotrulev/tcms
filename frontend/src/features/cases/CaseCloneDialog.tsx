@@ -215,7 +215,7 @@ export function CaseCloneDialog({
         </DialogHeader>
         <div className="mt-4 flex flex-col gap-4">
           <div className="flex flex-col mt-2 gap-4">
-            <p className="m-0 text-sm text-ink-2">
+            <p className="m-0 text-[13px] text-ink-2">
               <Identifier>{testCase.key}</Identifier> {testCase.title}
             </p>
 
@@ -286,10 +286,10 @@ export function CaseCloneDialog({
             {notCarried.length > 0 && (
               <div data-testid={`${TestId}.NotCarriedDeclines`}>
             <Banner tone="warn">
-                <p className="m-0 mb-1 text-sm font-semibold text-ink">
+                <p className="m-0 mb-1 text-[13px] font-semibold text-ink">
                   The copy will not carry {plural(notCarried.length, 'condition exception')}
                 </p>
-                <p className="m-0 text-sm">
+                <p className="m-0 text-[13px]">
                   A folder&rsquo;s rule can only be declined by a case filed in that folder, so the
                   copy follows {notCarried.length === 1 ? 'its' : 'their'} new folder&rsquo;s rules
                   in full. <Identifier>{testCase.key}</Identifier> keeps{' '}
@@ -297,7 +297,7 @@ export function CaseCloneDialog({
                 </p>
                 <ul className="pl-6 my-2">
                   {notCarried.map((ref) => (
-                    <li className="m-0 text-sm" key={ref.id}>
+                    <li className="m-0 text-[13px]" key={ref.id}>
                       {ref.title}
                       {ref.inheritedFrom ? ` — from ${ref.inheritedFrom}` : null}
                     </li>
@@ -323,7 +323,7 @@ export function CaseCloneDialog({
               whatever folder the copy lands in, while the standing rules it inherits are always the
               destination's — and its exceptions to them are the alert above.
             */}
-            <p className="m-0 text-xs text-ink-2">
+            <p className="m-0 text-[12px] text-ink-2">
               The steps, classification, tags, attached files and the conditions the case attaches
               itself come across; the standing rules it inherits are its new folder&rsquo;s. The
               review state starts at draft, and the source keeps its version and execution history.

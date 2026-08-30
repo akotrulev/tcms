@@ -145,7 +145,7 @@ export function PlanCasesTab({
       actions={
         <Tooltip>
 <TooltipTrigger asChild>
-          <span className="m-0 text-xs text-ink-2" data-testid="PlanCases.Total">
+          <span className="m-0 text-[12px] text-ink-2" data-testid="PlanCases.Total">
             {plural(plan.caseCount, 'case')} in scope
           </span>
         </TooltipTrigger>
@@ -154,7 +154,7 @@ export function PlanCasesTab({
       }
     >
       <div className="flex flex-col gap-4">
-        <span className="m-0 text-xs text-ink-2">
+        <span className="m-0 text-[12px] text-ink-2">
           Every reference below is resolved on each read: this plan grows when a referenced suite
           grows and when somebody tags a case. Nothing typed here is created until you press Save.
         </span>
@@ -340,7 +340,7 @@ function GroupCard({
   const remove = (reference: Reference) => onChange(removeReference(draft, group, reference));
 
   return (
-    <div className="border border-line rounded-lg p-3" data-testid={section ? 'PlanCases.Section' : 'PlanCases.Unsectioned'}>
+    <div className="border border-line rounded-[8px] p-3" data-testid={section ? 'PlanCases.Section' : 'PlanCases.Unsectioned'}>
       <div className="flex flex-col gap-3">
         <div className="flex gap-2 items-center flex-wrap">
           {section ? (
@@ -358,11 +358,11 @@ function GroupCard({
               className="border-0 bg-transparent px-0 font-semibold"
             />
           ) : (
-            <p className="m-0 text-sm font-medium">Not in a section</p>
+            <p className="m-0 text-[13px] font-medium">Not in a section</p>
           )}
 
           {count !== null && (
-            <span className="m-0 text-xs text-ink-2">
+            <span className="m-0 text-[12px] text-ink-2">
               {plural(count, 'case')}
             </span>
           )}
@@ -459,7 +459,7 @@ function GroupCard({
           })}
           {references.suiteIds.length + references.tags.length + references.caseIds.length === 0
             && rows.length <= 1 && (
-              <span className="m-0 text-xs text-ink-2">
+              <span className="m-0 text-[12px] text-ink-2">
                 Nothing referenced yet.
               </span>
             )}
@@ -692,7 +692,7 @@ function NewCaseRows({
     <PermissionGate projectId={projectId} permission="case:create">
       {({ allowed, reason }) => (
         <div className="flex flex-col gap-1">
-          <span className="m-0 text-xs text-ink-2">
+          <span className="m-0 text-[12px] text-ink-2">
             New cases {allowed ? '— created when you save this plan, filed in no suite.' : `— ${reason}`}
           </span>
           {rows.map((row, index) => (

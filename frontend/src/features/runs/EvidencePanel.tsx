@@ -124,7 +124,7 @@ export function EvidencePanel({
       )}
 
       {evidence.length === 0 ? (
-        <p className="m-0 text-sm text-ink-2">
+        <p className="m-0 text-[13px] text-ink-2">
           No screenshots or logs attached yet.
         </p>
       ) : (
@@ -164,26 +164,26 @@ function EvidenceRow({
   return (
     <div className="flex items-center gap-3" data-testid="Execution.Evidence.Row">
       {isImage && (
-        <img className="object-cover rounded-lg border border-line shrink-0" style={{ width: 48, height: 48 }} src={item.url} alt="" />
+        <img className="object-cover rounded-[8px] border border-line shrink-0" style={{ width: 48, height: 48 }} src={item.url} alt="" />
       )}
       <div className="flex flex-col min-w-0 flex-1">
         <a
           href={item.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="overflow-hidden text-ellipsis whitespace-nowrap text-sm text-steel underline-offset-4 hover:underline"
+          className="overflow-hidden text-ellipsis whitespace-nowrap text-[13px] text-steel underline-offset-4 hover:underline"
           data-testid="Execution.Evidence.Link"
         >
           {item.filename}
           <span className="sr-only"> (opens in a new tab)</span>
         </a>
-        <span className="m-0 text-xs text-ink-2">
+        <span className="m-0 text-[12px] text-ink-2">
           {formatBytes(item.sizeBytes)}
           {item.createdBy ? ` · ${item.createdBy.displayName}` : ''}
           {` · ${formatDateTime(item.createdAt)}`}
         </span>
         {item.caption && (
-          <span className="m-0 text-xs text-ink-2">
+          <span className="m-0 text-[12px] text-ink-2">
             {item.caption}
           </span>
         )}

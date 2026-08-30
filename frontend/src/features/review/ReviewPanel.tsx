@@ -346,7 +346,7 @@ function Assignees({
                 */
                 <span
                   data-testid="Review.Assignee"
-                  className="inline-flex items-center gap-1.5 rounded-[5px] border border-line px-2.5 py-[3px] text-xs text-ink-2"
+                  className="inline-flex items-center gap-1.5 rounded-[5px] border border-line px-2.5 py-[3px] text-[12px] text-ink-2"
                 >
                   {assignee.team ? (
                     <Users aria-hidden className="size-3 text-ink-4" />
@@ -480,7 +480,7 @@ function AssignForm({
           onClick={() => setOpen((current) => !current)}
           data-testid="Review.Assign.Choice"
           className={
-            'flex w-full items-center justify-between gap-2 rounded-[6px] border border-line ' +
+            'flex w-full items-center justify-between gap-2 rounded-[8px] border border-line ' +
             'bg-field px-3 py-1.5 text-left text-[13px] text-ink disabled:cursor-not-allowed ' +
             'disabled:opacity-45 focus-visible:outline-2 focus-visible:outline-offset-2 ' +
             'focus-visible:outline-[color:var(--color-given)]'
@@ -495,7 +495,7 @@ function AssignForm({
             <div
               id="Review.Assign.Options"
               role="listbox"
-              className="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-md border border-line bg-panel p-1 shadow-[0_16px_32px_-8px_rgb(0_0_0/60%)]"
+              className="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-[8px] border border-line bg-panel p-1 shadow-e3"
             >
               {options.length === 0 ? (
                 <p className="m-0 px-2.5 py-1.5 text-[12.5px] text-ink-4">
@@ -513,7 +513,7 @@ function AssignForm({
                       setOpen(false);
                     }}
                     className={
-                      'block w-full cursor-pointer rounded-[4px] px-2.5 py-1.5 text-left text-[13px] ' +
+                      'block w-full cursor-pointer rounded-sm px-2.5 py-1.5 text-left text-[13px] ' +
                       'hover:bg-wash-2 hover:text-ink focus-visible:outline-2 ' +
                       'focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)] ' +
                       (option.value === choice ? 'text-ink' : 'text-ink-2')
@@ -968,7 +968,7 @@ function VerdictForm({
 function EarlierReviews({ reviews }: { reviews: Review[] }) {
   return (
     <div data-testid="Review.Earlier">
-      <span className="block text-[11px] font-medium tracking-[.06em] text-ink-4 uppercase">
+      <span className="block font-mono text-[11px] tracking-[.06em] text-ink-4 uppercase">
         Earlier reviews
       </span>
       <div className="mt-1 flex flex-col gap-0.5">

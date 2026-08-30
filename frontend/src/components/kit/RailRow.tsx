@@ -53,7 +53,7 @@ export interface RailRowProps
 }
 
 const ROW =
-  'flex w-full items-center justify-between gap-2.5 rounded-[5px] py-1 text-[13px] text-left min-h-7';
+  'flex w-full items-center justify-between gap-2.5 rounded-[5px] py-[5px] text-[13px] text-left min-h-7';
 
 export function RailRow({ label, value, onOpen, readOnly, className, ...rest }: RailRowProps) {
   if (readOnly || !onOpen) {

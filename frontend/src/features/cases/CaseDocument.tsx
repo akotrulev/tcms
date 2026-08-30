@@ -159,10 +159,10 @@ const SCAFFOLD = [
 function BlankScaffold({ testId }: { testId: string }) {
   return (
     <div data-testid={testId} className="-ml-10 text-ink-4">
-      <span className="block max-w-[34ch] text-[25px] leading-[1.25] font-[620] tracking-[-.02em]">
+      <span className="block max-w-[36ch] text-[24px] leading-[1.25] font-[620] tracking-[-.02em]">
         Name the case on the first line…
       </span>
-      <span className="mt-1 block text-sm">One sentence stating what is verified</span>
+      <span className="mt-1 block text-[13px]">One sentence stating what is verified</span>
       <span className="my-5 block h-px max-w-[74ch] bg-line" />
       {SCAFFOLD.map((row, index) => (
         <ProcedureLine key={row.keyword} line={index + 1} keyword={row.keyword} className="opacity-55">
@@ -319,7 +319,7 @@ export function CaseDocument({
       >
         <span className="font-mono text-[11px] text-ink-4">Feature:</span>
         <span className="text-ink-2">{featureName ?? 'Unfiled'}</span>
-        <span className="text-xs text-ink-4">
+        <span className="text-[12px] text-ink-4">
           — from the suite this case is filed in. Change it in the rail.
         </span>
       </div>
@@ -332,7 +332,7 @@ export function CaseDocument({
             data-testid={`${testIdPrefix}.Document.AddTag`}
             className={cn(
               'rounded-[5px] border border-dashed border-line-strong px-[7px] py-0.5',
-              'font-mono text-xs text-ink-4 hover:border-line-strong hover:text-ink-2',
+              'font-mono text-[12px] text-ink-4 hover:border-line-strong hover:text-ink-2',
               'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
             )}
           >
@@ -418,7 +418,7 @@ export function CaseDocument({
           <div
             data-testid={`${testIdPrefix}.Document.Suggestions`}
             style={{ top: popup.top, left: popup.left }}
-            className="absolute z-30 w-[min(520px,100%)] overflow-hidden rounded-md border border-line-strong bg-panel py-1 shadow-[0_16px_32px_-8px_rgb(0_0_0/60%)]"
+            className="absolute z-30 w-[min(520px,100%)] overflow-hidden rounded-md border border-line-strong bg-panel py-1 shadow-e3"
           >
             {options.map((option, index) => (
               <div
@@ -462,7 +462,7 @@ export function CaseDocument({
       */}
       {(backgroundLine !== null || inheritedPreconditionCount > 0) && (
         <p
-          className="m-0 text-xs leading-[1.55] text-ink-3"
+          className="m-0 text-[12px] leading-[1.55] text-ink-3"
           data-testid={`${testIdPrefix}.Document.BackgroundNotice`}
         >
           <strong className="font-medium text-ink-2">Background:</strong> is this case&rsquo;s own

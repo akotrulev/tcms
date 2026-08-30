@@ -16,8 +16,8 @@ function DropdownMenuContent({
       <DropdownMenuPrimitive.Content
         sideOffset={sideOffset}
         className={cn(
-          'z-50 min-w-[8rem] overflow-hidden rounded-md border border-line bg-panel p-1 ' +
-            'shadow-[0_16px_32px_-8px_rgb(0_0_0/60%)]',
+          'z-50 min-w-[8rem] overflow-hidden rounded-[8px] border border-line bg-panel p-1 ' +
+            'shadow-e3',
           className,
         )}
         {...props}
@@ -30,7 +30,7 @@ function DropdownMenuItem({ className, ...props }: ComponentProps<typeof Dropdow
   return (
     <DropdownMenuPrimitive.Item
       className={cn(
-        'relative flex cursor-pointer select-none items-center gap-2 rounded-[4px] px-2 py-1.5 ' +
+        'relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 ' +
           'text-[13px] text-ink-2 outline-none data-[highlighted]:bg-wash-2 data-[highlighted]:text-ink ' +
           'data-[disabled]:pointer-events-none data-[disabled]:opacity-45',
         className,
@@ -50,7 +50,7 @@ function DropdownMenuCheckboxItem({
     <DropdownMenuPrimitive.CheckboxItem
       checked={checked}
       className={cn(
-        'relative flex cursor-pointer select-none items-center gap-2 rounded-[4px] py-1.5 pl-8 pr-2 ' +
+        'relative flex cursor-pointer select-none items-center gap-2 rounded-sm py-1.5 pl-8 pr-2 ' +
           'text-[13px] text-ink-2 outline-none data-[highlighted]:bg-wash-2 data-[highlighted]:text-ink ' +
           'data-[disabled]:pointer-events-none data-[disabled]:opacity-45',
         className,
@@ -80,7 +80,7 @@ function DropdownMenuCheckboxItem({
 function DropdownMenuLabel({ className, ...props }: ComponentProps<typeof DropdownMenuPrimitive.Label>) {
   return (
     <DropdownMenuPrimitive.Label
-      className={cn('px-2 py-1.5 text-xs font-medium text-ink-4', className)}
+      className={cn('px-2 py-1.5 text-[12px] font-medium text-ink-4', className)}
       {...props}
     />
   );

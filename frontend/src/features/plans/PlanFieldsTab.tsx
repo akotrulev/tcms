@@ -193,7 +193,7 @@ function CriteriaEditor({
   return (
     <Panel title={title} testId={testId}>
       <div className="flex flex-col gap-2">
-        <span className="m-0 text-xs text-ink-2">
+        <span className="m-0 text-[12px] text-ink-2">
           {hint}
         </span>
         {error && (
@@ -265,7 +265,7 @@ function CriteriaEditor({
           </div>
         ))}
         {rows.length === 0 && (
-          <p className="m-0 text-sm text-ink-2">
+          <p className="m-0 text-[13px] text-ink-2">
             None set.
           </p>
         )}

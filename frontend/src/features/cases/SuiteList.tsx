@@ -200,7 +200,7 @@ export function SuiteList({
               data-testid="SuiteList.Item.Status"
               title={lifecycleLabels[suite.lifecycleStatus]}
               className={cn(
-                'rounded border border-line px-1 text-[0.625rem] tracking-[0.04em] uppercase',
+                'rounded-sm border border-line px-1 text-[10px] tracking-[.06em] uppercase',
                 suite.lifecycleStatus === 'DEPRECATED' ? 'text-ink-4' : 'text-ink-2',
               )}
             >
@@ -347,7 +347,7 @@ export function SuiteList({
       */}
       {statusError && (
         <div className="mx-3 mb-2" data-testid="SuiteList.StatusError">
-          <Banner tone="warn" className="py-1 text-xs">
+          <Banner tone="warn" className="py-1 text-[12px]">
             <span className="min-w-0 flex-1">{statusError}</span>
             {/*
               ~~`Alert`'s own `onClose`~~ → an explicit dismiss button, T16. `Banner` has no
@@ -418,7 +418,7 @@ export function SuiteList({
             make" beside a button they cannot press is an instruction the reader cannot follow —
             an empty state that names the wrong next step is worse than one that names none.
           */}
-          <p className="m-0 text-sm text-ink-2">
+          <p className="m-0 text-[13px] text-ink-2">
             {gate.can('suite:manage')
               ? 'No suites yet. A case needs a suite to live in, so this is the first thing to make.'
               : 'No suites yet. A case needs a suite to live in — ask a project lead to create the first one.'}

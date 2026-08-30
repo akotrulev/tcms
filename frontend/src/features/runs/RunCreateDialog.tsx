@@ -486,9 +486,9 @@ export function RunCreateDialog({
                       const usage = (tags.data ?? []).find((row) => row.tag === tag);
                       return (
                         <span className="flex items-baseline gap-2">
-                          <span className="text-sm text-ink">{tag}</span>
+                          <span className="text-[13px] text-ink">{tag}</span>
                           {usage && (
-                            <span className="text-xs text-ink-2">
+                            <span className="text-[12px] text-ink-2">
                               {plural(usage.caseCount, 'case')}
                             </span>
                           )}

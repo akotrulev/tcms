@@ -419,7 +419,7 @@ function TileRow({
             style={{ borderLeftColor: severityVar[tile.severity] }}
             className="h-full rounded-md border border-l-[3px] border-line bg-panel px-3.5 py-3 transition-colors hover:border-line-strong"
           >
-            <span className="block font-mono text-[22px] leading-[1.1] font-medium tracking-[-.02em] tabular-nums text-ink">
+            <span className="block font-mono text-[26px] leading-[1.1] font-medium tracking-[-.02em] tabular-nums text-ink">
               {formatCount(tile.count)}
             </span>
             <span className="mt-1 block text-[12px] text-ink-3">{labelForKey(labels, tile.key)}</span>
@@ -496,7 +496,7 @@ function BreakdownList({
             className="grid grid-cols-[minmax(0,100px)_minmax(46px,1fr)_50px] items-center gap-[11px] py-[5px] text-[12.5px]"
           >
             <span className="truncate text-ink-2">{row.label}</span>
-            <span className="flex h-2 gap-0.5 overflow-hidden rounded bg-field" style={{ width: `${(total / max) * 100}%` }}>
+            <span className="flex h-2 gap-0.5 overflow-hidden rounded-sm bg-field" style={{ width: `${(total / max) * 100}%` }}>
               {row.segments.map((segment) => {
                 // §180: a segment's key is a LifecycleStatus, and both its words and its colour
                 // come from this side now. `row.label` above is the opposite case and stays as it
@@ -528,8 +528,8 @@ function BreakdownList({
                 style={entry.color ? { backgroundColor: entry.color } : undefined}
                 className={
                   entry.color
-                    ? 'block size-2.5 rounded-[2px]'
-                    : 'block size-2.5 rounded-[2px] border border-line-strong bg-field'
+                    ? 'block size-2.5 rounded-[1px]'
+                    : 'block size-2.5 rounded-[1px] border border-line-strong bg-field'
                 }
               />
               {entry.label}
@@ -558,7 +558,7 @@ function AutomationCoverage({
 
   return (
     <div>
-      <p className="mb-3 font-mono text-[30px] leading-none font-medium tracking-[-.03em] tabular-nums text-ink">
+      <p className="mb-3 font-mono text-[26px] leading-[1.1] font-medium tracking-[-.02em] tabular-nums text-ink">
         {formatPercent(coverage.coveragePercent)}
       </p>
       {/*
@@ -583,7 +583,7 @@ function AutomationCoverage({
             >
               {automationLabels[row.key]}
             </RouterLink>
-            <span className="flex h-2 overflow-hidden rounded bg-field">
+            <span className="flex h-2 overflow-hidden rounded-sm bg-field">
               <i
                 style={{
                   width: `${(row.count / Math.max(total, 1)) * 100}%`,
@@ -647,7 +647,7 @@ function ActivityChart({ activity }: { activity: RepositoryDashboard['recentActi
                   key={day.date}
                   title={`${day.date} — ${plural(day[key], 'case')} ${key}`}
                   style={{ height: `${(day[key] / max) * 100}%` }}
-                  className="block min-h-px flex-1 rounded-t-[2px] bg-steel opacity-75"
+                  className="block min-h-px flex-1 rounded-t-[1px] bg-steel opacity-75"
                 />
               ))}
             </span>

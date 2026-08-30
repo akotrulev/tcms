@@ -260,7 +260,7 @@ export function RunCloneDialog({
         </DialogHeader>
         <div className="mt-4 flex flex-col gap-4">
           <div className="flex flex-col mt-2 gap-4">
-            <p className="m-0 text-sm text-ink-2">
+            <p className="m-0 text-[13px] text-ink-2">
               <Identifier>{run.key}</Identifier> {run.name}
             </p>
 
@@ -417,7 +417,7 @@ export function RunCloneDialog({
               clone-versus-template distinction, and it is the one thing on this screen somebody
               would otherwise learn from a short checklist.
             */}
-            <p className="m-0 text-xs text-ink-2">
+            <p className="m-0 text-[12px] text-ink-2">
               The copy covers the same {plural(caseCount, 'case')} as this run, every one
               untested. Results, evidence, defect links and the run’s own timings stay with{' '}
               <Identifier variant="muted">{run.key}</Identifier>. Cases added to those folders since
@@ -450,10 +450,10 @@ export function RunCloneDialog({
                       className="mt-0.5"
                     />
                     <span className="flex flex-col gap-0.5">
-                      <span className="text-sm text-ink">
+                      <span className="text-[13px] text-ink">
                         Re-resolve the original scope instead
                       </span>
-                      <span className="text-xs text-ink-2">
+                      <span className="text-[12px] text-ink-2">
                         Runs {describeScopeRequest(run.scopeRequest)} again as they stand now, so
                         cases added since are included. The copy may be longer or shorter than this
                         run.

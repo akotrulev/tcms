@@ -732,7 +732,7 @@ function LifecycleMenu({
           <div
             role="menu"
             data-testid="CaseDetail.StatusMenu"
-            className="absolute right-0 z-50 mt-1 min-w-[200px] rounded-md border border-line bg-panel p-1 shadow-[0_16px_32px_-8px_rgb(0_0_0/60%)]"
+            className="absolute right-0 z-50 mt-1 min-w-[200px] rounded-[8px] border border-line bg-panel p-1 shadow-e3"
           >
             {moves.map((option) => (
               <PermissionGate
@@ -753,7 +753,7 @@ function LifecycleMenu({
                       setOpen(false);
                     }}
                     className={
-                      'block w-full rounded-[4px] px-2.5 py-1.5 text-left text-[13px] ' +
+                      'block w-full rounded-sm px-2.5 py-1.5 text-left text-[13px] ' +
                       'focus-visible:outline-2 focus-visible:outline-offset-[-2px] ' +
                       'focus-visible:outline-[color:var(--color-given)] ' +
                       (allowed && !setStatus.isPending

@@ -415,7 +415,7 @@ function StartCard({
       disabled={disabled}
       data-testid={testId}
       className={cn(
-        'flex cursor-pointer flex-col items-start rounded-lg border border-line bg-panel p-3.5 text-left',
+        'flex cursor-pointer flex-col items-start rounded-[8px] border border-line bg-panel p-3.5 text-left',
         'hover:border-line-strong focus-visible:outline-2 focus-visible:outline-offset-2',
         'focus-visible:outline-[color:var(--color-given)]',
         'disabled:cursor-not-allowed disabled:opacity-45',
@@ -425,7 +425,7 @@ function StartCard({
     >
       <span className="mb-1.5 text-[13.5px] font-semibold text-ink">{title}</span>
       <span className="text-[12.5px] leading-[1.5] text-ink-3">{children}</span>
-      <span className="mt-2.5 rounded border border-line-strong px-[5px] py-px font-mono text-[10.5px] text-ink-4">
+      <span className="mt-2.5 rounded-sm border border-line-strong px-[5px] py-px font-mono text-[10.5px] text-ink-4">
         {hint}
       </span>
     </button>
@@ -1588,7 +1588,7 @@ function CaseEditorForm({
                           )
                         }
                       />
-                      <p className="m-0 text-xs leading-[1.5] text-ink-4">
+                      <p className="m-0 text-[12px] leading-[1.5] text-ink-4">
                         {inheritedPreCount === 0
                           ? 'Write this case’s own setup as a Background: block.'
                           : 'Inherited from the suite — not shown in the text.'}
@@ -1619,7 +1619,7 @@ function CaseEditorForm({
                         <RouterLink
                           to={`/projects/${projectId}/cases/${existing.id}`}
                           data-testid={`${TestIdPrefix}.Preconditions.Link`}
-                          className="mt-1 inline-block text-xs text-steel underline-offset-4 hover:underline"
+                          className="mt-1 inline-block text-[12px] text-steel underline-offset-4 hover:underline"
                         >
                           See the whole procedure, inherited setup included
                         </RouterLink>
@@ -1689,7 +1689,7 @@ function CaseEditorForm({
                         type="button"
                         onClick={() => insertFromCorpus(row)}
                         data-testid={`${TestIdPrefix}.Corpus.Step`}
-                        className="cursor-pointer rounded-md px-2.5 py-2 text-left text-[13px] leading-[1.45] text-ink-2 hover:bg-wash-1 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)]"
+                        className="cursor-pointer rounded-md px-2.5 py-2 text-left text-[13px] leading-[1.5] text-ink-2 hover:bg-wash-1 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)]"
                       >
                         <span className="block font-medium text-ink">{row.action}</span>
                         {/* The ranking signal, shown rather than only sorted by. */}
@@ -1725,7 +1725,7 @@ function CaseEditorForm({
                   {(loaded) =>
                     loaded.length === 0 || loaded.every((dimension) => dimension.values.length === 0) ? (
                       <p
-                        className="m-0 text-xs leading-[1.55] text-ink-4"
+                        className="m-0 text-[12px] leading-[1.55] text-ink-4"
                         data-testid={`${TestIdPrefix}.Classification.Absent`}
                       >
                         Nothing configured, nothing shown.{' '}
@@ -1744,7 +1744,7 @@ function CaseEditorForm({
                         onChange={field.onChange}
                         testIdPrefix={TestIdPrefix}
                         emptyNotice={(empty) => (
-                          <span className="text-xs leading-[1.55] text-ink-4">
+                          <span className="text-[12px] leading-[1.55] text-ink-4">
                             {empty.map((dimension) => dimension.name).join(', ')}{' '}
                             {empty.length === 1 ? 'has' : 'have'} no values yet.{' '}
                             <RouterLink
@@ -1821,11 +1821,11 @@ function CaseEditorForm({
 }
 
 const SELECT_CLASS =
-  'w-full cursor-pointer rounded-[6px] border border-line bg-field px-2 py-1 text-[13px] text-ink ' +
+  'w-full cursor-pointer rounded-[8px] border border-line bg-field px-2 py-1 text-[13px] text-ink ' +
   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]';
 
 const INPUT_CLASS =
-  'w-full rounded-[6px] border border-line bg-field px-2 py-1 text-[13px] text-ink ' +
+  'w-full rounded-[8px] border border-line bg-field px-2 py-1 text-[13px] text-ink ' +
   'placeholder:text-ink-4 ' +
   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]';
 
@@ -1890,7 +1890,7 @@ function RailField({
     <div>
       <label
         htmlFor={htmlFor}
-        className="mb-1 block text-[11px] font-medium tracking-[.04em] text-ink-3 uppercase"
+        className="mb-[5px] block font-mono text-[11px] tracking-[.06em] text-ink-4 uppercase"
       >
         {label}
       </label>
@@ -1898,7 +1898,7 @@ function RailField({
       {help && (
         <p
           role={invalid ? 'alert' : undefined}
-          className={cn('m-0 mt-1 text-[11.5px] leading-[1.45]', invalid ? 'text-[color:var(--color-failed)]' : 'text-ink-4')}
+          className={cn('m-0 mt-1 text-[11.5px] leading-[1.5]', invalid ? 'text-[color:var(--color-failed)]' : 'text-ink-4')}
         >
           {help}
         </p>
@@ -1931,7 +1931,7 @@ function NoteField({
         {label}
       </label>
       <Textarea id={id} rows={2} data-testid={testId} {...registration} />
-      <p className="m-0 mt-1 text-xs text-ink-4">{help}</p>
+      <p className="m-0 mt-1 text-[12px] text-ink-4">{help}</p>
     </div>
   );
 }

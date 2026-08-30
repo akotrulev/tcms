@@ -187,17 +187,17 @@ export function SessionRecoveryProvider({ children }: { children: ReactNode }) {
         >
           <form onSubmit={submit}>
             <DialogHeader>
-              <DialogTitle id="session-expired-title" className="text-lg">
+              <DialogTitle id="session-expired-title" className="text-[18px]">
                 Your session has expired
               </DialogTitle>
             </DialogHeader>
 
-            <p className="mt-4 mb-4 text-sm text-ink-2">
+            <p className="mt-4 mb-4 text-[13px] text-ink-2">
               Sign in again to continue. <strong>Nothing you have typed has been lost</strong> —
               this page is still exactly where you left it.
             </p>
 
-            {user && <p className="mt-0 mb-4 text-sm text-ink-2">Signed in as {user.email}</p>}
+            {user && <p className="mt-0 mb-4 text-[13px] text-ink-2">Signed in as {user.email}</p>}
 
             {formError && (
               <div className="mb-4" data-testid="SessionExpired.Error">

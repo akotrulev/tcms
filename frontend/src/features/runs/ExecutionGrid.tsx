@@ -94,12 +94,12 @@ export function ExecutionGrid({
 
   return (
     <div>
-      <span className="m-0 text-xs text-ink-2 block mb-3">
+      <span className="m-0 text-[12px] text-ink-2 block mb-3">
         For a pass whose answers you already know. Blocked still asks which precondition failed, so
         it opens the checklist rather than recording in one click.
       </span>
 
-      <div className="border border-line rounded-lg bg-panel">
+      <div className="border border-line rounded-[8px] bg-panel">
         <ScrollX>
           <Table data-testid="Execution.Grid">
             <TableHead>
@@ -220,7 +220,7 @@ function GridRow({
           {execution.quarantined && <QuarantineChip testId={`${RowTestId}.Quarantined`} />}
         </div>
         {error && (
-          <span className="m-0 text-xs block" style={{ color: 'var(--color-failed)' }} data-testid={`${RowTestId}.Error`} role="alert">
+          <span className="m-0 text-[12px] block" style={{ color: 'var(--color-failed)' }} data-testid={`${RowTestId}.Error`} role="alert">
             {error}
           </span>
         )}
@@ -229,7 +229,7 @@ function GridRow({
         {execution.status?.kind ? (
           <StatusChip kind={execution.status.kind} testId={`${RowTestId}.Status`} />
         ) : (
-          <span className="m-0 text-xs text-ink-2" data-testid={`${RowTestId}.Status`}>
+          <span className="m-0 text-[12px] text-ink-2" data-testid={`${RowTestId}.Status`}>
             {statusLabels.UNTESTED}
           </span>
         )}

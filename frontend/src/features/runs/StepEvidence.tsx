@@ -108,7 +108,7 @@ export function StepEvidence({
               href={item.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="overflow-hidden text-ellipsis whitespace-nowrap text-sm text-steel underline-offset-4 hover:underline max-w-[200px]"
+              className="overflow-hidden text-ellipsis whitespace-nowrap text-[13px] text-steel underline-offset-4 hover:underline max-w-[200px]"
               data-testid="Execution.Steps.Row.Evidence.Link"
             >
               {item.filename}
@@ -166,7 +166,7 @@ export function StepEvidence({
 </div>
       )}
       {!recorded && evidence.length === 0 && (
-        <span className="m-0 text-xs text-ink-2 block mt-1">
+        <span className="m-0 text-[12px] text-ink-2 block mt-1">
           {UNMARKED_REASON}
         </span>
       )}

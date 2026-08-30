@@ -32,15 +32,19 @@ export function TableFoot({ summary, sort, keys, className, ...rest }: TableFoot
       role="status"
       data-testid={rest['data-testid']}
       className={cn(
-        'mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line pt-2',
-        'text-[11.5px] text-ink-4',
+        // `.foot` in the render kit is a bar, not an inline strip: its own recessed ground, the
+        // stage's 22px gutter, and two type sizes — 12px for the summary, 11px mono for the key
+        // hints. It stays in flow rather than pinned to the stage's bottom edge, because it sits
+        // inside the content column here and a full-bleed foot would need the shell to own it.
+        'mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line',
+        'bg-field/60 px-[22px] py-2.5 text-[12px] text-ink-4',
         className,
       )}
     >
       <span className="tabular-nums">{summary}</span>
       {sort && <span>{sort}</span>}
       {keys && keys.length > 0 && (
-        <span className="ml-auto flex flex-wrap gap-3 font-mono">
+        <span className="ml-auto flex flex-wrap gap-3 font-mono text-[11px]">
           {keys.map((key) => (
             <span key={key}>{key}</span>
           ))}

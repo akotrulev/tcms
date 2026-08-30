@@ -133,7 +133,7 @@ function SectionBody({ section }: { section: HelpSection }) {
       <h2
         ref={heading}
         tabIndex={-1}
-        className="m-0 mb-1.5 max-w-[36ch] text-[25px] leading-[1.25] font-[620] tracking-[-.02em] text-ink outline-none"
+        className="m-0 mb-1.5 max-w-[36ch] text-[24px] leading-[1.25] font-[620] tracking-[-.02em] text-ink outline-none"
       >
         {section.title}
       </h2>

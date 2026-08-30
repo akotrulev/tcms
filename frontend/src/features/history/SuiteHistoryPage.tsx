@@ -149,7 +149,7 @@ function SuiteHistoryBody({
                 onClick={() => setDenominator(option)}
                 data-testid={`SuiteHistory.Denominator.${option}`}
                 className={
-                  'rounded-[4px] px-2 py-0.5 text-[11.5px] focus-visible:outline-2 ' +
+                  'rounded-sm px-2 py-0.5 text-[11.5px] focus-visible:outline-2 ' +
                   'focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)] ' +
                   (denominator === option ? 'bg-wash-3 text-ink' : 'text-ink-3 hover:text-ink-2')
                 }

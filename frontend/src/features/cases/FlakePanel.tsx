@@ -54,7 +54,7 @@ export function FlakePanel({ projectId, testCase }: { projectId: string; testCas
         {quarantined && flake && (
           <div data-testid="CaseDetail.Flake.Quarantined">
 <Banner tone="warn">
-            <p className="m-0 text-sm font-semibold mb-0.5">
+            <p className="m-0 text-[13px] font-semibold mb-0.5">
               Quarantined
             </p>
             {/*
@@ -64,10 +64,10 @@ export function FlakePanel({ projectId, testCase }: { projectId: string; testCas
               each fragment as a health code, so "Flaky on Firefox, races the login redirect"
               renders as two fragments joined by a middot with nothing failing anywhere.
             */}
-            <p className="m-0 text-sm whitespace-pre-wrap">
+            <p className="m-0 text-[13px] whitespace-pre-wrap">
               {flake.quarantineReason}
             </p>
-            <span className="m-0 text-xs block mt-1 text-ink-2">
+            <span className="m-0 text-[12px] block mt-1 text-ink-2">
               {/*
                 `quarantinedBy` is a UserRef since this slice — it was the only bare-uuid actor
                 field on the API. It can still be null when the id resolves to no account (an
@@ -101,7 +101,7 @@ export function FlakePanel({ projectId, testCase }: { projectId: string; testCas
 </Tooltip>
             </>
           ) : (
-            <p className="m-0 text-sm text-ink-2" data-testid="CaseDetail.Flake.NoScore">
+            <p className="m-0 text-[13px] text-ink-2" data-testid="CaseDetail.Flake.NoScore">
               {verdict.kind === 'UNMEASURED'
                 ? 'Not assessed yet.'
                 : 'Not enough evidence to score.'}
@@ -110,13 +110,13 @@ export function FlakePanel({ projectId, testCase }: { projectId: string; testCas
         </div>
 
         {evidence && (
-          <p className="m-0 text-sm text-ink-2" data-testid="CaseDetail.Flake.Evidence">
+          <p className="m-0 text-[13px] text-ink-2" data-testid="CaseDetail.Flake.Evidence">
             {evidence}
           </p>
         )}
 
         {verdict.kind === 'UNMEASURED' && (
-          <p className="m-0 text-sm text-ink-2">
+          <p className="m-0 text-[13px] text-ink-2">
             Flakiness is measured from results recorded against one version on one configuration.
             Nothing has been computed for this case.
           </p>
@@ -128,7 +128,7 @@ export function FlakePanel({ projectId, testCase }: { projectId: string; testCas
           be current or stale about, and the line would claim a measurement that was never made.
         */}
         {flake && (
-          <span className="m-0 text-xs text-ink-2" data-testid="CaseDetail.Flake.ComputedAt">
+          <span className="m-0 text-[12px] text-ink-2" data-testid="CaseDetail.Flake.ComputedAt">
             {formatComputedAt(flake.computedAt)}
           </span>
         )}

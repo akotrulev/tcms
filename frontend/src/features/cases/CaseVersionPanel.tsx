@@ -113,7 +113,7 @@ function VersionRow({ version, isCurrent }: { version: CaseVersion; isCurrent: b
         )}
       </div>
 
-      <p className={cn('m-0 text-sm', version.changeComment ? 'text-ink' : 'text-ink-2')}>
+      <p className={cn('m-0 text-[13px]', version.changeComment ? 'text-ink' : 'text-ink-2')}>
         {/*
           `changeComment` is nullable and most saves have none. "No comment" rather than a blank
           line: an empty row reads as a rendering failure, and the reader cannot tell whether the
@@ -122,7 +122,7 @@ function VersionRow({ version, isCurrent }: { version: CaseVersion; isCurrent: b
         {version.changeComment ?? 'No comment'}
       </p>
 
-      <span className="block text-xs text-ink-2">
+      <span className="block text-[12px] text-ink-2">
         {/*
           `createdBy` is null when the author cannot be named — an imported version, or one whose
           recorded account no longer resolves. The contract says this field is always present and
@@ -156,7 +156,7 @@ function EarliestRecorded({ oldest }: { oldest: CaseVersion | undefined }) {
 
   return (
     <p
-      className="m-0 border-t border-line pt-3 text-xs text-ink-2"
+      className="m-0 border-t border-line pt-3 text-[12px] text-ink-2"
       data-testid="CaseDetail.Versions.EarliestRecorded"
     >
       v{oldest.versionNo} is the earliest recorded version. This case is older than its history —

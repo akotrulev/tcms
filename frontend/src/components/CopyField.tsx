@@ -65,13 +65,13 @@ export function CopyField({
 
   return (
     <div>
-      <span className="mb-1 block text-xs text-ink-2">{label}</span>
+      <span className="mb-1 block text-[12px] text-ink-2">{label}</span>
       <div className="flex items-start gap-2">
         {/* `break-all` and `select-all`: a 64-character secret must wrap rather than scroll out
             of view, because the whole point of rendering it is that every character can be read
             and selected. */}
         <div
-          className="identifier flex-1 rounded border border-line bg-field p-2.5 text-[13px] break-all select-all"
+          className="identifier flex-1 rounded-sm border border-line bg-field p-2.5 text-[13px] break-all select-all"
           data-testid={`${testId}.Value`}
         >
           {value}
@@ -84,7 +84,7 @@ export function CopyField({
         role="status"
         data-testid={`${testId}.Status`}
         className={cn(
-          'mt-1 block text-xs',
+          'mt-1 block text-[12px]',
           outcome === 'failed' ? 'text-[color:var(--color-warning)]' : 'text-ink-2',
         )}
       >

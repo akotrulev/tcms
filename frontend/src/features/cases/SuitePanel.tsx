@@ -48,7 +48,7 @@ export function SuitePanel({ projectId, suite }: { projectId: string; suite: Sui
       <Panel testId="Cases.SuitePanel.Header" dense>
         <div className="flex flex-wrap items-center gap-3 px-3 py-2">
           <Identifier variant="strong">{suite.key}</Identifier>
-          <span className="text-sm font-semibold text-ink" data-testid="Cases.SuitePanel.Name">
+          <span className="text-[13px] font-semibold text-ink" data-testid="Cases.SuitePanel.Name">
             {suite.name}
           </span>
           <LifecycleChip status={suite.lifecycleStatus} testId="Cases.SuitePanel.Lifecycle" />
@@ -66,7 +66,7 @@ export function SuitePanel({ projectId, suite }: { projectId: string; suite: Sui
           */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="text-xs text-ink-2" data-testid="Cases.SuitePanel.CaseCount">
+              <span className="text-[12px] text-ink-2" data-testid="Cases.SuitePanel.CaseCount">
                 {suite.caseCount} {suite.caseCount === 1 ? 'case' : 'cases'} filed, added or tagged
                 here
               </span>

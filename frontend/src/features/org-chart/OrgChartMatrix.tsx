@@ -53,7 +53,7 @@ export function OrgChartMatrix({
   return (
     <table
       data-testid="OrgChart.Matrix.Grid"
-      className="w-full border-separate border-spacing-[5px] text-xs"
+      className="w-full border-separate border-spacing-[5px] text-[12px]"
     >
       <thead>
         <tr>
@@ -166,8 +166,8 @@ function Cell({ assignment }: { assignment: OrgChartAssignment | undefined }) {
         VIA_FILL[assignment.via],
       )}
     >
-      <span className="font-mono text-[11px] leading-tight">{assignment.roleName}</span>
-      <span className="text-[10.5px] leading-tight text-ink-4">{detail}</span>
+      <span className="font-mono text-[11px] leading-[1.25]">{assignment.roleName}</span>
+      <span className="text-[10.5px] leading-[1.25] text-ink-4">{detail}</span>
     </span>
   );
 }

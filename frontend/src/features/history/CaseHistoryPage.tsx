@@ -119,7 +119,7 @@ export function CaseHistoryPage() {
               }}
               data-testid={`CaseHistory.Scope.${option.value}`}
               className={
-                'rounded-[4px] px-2.5 py-1 text-xs focus-visible:outline-2 focus-visible:outline-offset-[-2px] ' +
+                'rounded-sm px-2.5 py-1 text-[12px] focus-visible:outline-2 focus-visible:outline-offset-[-2px] ' +
                 'focus-visible:outline-[color:var(--color-given)] ' +
                 (scope === option.value ? 'bg-wash-3 text-ink' : 'text-ink-3 hover:text-ink-2')
               }

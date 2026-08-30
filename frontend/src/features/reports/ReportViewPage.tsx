@@ -208,7 +208,7 @@ function JobBody({
     <div
       data-color-scheme="light"
       data-testid={`${TestId}.Preview`}
-      className="rounded-lg bg-field p-4 text-ink md:p-6"
+      className="rounded-[8px] bg-field p-4 text-ink md:p-6"
     >
       <DataRegion
         testId={`${TestId}.Model`}

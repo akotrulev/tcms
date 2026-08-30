@@ -161,7 +161,7 @@ export function ConditionEditDialog({
               value={type}
               onChange={(event) => setType(event.target.value)}
               data-testid="CaseEditor.Condition.Type"
-              className="w-full cursor-pointer rounded-[6px] border border-line bg-field px-3 py-1.5 text-[13px] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]"
+              className="w-full cursor-pointer rounded-[8px] border border-line bg-field px-3 py-1.5 text-[13px] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]"
             >
               {TYPES.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -233,7 +233,7 @@ function Field({
       {(error ?? help) && (
         <p
           role={error ? 'alert' : undefined}
-          className={cn('m-0 mt-1 text-xs', error ? 'text-[color:var(--color-failed)]' : 'text-ink-4')}
+          className={cn('m-0 mt-1 text-[12px]', error ? 'text-[color:var(--color-failed)]' : 'text-ink-4')}
         >
           {error ?? help}
         </p>

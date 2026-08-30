@@ -27,16 +27,16 @@ type SourceType = BlockLink['sourceType'];
 const TestIdPrefix = 'Docs.Block.LinkDialog';
 
 const FIELD =
-  'w-full rounded-[6px] border border-line bg-field px-3 py-1.5 text-left text-[13px] text-ink ' +
+  'w-full rounded-[8px] border border-line bg-field px-3 py-1.5 text-left text-[13px] text-ink ' +
   'placeholder:text-ink-4 focus-visible:outline-2 focus-visible:outline-offset-2 ' +
   'focus-visible:outline-[color:var(--color-given)]';
 
 const POPOVER =
-  'absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-md border border-line bg-panel p-1 ' +
-  'shadow-[0_16px_32px_-8px_rgb(0_0_0/60%)]';
+  'absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-[8px] border border-line bg-panel p-1 ' +
+  'shadow-e3';
 
 const OPTION =
-  'block w-full cursor-pointer rounded-[4px] px-2.5 py-1.5 text-left text-[13px] text-ink-2 ' +
+  'block w-full cursor-pointer rounded-sm px-2.5 py-1.5 text-left text-[13px] text-ink-2 ' +
   'hover:bg-wash-2 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-[-2px] ' +
   'focus-visible:outline-[color:var(--color-given)]';
 
@@ -187,7 +187,7 @@ export function LinkBlockDialog({
           <div
             role="group"
             aria-label="What is being linked"
-            className="inline-flex w-fit gap-0.5 rounded-lg bg-wash-1 p-0.5"
+            className="inline-flex w-fit gap-0.5 rounded-[8px] bg-wash-1 p-0.5"
           >
             {(Object.keys(linkSourceTypeLabels) as SourceType[]).map((value) => (
               <button
@@ -197,10 +197,10 @@ export function LinkBlockDialog({
                 onClick={() => setSourceType(value)}
                 data-testid={`${TestIdPrefix}.Kind.${value}`}
                 className={cn(
-                  'cursor-pointer rounded-md border-0 px-[11px] py-1 text-xs font-medium',
+                  'cursor-pointer rounded-md border-0 px-[11px] py-1 text-[12px] font-medium',
                   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
                   sourceType === value
-                    ? 'bg-panel text-ink shadow-[0_1px_2px_rgb(0_0_0/40%)]'
+                    ? 'bg-panel text-ink shadow-e1'
                     : 'bg-transparent text-ink-3 hover:text-ink-2',
                 )}
               >

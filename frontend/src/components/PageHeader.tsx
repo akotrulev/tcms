@@ -127,7 +127,7 @@ export function PageHeader({
       <div className="flex flex-col items-stretch gap-4 md:flex-row md:items-start">
         <div className="min-w-0 flex-1">
           <h1
-            className="m-0 text-[22px] leading-tight font-[620] tracking-[-.02em] text-balance text-ink"
+            className="m-0 text-[22px] leading-[1.25] font-[620] tracking-[-.02em] text-balance text-ink"
             data-testid={`${testId}.Title`}
           >
             {title}
@@ -141,7 +141,7 @@ export function PageHeader({
             </div>
           )}
           {subtitle && (
-            <p className="mt-2 mb-0 max-w-[80ch] text-sm text-ink-2">{subtitle}</p>
+            <p className="mt-2 mb-0 max-w-[74ch] text-[13px] text-ink-2">{subtitle}</p>
           )}
         </div>
 
@@ -194,7 +194,7 @@ export function Panel({
     <section
       data-testid={testId}
       className={
-        plain ? undefined : 'overflow-hidden rounded-lg border border-line bg-panel'
+        plain ? undefined : 'overflow-hidden rounded-[8px] border border-line bg-panel'
       }
     >
       {(title || actions) && (

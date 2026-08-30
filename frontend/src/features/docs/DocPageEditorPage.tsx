@@ -331,7 +331,7 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
       <div className="flex flex-col items-start gap-4 xl:flex-row">
         <DocumentSurface
           measure="prose"
-          className="min-w-0 flex-1 rounded-lg border border-line"
+          className="min-w-0 flex-1 rounded-[8px] border border-line"
         >
           {errors.root && (
             <div className="mb-4" data-testid={`${TestIdPrefix}.Error`}>
@@ -353,14 +353,14 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
             maxLength={MAX_TITLE}
             data-testid={`${TestIdPrefix}.Title`}
             className={
-              'w-full border-0 bg-transparent p-0 text-2xl leading-[1.25] font-[620] ' +
+              'w-full border-0 bg-transparent p-0 text-[24px] leading-[1.25] font-[620] ' +
               'tracking-[-.02em] text-ink placeholder:text-ink-4 ' +
               'focus-visible:outline-2 focus-visible:outline-offset-4 ' +
               'focus-visible:outline-[color:var(--color-given)]'
             }
           />
           {errors.title && (
-            <p role="alert" className="m-0 mt-1 text-xs text-[color:var(--color-failed)]">
+            <p role="alert" className="m-0 mt-1 text-[12px] text-[color:var(--color-failed)]">
               {errors.title.message}
             </p>
           )}
@@ -406,7 +406,7 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
                           type="button"
                           aria-label={`Block ${index + 1} actions`}
                           data-testid={`${TestIdPrefix}.Block.Menu`}
-                          className="rounded-[3px] font-mono text-[9px] tracking-[.04em] text-ink-4 uppercase hover:text-ink-2 focus-visible:outline-2 focus-visible:outline-[color:var(--color-given)]"
+                          className="rounded-[3px] font-mono text-[10px] tracking-[.06em] text-ink-4 uppercase hover:text-ink-2 focus-visible:outline-2 focus-visible:outline-[color:var(--color-given)]"
                         >
                           {GUTTER_LABEL[type]}
                         </button>
@@ -514,14 +514,14 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
                         // The monospace face follows the content, so a code block is edited in
                         // the shape it is read in — two clicks away on the same page.
                         type === 'code' && 'font-mono text-[12.5px]',
-                        type === 'heading' && 'text-[17px] font-semibold',
+                        type === 'heading' && 'text-[18px] font-semibold',
                       )}
                     />
                     {(blockErrors?.text?.message || TEXT_HINT[type]) && (
                       <p
                         role={blockErrors?.text ? 'alert' : undefined}
                         className={cn(
-                          'm-0 mt-1 text-xs',
+                          'm-0 mt-1 text-[12px]',
                           blockErrors?.text ? 'text-[color:var(--color-failed)]' : 'text-ink-4',
                         )}
                       >
@@ -595,7 +595,7 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
                       : `${TestIdPrefix}.AddBlock.${value}`
                   }
                   className={
-                    'cursor-pointer rounded-[6px] border border-dashed border-line-strong px-2.5 py-0.5 ' +
+                    'cursor-pointer rounded-md border border-dashed border-line-strong px-2.5 py-0.5 ' +
                     'font-mono text-[11px] text-ink-4 hover:border-line-strong hover:text-ink-2 ' +
                     'focus-visible:outline-2 focus-visible:outline-offset-2 ' +
                     'focus-visible:outline-[color:var(--color-given)]'
@@ -609,7 +609,7 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
           </div>
         </DocumentSurface>
 
-        <aside className="w-full shrink-0 rounded-lg border border-line bg-panel p-4 xl:w-[280px]">
+        <aside className="w-full shrink-0 rounded-[8px] border border-line bg-panel p-4 xl:w-[280px]">
           {linkedCases.size > 0 && (
             <section className="mb-5">
               <h2 className={SECTION_HEADING}>
@@ -737,7 +737,7 @@ function TableRowsEditor({
               placeholder={rowIndex === 0 ? 'Column name' : undefined}
               data-testid={`${testId}.Cell`}
               className={
-                'min-w-[90px] flex-1 rounded-[6px] border border-line bg-field px-2 py-1 ' +
+                'min-w-[90px] flex-1 rounded-[8px] border border-line bg-field px-2 py-1 ' +
                 'font-mono text-[12px] text-ink placeholder:text-ink-4 ' +
                 'focus-visible:outline-2 focus-visible:outline-offset-2 ' +
                 'focus-visible:outline-[color:var(--color-given)]'
@@ -851,7 +851,7 @@ function ImageFilePicker({
           </option>
         ))}
       </NativeSelect>
-      <p className="m-0 mt-1 text-xs text-ink-4">One of this page&rsquo;s attachments.</p>
+      <p className="m-0 mt-1 text-[12px] text-ink-4">One of this page&rsquo;s attachments.</p>
     </div>
   );
 }

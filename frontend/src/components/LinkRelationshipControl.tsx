@@ -80,7 +80,7 @@ export function LinkRelationshipControl({
                 size="sm"
                 variant="ghost"
                 disabled={disabled || pending}
-                className="min-w-0 py-0 text-xs font-normal text-ink-2"
+                className="min-w-0 py-0 text-[12px] font-normal text-ink-2"
                 data-testid={testId}
               >
                 {linkRelationshipLabels[value]}
@@ -104,7 +104,7 @@ export function LinkRelationshipControl({
                   <span className={choice === value ? 'font-semibold text-ink' : 'text-ink'}>
                     {linkRelationshipLabels[choice]}
                   </span>
-                  <span className="text-xs text-ink-2">{linkRelationshipHelp[choice]}</span>
+                  <span className="text-[12px] text-ink-2">{linkRelationshipHelp[choice]}</span>
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>

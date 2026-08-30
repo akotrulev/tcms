@@ -28,7 +28,7 @@ export function SessionGate({ children }: { children: ReactNode }) {
     >
       <div className="flex flex-col items-center gap-4">
         {/* The wordmark, so the wait reads as the app starting rather than as a blank page. */}
-        <Identifier variant="strong" className="text-2xl tracking-[0.06em]">
+        <Identifier variant="strong" className="text-[24px] tracking-[.06em]">
           TCMS
         </Identifier>
         {/*
@@ -42,7 +42,7 @@ export function SessionGate({ children }: { children: ReactNode }) {
           aria-hidden
           className="size-5 rounded-full border-2 border-line-strong border-t-steel motion-safe:animate-spin"
         />
-        <p className="m-0 text-sm text-ink-2">Restoring your session…</p>
+        <p className="m-0 text-[13px] text-ink-2">Restoring your session…</p>
       </div>
     </main>
   );

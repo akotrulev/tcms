@@ -90,7 +90,7 @@ export function UnlinkDialog({
           <p className="m-0 text-ink" data-testid={`${testId}.Target`}>
             {target}
           </p>
-          <p className="m-0 text-sm text-ink-2">{consequence}</p>
+          <p className="m-0 text-[13px] text-ink-2">{consequence}</p>
           {/*
             The failure stays on the dialog rather than going to the corner: the refusal this can
             produce is a 403 or a 404 about the row the reader just clicked, and a toast detaches

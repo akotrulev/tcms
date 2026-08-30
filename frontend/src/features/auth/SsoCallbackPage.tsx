@@ -117,7 +117,7 @@ export function SsoCallbackPage() {
           <Skeleton className="size-[9px] rounded-full" />
           <Skeleton className="size-[9px] rounded-full" />
         </div>
-        <h1 className="m-0 mb-[7px] text-base font-semibold text-ink-2">Signing you in</h1>
+        <h1 className="m-0 mb-[7px] text-[16px] font-semibold text-ink-2">Signing you in</h1>
         <p className="m-0 text-[13.5px] leading-[1.6] text-ink-4">
           Checking the response and finding your company. This takes a second or two.
         </p>

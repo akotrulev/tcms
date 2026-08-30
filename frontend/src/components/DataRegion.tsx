@@ -75,7 +75,7 @@ export function DataRegion<T>({
       <div className="my-2" data-testid={`${testId}.Error`}>
         <Banner tone={isRefused ? 'warn' : 'bad'}>
           <div className="min-w-0">
-            <p className="m-0 text-sm font-semibold text-ink">{title}</p>
+            <p className="m-0 text-[13px] font-semibold text-ink">{title}</p>
             <p className={showRetry || isRefused ? 'mt-1 mb-3' : 'mt-1 mb-0'}>{body}</p>
             {/*
               The Refused state's way out (005 C1b). `describeError` has already named the
@@ -112,7 +112,7 @@ export function DataRegion<T>({
               </Button>
             )}
             {correlationId && (
-              <p className="mt-2 mb-0 text-xs text-ink-3">
+              <p className="mt-2 mb-0 text-[12px] text-ink-3">
                 Reference <Identifier variant="muted">{correlationId}</Identifier>
               </p>
             )}
@@ -235,7 +235,7 @@ function DefaultSkeleton() {
   return (
     <div className="flex flex-col gap-2 py-2">
       {[0, 1, 2, 3, 4].map((i) => (
-        <Skeleton key={i} className="h-9 rounded" />
+        <Skeleton key={i} className="h-9 rounded-sm" />
       ))}
     </div>
   );
@@ -245,9 +245,9 @@ function DefaultSkeleton() {
 export function GridSkeleton({ rows = 8 }: { rows?: number }) {
   return (
     <div className="flex flex-col gap-1 p-2">
-      <Skeleton className="h-10 rounded" />
+      <Skeleton className="h-10 rounded-sm" />
       {Array.from({ length: rows }, (_, i) => (
-        <Skeleton key={i} className="h-11 rounded" />
+        <Skeleton key={i} className="h-11 rounded-sm" />
       ))}
     </div>
   );
@@ -316,7 +316,7 @@ export function EmptyState({
   return (
     <div data-testid={testId} className="px-6 py-12 text-center text-ink-2">
       <h3 className="m-0 mb-1 text-[15px] font-semibold text-ink">{copy.title}</h3>
-      {copy.body && <p className="mx-auto mt-0 mb-0 max-w-[46ch] text-sm">{copy.body}</p>}
+      {copy.body && <p className="mx-auto mt-0 mb-0 max-w-[46ch] text-[13px]">{copy.body}</p>}
       {(action || onClearFilters) && (
         <div className="mt-4 flex justify-center gap-2">
           {action}

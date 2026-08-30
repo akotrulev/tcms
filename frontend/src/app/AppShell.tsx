@@ -558,7 +558,13 @@ export function AppShell() {
             tabIndex={-1}
             ref={mainRef}
             className={cn(
-              'flex-1 min-w-0 px-2 py-2 md:px-4 md:py-3',
+              // The render kit gives every strip on the stage the same 22px horizontal gutter —
+              // `.top`, `.filters`, `.title-row`, `.bulk` and `.foot` all share it, and it is the
+              // one spatial constant of the shell. The app drew 16px at desktop and 8px below,
+              // so all forty-two screens sat tighter to the frame than anything they were drawn
+              // from. Below `md` the gutter stays smaller than 22px on purpose: the renders are
+              // desktop-only and a phone cannot spend 44px on margins.
+              'flex-1 min-w-0 px-3 py-2 md:px-[22px] md:py-3',
               // Focusing a large container draws a full-width ring that reads as a rendering bug
               // rather than as a focus cue. The heading the user lands on is the signal; the skip
               // link and every real control keep their own visible indicators.
@@ -660,7 +666,7 @@ function RailContent({
         >
           <Identifier
             variant="strong"
-            className={cn(collapsed ? 'text-[0.8125rem] tracking-normal' : 'text-base tracking-[0.08em]')}
+            className={cn(collapsed ? 'text-[13px] tracking-normal' : 'text-[14px] tracking-[.08em]')}
           >
             TCMS
           </Identifier>
@@ -710,7 +716,7 @@ function RailContent({
         Outside the project frame below it, both of them. `MY_WORK` is personal; `ALL_PROJECTS` is
         what the switcher chooses between — see each one's own note.
       */}
-      <ul className="m-0 list-none p-0 py-2">
+      <ul className={cn('m-0 list-none py-2', collapsed ? 'px-0' : 'px-2')}>
         <li>
           <RailLink item={MY_WORK} onNavigate={onNavigate} collapsed={collapsed} />
         </li>
@@ -744,11 +750,16 @@ function RailContent({
             {collapsed ? (
               index > 0 && <hr className="mx-3 mb-2 border-t border-line" />
             ) : (
-              <p className="m-0 px-4 py-1 font-mono text-[10px] uppercase tracking-[.1em] text-ink-4">
+              <p className="m-0 px-[18px] py-1 font-mono text-[10px] uppercase tracking-[.1em] text-ink-4">
                 {group.heading}
               </p>
             )}
-            <ul className="m-0 list-none p-0">
+            {/*
+              8px of inset so the rows read as pills inside the rail rather than as full-bleed
+              bands — `.rail .grp` in the render kit. With the row's own 10px that puts label text
+              18px from the rail edge, which is where the group heading above it sits too.
+            */}
+            <ul className={cn('m-0 list-none', collapsed ? 'p-0' : 'px-2 py-0')}>
               {group.items.map((item) => (
                 <li key={item.to}>
                   <RailLink item={item} onNavigate={onNavigate} collapsed={collapsed} />
@@ -929,17 +940,15 @@ function RailLink({
         <div
           aria-current={isActive ? 'page' : undefined}
           className={cn(
-            'relative flex items-center py-[7px] text-[13px]',
-            collapsed ? 'justify-center gap-0 px-0' : 'justify-start gap-2.5 px-4',
+            // `.rail .n` in the render kit: an inset pill, `6px 10px`, 5px radius, 9px gap —
+            // and the active state is the tinted fill ALONE. The build kept the fill and added a
+            // 3px steel bar at the row's left edge, which the kit does not draw; two active
+            // treatments on the most-looked-at component in the product.
+            'relative flex items-center rounded-[5px] py-1.5 text-[13px]',
+            collapsed ? 'justify-center gap-0 px-0' : 'justify-start gap-[9px] px-2.5',
             isActive ? 'bg-steel/12 font-medium text-ink' : 'text-ink-2 hover:bg-wash-1',
           )}
         >
-          {isActive && (
-            <span
-              aria-hidden
-              className="absolute left-0 top-[6px] bottom-[6px] w-[3px] rounded-r-sm bg-steel"
-            />
-          )}
           <span className={cn('flex', isActive ? 'text-steel' : 'text-ink-3')}>{item.icon}</span>
           {!collapsed && item.label}
         </div>
@@ -982,7 +991,7 @@ function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
   const isDark = resolved === 'dark';
 
   return (
-    <header className="sticky top-0 z-10 flex h-[52px] shrink-0 items-center gap-1 border-b border-line bg-paper px-2 md:px-4">
+    <header className="sticky top-0 z-10 flex h-[52px] shrink-0 items-center gap-1 border-b border-line bg-paper px-3 md:px-[22px]">
       <Button
         variant="quiet"
         size="icon"
@@ -1044,7 +1053,7 @@ function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
         <DropdownMenuContent align="end">
           <div className="px-2 py-1.5">
             <p className="m-0 text-[13px] font-semibold text-ink">{user?.displayName}</p>
-            <p className="m-0 text-xs text-ink-3">{user?.email}</p>
+            <p className="m-0 text-[12px] text-ink-3">{user?.email}</p>
           </div>
           <div className="my-1 h-px bg-line" />
           {/* The account's own sign-in identities (V58) — self-service, so no gate. */}
@@ -1114,13 +1123,13 @@ function AppFooter() {
       className="border-t border-line px-2 py-2 text-ink-3 md:px-4"
     >
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs">
+        <span className="text-[12px]">
           TCMS <Identifier variant="muted">{__APP_VERSION__}</Identifier>
         </span>
         <RouterLink
           to="/help"
           data-testid="AppFooter.HelpLink"
-          className="text-xs text-steel underline-offset-4 hover:underline"
+          className="text-[12px] text-steel underline-offset-4 hover:underline"
         >
           Documentation
         </RouterLink>

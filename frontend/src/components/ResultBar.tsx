@@ -52,16 +52,16 @@ export function PassRateSummary({
   return (
     <div className="flex flex-wrap gap-8" data-testid={testId}>
       <div>
-        <p className="identifier m-0 text-[2rem] leading-none font-semibold text-ink">
+        <p className="identifier m-0 text-[26px] leading-[1.1] font-medium text-ink">
           {formatPercent(ofExecuted)}
         </p>
-        <span className="text-xs text-ink-2">passed, of {formatCount(executed)} executed</span>
+        <span className="text-[12px] text-ink-2">passed, of {formatCount(executed)} executed</span>
       </div>
       <div>
-        <p className="identifier m-0 text-[2rem] leading-none font-semibold text-ink">
+        <p className="identifier m-0 text-[26px] leading-[1.1] font-medium text-ink">
           {formatPercent(coverage)}
         </p>
-        <span className="text-xs text-ink-2">
+        <span className="text-[12px] text-ink-2">
           executed, of {formatCount(counts.total)} in scope
         </span>
       </div>
@@ -89,7 +89,7 @@ export function ResultCountsCell({
   return (
     <div className="flex items-center gap-2" data-testid={testId}>
       <Identifier className="min-w-[52px] text-right">{formatPercent(rate, 0)}</Identifier>
-      <span className="text-xs text-ink-2">
+      <span className="text-[12px] text-ink-2">
         {formatCount(counts.passed)}/{formatCount(whole)}
       </span>
     </div>
@@ -108,7 +108,7 @@ export function DenominatorToggle({
 }) {
   return (
     <div className="flex items-center gap-1">
-      <span className="text-xs text-ink-2">Pass rate as a share of</span>
+      <span className="text-[12px] text-ink-2">Pass rate as a share of</span>
       {(['EXECUTED', 'TOTAL'] as const).map((option) => (
         <button
           key={option}
@@ -117,7 +117,7 @@ export function DenominatorToggle({
           aria-pressed={value === option}
           data-testid={`${testId}.${option}`}
           className={cn(
-            'cursor-pointer rounded-[2px] border px-2 py-0.5 font-sans text-xs text-ink',
+            'cursor-pointer rounded-[5px] border px-2 py-0.5 font-sans text-[12px] text-ink',
             'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
             value === option
               ? 'border-steel bg-wash-3 font-semibold'

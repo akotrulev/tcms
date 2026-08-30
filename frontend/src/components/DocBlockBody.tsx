@@ -134,7 +134,7 @@ function CodeBody({ block, testId }: { block: DocBlock; testId: string }) {
     // blob — and keeps that scrollbar inside this block, which is the rule the table below follows.
     <pre
       data-testid={`${testId}.Code`}
-      className="m-0 overflow-x-auto rounded border border-line bg-field p-3 font-mono text-[0.85rem] whitespace-pre-wrap text-ink"
+      className="m-0 overflow-x-auto rounded-sm border border-line bg-field p-3 font-mono text-[12.5px] whitespace-pre-wrap text-ink"
     >
       {/* A real <code> inside a real <pre>: the two elements together are what tells a screen
           reader this is preformatted source rather than a paragraph that happens to be monospace. */}
@@ -153,7 +153,7 @@ function TableBody({ block, testId }: { block: DocBlock; testId: string }) {
     return (
       <div className="flex flex-col gap-1">
         <ProseBody text={block.text} />
-        <p className="m-0 text-sm text-ink-2" data-testid={`${testId}.Table.Empty`}>
+        <p className="m-0 text-[13px] text-ink-2" data-testid={`${testId}.Table.Empty`}>
           This table has no rows.
         </p>
       </div>
@@ -162,7 +162,7 @@ function TableBody({ block, testId }: { block: DocBlock; testId: string }) {
 
   const [header, ...body] = rows;
 
-  const CELL = 'border border-line px-2 py-1.5 text-left align-top text-[0.9rem]';
+  const CELL = 'border border-line px-2 py-1.5 text-left align-top text-[13px]';
 
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
@@ -174,7 +174,7 @@ function TableBody({ block, testId }: { block: DocBlock; testId: string }) {
       <div className="max-w-full overflow-x-auto">
         <table data-testid={`${testId}.Table`} className="w-full border-collapse text-ink">
           {block.text ? (
-            <caption className="caption-top pb-1 text-left text-[0.9rem] text-ink-2">
+            <caption className="caption-top pb-1 text-left text-[13px] text-ink-2">
               {block.text}
             </caption>
           ) : null}
@@ -314,7 +314,7 @@ function AttachmentImage({
         aria-busy="true"
         aria-label={alt}
         data-testid={`${testId}.Image.Loading`}
-        className="h-[180px] max-w-[640px] rounded"
+        className="h-[180px] max-w-[640px] rounded-sm"
       />
     );
   }
@@ -327,12 +327,12 @@ function AttachmentImage({
         // image in a specification is never decorative.
         alt={alt}
         data-testid={`${testId}.Image`}
-        className="h-auto max-w-full rounded border border-line"
+        className="h-auto max-w-full rounded-sm border border-line"
       />
       {/* The alt text again, visibly. In a specification the sentence describing a diagram is part
           of the specification — a reader quoting the document needs it, and hiding it in an
           attribute means only screen-reader users ever get it. */}
-      <p className="m-0 text-sm text-ink-2" data-testid={`${testId}.Image.Caption`}>
+      <p className="m-0 text-[13px] text-ink-2" data-testid={`${testId}.Image.Caption`}>
         {alt}
       </p>
     </div>
@@ -345,6 +345,6 @@ function ProseBody({ text }: { text: string }) {
     // `whitespace-pre-wrap`, so a paragraph somebody wrote across several lines reads as they
     // wrote it. The editor stores the newlines; a renderer that collapsed them would show a
     // different document from the one being edited two clicks away.
-    <p className="m-0 min-w-0 flex-1 text-[0.95rem] whitespace-pre-wrap text-ink">{text}</p>
+    <p className="m-0 min-w-0 flex-1 text-[14.5px] whitespace-pre-wrap text-ink">{text}</p>
   );
 }

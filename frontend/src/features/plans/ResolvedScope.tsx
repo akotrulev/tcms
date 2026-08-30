@@ -82,7 +82,7 @@ export function ResolvedScope({
 
   return (
     <div className="flex flex-col gap-1" data-testid={testId}>
-      <span className="text-xs text-ink-2">
+      <span className="text-[12px] text-ink-2">
         {dirty
           ? /*
               The honest sentence for a reference the author has just added. The rows ARE live
@@ -111,7 +111,7 @@ export function ResolvedScope({
         skeleton={
           <div className="flex flex-col gap-1 pl-4">
             {[0, 1, 2].map((row) => (
-              <Skeleton key={row} className="h-4 w-3/5 rounded" />
+              <Skeleton key={row} className="h-4 w-3/5 rounded-sm" />
             ))}
           </div>
         }
@@ -136,12 +136,12 @@ export function ResolvedScope({
                   ├─
                 </span>
                 <Identifier>{row.key}</Identifier>
-                <span className="text-sm text-ink">{row.title}</span>
+                <span className="text-[13px] text-ink">{row.title}</span>
                 {/*
                   Which reference brought it in. Without it, taking a suite off and watching three
                   rows vanish is a surprise; with it, the row said so before the click.
                 */}
-                <span className="text-xs text-ink-2">({row.via.join(', ')})</span>
+                <span className="text-[12px] text-ink-2">({row.via.join(', ')})</span>
               </div>
             ))}
           </div>

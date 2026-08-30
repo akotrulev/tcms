@@ -17,7 +17,7 @@ export function SkipToContentLink() {
     <a
       href="#main-content"
       data-testid="SkipToContent"
-      className="absolute top-2 left-2 z-1400 -translate-y-[200%] rounded bg-steel px-4 py-2 text-sm font-semibold text-white no-underline focus:translate-y-0 focus-visible:translate-y-0 motion-safe:transition-transform motion-safe:duration-120 motion-safe:ease-out"
+      className="absolute top-2 left-2 z-1400 -translate-y-[200%] rounded-sm bg-steel px-4 py-2 text-[13px] font-semibold text-white no-underline focus:translate-y-0 focus-visible:translate-y-0 motion-safe:transition-transform motion-safe:duration-120 motion-safe:ease-out"
     >
       Skip to content
     </a>

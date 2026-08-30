@@ -15,7 +15,7 @@ function SelectTrigger({ className, children, ...props }: ComponentProps<typeof 
   return (
     <SelectPrimitive.Trigger
       className={cn(
-        'flex w-full items-center justify-between gap-2 rounded-[6px] border border-transparent ' +
+        'flex w-full items-center justify-between gap-2 rounded-[8px] border border-transparent ' +
           'px-3 py-1.5 text-[13px] text-ink hover:border-line-strong ' +
           'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)] ' +
           'disabled:pointer-events-none disabled:opacity-45 data-[placeholder]:text-ink-4',
@@ -47,8 +47,8 @@ function SelectContent({ className, children, position = 'popper', ...props }: C
       <SelectPrimitive.Content
         position={position}
         className={cn(
-          'z-50 min-w-[8rem] overflow-hidden rounded-md border border-line bg-panel ' +
-            'shadow-[0_16px_32px_-8px_rgb(0_0_0/60%)]',
+          'z-50 min-w-[8rem] overflow-hidden rounded-[8px] border border-line bg-panel ' +
+            'shadow-e3',
           position === 'popper' &&
             'data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1',
           className,
@@ -64,7 +64,7 @@ function SelectContent({ className, children, position = 'popper', ...props }: C
 function SelectLabel({ className, ...props }: ComponentProps<typeof SelectPrimitive.Label>) {
   return (
     <SelectPrimitive.Label
-      className={cn('px-2 py-1.5 text-xs font-medium text-ink-4', className)}
+      className={cn('px-2 py-1.5 text-[12px] font-medium text-ink-4', className)}
       {...props}
     />
   );
@@ -74,7 +74,7 @@ function SelectItem({ className, children, ...props }: ComponentProps<typeof Sel
   return (
     <SelectPrimitive.Item
       className={cn(
-        'relative flex cursor-pointer select-none items-center rounded-[4px] px-2 py-1.5 text-[13px] ' +
+        'relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-[13px] ' +
           'text-ink-2 outline-none data-[highlighted]:bg-wash-2 data-[highlighted]:text-ink ' +
           'data-[disabled]:pointer-events-none data-[disabled]:opacity-45',
         className,

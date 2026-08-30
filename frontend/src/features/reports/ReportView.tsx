@@ -88,7 +88,7 @@ export function ReportView({ document }: { document: ReportDocument }) {
       */}
       {report.sections.length === 0 ? (
         <Panel testId={`${TestId}.NoSections`} dense>
-          <p className="m-0 text-sm text-ink-2 p-4">
+          <p className="m-0 text-[13px] text-ink-2 p-4">
             This report has no sections. Nothing matched what it was asked to compute over — the
             header above says what that was.
           </p>
@@ -122,7 +122,7 @@ function SectionPanel({ section }: { section: ReportSection }) {
         */}
         {section.narrative && (
           <p
-            className={cn('m-0 text-sm text-ink-2', table && 'px-4 pt-4')}
+            className={cn('m-0 text-[13px] text-ink-2', table && 'px-4 pt-4')}
             data-testid={`${TestId}.Section.Narrative`}
           >
             {section.narrative}
@@ -187,22 +187,22 @@ function SeriesChart({ series }: { series: ReportSeries }) {
 
   return (
     <div className="flex flex-col gap-1.5" data-testid={`${TestId}.Series`}>
-      <span className="m-0 text-xs text-ink-2 font-semibold">
+      <span className="m-0 text-[12px] text-ink-2 font-semibold">
         {series.name}
       </span>
       {series.points.map((point, index) => (
         <div className="flex items-center gap-2" key={`${index}-${point.label}`} data-testid={`${TestId}.Series.Point`}>
-          <span className="m-0 text-xs shrink-0" style={{ width: 140 }}>
+          <span className="m-0 text-[12px] shrink-0" style={{ width: 140 }}>
             {point.label}
           </span>
-          <div className="h-2.5 flex-1 rounded bg-field">
+          <div className="h-2.5 flex-1 rounded-sm bg-field">
             <div
               data-testid={`${TestId}.Series.Bar`}
-              className="h-full rounded bg-[color:var(--color-viz-1)]"
+              className="h-full rounded-sm bg-[color:var(--color-viz-1)]"
               style={{ width: `${percents[index]}%` }}
             />
           </div>
-          <span className="m-0 text-xs text-right shrink-0" style={{ width: 64 }}>
+          <span className="m-0 text-[12px] text-right shrink-0" style={{ width: 64 }}>
             {point.value}
           </span>
         </div>

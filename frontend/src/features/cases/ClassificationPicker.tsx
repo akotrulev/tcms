@@ -217,7 +217,7 @@ function DimensionControl({
               onChange={(event) => onToggle(value.id, event.target.checked)}
               data-testid={`${testId}.Value`}
               className={cn(
-                'size-4 shrink-0 cursor-pointer rounded-[4px] accent-[color:var(--color-steel)]',
+                'size-4 shrink-0 cursor-pointer rounded-sm accent-[color:var(--color-steel)]',
                 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
                 'disabled:cursor-not-allowed disabled:opacity-45',
               )}
@@ -343,7 +343,7 @@ function Option({
       data-testid={testId}
       style={depth > 0 ? { paddingLeft: 8 + depth * 16 } : undefined}
       className={cn(
-        'cursor-pointer rounded-[4px] border-0 bg-transparent px-2 py-1 text-left text-[13px]',
+        'cursor-pointer rounded-sm border-0 bg-transparent px-2 py-1 text-left text-[13px]',
         'hover:bg-wash-2 focus-visible:outline-2 focus-visible:outline-offset-[-2px]',
         'focus-visible:outline-[color:var(--color-given)]',
         selected ? 'text-steel' : 'text-ink-2',

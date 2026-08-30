@@ -659,7 +659,7 @@ export function RegisterArtifactDialog({
                   {picked ? 'Choose a different file' : 'Choose a file'}
                 </Button>
                 <p
-                  className={cn('m-0 mt-1 text-xs', errors.file ? 'text-[color:var(--color-failed)]' : 'text-ink-4')}
+                  className={cn('m-0 mt-1 text-[12px]', errors.file ? 'text-[color:var(--color-failed)]' : 'text-ink-4')}
                   role={errors.file ? 'alert' : undefined}
                   data-testid={`${TestIdPrefix}.FileHelp`}
                 >
@@ -727,7 +727,7 @@ export function RegisterArtifactDialog({
               />
               <span className="text-[13px] text-ink">This is a sign-off record</span>
             </label>
-            <p className="m-0 text-xs text-ink-4">
+            <p className="m-0 text-[12px] text-ink-4">
               Sign-off records are kept as they were signed: they cannot be edited or removed, and
               a correction is registered as a replacement. This cannot be changed later.
             </p>
@@ -1076,7 +1076,7 @@ export function DeleteArtifactDialog({
         <div className="flex flex-col mt-2 gap-4">
           <div>
             <div className="font-medium">{artifact.title}</div>
-            <p className="m-0 mt-1 text-xs text-ink-4">
+            <p className="m-0 mt-1 text-[12px] text-ink-4">
               {artifact.kind === 'FILE'
                 ? 'This deletes the uploaded file as well. The register keeps no copy.'
                 : 'This removes the register entry. Whatever it points at is not affected.'}

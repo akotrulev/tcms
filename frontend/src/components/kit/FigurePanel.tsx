@@ -48,7 +48,7 @@ export function FigurePanel({ title, subtitle, actions, children, className, tes
   return (
     <section
       data-testid={testId}
-      className={cn('min-w-0 rounded-lg border border-line bg-panel px-4 py-3.5', className)}
+      className={cn('min-w-0 rounded-[8px] border border-line bg-panel px-4 py-3.5', className)}
     >
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">

@@ -560,9 +560,9 @@ function BulkPreview({ result }: { result: BulkResult }) {
         tone={result.skipped.length > 0 || result.declinesEnded.length > 0 ? 'warn' : 'steel'}
         className="[&>div]:w-full"
       >
-        <p className="m-0 mb-1 text-sm font-semibold text-ink">Preview</p>
+        <p className="m-0 mb-1 text-[13px] font-semibold text-ink">Preview</p>
         <div className="flex flex-col gap-2">
-          <p className="m-0 text-sm">
+          <p className="m-0 text-[13px]">
             <strong>{formatCount(result.changed.length)}</strong> will change ·{' '}
             <strong>{formatCount(result.unchanged.length)}</strong> already match ·{' '}
             <strong>{formatCount(result.skipped.length)}</strong> will be skipped
@@ -570,7 +570,7 @@ function BulkPreview({ result }: { result: BulkResult }) {
 
           {result.changed.length > 0 && (
             <div>
-              <span className="m-0 text-xs font-semibold">
+              <span className="m-0 text-[12px] font-semibold">
                 Changing
               </span>
               <div className="flex flex-wrap gap-1.5 mt-1">
@@ -580,7 +580,7 @@ function BulkPreview({ result }: { result: BulkResult }) {
                   </Identifier>
                 ))}
                 {result.changed.length > 12 && (
-                  <span className="m-0 text-xs">+{result.changed.length - 12} more</span>
+                  <span className="m-0 text-[12px]">+{result.changed.length - 12} more</span>
                 )}
               </div>
             </div>
@@ -593,7 +593,7 @@ function BulkPreview({ result }: { result: BulkResult }) {
               no way to find out which three. */}
           {result.declinesEnded.length > 0 && (
             <div>
-              <span className="m-0 text-xs font-semibold">
+              <span className="m-0 text-[12px] font-semibold">
                 Losing a condition exception
               </span>
               <div className="flex flex-wrap gap-1.5 mt-1">
@@ -603,12 +603,12 @@ function BulkPreview({ result }: { result: BulkResult }) {
                   </Identifier>
                 ))}
                 {result.declinesEnded.length > 12 && (
-                  <span className="m-0 text-xs">
+                  <span className="m-0 text-[12px]">
                     +{result.declinesEnded.length - 12} more
                   </span>
                 )}
               </div>
-              <span className="m-0 text-xs block mt-1">
+              <span className="m-0 text-[12px] block mt-1">
                 These cases turn an inherited condition off. The folder they are moving to does not
                 impose it, so the exception ends — and moving them back will not bring it back.
               </span>
@@ -619,13 +619,13 @@ function BulkPreview({ result }: { result: BulkResult }) {
               with no way to find out which two, or what to do about them. */}
           {result.skipped.length > 0 && (
             <div>
-              <span className="m-0 text-xs font-semibold">
+              <span className="m-0 text-[12px] font-semibold">
                 Skipped
               </span>
               <div className="flex flex-col m-0 mt-1 pl-4 gap-0.5">
                 {result.skipped.map((item) => (
                   <li key={item.key}>
-                    <span className="m-0 text-xs">
+                    <span className="m-0 text-[12px]">
                       <Identifier variant="muted">{item.key}</Identifier> — {item.reason}
                     </span>
                   </li>

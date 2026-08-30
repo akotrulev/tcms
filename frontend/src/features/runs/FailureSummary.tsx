@@ -75,7 +75,7 @@ export function FailureSummary({
           The headline, in counts and in words. `formatCount` rather than a bare number so the
           thousands separator matches every other figure in the product.
         */}
-        <p className="m-0 text-sm" data-testid="RunDetail.Failures.Headline">
+        <p className="m-0 text-[13px]" data-testid="RunDetail.Failures.Headline">
           {failed.length === 0 && blocked.length === 0
             ? 'Nothing failed and nothing was blocked in this run.'
             : [
@@ -90,7 +90,7 @@ export function FailureSummary({
         {failed.length === 0 && blocked.length === 0 ? (
           // Good news, worded as good news. An empty table here reads as a panel that failed to
           // load, which is the one thing this state must not be mistaken for.
-          <p className="m-0 text-sm text-ink-2" data-testid="RunDetail.Failures.None">
+          <p className="m-0 text-[13px] text-ink-2" data-testid="RunDetail.Failures.None">
             {(data.counts.notRun ?? 0) > 0
               ? 'Nothing has failed so far — but the run is not finished, so this is not the final answer.'
               : 'Every case in this run produced a result and none of them failed.'}
@@ -113,7 +113,7 @@ export function FailureSummary({
                   testId="RunDetail.Failures.Steps"
                   state={steps}
                   skeleton={
-                    <span className="m-0 text-xs text-ink-2">
+                    <span className="m-0 text-[12px] text-ink-2">
                       Reading where each case failed…
                     </span>
                   }
@@ -139,7 +139,7 @@ export function FailureSummary({
                 </div>
 
                 {truncated > 0 && (
-                  <span className="m-0 text-xs text-ink-2" data-testid="RunDetail.Failures.Truncated">
+                  <span className="m-0 text-[12px] text-ink-2" data-testid="RunDetail.Failures.Truncated">
                     Every failed case is listed. Step detail was read for the first{' '}
                     {formatCount(STEP_DETAIL_LIMIT)} — open the other {formatCount(truncated)} to see
                     where they failed.
@@ -150,7 +150,7 @@ export function FailureSummary({
 
             {blocked.length > 0 && (
               <div className="flex flex-col gap-2">
-                <span className="m-0 text-xs text-ink-2">
+                <span className="m-0 text-[12px] text-ink-2">
                   Blocked — nobody could get far enough to find out whether these pass. Not counted
                   as failures.
                 </span>
@@ -228,18 +228,18 @@ function FailedCaseRow({
       <CaseLine execution={execution} projectId={projectId} runId={runId} />
       <div className="pl-4 mt-1 border-l-2 border-line">
         {pending ? null : outcome === null ? (
-          <span className="m-0 text-xs text-ink-2">
+          <span className="m-0 text-[12px] text-ink-2">
             Open the case to see where it failed.
           </span>
         ) : outcome.totalCount === 0 ? (
           // Exploratory cases carry no structured steps at all. Saying "0 of 0 steps failed" would
           // read as a case whose steps all passed while the case itself failed.
-          <span className="m-0 text-xs text-ink-2" data-testid={`${StepRowTestId}.None`}>
+          <span className="m-0 text-[12px] text-ink-2" data-testid={`${StepRowTestId}.None`}>
             No structured steps — the verdict is on the case as a whole.
           </span>
         ) : (
           <div className="flex flex-col gap-1">
-            <span className="m-0 text-xs text-ink-2" data-testid={`${StepRowTestId}.Counts`}>
+            <span className="m-0 text-[12px] text-ink-2" data-testid={`${StepRowTestId}.Counts`}>
               {formatCount(outcome.failed.length)} of {plural(outcome.totalCount, 'step')} failed
               {outcome.unmarkedCount > 0 && ` · ${formatCount(outcome.unmarkedCount)} not marked`}
             </span>
@@ -248,12 +248,12 @@ function FailedCaseRow({
                 {/* The position as the tester saw it: `position` is 0-based on the wire. */}
                 <Identifier variant="muted">{(step.position ?? 0) + 1}</Identifier>
                 <div className="min-w-0">
-                  <p className="m-0 text-sm" style={{ color: 'var(--color-failed)' }}>
+                  <p className="m-0 text-[13px]" style={{ color: 'var(--color-failed)' }}>
                     {step.keyword ? `${step.keyword} ` : ''}
                     {step.action}
                   </p>
                   {step.comment && (
-                    <span className="m-0 text-xs text-ink-2 block" data-testid={`${StepRowTestId}.Comment`}>
+                    <span className="m-0 text-[12px] text-ink-2 block" data-testid={`${StepRowTestId}.Comment`}>
                       {step.comment}
                     </span>
                   )}

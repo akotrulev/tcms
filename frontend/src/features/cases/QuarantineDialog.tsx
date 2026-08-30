@@ -127,7 +127,7 @@ export function QuarantineDialog({
                 argument in one sentence: a denominator that moved without saying so is worse than
                 no figure at all.
               */}
-              <p className="m-0 text-sm text-ink-2">
+              <p className="m-0 text-[13px] text-ink-2">
                 The test stays in every run and every report, and its results still count. Quarantine
                 records the decision to stop treating its failures as a signal — it is a note for
                 the people reading them, not an exclusion.
@@ -153,7 +153,7 @@ export function QuarantineDialog({
               </Field>
             </>
           ) : (
-            <p className="m-0 text-sm text-ink-2">
+            <p className="m-0 text-[13px] text-ink-2">
               The reason recorded with the quarantine is cleared. It stays in the audit log — the
               row keeps only the current decision, which is why the log is where the history of an
               exclusion lives.

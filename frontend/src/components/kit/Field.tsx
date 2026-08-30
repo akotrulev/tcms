@@ -50,7 +50,16 @@ export function Field({ label, htmlFor, help, error, children, className }: Fiel
 
   return (
     <div className={cn('min-w-0', className)}>
-      <label htmlFor={htmlFor} className="mb-1 block text-[13px] font-medium text-ink-2">
+      {/*
+        The render kit's `label.f` verbatim: mono, 11px, `.06em`, uppercase, `--ink-4`, 5px below.
+        It used to be 13px sans medium at `--ink-2`, which is the value tier — so the label carried
+        the same weight as the answer it labels. Every declared property differed; this is the one
+        idiom, and the two screens that had spelled their own were folded into it.
+      */}
+      <label
+        htmlFor={htmlFor}
+        className="mb-[5px] block font-mono text-[11px] tracking-[.06em] text-ink-4 uppercase"
+      >
         {label}
       </label>
       {described}
@@ -58,7 +67,7 @@ export function Field({ label, htmlFor, help, error, children, className }: Fiel
         <p
           id={messageId}
           role={error ? 'alert' : undefined}
-          className={cn('m-0 mt-1 text-xs', error ? 'text-[color:var(--color-failed)]' : 'text-ink-4')}
+          className={cn('m-0 mt-1 text-[12px]', error ? 'text-[color:var(--color-failed)]' : 'text-ink-4')}
         >
           {message}
         </p>

@@ -218,7 +218,7 @@ export function DefectPanel({
       )}
 
       {defects.length === 0 ? (
-        <p className="m-0 text-sm text-ink-2">
+        <p className="m-0 text-[13px] text-ink-2">
           No defect linked to this result.
         </p>
       ) : (
@@ -265,7 +265,7 @@ function DefectRow({
         </span>
       </a>
       {defect.statusCache && (
-        <span className="m-0 text-xs text-ink-2">
+        <span className="m-0 text-[12px] text-ink-2">
           {defect.statusCache}
         </span>
       )}
@@ -441,7 +441,7 @@ function FileDefectDialog({
       </DialogHeader>
       <div>
         <div className="flex flex-col gap-4 mt-2">
-          <p className="m-0 text-sm text-ink-2">
+          <p className="m-0 text-[13px] text-ink-2">
             Filed in your name, with your own tracker account.
           </p>
           <Field

@@ -334,7 +334,7 @@ function SuiteFormDialog({
               rather than by omission.
             */}
             <div className="flex flex-col gap-2">
-              <p className="m-0 text-sm text-ink-2">
+              <p className="m-0 text-[13px] text-ink-2">
                 Conditions are inherited by the cases <strong>filed</strong> in this suite. A case
                 added individually, or matched by a tag rule, does not pick them up.
               </p>

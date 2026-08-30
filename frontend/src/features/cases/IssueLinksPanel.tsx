@@ -201,7 +201,7 @@ function LinkIssueDialog({
             <div data-testid="CaseDetail.IssueLinks.Unavailable">
 <Banner tone="steel">
               <div className="flex flex-col gap-2 items-start">
-                <p className="m-0 text-sm">
+                <p className="m-0 text-[13px]">
                   {search.data?.state === 'NOT_CONNECTED'
                     ? trackerUnavailableReasons.NOT_CONNECTED
                     : trackerUnavailableReasons.UNAVAILABLE}
@@ -233,13 +233,13 @@ function LinkIssueDialog({
                     <span className="block text-[13px] text-ink">
                       {issue.key} · {issue.title}
                     </span>
-                    <span className="block text-xs text-ink-2">{issue.statusName}</span>
+                    <span className="block text-[12px] text-ink-2">{issue.statusName}</span>
                   </button>
                 </li>
               ))}
               {search.data.issues.length === 0 && (
                 <div className="px-4 py-2">
-                  <p className="m-0 text-sm text-ink-2">
+                  <p className="m-0 text-[13px] text-ink-2">
                     Nothing matched.
                   </p>
                 </div>
