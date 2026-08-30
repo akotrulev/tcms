@@ -320,7 +320,24 @@ class SchemaConventionTest extends IntegrationTestBase {
                 // LEVEL SECURITY, and the predicate above byte for byte. V2 enables the policy
                 // AFTER its backfill loop, deliberately — see that migration's header for the
                 // silent-INSERT trap that ordering avoids.
-                .isEqualTo(75);
+                //
+                // 84 since V3 (plan 011, module M1) — issue, issue_type, issue_status,
+                // issue_transition, issue_link, issue_comment, issue_watcher, issue_doc_link and
+                // issue_fact. All nine are company-owned and none is an exception, INCLUDING
+                // issue_fact: it is a read projection with no foreign keys at all, which is the one
+                // shape where "it is only a copy" could argue itself out of a policy — and would
+                // be wrong, because a projection every downstream module joins is exactly where a
+                // missing predicate leaks one client's backlog into another's report.
+                //
+                // V3 enables these BEFORE its two backfill loops, unlike V2, and that is safe
+                // rather than a divergence: every loop in that file sets app.current_company before
+                // it reads or writes, so the policy is satisfied on both sides. V2's backfill had
+                // no per-row company context to set, which is why it ordered the other way.
+                //
+                // work_item and work_item_link are still counted here and go in V4, with the nine
+                // com.tcms.work classes that map them — a database without work_item cannot boot a
+                // context that still declares the entity, so the drop travels with the deletion.
+                .isEqualTo(84);
     }
 
     @Test
