@@ -131,9 +131,20 @@ export function LifecycleChip({
 }
 
 /**
- * Priority reads as text with a leading rule rather than as a coloured chip — in a grid
- * where every row also carries a result status, a second saturated chip per row turns the
- * table into confetti and the result stops standing out.
+ * Priority reads as text with a leading rule rather than as a coloured chip — in a grid where every
+ * row also carries a result status, a second saturated chip per row turns the table into confetti
+ * and the result stops standing out.
+ *
+ * ~~CRITICAL takes `--color-failed` and HIGH takes `--color-blocked`.~~ → **superseded, 2026-08-30
+ * (renders audit 1.6).** The confetti argument is a fair argument against a *chip* and was never an
+ * argument for reusing the result hues. Design language rule 5 gives those two exactly one meaning
+ * each, shared deliberately between the Gherkin keywords and the result statuses — and on this very
+ * row the Last result column is drawing them for that meaning. Two meanings for red in one row is
+ * what rule 5 exists to prevent, and the render draws priority as plain text.
+ *
+ * So the rule carries weight and one non-reserved hue: `--color-steel`, the action colour, for
+ * CRITICAL only, and the border colour for everything else. `statusPalette.test.ts` measures the
+ * reserved set; this component's test asserts it stays out of it.
  */
 export function PriorityLabel({ priority, testId }: { priority: Priority; testId?: string }) {
   const emphasis = priority === 'CRITICAL' || priority === 'HIGH';
@@ -143,7 +154,7 @@ export function PriorityLabel({ priority, testId }: { priority: Priority; testId
       className={cn(
         'inline-flex items-center gap-1.5',
         emphasis ? 'font-semibold' : 'font-normal',
-        priority === 'CRITICAL' ? 'text-[color:var(--color-failed)]' : 'text-ink',
+        priority === 'CRITICAL' ? 'text-[color:var(--color-steel)]' : 'text-ink',
       )}
     >
       <span
@@ -152,9 +163,9 @@ export function PriorityLabel({ priority, testId }: { priority: Priority; testId
         style={{
           backgroundColor:
             priority === 'CRITICAL'
-              ? 'var(--color-failed)'
+              ? 'var(--color-steel)'
               : priority === 'HIGH'
-                ? 'var(--color-blocked)'
+                ? 'color-mix(in oklab, var(--color-steel) 55%, transparent)'
                 : 'var(--color-border-strong)',
         }}
       />
@@ -334,7 +345,14 @@ export function HealthChip({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Pill colorVar={color} tinted={false} testId={testId} aria-label={healthHelp[signal]}>
+        {/*
+          Tinted, like every other badge — renders audit 1.5. §5: a badge is state the system owns,
+          a chip is a value the reader owns and is a button. Health is computed by the server
+          (`CaseHealth.signals()`), so it is a badge; it was already not operable, but the outlined
+          treatment read as a chip beside the operable ones. The name stays `HealthChip` only
+          because renaming it touches nine call sites for no reader's benefit.
+        */}
+        <Pill colorVar={color} testId={testId} aria-label={healthHelp[signal]}>
           {healthLabels[signal]}
         </Pill>
       </TooltipTrigger>

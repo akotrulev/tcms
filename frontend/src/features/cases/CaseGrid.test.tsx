@@ -175,3 +175,31 @@ describe('the kit’s Table rule (design language §5)', () => {
     expect(screen.queryAllByText(/Last run failed on/)).toHaveLength(1);
   });
 });
+
+describe('the grid gives its columns room, and says what is on screen', () => {
+  it('declares a floor no narrower than the widths it hints at', () => {
+    // The audit's finding 1.3: 1588px of `meta.width` hints inside a 1240px floor, and
+    // `table-layout: auto` took the difference out of the one column allowed to wrap. Title
+    // measured 137px at 1680.
+    renderGrid()
+    const table = screen.getByTestId('Cases.Grid').querySelector('table')!
+    const declared = [...table.querySelectorAll('thead th')].reduce(
+      (sum, th) => sum + parseInt((th as HTMLElement).style.width || '0', 10),
+      0,
+    )
+    const floor = Number(/min-w-\[(\d+)px\]/.exec(table.className)?.[1] ?? 0)
+    expect(floor).toBeGreaterThanOrEqual(declared)
+  })
+
+  it('gives the title a real floor and not only a hint', () => {
+    renderGrid()
+    expect(screen.getAllByTestId('Cases.Row.Title')[0].className).toContain('min-w-[300px]')
+  })
+
+  it('states the count, the sort and the keys under the table', () => {
+    renderGrid()
+    const foot = screen.getByTestId('Cases.Foot')
+    expect(foot).toHaveTextContent('sorted by')
+    expect(foot).toHaveTextContent('Enter open')
+  })
+})

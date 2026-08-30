@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { HealthChip } from './StatusChip';
+import { HealthChip, PriorityLabel } from './StatusChip';
 import { healthLabels } from '../lib/labels';
 import { severityVar } from '../lib/statusColors';
 import type { HealthSignalSeverity } from '../api/types';
@@ -139,3 +139,29 @@ describe('HealthChip — renders the severity it is given, and decides nothing',
     expect(healthLabels.UNDECLARED_AUTOMATION).toBe('Automated, but not marked so');
   });
 });
+
+describe('the reserved result hues belong to results (rule 5)', () => {
+  it('spends neither --color-failed nor --color-blocked on priority', () => {
+    // Renders audit 1.6. Rule 5 gives those two hues exactly one meaning each, shared between the
+    // Gherkin keywords and the result statuses — and on a case row the Last result column is
+    // drawing them for that meaning. Priority painting CRITICAL red put two meanings for red in
+    // one row, which is what rule 5 exists to prevent.
+    const { container } = render(<PriorityLabel priority="CRITICAL" />)
+    expect(container.innerHTML).not.toContain('--color-failed')
+    expect(container.innerHTML).not.toContain('--color-blocked')
+  })
+
+  it('spends neither on HIGH either', () => {
+    const { container } = render(<PriorityLabel priority="HIGH" />)
+    expect(container.innerHTML).not.toContain('--color-failed')
+    expect(container.innerHTML).not.toContain('--color-blocked')
+  })
+
+  it('still separates a critical case from an ordinary one', () => {
+    // The guard: dropping the hues must not flatten the column into undifferentiated text, which
+    // is the other way to fail the render.
+    const { container: critical } = render(<PriorityLabel priority="CRITICAL" />)
+    const { container: low } = render(<PriorityLabel priority="LOW" />)
+    expect(critical.innerHTML).not.toBe(low.innerHTML)
+  })
+})

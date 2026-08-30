@@ -16,10 +16,18 @@ import { Link as RouterLink } from 'react-router-dom';
 import type { TestCaseSummary } from '../../api/types';
 import { AutomationLabel, HealthChip, LifecycleChip, PriorityLabel, StatusDot } from '../../components/StatusChip';
 import { Identifier } from '../../components/Identifier';
-import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from '../../components/kit';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableFoot,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from '../../components/kit';
 import { Checkbox } from '../../components/ui';
 import { cn } from '../../lib/cn';
-import { formatAge, formatCount, formatDateTime } from '../../lib/format';
+import { formatAge, formatCount, formatDateTime, plural } from '../../lib/format';
 import { healthLabels } from '../../lib/labels';
 import { DEFAULT_SORT } from './useCaseFilters';
 
@@ -141,7 +149,9 @@ function caseColumns(projectId: string) {
         <RouterLink
           to={`/projects/${projectId}/cases/${row.original.id}`}
           data-testid={`${TestIdPrefix}.Row.Title`}
-          className="text-ink no-underline hover:underline"
+          // `min-w` and not only `meta.width`: the width is a hint the browser is free to take
+          // back from the one column that wraps, and it did. See the table's own note.
+          className="block min-w-[300px] text-ink no-underline hover:underline"
         >
           {row.original.title}
         </RouterLink>
@@ -214,6 +224,17 @@ function caseColumns(projectId: string) {
             className="inline-flex items-center gap-2"
             data-testid={`${TestIdPrefix}.Row.LastResult`}
           >
+            {/*
+              **Still a dot and a date, not the render's `7/8` proportion bar** — renders audit 1.4,
+              deliberately not implemented here. The render draws a 56px stacked bar plus a count in
+              mono, which is §5's "proportion before number", and the product owns a conformant
+              `kit/ResultBar` to draw it with. What it does not own is the data: `lastResult` on the
+              wire is ONE status (`TestCaseSummary.lastResult` — `statusKind`, `executedAt`,
+              `releaseVersion`, `configurationName`) and carries no counts. A `ResultBar` over a
+              single datum is one coloured rectangle claiming a proportion that was never measured,
+              which is worse than the dot it would replace. Closing this needs pass/fail counts on
+              the summary contract; it is on plan 008 T19's deferred list, not silently dropped.
+            */}
             <StatusDot kind={row.original.lastResult.statusKind} />
             <span className="text-[12px] text-ink-3">{formatAge(row.original.lastResult.executedAt)}</span>
           </span>
@@ -409,9 +430,40 @@ export function CaseGrid({
   const first = total === 0 ? 0 : page * size + 1;
   const last = page * size + modelRows.length;
 
+  /**
+   * The foot's sort clause, read from the table's own sorting state rather than written by hand —
+   * so it cannot claim an order the rows are not in. Design language rule 2 asks the footer to
+   * state what is on screen and what the keyboard can do; the renders audit found that on one
+   * screen out of forty-two, with this grid's count floating above the table and nothing naming
+   * the sort at all.
+   */
+  const sortedColumn = sorting[0] ? table.getColumn(sorting[0].id)?.columnDef.header : undefined;
+  const sortDescription =
+    typeof sortedColumn === 'string'
+      ? // "ascending"/"descending" rather than the render's "newest first": that reading is only
+        // true of a date column, and this clause has to be true of Title and Owner too. A footer
+        // that says "newest first" about an alphabetical sort is the same defect as one that
+        // names a sort the rows are not in.
+        `sorted by ${sortedColumn}, ${sorting[0].desc ? 'descending' : 'ascending'}`
+      : sortField === DEFAULT_SORT.split(',')[0]
+        ? // The default is the server's stable insertion order, which has no column of its own
+          // (see `knownFields` above) — but it is still an order, and saying nothing about it
+          // leaves the foot claiming less than it knows.
+          'sorted by Key, in the order they were created'
+        : undefined;
+
   return (
     <div data-testid={`${TestIdPrefix}.Grid`}>
-      <Table className="min-w-[1240px]">
+      {/*
+        The floor is the SUM of the declared widths (1588), not a round number under it.
+        `meta.width` is a hint to `table-layout: auto`, and with 1588px of hints inside a 1240px
+        floor the browser satisfied the floor and then squeezed the one column allowed to wrap:
+        the renders audit measured Title at **137px** at a 1680px viewport, against Suite's 143 and
+        Health's 182, with titles wrapping to four and five lines. That is UX#113's essential-text
+        rule failed by layout — the exact defect design language §9.5 predicted for this grid, and
+        it is why Title also carries a real `min-width` in its cell below rather than only a hint.
+      */}
+      <Table className="min-w-[1588px]">
         <TableHead>
           {table.getHeaderGroups().map((group) => (
             <TableRow key={group.id}>
@@ -460,6 +512,15 @@ export function CaseGrid({
           ))}
         </TableBody>
       </Table>
+
+      <TableFoot
+        data-testid={`${TestIdPrefix}.Foot`}
+        summary={`${plural(total, 'case')}${
+          selection.length > 0 ? ` · ${formatCount(selection.length)} selected` : ''
+        }`}
+        sort={sortDescription}
+        keys={['↑↓ row', 'Space select', 'Enter open']}
+      />
 
       <div
         className="flex items-center justify-end gap-4 px-3.5 py-2 text-[12px] text-ink-3"
