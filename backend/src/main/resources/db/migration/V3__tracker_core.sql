@@ -177,8 +177,8 @@ COMMENT ON COLUMN issue.acceptance_criteria IS
     'criterion, nothing reports on one, and the whole list is written by one form in one request — '
     'a table would buy referential integrity for an edge that has no other end.';
 COMMENT ON COLUMN issue.estimate_hours IS
-    'HOURS, NOT STORY POINTS (D8, decided 2026-08-30). Hours are directly comparable to '
-    'time_entry actuals, so estimate-vs-actual and budget burn work with no conversion — which is '
+    'HOURS, NOT STORY POINTS (D8, decided 2026-08-30). Hours are directly comparable to the '
+    'actuals M6 records, so estimate-vs-actual and budget burn work with no conversion — which is '
     'what matters on contracted client work, where the estimate and the invoice have to be the '
     'same unit. THE KNOWN COST, recorded rather than discovered later: hours read as commitments '
     'and get quoted back at you, and D6 removed sprints, so there is NO VELOCITY to recalibrate '
@@ -197,8 +197,9 @@ COMMENT ON COLUMN issue.done_at IS
     'time somebody reopened something.';
 COMMENT ON COLUMN issue.deleted_at IS
     'Soft delete, inherited from work_item and REQUIRED rather than stylistic. Scope §3: a '
-    'downstream time_entry or invoice_line holds an id into this table WITH NO FOREIGN KEY, '
-    'because the module rule forbids one. A hard delete orphans them silently; this is the '
+    'downstream time entry or invoice line will hold an id into this table WITH NO FOREIGN KEY, '
+    'because the module rule forbids one — and those tables arrive with M6 and M8, which is why '
+    'neither is named here as an identifier. A hard delete orphans them silently; this is the '
     'mitigation, together with the consistency check in the nightly suite.';
 CREATE UNIQUE INDEX issue_created_idempotency_key_idx
     ON issue (company_id, project_id, created_idempotency_key)
@@ -637,3 +638,139 @@ BEGIN
     PERFORM set_config('app.current_company', '', true);
 END $$;
 
+
+-- -----------------------------------------------------------------------------
+-- 6. work_item → issue, AS PARENTLESS STORIES
+-- -----------------------------------------------------------------------------
+--
+-- D12, and it was DETERMINED rather than chosen, once the code was read:
+-- work_item.kind is written exactly once and always 'TASK' (WorkItem.java:170),
+-- and WorkItemWriteRequest deliberately carries NO kind field — a client cannot
+-- set one, because doing so "would let a client POST EXECUTION and so materialise
+-- a derived card". So every existing row is a parentless TASK, and NO USER EVER
+-- CHOSE THAT WORD.
+--
+-- Under scope §4 a TASK-level issue requires a story-level parent and these have
+-- none, so they migrate to the STORY level — onto the type D29 names `Task`, so a
+-- user who typed "task" still sees "task" (settings-general.html says this out
+-- loud: "Tasks created before the upgrade are still called Task. Nothing you
+-- typed changed meaning underneath you").
+--
+-- RELAXING THE DEPTH RULE TO PERMIT ORPHAN TASKS WAS REJECTED. It would apply to
+-- every future task, not just to migrated rows, and would weaken the one rule
+-- that makes Epic → Story → Task mean anything — to accommodate a label the user
+-- never picked.
+--
+-- STATUS MAPPING. work_item.status is the five-member WorkItemStatus enum and the
+-- seeded workflow has six names; four map by meaning and TODO maps to Backlog
+-- rather than to Ready. Backlog is the more conservative destination: Ready
+-- claims the issue is refined and estimated, which nothing about a pre-upgrade
+-- task supports, and story B1 calls Backlog "the default for a new issue". A
+-- status with no arm below produces a NULL status_id, the NOT NULL refuses the
+-- insert, and the whole migration fails LOUDLY — which is the design.
+--
+-- KEYS. Every migrated row gets one, from the project's own counter, in
+-- work_item.created_at order — so the oldest task in a project is ACME-1 and the
+-- numbering reads like a history rather than like a shuffle. The counter is then
+-- advanced past them, which is why this runs AFTER section 5's backfill created
+-- the counter rows.
+--
+-- THE OUTER LOOP IS OVER COMPANY, not over work_item, for the reason above
+-- section 5's backfill: work_item carries FORCE ROW LEVEL SECURITY, so
+-- SELECT DISTINCT company_id, project_id FROM work_item with the GUC unset reads
+-- ZERO ROWS, migrates nothing, and reports success.
+DO $$
+DECLARE
+    c UUID;
+    r RECORD;
+    v_prefix TEXT;
+BEGIN
+    FOR c IN SELECT id FROM company LOOP
+        PERFORM set_config('app.current_company', c::text, true);
+
+        FOR r IN SELECT DISTINCT company_id, project_id FROM work_item LOOP
+            SELECT p.key INTO v_prefix FROM project p WHERE p.id = r.project_id;
+
+            -- One statement per project, numbering in created_at order.
+            -- next_value is read and advanced ONCE per project rather than per
+            -- row: the UPDATE takes the row lock either way, and a loop over rows
+            -- would take it N times for no additional guarantee.
+            WITH numbered AS (
+                SELECT w.id,
+                       row_number() OVER (ORDER BY w.created_at, w.id) AS n
+                  FROM work_item w
+                 WHERE w.company_id = r.company_id AND w.project_id = r.project_id
+            ),
+            reserved AS (
+                UPDATE project_key_sequence s
+                   SET next_value = s.next_value + (SELECT count(*) FROM numbered)
+                 WHERE s.company_id = r.company_id AND s.project_id = r.project_id
+                RETURNING s.next_value - (SELECT count(*) FROM numbered) AS first_value
+            )
+            INSERT INTO issue (
+                id, company_id, project_id, key_seq, issue_key, type_id, status_id,
+                parent_id, title, description, priority, due_date, assignee_id,
+                reporter_id, status_entered_at, done_at, created_at, created_by,
+                updated_at, updated_by, deleted_at, created_idempotency_key)
+            SELECT w.id,
+                   w.company_id,
+                   w.project_id,
+                   (SELECT first_value FROM reserved) + numbered.n - 1,
+                   v_prefix || '-' || ((SELECT first_value FROM reserved) + numbered.n - 1),
+                   (SELECT t.id FROM issue_type t
+                     WHERE t.company_id = w.company_id AND t.project_id = w.project_id
+                       AND t.name = 'Task' AND t.level = 'STORY'),
+                   (SELECT st.id FROM issue_status st
+                     WHERE st.company_id = w.company_id AND st.project_id = w.project_id
+                       AND st.name = CASE w.status
+                                         WHEN 'TODO'        THEN 'Backlog'
+                                         WHEN 'IN_PROGRESS' THEN 'In Progress'
+                                         WHEN 'IN_REVIEW'   THEN 'In Review'
+                                         WHEN 'BLOCKED'     THEN 'Blocked'
+                                         WHEN 'DONE'        THEN 'Done'
+                                     END),
+                   NULL,                     -- parentless, by D12
+                   w.title,
+                   w.description,
+                   w.priority,
+                   w.due_date,
+                   w.assignee_id,
+                   -- The reporter is whoever raised it. Resolved through app_user
+                   -- rather than copied: work_item.created_by carries NO foreign
+                   -- key and issue.reporter_id does, so a row naming an account
+                   -- that is gone would abort the whole upgrade on a live
+                   -- instance. An unattributable reporter is what the nullable
+                   -- column already means.
+                   (SELECT u.id FROM app_user u WHERE u.id = w.created_by),
+                   w.updated_at,             -- status_entered_at: the best available truth
+                   CASE WHEN w.status = 'DONE' THEN w.updated_at END,
+                   w.created_at,
+                   w.created_by,
+                   w.updated_at,
+                   w.updated_by,
+                   w.deleted_at,
+                   w.created_idempotency_key
+              FROM work_item w
+              JOIN numbered ON numbered.id = w.id
+             WHERE w.company_id = r.company_id AND w.project_id = r.project_id;
+        END LOOP;
+
+        -- Same policy, same loop. work_item_link and derived_item_annotation both
+        -- carry FORCE ROW LEVEL SECURITY, so these two statements outside a
+        -- company context would each match nothing and say nothing.
+        INSERT INTO issue_link (company_id, issue_id, target_type, target_id)
+        SELECT company_id, work_item_id, target_type, target_id FROM work_item_link;
+
+        -- derived_item_annotation rows keep pointing at the same ids, because the
+        -- id is CARRIED and not minted (see issue.id's comment); its source_type
+        -- vocabulary is free text and 'TASK' rows are re-labelled rather than left
+        -- to rot.
+        UPDATE derived_item_annotation SET source_type = 'ISSUE' WHERE source_type = 'TASK';
+    END LOOP;
+    PERFORM set_config('app.current_company', '', true);
+END $$;
+
+-- work_item and work_item_link are NOT dropped here — see this file's header.
+-- T4 deletes com.tcms.work.WorkItem and its eight siblings and drops both tables
+-- in V4, in one commit, because a database without the table cannot boot a
+-- context that still maps it.

@@ -43,14 +43,14 @@ class WorkflowSeedTest extends IntegrationTestBase {
     private CompanyProvisioningService provisioning;
 
     @Test
-    @DisplayName("every project in the database has the six statuses, in order")
+    @DisplayName("every seeded project in the database has the six statuses, in order")
     void everyProjectThatExistedBeforeTheMigrationHasTheSixStatuses() throws SQLException {
         // Over whatever the shared container holds rather than over a project this test made,
         // which is what makes it a statement about the BACKFILL and not about the create path.
         // The backfill is the half that is easy to get silently wrong: `project` carries FORCE ROW
         // LEVEL SECURITY and Flyway connects as tcms_owner, so a loop that reads it without
         // setting app.current_company first sees ZERO ROWS, seeds nothing, and reports success.
-        List<UUID> projects = allProjectIds();
+        List<UUID> projects = seededProjectIds();
         assertThat(projects)
                 .as("the sweep must have compared something — an empty project table is what a "
                         + "silently-skipped backfill also looks like")
@@ -66,7 +66,7 @@ class WorkflowSeedTest extends IntegrationTestBase {
     @Test
     @DisplayName("every status carries its kind, and Blocked is IN_PROGRESS rather than a fourth")
     void everyStatusCarriesItsKind() throws SQLException {
-        UUID projectId = allProjectIds().getFirst();
+        UUID projectId = ownSeededProject();
 
         // Blocked is IN_PROGRESS deliberately: something blocked is started and not done, and a
         // kind of its own would have to be given a meaning by every percentage in the product.
@@ -82,7 +82,7 @@ class WorkflowSeedTest extends IntegrationTestBase {
     @Test
     @DisplayName("Done is reachable only from In Review — the review gate, as an allow-list")
     void doneIsReachableOnlyFromInReview() throws SQLException {
-        UUID projectId = allProjectIds().getFirst();
+        UUID projectId = ownSeededProject();
 
         // issue_transition is an ALLOW-LIST: a pair that is not a row is refused. This is the one
         // shape in the default set, and it is what settings-workflow.html states — "Not to Done, a
@@ -110,7 +110,7 @@ class WorkflowSeedTest extends IntegrationTestBase {
     @Test
     @DisplayName("two of the six types are named for a task, at the two levels that need one")
     void theQuickAddTaskIsStoryLevelAndTheBreakdownTaskIsTaskLevel() throws SQLException {
-        UUID projectId = allProjectIds().getFirst();
+        UUID projectId = ownSeededProject();
 
         // D29 and the recorded disagreement with settings-general.html, which lists five types
         // while story.html and issue-new.html both offer sub-tasks. Those cannot both be true with
@@ -130,7 +130,7 @@ class WorkflowSeedTest extends IntegrationTestBase {
     @Test
     @DisplayName("Epic and Spike do not count toward completion, and the other four do")
     void whatCountsTowardCompletion() throws SQLException {
-        UUID projectId = allProjectIds().getFirst();
+        UUID projectId = ownSeededProject();
 
         // D8. A spike produces knowledge rather than shippable work, so counting it would let an
         // epic read 40% done having shipped nothing; an epic is what completion is computed FOR
@@ -140,8 +140,46 @@ class WorkflowSeedTest extends IntegrationTestBase {
                 .containsExactlyInAnyOrder("Epic", "Spike");
     }
 
-    private List<UUID> allProjectIds() throws SQLException {
-        return superuserQuery("SELECT id::text FROM project ORDER BY 1").stream()
+    /**
+     * A project this class provisioned, rather than whichever row of {@code project} sorts first.
+     *
+     * <p>Every test class shares one container, so "some project" is "whatever the classes that ran
+     * before me happened to leave" — a fixture whose content depends on test ORDER, which is the
+     * vacuity every check in this repository is written against. Each caller provisions its own
+     * company, so the assertions below are about rows this test caused.
+     */
+    private UUID ownSeededProject() {
+        String slug = "wf-" + UUID.randomUUID().toString().substring(0, 8);
+        ProvisionCompanyResult result = provisioning.provision(ProvisionCompanyRequest.withFirstProject(
+                slug, "Workflow " + slug, "ops@" + slug + ".test", "Ops Person",
+                "WF" + slug.substring(3, 7).toUpperCase(java.util.Locale.ROOT), "Workflow Product"));
+        return result.projectId().orElseThrow(
+                () -> new AssertionError("provisioning was asked for a first project and made none"));
+    }
+
+    /**
+     * Projects {@code tcms_seed_project_defaults} actually ran for — they carry its Default
+     * configuration — and not every row of {@code project}.
+     *
+     * <p><strong>That is the design rather than a weakening</strong>, and it is
+     * {@code ProjectKeySequenceSchemaTest}'s reasoning applied to the same function one block
+     * later: every test class shares one container, and a dozen of them build a project by saving
+     * the entity directly, without ever calling the seed function. Those projects have no
+     * {@code case_status}, no Default {@code configuration} and no {@code doc_space} either, and
+     * nothing is broken about them. The sweep over <em>every</em> row was written first and fails
+     * in the suite while passing alone — which is worse than not sweeping, because it reads as a
+     * broken backfill. What is pinned here is the invariant that is both true and at risk: the
+     * function's blocks travel together, and the backfill reached every project the function has
+     * ever run for.
+     */
+    private List<UUID> seededProjectIds() throws SQLException {
+        return superuserQuery("""
+                SELECT p.id::text
+                  FROM project p
+                  JOIN configuration c
+                    ON c.company_id = p.company_id AND c.project_id = p.id AND c.is_default
+                 ORDER BY 1
+                """).stream()
                 .map(UUID::fromString)
                 .toList();
     }
