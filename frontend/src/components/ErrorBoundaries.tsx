@@ -1,9 +1,11 @@
 import { Banner } from './kit';
 import { Button } from './ui';
 import { ErrorBoundary, type FallbackProps } from 'react-error-boundary';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import { handlePossibleSkew, isChunkLoadError, reloadOntoCurrentBuild } from '../app/versionSkew';
+import { newErrorReference } from '../lib/errorReference';
+import { formatTimeOfDay } from '../lib/format';
 import { reportClientError, type ErrorSource } from '../lib/reportClientError';
 
 /**
@@ -86,10 +88,55 @@ function report(source: ErrorSource, context?: Record<string, string>) {
   return (error: unknown) => reportClientError(error, source, context ?? null);
 }
 
+/**
+ * The reference and the timestamp this failure carries, stable for as long as it is on screen.
+ *
+ * Design language §7: *"Every failure carries a six-character reference and a timestamp"*. The
+ * 2026-08-30 renders audit found all three tiers carrying neither (9.2) — *"a reader who reports it
+ * has nothing to quote"* — which is the difference between a support message that can be matched
+ * to a log line and one that says "the page went red".
+ *
+ * Held against the error's identity, and re-minted only when that changes: a re-render of the same
+ * failure must show the same reference — one that changed while somebody was copying it is worse
+ * than none — and a genuinely new error must get a new one. React-error-boundary hands the same
+ * `error` object for the life of a fallback, so the identity is exactly the right key.
+ *
+ * A ref rather than `useMemo([error])`, because the error is the KEY and not an input: the memo
+ * body never reads it, which reads to a linter as a dependency that does nothing and to a later
+ * reader as one safe to drop. Written this way the comparison is the code.
+ */
+function useFailureMarks(error: unknown): { reference: string; at: number } {
+  const held = useRef<{ error: unknown; marks: { reference: string; at: number } } | null>(null);
+  if (held.current === null || held.current.error !== error) {
+    held.current = { error, marks: { reference: newErrorReference(), at: Date.now() } };
+  }
+  return held.current.marks;
+}
+
+/**
+ * The line every fallback ends with. Mono, quiet, and selectable — it exists to be copied.
+ *
+ * The timestamp is rendered as the local time a person would say out loud, with the ISO instant on
+ * the `title` for whoever is grepping a log: the two readers of this line are the one reporting it
+ * and the one matching it, and they need different formats of the same moment.
+ */
+function FailureMarks({ marks, testId }: { marks: { reference: string; at: number }; testId: string }) {
+  return (
+    <p className="mt-3 mb-0 font-mono text-[11px] text-ink-4">
+      <span data-testid={`${testId}.Reference`}>{marks.reference}</span>
+      {' · '}
+      <span data-testid={`${testId}.Timestamp`} title={new Date(marks.at).toISOString()}>
+        {formatTimeOfDay(marks.at)}
+      </span>
+    </p>
+  );
+}
+
 // --------------------------------------------------------------------- root ----
 
 function RootFallback({ error, resetErrorBoundary }: FallbackProps) {
   const skew = useSkewRecovery(error);
+  const marks = useFailureMarks(error);
 
   return (
     <div className="grid min-h-screen place-items-center bg-ground p-6">
@@ -122,6 +169,7 @@ function RootFallback({ error, resetErrorBoundary }: FallbackProps) {
                 Reload
               </Button>
             </div>
+            <FailureMarks marks={marks} testId="Root.Error" />
           </>
         )}
       </div>
@@ -145,6 +193,7 @@ export function RootErrorBoundary({ children }: { children: ReactNode }) {
 
 function RouteFallback({ error, resetErrorBoundary }: FallbackProps) {
   const skew = useSkewRecovery(error);
+  const marks = useFailureMarks(error);
 
   if (skew !== 'not-skew') return <SkewFallback mode={skew} testId="Route" />;
 
@@ -166,6 +215,7 @@ function RouteFallback({ error, resetErrorBoundary }: FallbackProps) {
           >
             Try again
           </Button>
+          <FailureMarks marks={marks} testId="Route.Error" />
         </div>
       </Banner>
     </div>
@@ -197,6 +247,15 @@ export function RouteErrorBoundary({ children }: { children: ReactNode }) {
 // ------------------------------------------------------------------- region ----
 
 /**
+ * The region tier's marks. A component rather than a `useFailureMarks` call in `fallbackRender`,
+ * because `fallbackRender` is a render prop and not a component — a hook called there is a hook in
+ * the boundary's own render, which changes its count between the healthy and the failed pass.
+ */
+function RegionFailureMarks({ error, testId }: { error: unknown; testId: string }) {
+  return <FailureMarks marks={useFailureMarks(error)} testId={testId} />;
+}
+
+/**
  * For an independently-failing region — a dashboard tile, a chart, a panel. Scoped so the
  * surrounding page keeps rendering, which is the same rule `DataRegion` applies to failed
  * *fetches*, extended to render-time throws.
@@ -214,7 +273,7 @@ export function RegionErrorBoundary({
   return (
     <ErrorBoundary
       onError={report('region-boundary', { region: testId })}
-      fallbackRender={({ resetErrorBoundary }) => (
+      fallbackRender={({ error, resetErrorBoundary }) => (
         <div className="my-2" data-testid={`${testId}.RenderError`}>
           <Banner tone="bad">
             <div className="min-w-0">
@@ -228,6 +287,7 @@ export function RegionErrorBoundary({
               >
                 Try again
               </Button>
+              <RegionFailureMarks error={error} testId={`${testId}.RenderError`} />
             </div>
           </Banner>
         </div>

@@ -29,6 +29,56 @@ export interface QueryClientHandlers {
 /** Stop automatic retries after this many consecutive failures for one key. */
 const MAX_RETRIES = 3;
 
+/**
+ * How long automatic retrying may take in total, before the region has to say something.
+ *
+ * The 2026-08-30 renders audit measured the defect this exists to close (9.3, High): with
+ * `tcmsFaults.status(503, 30)` armed, three retries each obeying a thirty-second `Retry-After` kept
+ * the Board in its **loading skeleton for 56+ seconds** — no failed state, no stale marker, no
+ * message and zero notifications. §7's whole point is that the six states must be unmistakable, and
+ * here the loading state was indistinguishable from a permanently broken one: a reader had no way
+ * to tell a slow request from a dead server.
+ *
+ * `Retry-After` is still obeyed — nothing is re-sent earlier than the server asked, so the reason
+ * below still holds and a throttle still does not become a ban. What changes is that a server
+ * asking for **longer than this budget** is no longer waited on in silence: the region goes to
+ * FAILED, which offers a manual retry and can quote the server's own number. Obeying a throttle and
+ * lying to the reader are separable, and only the first is a requirement.
+ */
+export const RETRY_BUDGET_MS = 8_000;
+
+/**
+ * Whether to try again automatically.
+ *
+ * The policy this replaces was a blanket `retry: 1`, which retried everything — including 4xx. A
+ * 403 was therefore requested twice, doubling the time to show a permission error that was never
+ * going to change, and a 404 likewise.
+ *
+ * Retries are for faults that are plausibly transient, and they stop: a query left auto-retrying
+ * through a twenty-minute outage burns battery, fills logs, and keeps hammering a service that is
+ * already down. After `MAX_RETRIES` the region switches to manual-retry-only, which is exactly what
+ * its failed state offers.
+ *
+ * Exported so it can be tested directly. An inline closure on the client is a policy that can only
+ * be exercised by standing up a query and waiting out its real delays, which is why the 56-second
+ * behaviour above shipped with a green suite.
+ */
+export function shouldRetry(failureCount: number, error: unknown): boolean {
+  if (failureCount >= MAX_RETRIES || !isTransient(error)) return false;
+  const serverAsked = retryAfterMs(error);
+  return serverAsked === null || serverAsked <= RETRY_BUDGET_MS;
+}
+
+/** How long to wait before the next attempt — never longer than the budget allows. */
+export function retryDelay(attemptIndex: number, error: unknown): number {
+  // When the server has said when to come back, obey it. Backing off less than a 429 or 503 asked
+  // for is how a throttle becomes a ban — and asking for longer than the budget is not answered by
+  // backing off less, it is answered by `shouldRetry` declining to wait at all.
+  const serverAsked = retryAfterMs(error);
+  if (serverAsked !== null) return Math.min(serverAsked, RETRY_BUDGET_MS);
+  return Math.min(1_000 * 2 ** attemptIndex, RETRY_BUDGET_MS / 2);
+}
+
 export function createAppQueryClient(handlers: QueryClientHandlers): QueryClient {
   return new QueryClient({
     queryCache: new QueryCache({
@@ -133,25 +183,8 @@ export function createAppQueryClient(handlers: QueryClientHandlers): QueryClient
          */
         staleTime: 30_000,
 
-        /**
-         * The retry policy this replaces was a blanket `retry: 1`, which retried everything —
-         * including 4xx. A 403 was therefore requested twice, doubling the time to show a
-         * permission error that was never going to change, and a 404 likewise.
-         *
-         * Retries are for faults that are plausibly transient, and they stop: a query left
-         * auto-retrying through a twenty-minute outage burns battery, fills logs, and keeps
-         * hammering a service that is already down. After `MAX_RETRIES` the region switches to
-         * manual-retry-only, which is exactly what its failed state offers.
-         */
-        retry: (failureCount, error) => failureCount < MAX_RETRIES && isTransient(error),
-
-        retryDelay: (attemptIndex, error) => {
-          // When the server has said when to come back, obey it. Backing off less than a 429 or
-          // 503 asked for is how a throttle becomes a ban.
-          const serverAsked = retryAfterMs(error);
-          if (serverAsked !== null) return Math.min(serverAsked, 60_000);
-          return Math.min(1_000 * 2 ** attemptIndex, 30_000);
-        },
+        retry: shouldRetry,
+        retryDelay,
       },
 
       mutations: {
