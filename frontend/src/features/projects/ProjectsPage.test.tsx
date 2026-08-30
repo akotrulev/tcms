@@ -57,25 +57,33 @@ describe('the project card states its count, and the list can put a retired proj
     expect(meta[0].textContent).toMatch(/\d+\s+cases?/)
   })
 
-  it('hides an archived project by default, behind a switch that says how many', async () => {
+  it('lists an archived project by default, and offers a switch that says how many', async () => {
+    /*
+      Listed, NOT hidden. The render draws a `Show archived` switch, which reads as off-by-default,
+      and off-by-default is the one thing this list may not do: the server returns retired projects
+      deliberately because omitting one makes it unreachable rather than marked, and this card is
+      the only route back to the screen that can un-archive it (`ArchiveProject.test.tsx` pins the
+      same guarantee from the other side). So the control exists and defaults to keeping it.
+    */
     renderProjects()
 
     expect(await screen.findByText('Storefront')).toBeInTheDocument()
-    expect(screen.queryByText('Legacy')).not.toBeInTheDocument()
-    expect(screen.getByTestId('Projects.ShowArchived')).toBeInTheDocument()
-    // The count is the half that keeps the old comment's guarantee: a project that is hidden is
-    // marked as hidden, never simply absent.
+    expect(screen.getByText('Legacy')).toBeInTheDocument()
     expect(screen.getByText(/Show archived \(1\)/)).toBeInTheDocument()
   })
 
-  it('shows it again when the URL asks', async () => {
+  it('puts them away when the reader asks, and says how many it is holding', async () => {
     render(
-      <TestProviders client={createTestQueryClient()} route="/projects?archived=true">
+      <TestProviders client={createTestQueryClient()} route="/projects?archived=false">
         <Routes>
           <Route path="/projects" element={<ProjectsPage />} />
         </Routes>
       </TestProviders>,
     )
-    expect(await screen.findByText('Legacy')).toBeInTheDocument()
+
+    expect(await screen.findByText('Storefront')).toBeInTheDocument()
+    expect(screen.queryByText('Legacy')).not.toBeInTheDocument()
+    // The count is what keeps "hidden" from reading as "gone".
+    expect(screen.getByText(/Show archived \(1\)/)).toBeInTheDocument()
   })
 })

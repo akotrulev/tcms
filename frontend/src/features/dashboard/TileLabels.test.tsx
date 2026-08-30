@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
@@ -156,5 +156,32 @@ describe('Dashboard tiles and segments are named from this app’s own catalogue
       'href',
       '/projects/p1/cases?healthSignal=SIGNAL_FROM_THE_FUTURE',
     )
+  })
+})
+
+describe('every multi-colour breakdown carries a key', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('gives By feature and By owner the legend By last run already had', async () => {
+    /*
+      Renders audit 6.2. `By last run` passed `legend`; the two four-colour lifecycle stacks beside
+      it passed none, so a reader saw amber, green and periwinkle with nothing naming them. Each
+      segment does carry an `aria-label` and a `title` — and a hover-only key is not a legend: it
+      does not exist for a touch reader at all, and rule 8's "a count is a link to its rows"
+      assumes the reader knows which count they are about to follow.
+    */
+    renderDashboard()
+
+    // ByFeature alone: this fixture's `byOwner` is empty, and a legend under an empty-state
+    // sentence would be a key to nothing. The prop is passed to both; what is asserted is that a
+    // figure WITH bars carries it.
+    for (const figure of ['Dashboard.ByFeature']) {
+      const panel = await screen.findByTestId(figure)
+      for (const status of ['DRAFT', 'IN_REVIEW', 'APPROVED', 'DEPRECATED'] as const) {
+        expect(within(panel).getAllByText(lifecycleLabels[status]).length).toBeGreaterThan(0)
+      }
+    }
   })
 })

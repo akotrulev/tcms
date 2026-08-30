@@ -15,6 +15,25 @@ import { cn } from '../../lib/cn';
  * It is deliberately **not** `Panel`: rule 1 forbids a card around the only thing on a screen, and
  * this is the opposite case — a grid of figures where the border is what separates one set of
  * numbers from the next.
+ *
+ * <h2>The 2026-08-30 renders audit disagreed, and this paragraph is the answer</h2>
+ *
+ * Finding 6.4 (Low) reads: *"Every figure on the Dashboard sits in a bordered panel. Rule 1 says no
+ * panel around the subject of the page; on a screen that is nothing but figures, seven borders is
+ * what rule 1 describes."* **Kept as it is**, because rule 1's subject is *the only thing on a
+ * screen* and seven figures are seven things: what the rule is protecting against is a card drawn
+ * around a page's single subject, which announces a boundary the reader already knows. Here the
+ * boundary is the information — where one denominator stops and the next begins — and the
+ * dashboard is the one screen in the product where two adjacent sets of numbers mean different
+ * things and look identical.
+ *
+ * The audit's own evidence is on the other side of this: 6.2 found two of these figures shipping
+ * with no legend, which is a reader unable to tell one set of numbers from another *inside* one
+ * panel. Removing the frames between them would make more of that, not less.
+ *
+ * The case detail's four carded blocks (2.4) were a real instance of the finding and were fixed —
+ * there the card sat beside uncarded siblings in one column, which is two idioms for one kind of
+ * thing. Nothing on this screen is uncarded, so nothing here disagrees with anything.
  */
 export interface FigurePanelProps {
   title: ReactNode;

@@ -203,6 +203,7 @@ function DashboardBody({ data, projectId }: { data: RepositoryDashboard; project
             rows={data.byFeature}
             casesPath={casesPath}
             testId="Dashboard.ByFeature"
+            legend={LIFECYCLE_LEGEND}
             emptyMessage="No case has been given a feature yet. Features are a per-project vocabulary you define, and cases are classified against it."
           />
         </FigurePanel>
@@ -215,6 +216,7 @@ function DashboardBody({ data, projectId }: { data: RepositoryDashboard; project
             rows={data.byOwner}
             casesPath={casesPath}
             testId="Dashboard.ByOwner"
+            legend={LIFECYCLE_LEGEND}
             emptyMessage="No case has an owner yet."
           />
         </FigurePanel>
@@ -269,6 +271,23 @@ const LAST_RUN_LEGEND: { label: string; color: string | null }[] = [
   { label: labelForKey(lastRunLabels, 'BLOCKED'), color: statusVar.BLOCKED },
   { label: labelForKey(lastRunLabels, 'NEVER_RUN'), color: null },
 ];
+
+/**
+ * The four lifecycle entries, for the same reason `LAST_RUN_LEGEND` exists one screen-section up.
+ *
+ * `By feature` and `By owner` are four-colour stacks and carried no key at all — the reader saw
+ * amber, green and periwinkle and was told nothing (renders audit 6.2). Each segment does have an
+ * `aria-label` and a `title`, and a hover-only key is not a legend: it does not exist for a touch
+ * reader at all, and rule 8's *"a count is a link to its rows"* assumes the reader knows which
+ * count they are about to follow.
+ *
+ * Derived from `lifecycleVar` and `lifecycleLabels` — the same two maps `BreakdownList`'s default
+ * `segmentColor` and its segment labels read — so the legend cannot drift from the bars it is
+ * about. Spelling the four hexes here again is exactly how that drift starts.
+ */
+const LIFECYCLE_LEGEND: { label: string; color: string | null }[] = (
+  ['DRAFT', 'IN_REVIEW', 'APPROVED', 'DEPRECATED'] as const
+).map((status) => ({ label: lifecycleLabels[status], color: lifecycleVar[status] }));
 
 /**
  * The three states of "Needs attention", which are genuinely three and not two.

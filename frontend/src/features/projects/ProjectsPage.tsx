@@ -45,7 +45,20 @@ export function ProjectsPage() {
     sends the link on, and component state sends a list the project is not in.
   */
   const [params, setParams] = useSearchParams();
-  const showArchived = params.get('archived') === 'true';
+  /*
+    **Default ON**, and the parameter spells the hiding rather than the showing.
+
+    The render draws a `Show archived` switch, which reads as off-by-default — and off-by-default
+    is the one thing this list may not do. The archived badge's comment below records why, and
+    `ArchiveProject.test.tsx` asserts it: the server returns retired projects deliberately, because
+    omitting one makes it unreachable rather than marked, and this card is the only route back to
+    the screen that can un-archive it. A default that hid them would turn "marked" into "gone" for
+    every reader who never finds the switch.
+
+    So the control exists, as the render asks, and it defaults to the state that keeps the
+    guarantee. The count beside it says what it is holding back once it is off.
+  */
+  const showArchived = params.get('archived') !== 'false';
 
   const all = projects.data ?? [];
   /*
@@ -84,7 +97,7 @@ export function ProjectsPage() {
               <Switch
                 checked={showArchived}
                 onCheckedChange={(next) =>
-                  setParams(next ? { archived: 'true' } : {}, { replace: true })
+                  setParams(next ? {} : { archived: 'false' }, { replace: true })
                 }
                 data-testid="Projects.ShowArchived"
               />
@@ -143,7 +156,7 @@ export function ProjectsPage() {
                 hidden: all.length,
                 filters: 1,
                 noun: 'project',
-                onClearFilters: () => setParams({ archived: 'true' }, { replace: true }),
+                onClearFilters: () => setParams({}, { replace: true }),
               }
             : {
                 kind: 'no-records',
