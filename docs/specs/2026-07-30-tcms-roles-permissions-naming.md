@@ -220,6 +220,10 @@ Author-cannot-approve-own-work defaults on.
 
 Both new — the plan described the features (defect filing from a failed step; the kanban board, §6l) without permissions to govern them.
 
+~~`workitem:manage` governs the board's stored tasks.~~ **→ superseded 2026-08-30 by `issue:*` (009 module M1).** `work_item` is gone: every stored card is an `issue`, so creating one costs `issue:create` and moving one costs `issue:edit`. **There is no `board:move`** — dragging a card changes the issue's status, and a second key for the same act would be a permission somebody could hold without being able to use it.
+
+The key and its five grants are **kept in the catalogue rather than deleted**. Nothing reads it; removing seeded rows would be a migration whose only effect is to make three documents that pin this matrix disagree with the database. It is inert, and it is a record of what the board used to be.
+
 #### Tracker
 
 | Permission | IA | CA | PM | TL | TE | AS | V |
@@ -565,6 +569,8 @@ evidence:attach   ✓                   artifact:edit     ✓  plan scope only
 defect:create     ✓                   project:read      ✓  visibility precondition (§A6)
 workitem:manage   ✓
 ```
+
+`workitem:manage` in that listing is **superseded 2026-08-30 by `issue:*` (009 module M1)**, on §A3's terms above: the row stays in the catalogue and in this historical grant, and nothing reads it.
 
 **What the consent prompt actually covers, measured rather than assumed — §211.** The paragraph
 above says the withheld acts are "gated by a user-consent prompt in the MCP tool definitions", and

@@ -105,6 +105,10 @@ Roles are ordered least-permissioned first. Rows are grouped by how widely a per
 | `project:members` | — | — | — | ✓ | ✓ | ✓ | ✓ |
 | `integration:manage` | — | — | — | ✓ | ✓ | ✓ | ✓ |
 
+`workitem:manage` is **superseded by `issue:*`** (2026-08-30, module M1): stored board cards are
+issues now, so creating one costs `issue:create` and moving one `issue:edit`. The key is kept in
+the catalogue and read by nothing.
+
 **The ten rows with a `—` under Test Engineer and a `✓` under Test Lead are the whole tier line** —
 ~~seven since `V52` (2026-08-15)~~ → **ten since `V2` (2026-08-30)**: giving approvals, adding and
 managing permission on the project, and managing its issues (`issue:delete`, `issue:workflow`,

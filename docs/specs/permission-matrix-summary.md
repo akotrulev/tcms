@@ -49,6 +49,10 @@ Roles are ordered least-permissioned first; rows run broadest-held to narrowest.
 | `case:approve` · `suite:approve` · `plan:approve` | — | — | — | — | ✓ | ✓ | ✓ |
 | `project:audit` · `project:settings` · `project:members` · `integration:manage` | — | — | — | ✓ | ✓ | ✓ | ✓ |
 
+`workitem:manage` is **superseded by `issue:*`** (2026-08-30, module M1): stored board cards are
+issues now, so creating one costs `issue:create` and moving one `issue:edit`. The key is kept in
+the catalogue and read by nothing.
+
 **The Test Engineer → Test Lead line is approvals, project configuration and issue management** —
 ~~seven keys~~ → **ten since `V2` (2026-08-30)**: the three approvals, the four configuration keys,
 and `issue:delete` · `issue:workflow` · `issue:import`, which are the same second clause.
