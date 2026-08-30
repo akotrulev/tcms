@@ -488,7 +488,10 @@ document, exactly as the first audit's 6.1 got `app/statusPalette.test.ts`.
 ## 10. Remediated — 2026-08-30, round 3
 
 Every finding in this document is fixed. Gates run on `shanks`: frontend build ✔, oxlint 0/0 ✔,
-**2184 frontend tests ✔**, packages build ✔, 153 package tests ✔.
+**2184 frontend tests ✔**, packages build ✔, 153 package tests ✔, and `./gradlew build` ✔
+(10m 21s). The backend cannot be affected by a change under `frontend/src` — `build.gradle.kts`
+declares only `frontend/src/lib/permissions.ts` and `docs/specs/` as out-of-source test inputs, and
+neither was touched — but it was run rather than reasoned about.
 
 ### 10.1 What §0's method could not see, and what it cost this document
 
