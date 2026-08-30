@@ -783,25 +783,6 @@ tcms review comment    # a remark on an open review`}</Terminal>
           and the first needs no installation.
         </P>
 
-        <H>First, issue a token</H>
-        <P>
-          An agent connects as a credential of its own — never as your sign-in session — so the
-          setup starts with issuing one. It takes about a minute.
-        </P>
-        <TokenSteps purpose="agent" />
-        <Note>
-          <strong>The quickest path skips the copying below.</strong> The dialog that issues an{' '}
-          <em>Agent</em> token hands you the finished configuration with the token already in it,
-          at the one moment the secret exists. Copy that and you are done — what follows is the
-          same thing with <Code>&lt;your token&gt;</Code> left to fill in.
-        </Note>
-
-        <H>Then point your agent at this instance</H>
-        <P>
-          Two shapes, both complete and both filled in with this instance&apos;s own address.{' '}
-          <strong>Hosted is the one to prefer</strong> — it installs nothing and is upgraded by your
-          operator along with the instance, so it cannot drift from the API it adapts.
-        </P>
         <McpSetup />
 
         <H>The tools</H>

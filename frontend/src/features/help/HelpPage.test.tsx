@@ -2,9 +2,11 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api } from '../../api/client';
-import type { Role } from '../../api/types';
+import { ApiError, api } from '../../api/client';
+import type { PermissionKey, Role } from '../../api/types';
 import { allPermissions } from '../../lib/permissions';
+import { heldPermissions } from '../../test/permissions';
+import { drivingAFailedWrite } from '../../test/renderFailures';
 import { createTestQueryClient } from '../../test/queryClient';
 import { TestProviders } from '../../test/TestProviders';
 import { HelpPage } from './HelpPage';
@@ -57,16 +59,66 @@ const AGENT: Role = {
   permissions: ['case:read', 'project:read', 'case:edit'],
 };
 
-function mockApi(roles: Role[] = [VIEWER, LEAD, AGENT]) {
+/**
+ * The reads this page makes, and why there are three of them.
+ *
+ * `/roles` is the matrix. `/me/permissions` and `/projects` arrived with the token generator in the
+ * MCP section — the first decides whether a reader is offered one at all, the second is where the
+ * token may be pinned. Both are already in the cache on a real visit (the shell asks for them), so
+ * the guide adds no request to a session that has moved anywhere else first.
+ *
+ * `held` defaults to a reader who may issue tokens, because that is the branch with something to
+ * assert. Pass `[]` for the other one.
+ */
+function mockApi(
+  roles: Role[] = [VIEWER, LEAD, AGENT],
+  held: PermissionKey[] = ['token:issue'],
+  projects: unknown[] = [PROJECT],
+) {
   return vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/roles')) return roles;
+    if (path.startsWith('/me/permissions')) return heldPermissions(held, {}, null);
+    if (path.startsWith('/projects')) return projects;
     throw new Error(`unmocked read: ${path}`);
   }) as never);
 }
 
+/** The one project the reader can see, so the generator's ceiling needs no decision. */
+const PROJECT = {
+  id: 'p1',
+  key: 'OLB',
+  name: 'Acme Online Banking',
+  description: null,
+  archived: false,
+  caseCount: 0,
+  myRole: 'Test Lead',
+};
+
+/** What `POST /api-tokens` answers — the one response in this contract carrying a credential. */
+const ISSUED = {
+  token: {
+    id: 'tok-1',
+    name: 'Agent set up from the guide',
+    tokenPrefix: 'tcms_abc123',
+    ownerId: 'user-1',
+    roleId: 'role-agent',
+    roleName: 'Agent',
+    projectId: 'p1',
+    expiresAt: '2026-11-28T09:00:00Z',
+    lastUsedAt: null,
+    revokedAt: null,
+    createdAt: '2026-08-30T09:00:00Z',
+  },
+  secret: 'tcms_abc123_the_only_time_this_is_ever_shown',
+};
+
+/** The client the last `renderAt` built, so a test can inspect what did — and did not — get cached. */
+let client: ReturnType<typeof createTestQueryClient>;
+
 function renderAt(route: string) {
+  client = createTestQueryClient();
   return render(
-    <TestProviders client={createTestQueryClient()} route={route}>
+    <TestProviders client={client} route={route}>
       <Routes>
         <Route path="/help" element={<HelpPage />} />
         <Route path="/help/:sectionId" element={<HelpPage />} />
@@ -292,12 +344,16 @@ describe('HelpPage — the setup blocks', () => {
 
   it('tells a reader how to get the token both surfaces start by requiring', async () => {
     // The step the guide left out entirely: both sections opened by telling the reader to use a
-    // credential and neither said where one comes from.
+    // credential and neither said where one comes from. Asserted on the CLI section because that
+    // one shows the steps to every reader — the MCP section offers the generator instead to
+    // anybody who can use it, which the generator's own describe block covers.
     mockApi();
-    renderAt('/help/mcp');
+    renderAt('/help/cli');
 
-    const section = await screen.findByTestId('Help.Section.mcp');
-    expect(within(section).getByRole('link', { name: /API tokens/i })).toHaveAttribute(
+    const section = await screen.findByTestId('Help.Section.cli');
+    // Named exactly: the pager at the foot of this section links on to "People, teams and API
+    // tokens", which a loose matcher catches too.
+    expect(within(section).getByRole('link', { name: 'Company → API tokens' })).toHaveAttribute(
       'href',
       '/admin/tokens',
     );
@@ -339,5 +395,141 @@ describe('HelpPage — the setup blocks', () => {
       /select the text/i,
     );
     expect(screen.getByTestId('Help.Mcp.Hosted.Value')).toHaveTextContent('mcpServers');
+  });
+});
+
+/**
+ * Generating the token from the guide — the step that used to be a different screen.
+ *
+ * What is locked here is not the form. It is the four things that make a credential-issuing
+ * control safe to put on a documentation page:
+ *
+ *   1. **It is offered only to a reader who may use it**, and the reader who may not is told what
+ *      to ask for rather than shown a button that 403s.
+ *   2. **The token it issues is an `Agent` token with an expiry** — the shape this page documents,
+ *      not whatever the form could be talked into.
+ *   3. **The secret lands in the configuration**, which is the entire point: the block below the
+ *      panel becomes something a user can paste without editing.
+ *   4. **The secret never reaches the query cache.** Same rule as the dialog, checked the same way.
+ */
+describe('HelpPage — generating the agent token', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  async function generate() {
+    renderAt('/help/mcp');
+    await userEvent.click(await screen.findByTestId('Help.Mcp.Token.Submit'));
+  }
+
+  it('issues an Agent token with an expiry, pinned to the only project the reader can see', async () => {
+    const post = vi.spyOn(api, 'post').mockResolvedValue(ISSUED);
+    mockApi();
+    await generate();
+
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    const body = vi.mocked(post).mock.calls[0][1] as {
+      name: string;
+      roleId: string;
+      projectId: string | null;
+      expiresAt: string;
+    };
+    // The role is resolved from the catalogue by name, because ids are seeded data this client
+    // does not hold — a hardcoded id here would be a 400 on every instance but the author's.
+    expect(body.roleId).toBe(AGENT.id);
+    // Not null: the server requires an expiry for an Agent token, and a credential on somebody's
+    // laptop with no end is the one nobody remembers to withdraw.
+    expect(new Date(body.expiresAt).getTime()).toBeGreaterThan(Date.now());
+    expect(body.projectId).toBe('p1');
+    expect(body.name.trim()).not.toBe('');
+  });
+
+  it('drops the secret straight into the configuration below it', async () => {
+    // THE HEADLINE. Before this the reader crossed to another screen, came back with a value that
+    // could not be recovered, and edited it into a JSON block by hand.
+    vi.spyOn(api, 'post').mockResolvedValue(ISSUED);
+    mockApi();
+    await generate();
+
+    const block = await screen.findByTestId('Help.Mcp.Hosted.Value');
+    await waitFor(() => {
+      const config = JSON.parse(block.textContent ?? '') as {
+        mcpServers: { tcms: { headers: Record<string, string> } };
+      };
+      expect(config.mcpServers.tcms.headers.Authorization).toBe(`Bearer ${ISSUED.secret}`);
+    });
+
+    // And the local shape binds to the project by KEY, which only this page knows — the response
+    // carries the id.
+    await userEvent.click(screen.getByTestId('Help.Mcp.Tab.Stdio'));
+    const local = await screen.findByTestId('Help.Mcp.Stdio.Value');
+    const env = (
+      JSON.parse(local.textContent ?? '') as {
+        mcpServers: { tcms: { env: Record<string, string> } };
+      }
+    ).mcpServers.tcms.env;
+    expect(env.TCMS_TOKEN).toBe(ISSUED.secret);
+    expect(env.TCMS_PROJECT).toBe('OLB');
+  });
+
+  it('says the secret is shown once, because a page is easy to navigate away from', async () => {
+    vi.spyOn(api, 'post').mockResolvedValue(ISSUED);
+    mockApi();
+    await generate();
+
+    expect(await screen.findByTestId('Help.Mcp.Token.Warning')).toHaveTextContent(
+      /only time this token is shown/i,
+    );
+    expect(await screen.findByTestId('Help.Mcp.Token.Secret.Value')).toHaveTextContent(
+      ISSUED.secret,
+    );
+  });
+
+  it('never writes the secret into the query cache', async () => {
+    vi.spyOn(api, 'post').mockResolvedValue(ISSUED);
+    mockApi();
+    await generate();
+    await screen.findByTestId('Help.Mcp.Token.Secret.Value');
+
+    const cached = JSON.stringify(
+      client
+        .getQueryCache()
+        .getAll()
+        .map((entry) => entry.state.data),
+    );
+    expect(cached).not.toContain(ISSUED.secret);
+  });
+
+  it('offers the steps, not a button, to a reader who cannot issue tokens', async () => {
+    // Hidden is not protected and this is not a gate — the server refuses either way. What it
+    // prevents is a control that 403s on a page whose job is to say what you are missing.
+    mockApi([VIEWER, LEAD, AGENT], []);
+    renderAt('/help/mcp');
+
+    // Awaited, because the verdict is a query: `Gate.can` is fail-closed while it is in flight, so
+    // asserting immediately would be asserting about the pending state and passing for it.
+    await screen.findByText(/token:issue/);
+    expect(screen.queryByTestId('Help.Mcp.Token.Submit')).not.toBeInTheDocument();
+    // And the block still says what to put where, rather than being withheld with the button.
+    expect(await screen.findByTestId('Help.Mcp.Hosted.Value')).toHaveTextContent('<your token>');
+  });
+
+  it('lands a refused name on the field rather than in a global toast', async () => {
+    // The realistic refusal: token names are unique among a company's live ones, and the default
+    // name carries a timestamp precise to the minute.
+    drivingAFailedWrite();
+    vi.spyOn(api, 'post').mockRejectedValue(
+      new ApiError(400, 'Check the highlighted fields.', {
+        name: ['This company already has a live token with that name.'],
+      }),
+    );
+    mockApi();
+    await generate();
+
+    expect(await screen.findByText(/already has a live token/i)).toBeInTheDocument();
+    // Still on the form, with the configuration still showing the placeholder — a refused write
+    // that left a half-filled config would be worse than one that changed nothing.
+    expect(screen.getByTestId('Help.Mcp.Token.Submit')).toBeInTheDocument();
+    expect(screen.getByTestId('Help.Mcp.Hosted.Value')).toHaveTextContent('<your token>');
   });
 });

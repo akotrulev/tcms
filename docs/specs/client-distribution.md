@@ -83,8 +83,15 @@ two screens that have something to hand over:
 
 | Screen | What it renders | The token in it |
 |---|---|---|
-| Help → **AI agent access (MCP)** and **The command-line tool** | both MCP shapes, the CLI's install-and-export block | `<your token>` — the reader pastes their own |
+| Help → **AI agent access (MCP)**, for a reader holding `token:issue` | a **Generate token** panel, then both MCP shapes | **the real secret** — issued in place, straight into the blocks |
+| Help → same section, for a reader without it | the steps to ask an administrator for one, then both MCP shapes | `<your token>` — the reader pastes their own |
+| Help → **The command-line tool** | the CLI's install-and-export block | `<your token>` |
 | **Company → API tokens → Issue token**, reveal step, `Agent` role only | both MCP shapes | **the real secret**, at the one moment it exists |
+
+The generator issues exactly one shape — an `Agent` token, ninety days, pinned where the reader
+says — and links to the dialog for anything else. Its secret lives in component state on that page
+and nowhere else: leaving the page loses it, which is what its warning says. The blocks below it
+then need no editing at all, which is the whole point of putting it there.
 
 The instance's address comes from `window.location.origin` rather than a placeholder: the guide is
 only ever read *from* the instance it describes, and the SPA, `/api`, `/mcp` and `/downloads` are

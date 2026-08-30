@@ -272,9 +272,10 @@ What makes it safe to point at real data:
 - Destructive operations prompt for consent, and **refuse outright when the host cannot ask**
 - Tools are filtered by permission, so a narrowly-scoped token sees a narrower tool list
 
-Connecting one is handed over rather than described: the guide and the token-issuing dialog both
-render the finished `mcpServers` block for this instance, and the dialog's carries the new token
-already in it — the one moment the secret exists.
+Connecting one is handed over rather than described. The guide's MCP section generates the agent
+token in place — one press, for anybody who may issue one — and drops the secret straight into the
+`mcpServers` block for this instance, so setup is *copy this*. The token-issuing dialog does the
+same for an Agent token issued the long way round.
 
 ## Running It
 
