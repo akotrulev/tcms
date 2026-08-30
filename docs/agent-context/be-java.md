@@ -51,5 +51,12 @@ Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
   those batches pair them.
 
 ## Session log
+- 2026-08-30 011 T1: contract-only. `/work-items` (+ its POST/PATCH) removed; `GET /board`,
+  `PUT /board/annotations/{sourceType}/{sourceId}`, `/issues*` and `/projects/{id}/workflow*`
+  added under a new `tracker` tag. `WorkItem`/`WorkItemStatus`/`WorkItemInput`/
+  `WorkItemStatusUpdate` schemas gone; `BoardCard.status` is now `{name, kind}`. Both generated
+  clients regenerated. **Tree does not build** — `frontend`/`packages` still reference the
+  removed types (T4/T5/T6/T7 repair), and `ContractConventionTest` has no pairing entry for the
+  ~19 new schemas.
 - 2026-08-28 B2: Problem members, V71, doc:review, ReviewImpactSource, org-chart gaps,
   /me/password + sign-out-others, sign-in lockout. Built and unverified.
