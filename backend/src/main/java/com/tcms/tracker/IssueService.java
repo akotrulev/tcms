@@ -8,6 +8,8 @@ import com.tcms.project.ProjectService;
 import com.tcms.tenancy.AuditEvent;
 import com.tcms.tenancy.AuditEventRepository;
 import com.tcms.tenancy.CompanyContext;
+import com.tcms.tenancy.Outbox;
+import com.tcms.tenancy.OutboxEvents;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -70,6 +72,7 @@ public class IssueService {
     private final TrackerPeople people;
     private final ProjectKeys keys;
     private final AuditEventRepository auditEvents;
+    private final Outbox outbox;
     private final Clock clock;
 
     public IssueService(
@@ -81,6 +84,7 @@ public class IssueService {
             TrackerPeople people,
             ProjectKeys keys,
             AuditEventRepository auditEvents,
+            Outbox outbox,
             Clock clock) {
 
         this.projects = projects;
@@ -91,6 +95,7 @@ public class IssueService {
         this.people = people;
         this.keys = keys;
         this.auditEvents = auditEvents;
+        this.outbox = outbox;
         this.clock = clock;
     }
 
@@ -401,7 +406,16 @@ public class IssueService {
                 .orElse(null);
     }
 
+    /**
+     * The audit row and the projection trigger, together, inside the write's own transaction.
+     *
+     * <p>One call site for all four writes rather than four, because the two facts are the same
+     * fact: this issue moved. {@code Outbox.recordCoalesced} refuses to run outside a transaction,
+     * which is what keeps the event and the row it describes committing together or not at all —
+     * and being coalesced, a bulk edit records one notice rather than one per issue.
+     */
     private void audit(Project project, UUID userId, Issue issue, String action, Instant now) {
+        outbox.recordCoalesced(OutboxEvents.ISSUES_CHANGED);
         auditEvents.save(AuditEvent.record(
                 project.getId(),
                 userId,
@@ -434,6 +448,23 @@ public class IssueService {
         IssueStatus status = statusesById.get(issue.getStatusId());
 
         List<Issue> children = issues.findByParentIdAndDeletedAtIsNullOrderByKeySeqAsc(issue.getId());
+        boolean isEpic = type.getLevel() == IssueLevel.EPIC;
+
+        /*
+          D8 and D31, from ONE list, which is the whole reason CountedIssue is shared. An epic
+          reading "In Progress" beside a completion of 100% is the disagreement D31 exists to make
+          unrepresentable, and two lists is how it would come back.
+        */
+        List<CountedIssue> counted = children.stream()
+                .map(child -> new CountedIssue(
+                        typesById.get(child.getTypeId()).isCountsTowardCompletion(),
+                        statusesById.get(child.getStatusId()).getKind(),
+                        child.getEstimateHours()))
+                .toList();
+        IssueStatusView statusView = isEpic
+                ? derivedStatus(EpicStatus.of(counted), statusesById, status)
+                : IssueStatusView.of(status);
+        CompletionView completion = isEpic ? Completion.of(counted).view() : null;
         Issue parent = issue.getParentId() == null
                 ? null : issues.findById(issue.getParentId()).orElse(null);
         Issue epic = epicOf(issue, parent, typesById);
@@ -453,7 +484,7 @@ public class IssueService {
                 issue.getDescription(),
                 AcceptanceCriteria.parse(issue.getAcceptanceCriteria()),
                 IssueTypeView.of(type),
-                IssueStatusView.of(status),
+                statusView,
                 issue.getStatusEnteredAt(),
                 project.getId(),
                 project.getKey(),
@@ -469,9 +500,7 @@ public class IssueService {
                 issue.getTargetDate(),
                 issue.getDueDate(),
                 overdue(issue, status, today),
-                // D8's number is Part B's. Null rather than a zero, because the contract makes it
-                // nullable and a zero would be a percentage the product had not computed.
-                null,
+                completion,
                 children.stream()
                         .map(child -> summaryOf(child, project, typesById, statusesById, refs,
                                 issue, epic, today))
@@ -484,6 +513,26 @@ public class IssueService {
                 issue.getCreatedAt(),
                 issue.getUpdatedAt(),
                 issue.getDoneAt());
+    }
+
+    /**
+     * The project status that spells a derived kind — the first one at that kind, by position.
+     *
+     * <p>An epic's status is a {@link IssueStatusKind}, not a row: D31 derives it and nobody sets
+     * it, so there is no {@code status_id} that means it. The screen still has to render a NAME, and
+     * it must be one of this project's own — a hardcoded "Done" would be the word-lookup story B1
+     * exists to remove. The stored status is the fallback for a project whose workflow has no status
+     * at that kind at all, which the DONE-status rule makes impossible to reach for {@code DONE} and
+     * which is otherwise an honest "we cannot spell this".
+     */
+    private static IssueStatusView derivedStatus(
+            IssueStatusKind derived, Map<UUID, IssueStatus> statusesById, IssueStatus stored) {
+
+        return statusesById.values().stream()
+                .filter(status -> status.getKind() == derived)
+                .min(Comparator.comparingInt(IssueStatus::getPosition))
+                .map(IssueStatusView::of)
+                .orElseGet(() -> IssueStatusView.of(stored));
     }
 
     /**

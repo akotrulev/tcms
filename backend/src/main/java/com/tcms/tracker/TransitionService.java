@@ -5,6 +5,8 @@ import com.tcms.project.Project;
 import com.tcms.project.ProjectService;
 import com.tcms.tenancy.AuditEvent;
 import com.tcms.tenancy.AuditEventRepository;
+import com.tcms.tenancy.Outbox;
+import com.tcms.tenancy.OutboxEvents;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -55,6 +57,7 @@ public class TransitionService {
     private final IssueStatusRepository statuses;
     private final IssueTransitionRepository transitions;
     private final AuditEventRepository auditEvents;
+    private final Outbox outbox;
     private final Clock clock;
 
     public TransitionService(
@@ -65,6 +68,7 @@ public class TransitionService {
             IssueStatusRepository statuses,
             IssueTransitionRepository transitions,
             AuditEventRepository auditEvents,
+            Outbox outbox,
             Clock clock) {
 
         this.projects = projects;
@@ -74,6 +78,7 @@ public class TransitionService {
         this.statuses = statuses;
         this.transitions = transitions;
         this.auditEvents = auditEvents;
+        this.outbox = outbox;
         this.clock = clock;
     }
 
@@ -143,6 +148,9 @@ public class TransitionService {
         }
 
         Instant now = clock.instant();
+        // Inside the transaction that moves the issue, so issue_fact cannot be told about a move
+        // that then rolls back. Coalesced: a board drag-and-drop session is one recompute.
+        outbox.recordCoalesced(OutboxEvents.ISSUES_CHANGED);
         issue.moveTo(targetStatusId, target.get().getKind() == IssueStatusKind.DONE, userId, now);
         Issue moved = issues.save(issue);
 

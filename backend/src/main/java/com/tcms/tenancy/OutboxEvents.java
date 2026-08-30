@@ -212,6 +212,31 @@ public final class OutboxEvents {
      */
     public static final String TRACKER_ISSUE_CREATED = "integration.tracker_issue_created";
 
+    /**
+     * A company's issues have moved — created, edited, transitioned or deleted (011, module M1).
+     *
+     * <p><strong>Coalesced</strong>, for {@link #RESULTS_CHANGED}'s reason and by the convention
+     * stated at the top of this file: its one handler is a whole-company recompute that takes no
+     * arguments ({@code tracker.IssueFactProjection}), so a person dragging fifty cards through a
+     * board must not be fifty projections. It says which company and nothing else, which is all a
+     * recompute needs and all a coalesced event can honestly carry.
+     *
+     * <p><strong>The plan proposed the other half and this is why it is not that.</strong> 011's
+     * T3 Part B sketched {@code tracker.issue_changed} as an <em>occurrence</em> carrying an issue
+     * id, arguing that a coalesced form "could name only one of fifty moves and leave forty-nine
+     * rows stale". That argument holds only for a handler that rewrites the one row it is told
+     * about. This handler rewrites every issue in the company, so there is nothing for a payload to
+     * name and nothing left stale — and a name saying something <em>changed</em> recorded through
+     * {@link Outbox#record} would be the backwards case this file's header warns about, delivering
+     * one whole-company recompute per issue. {@code V3}'s own schema comment already names this
+     * spelling ("fed by an event … tracker.IssueFactProjection, on the tracker.issues_changed
+     * outbox event"), so the migration, the convention and the handler agree.
+     *
+     * <p>The producers are {@code tracker.IssueService} and {@code tracker.TransitionService}, each
+     * inside the transaction that wrote the issue.
+     */
+    public static final String ISSUES_CHANGED = "tracker.issues_changed";
+
     private OutboxEvents() {
     }
 }
