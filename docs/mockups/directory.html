@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Directory · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="directory" data-role="Account Manager" data-crumbs="Directory">
+<main class="page">
+<div class="phead">
+  <div><h1>Directory</h1><div class="sub">Who has which skills, and when they are free</div></div>
+  <div class="actions"><a class="btn" href="staffing.html">Staffing view</a></div>
+</div>
+
+<div class="filters">
+  <span class="chip on">Playwright <span class="x">×</span></span>
+  <span class="sel" data-mock="Add a skill filter">+ Skill</span>
+  <span class="sel" data-mock="Availability filter">Free from: any</span>
+  <span class="spacer"></span>
+  <span style="font-size:11.5px;color:var(--color-text-faint)">3 of 11 people match</span>
+</div>
+
+<div class="stack">
+  <section class="panel">
+    <div class="panel-head"><h2>Mira Sund</h2><span class="badge b-blocked">130% allocated</span><span class="spacer"></span><button class="btn btn-sm" data-mock="Open profile">Profile</button></div>
+    <div class="panel-body grid g2" style="gap:16px">
+      <div class="stack" style="gap:9px">
+        <div class="chips"><span class="chip on">Playwright</span><span class="chip">TypeScript</span><span class="chip">Java</span><span class="chip">Accessibility</span><span class="chip">Payments</span></div>
+        <div style="font-size:12px;color:var(--color-text-faint)">Test Lead · Stockholm · 6 years</div>
+      </div>
+      <div>
+        <div class="tl-row" style="grid-template-columns:70px 1fr"><div class="tl-label" style="font-size:11px">Sep–Nov</div>
+          <div class="tl-track" style="height:22px"><span class="tl-bar" style="left:0;width:100%;background:var(--color-danger);color:var(--color-surface-rail);height:14px;top:4px">no free capacity</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Tomas Ek</h2><span class="badge b-done">60% free</span><span class="spacer"></span><button class="btn btn-sm" data-mock="Open profile">Profile</button></div>
+    <div class="panel-body grid g2" style="gap:16px">
+      <div class="stack" style="gap:9px">
+        <div class="chips"><span class="chip on">Playwright</span><span class="chip">Python</span><span class="chip">Load testing</span><span class="chip">Postgres</span></div>
+        <div style="font-size:12px;color:var(--color-text-faint)">Test Engineer · Malmö · 3 years</div>
+      </div>
+      <div>
+        <div class="tl-row" style="grid-template-columns:70px 1fr"><div class="tl-label" style="font-size:11px">Sep–Nov</div>
+          <div class="tl-track" style="height:22px"><span class="tl-bar" style="left:0;width:40%;background:var(--color-viz-2);height:14px;top:4px">Storefront</span><span class="tl-bar unsched" style="left:41%;width:59%;height:14px;top:4px">free from 1 Oct</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Jun Park</h2><span class="badge b-done">25% free</span><span class="spacer"></span><button class="btn btn-sm" data-mock="Open profile">Profile</button></div>
+    <div class="panel-body grid g2" style="gap:16px">
+      <div class="stack" style="gap:9px">
+        <div class="chips"><span class="chip on">Playwright</span><span class="chip">React</span><span class="chip">Design systems</span></div>
+        <div style="font-size:12px;color:var(--color-text-faint)">Test Engineer · Gothenburg · 4 years</div>
+      </div>
+      <div>
+        <div class="tl-row" style="grid-template-columns:70px 1fr"><div class="tl-label" style="font-size:11px">Sep–Nov</div>
+          <div class="tl-track" style="height:22px"><span class="tl-bar" style="left:0;width:33%;background:var(--color-viz-2);height:14px;top:4px">Kessler</span><span class="tl-bar" style="left:34%;width:20%;background:var(--color-text-ghost);color:var(--color-surface-rail);height:14px;top:4px">absent</span><span class="tl-bar unsched" style="left:55%;width:45%;height:14px;top:4px">free</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="note" style="margin-top:16px">
+  <span>◈</span>
+  <div>Enough to answer a client's staffing question — who knows this, and from when — without opening a spreadsheet or asking three people.</div>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

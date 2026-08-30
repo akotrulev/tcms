@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Checkout specification · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="projects" data-proj="ACME|Acme Storefront" data-projnav="documents" data-crumbs="Projects>projects.html|Acme Storefront>project-overview.html|Documents">
+<main class="page">
+<div class="phead">
+  <div>
+    <h1>Checkout specification</h1>
+    <div class="sub">Opened at <span class="mono">§3.2 Guest flow</span> — the block <a href="epic.html">ACME-101</a> links to</div>
+  </div>
+  <div class="actions">
+    <a class="btn" href="epic.html">← Back to the epic</a>
+    <button class="btn" data-mock="Edit document">Edit</button>
+  </div>
+</div>
+
+<div class="grid g-main">
+  <div class="panel">
+    <div class="panel-body" style="max-width:74ch">
+      <div style="font-size:12px;color:var(--color-text-ghost);margin-bottom:18px">Version 6 · updated 3 days ago by Mira Sund</div>
+
+      <h2 style="font-size:17px;font-weight:600;margin-bottom:10px">3. The guest flow</h2>
+      <p style="font-size:13.5px;color:var(--color-text-muted);line-height:1.7;margin-bottom:16px">
+        The checkout must be completable by a shopper who has never signed in. Everything below describes that path; the signed-in path differs only in which fields are pre-filled.
+      </p>
+
+      <div style="border:1px solid var(--color-action-line);background:var(--color-action-glow);border-radius:var(--r-md);padding:14px 16px;margin-bottom:16px">
+        <div class="row" style="gap:8px;margin-bottom:8px">
+          <span class="ikey">§3.2</span>
+          <span class="badge b-info"><span class="dot"></span>linked by ACME-101</span>
+          <span class="spacer"></span>
+          <a class="btn btn-sm" href="epic.html">Open the epic</a>
+        </div>
+        <p style="font-size:13.5px;color:var(--color-text);line-height:1.7">
+          A shopper who has never signed in must be able to complete an order with an email address and a delivery address, and be offered — never required — an account at the end.
+        </p>
+      </div>
+
+      <p style="font-size:13.5px;color:var(--color-text-muted);line-height:1.7;margin-bottom:16px">
+        The cart is keyed to the browser session and must survive a sign-in performed mid-checkout. Nothing in the guest path may write to the customer table before the order is placed.
+      </p>
+
+      <h2 style="font-size:17px;font-weight:600;margin:26px 0 10px">4. Errors</h2>
+      <p style="font-size:13.5px;color:var(--color-text-muted);line-height:1.7">
+        Every validation failure names the field it came from and is shown beside that field. A summary at the top of the form is additional, never the only place an error appears.
+      </p>
+    </div>
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Linked from</h2><span class="hint">2</span></div>
+      <div class="panel-body stack" style="gap:8px">
+        <a class="linked" href="epic.html"><span class="type-ic t-epic">E</span><div><div style="font-size:12.5px">Checkout rebuild</div><div style="font-size:11px;color:var(--color-text-ghost)">§3.2 · confirmed</div></div></a>
+        <a class="linked" href="story.html"><span class="type-ic t-story">S</span><div><div style="font-size:12.5px">Guest checkout without an account</div><div style="font-size:11px;color:var(--color-text-ghost)">§3.2 · confirmed</div></div></a>
+      </div>
+      <div class="panel-foot"><span>Editing a linked block flags every link to it as "changed since linked" until someone re-confirms.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Contents</h2></div>
+      <div class="panel-body stack" style="gap:4px">
+        <a href="documents.html" style="font-size:12.5px;color:var(--color-text-faint)">1 · Scope</a>
+        <a href="documents.html" style="font-size:12.5px;color:var(--color-text-faint)">2 · The cart</a>
+        <a href="documents.html" style="font-size:12.5px;color:var(--color-text);font-weight:500">3 · The guest flow</a>
+        <a href="documents.html" style="font-size:12.5px;color:var(--color-text-faint)">4 · Errors</a>
+        <a href="documents.html" style="font-size:12.5px;color:var(--color-text-faint)">5 · Payment capture</a>
+      </div>
+    </section>
+  </div>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

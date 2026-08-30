@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Runs · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="projects" data-proj="ACME|Acme Storefront" data-projnav="runs" data-crumbs="Projects>projects.html|Acme Storefront>project-overview.html|Runs">
+<main class="page">
+<div class="phead">
+  <div>
+    <div class="row" style="gap:8px;margin-bottom:4px"><span class="badge b-done"><span class="dot"></span>Complete</span><span class="chip">2.4 regression · run 2 h ago by Mira Sund</span></div>
+    <h1>Run · 2.4 regression</h1>
+  </div>
+  <div class="actions"><a class="btn" href="release.html">Release readiness</a><button class="btn btn-primary" data-mock="Start a new run">Start a new run</button></div>
+</div>
+
+<div class="grid g4" style="margin-bottom:16px">
+  <div class="panel"><div class="panel-body kpi"><span class="n" style="color:var(--color-passed)">117</span><span class="l">Passed</span></div></div>
+  <div class="panel"><div class="panel-body kpi"><span class="n" style="color:var(--color-failed)">2</span><span class="l">Failed</span></div></div>
+  <div class="panel"><div class="panel-body kpi"><span class="n">0</span><span class="l">Blocked</span></div></div>
+  <div class="panel"><div class="panel-body kpi"><span class="n">119</span><span class="l">Executed of 119</span></div></div>
+</div>
+
+<div class="grid g-main">
+  <section class="panel">
+    <div class="panel-head"><h2>Results</h2><span class="hint">failures first</span></div>
+    <div class="tw">
+      <table class="t">
+        <thead><tr><th>Case</th><th>Title</th><th>Result</th><th>Verifies</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr style="background:color-mix(in srgb, var(--color-danger) 8%, transparent)"><td><span class="ikey">TC-311</span></td><td><a class="ttl" href="test-cases.html">Guest order, expired card</a></td><td><span class="badge b-fail"><span class="dot"></span>Failed</span></td><td><a href="story.html">ACME-118</a></td><td style="color:var(--color-text-faint)">cart emptied instead of kept</td></tr>
+          <tr style="background:color-mix(in srgb, var(--color-danger) 8%, transparent)"><td><span class="ikey">TC-402</span></td><td><a class="ttl" href="test-cases.html">Card capture without leaving the page</a></td><td><span class="badge b-fail"><span class="dot"></span>Failed</span></td><td><a href="story.html">ACME-122</a></td><td style="color:var(--color-text-faint)">iframe blocked on Safari 18</td></tr>
+          <tr><td><span class="ikey">TC-308</span></td><td><a class="ttl" href="test-cases.html">Guest order, valid card</a></td><td><span class="badge b-pass"><span class="dot"></span>Passed</span></td><td><a href="story.html">ACME-118</a></td><td style="color:var(--color-text-faint)">—</td></tr>
+          <tr><td><span class="ikey">TC-309</span></td><td><a class="ttl" href="test-cases.html">Guest order, declined card</a></td><td><span class="badge b-pass"><span class="dot"></span>Passed</span></td><td><a href="story.html">ACME-118</a></td><td style="color:var(--color-text-faint)">—</td></tr>
+          <tr><td><span class="ikey">TC-320</span></td><td><a class="ttl" href="test-cases.html">Cart survives sign-in mid-checkout</a></td><td><span class="badge b-pass"><span class="dot"></span>Passed</span></td><td><a href="story.html">ACME-112</a></td><td style="color:var(--color-text-faint)">—</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="panel-foot"><span>5 of 119 shown</span></div>
+  </section>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>What these failures block</h2></div>
+      <div class="panel-body stack" style="gap:10px">
+        <div class="note bad"><span>✕</span><div><a href="release.html"><strong>Release 2.4</strong></a> is not ready. Two stories are done or nearly done with a failing linked case.</div></div>
+        <a class="btn btn-sm" href="issue-new.html">File a bug from TC-311</a>
+        <div style="font-size:11.5px;color:var(--color-text-ghost);line-height:1.55">Filing from here puts the bug under the same epic as the story the case verifies, and the epic's completion drops accordingly — by count, and it says so.</div>
+      </div>
+    </section>
+  </div>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Acme Storefront — Calendar · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="projects" data-proj="ACME|Acme Storefront" data-projnav="work" data-crumbs="Projects>projects.html|Acme Storefront>project-overview.html|Work>work-board.html|Calendar">
+<main class="page">
+<div class="phead">
+  <div><h1>Work</h1><div class="sub">September 2026 · due dates, release dates and absences</div></div>
+  <div class="actions"><span class="sel" data-mock="Month picker">September 2026</span><a class="btn btn-primary" href="issue-new.html">+ Add</a></div>
+</div>
+
+<div class="row" style="margin-bottom:12px">
+  <nav class="tabs" aria-label="Work views">
+    <a href="work-board.html">Board</a>
+    <a href="work-backlog.html">Backlog</a>
+    <a href="work-table.html">Table</a>
+    <a href="work-timeline.html">Timeline</a>
+    <a href="work-calendar.html" aria-current="page">Calendar</a>
+  </nav>
+</div>
+
+<div class="filters">
+  <span class="chip on">checkout <span class="x">×</span></span>
+  <span class="chip on">payments <span class="x">×</span></span>
+  <span class="chip on"><span class="avatar sm">DP</span> Dana Petrov <span class="x">×</span></span>
+  <span class="chip on">AI-eligible <span class="x">×</span></span>
+  <span class="spacer"></span>
+  <span style="font-size:11.5px;color:var(--color-text-faint)">same filter, fifth view</span>
+</div>
+
+<div class="cal">
+  <div class="dow">Mon</div><div class="dow">Tue</div><div class="dow">Wed</div><div class="dow">Thu</div><div class="dow">Fri</div><div class="dow">Sat</div><div class="dow">Sun</div>
+
+  <div class="day out"><div class="num">31</div><a class="cal-ev over" href="story.html">ACME-131 overdue</a></div>
+  <div class="day today"><div class="num">1</div><a class="cal-ev" href="task.html">ACME-124 due</a></div>
+  <div class="day"><div class="num">2</div></div>
+  <div class="day"><div class="num">3</div><a class="cal-ev" href="test-cases.html">TC-311 review</a></div>
+  <div class="day"><div class="num">4</div><a class="cal-ev" href="story.html">ACME-118 due</a></div>
+  <div class="day out"><div class="num">5</div></div>
+  <div class="day out"><div class="num">6</div></div>
+
+  <div class="day"><div class="num">7</div><a class="cal-ev" href="task.html">ACME-126 due</a></div>
+  <div class="day"><div class="num">8</div></div>
+  <div class="day"><div class="num">9</div></div>
+  <div class="day"><div class="num">10</div><a class="cal-ev" href="story.html">ACME-121 due</a></div>
+  <div class="day"><div class="num">11</div><span class="cal-ev" style="border-left-color:var(--color-text-ghost)">Mira away</span></div>
+  <div class="day out"><div class="num">12</div></div>
+  <div class="day out"><div class="num">13</div></div>
+
+  <div class="day"><div class="num">14</div><span class="cal-ev" style="border-left-color:var(--color-text-ghost)">Mira away</span></div>
+  <div class="day"><div class="num">15</div><a class="cal-ev" href="test-runs.html">2.4 regression run</a></div>
+  <div class="day"><div class="num">16</div><a class="cal-ev" href="story.html">ACME-119 due</a></div>
+  <div class="day"><div class="num">17</div><a class="cal-ev" href="timesheets.html">Timesheet period ends</a></div>
+  <div class="day"><div class="num">18</div><a class="cal-ev rel" href="release.html">2.4 target</a></div>
+  <div class="day out"><div class="num">19</div></div>
+  <div class="day out"><div class="num">20</div></div>
+
+  <div class="day"><div class="num">21</div></div>
+  <div class="day"><div class="num">22</div></div>
+  <div class="day"><div class="num">23</div></div>
+  <div class="day"><div class="num">24</div></div>
+  <div class="day"><div class="num">25</div></div>
+  <div class="day out"><div class="num">26</div></div>
+  <div class="day out"><div class="num">27</div></div>
+
+  <div class="day"><div class="num">28</div></div>
+  <div class="day"><div class="num">29</div></div>
+  <div class="day"><div class="num">30</div><a class="cal-ev rel" href="releases.html">LOYA 0.4 target</a></div>
+  <div class="day out"><div class="num">1</div></div>
+  <div class="day out"><div class="num">2</div></div>
+  <div class="day out"><div class="num">3</div></div>
+  <div class="day out"><div class="num">4</div></div>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

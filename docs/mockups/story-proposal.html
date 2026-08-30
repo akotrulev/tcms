@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Proposed sub-tasks · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="projects" data-proj="ACME|Acme Storefront" data-projnav="work" data-crumbs="Projects>projects.html|Acme Storefront>project-overview.html|ACME-118>story.html|Proposed breakdown">
+<main class="page">
+<div class="phead">
+  <div>
+    <div class="row" style="gap:8px;margin-bottom:4px">
+      <span class="ai-tag">claude-code</span>
+      <span class="badge b-review"><span class="dot"></span>Pending your decision</span>
+    </div>
+    <h1>Proposed breakdown of ACME-118</h1>
+    <div class="sub">Three sub-tasks proposed 20 minutes ago. None of them exists yet.</div>
+  </div>
+  <div class="actions">
+    <a class="btn" href="story.html">Back to the story</a>
+    <a class="btn btn-primary" href="story.html">Apply 2 accepted</a>
+  </div>
+</div>
+
+<div class="note" style="margin-bottom:16px">
+  <span>◈</span>
+  <div><strong>A proposal is not a task.</strong> Nothing below appears on the board, in a count, or in anyone's queue until you accept it. Decomposition stays yours; the speed is the machine's.</div>
+</div>
+
+<div class="grid g-main">
+  <div class="stack">
+
+    <section class="panel" style="border-color:color-mix(in srgb, var(--color-success) 34%, transparent)">
+      <div class="panel-head">
+        <span class="badge b-done"><span class="dot"></span>Accepted</span>
+        <h2 style="margin-left:4px">Wire the address form to the validation service</h2>
+        <span class="spacer"></span>
+        <span class="mono" style="font-size:11.5px">4h</span>
+      </div>
+      <div class="panel-body" style="font-size:12.5px;color:var(--color-text-muted);line-height:1.6">
+        Call the carrier list on blur of the postcode field; show the error beside the field, never only at the top of the form.
+      </div>
+      <div class="panel-foot">
+        <span>Owner: Dana Petrov · will be created under ACME-118</span>
+        <span class="spacer" style="margin-left:auto"></span>
+        <button class="btn btn-sm" data-mock="Undo accept">Undo</button>
+      </div>
+    </section>
+
+    <section class="panel" style="border-color:var(--color-action-line)">
+      <div class="panel-head">
+        <span class="badge b-info"><span class="dot"></span>Edited, then accepted</span>
+        <h2 style="margin-left:4px">Cover the six-character Dutch postcode boundary</h2>
+        <span class="spacer"></span>
+        <span class="mono" style="font-size:11.5px">3h</span>
+      </div>
+      <div class="panel-body stack" style="gap:10px">
+        <div style="font-size:12.5px;color:var(--color-text-muted);line-height:1.6">
+          Unit-test the boundary either side of six characters, and add a case to <a href="test-cases.html">TC-309</a>.
+        </div>
+        <div class="excerpt" style="border-left-color:var(--color-rule)">
+          <span style="color:var(--color-text-ghost)">Proposed as:</span> "Add postcode tests" · 2h · no owner
+        </div>
+      </div>
+      <div class="panel-foot"><span>Your edit is what gets created. The original wording is kept beside it.</span></div>
+    </section>
+
+    <section class="panel" style="border-color:color-mix(in srgb, var(--color-danger) 30%, transparent)">
+      <div class="panel-head">
+        <span class="badge b-blocked"><span class="dot"></span>Rejected</span>
+        <h2 style="margin-left:4px">Migrate the address table to the new schema</h2>
+        <span class="spacer"></span>
+        <span class="mono" style="font-size:11.5px">8h</span>
+      </div>
+      <div class="panel-body stack" style="gap:10px">
+        <div style="font-size:12.5px;color:var(--color-text-muted);line-height:1.6">
+          Rename <span class="mono">address.zip</span> to <span class="mono">address.postal_code</span> and backfill.
+        </div>
+        <div class="note bad" style="align-items:flex-start">
+          <span>✕</span>
+          <div><strong>Your note, kept with the rejection:</strong> <em>out of scope for 2.4 — a schema change here needs its own story and a migration slot. Raise it against 2.5.</em></div>
+        </div>
+      </div>
+      <div class="panel-foot"><span>Rejections and their reasons stay on the story, so the same proposal does not come back unexplained.</span></div>
+    </section>
+
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Summary</h2></div>
+      <div class="panel-body stack" style="gap:12px">
+        <dl class="dl">
+          <dt>Proposed</dt><dd>3 sub-tasks · 14h</dd>
+          <dt>Accepting</dt><dd style="color:var(--color-success)">2 · 7h</dd>
+          <dt>Rejecting</dt><dd style="color:var(--color-danger)">1 · 8h</dd>
+          <dt>By</dt><dd><span class="ai-tag">claude-code</span> as Dana Petrov</dd>
+        </dl>
+        <a class="btn btn-primary" href="story.html">Apply — create 2 sub-tasks</a>
+        <a class="btn" href="story.html">Discard the whole proposal</a>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>What it read</h2></div>
+      <div class="panel-body" style="font-size:12.5px;color:var(--color-text-muted);line-height:1.6">
+        The story, its four acceptance criteria, the epic goal, the target release and the linked block of <a href="documents.html">Checkout specification §3.2</a>. Nothing outside <strong>Acme Storefront</strong> — this assistant is scoped to one project.
+      </div>
+    </section>
+  </div>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

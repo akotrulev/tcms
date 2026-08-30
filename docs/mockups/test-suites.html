@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Suites · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="projects" data-proj="ACME|Acme Storefront" data-projnav="suites" data-crumbs="Projects>projects.html|Acme Storefront>project-overview.html|Suites">
+<main class="page">
+<div class="phead">
+  <div><h1>Suites</h1><div class="sub">A suite is flat — a named collection whose members are filed ∪ added ∪ tagged. Not a folder in a tree.</div></div>
+  <div class="actions"><button class="btn btn-primary" data-mock="New suite">+ New suite</button></div>
+</div>
+
+<section class="panel">
+  <div class="tw">
+    <table class="t">
+      <thead><tr><th class="sorted-asc">Suite</th><th>Filed</th><th>Added</th><th>Tagged</th><th class="num">Members</th><th>Used by</th></tr></thead>
+      <tbody>
+        <tr><td><a class="ttl" href="test-cases.html">Checkout</a></td><td class="mono">42</td><td class="mono">6</td><td class="mono">tag:checkout → 11</td><td class="num mono">59</td><td><a href="test-plans.html">2.4 regression</a></td></tr>
+        <tr><td><a class="ttl" href="test-cases.html">Payments</a></td><td class="mono">28</td><td class="mono">2</td><td class="mono">tag:payments → 9</td><td class="num mono">39</td><td><a href="test-plans.html">2.4 regression</a></td></tr>
+        <tr><td><a class="ttl" href="test-cases.html">Accessibility</a></td><td class="mono">31</td><td class="mono">0</td><td class="mono">tag:a11y → 4</td><td class="num mono">35</td><td><a href="test-plans.html">2.3 sign-off</a></td></tr>
+        <tr><td><a class="ttl" href="test-cases.html">Smoke</a></td><td class="mono">0</td><td class="mono">21</td><td class="mono">—</td><td class="num mono">21</td><td>every plan</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="panel-foot"><span>The three arms are a union, so a case reached by a tag is a member without being moved anywhere.</span></div>
+</section>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

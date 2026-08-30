@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ACME-124 Address validation · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="projects" data-proj="ACME|Acme Storefront" data-projnav="work" data-crumbs="Projects>projects.html|Acme Storefront>project-overview.html|ACME-118>story.html|ACME-124">
+<main class="page">
+<div class="phead">
+  <div>
+    <div class="row" style="gap:8px;margin-bottom:4px">
+      <span class="type-ic t-task">T</span><span class="ikey">ACME-124</span>
+      <span class="badge b-prog"><span class="dot"></span>In Progress</span>
+      <span class="ai-tag">AI-ELIGIBLE</span>
+      <span class="chip">under <a href="story.html">ACME-118</a></span>
+    </div>
+    <h1>Add address validation to the checkout form</h1>
+  </div>
+  <div class="actions">
+    <span class="sel on" data-mock="Status picker">Move to… ▾</span>
+    <button class="btn" data-mock="Log time">◷ Log time</button>
+    <button class="btn" data-mock="Watch">☆ Watch</button>
+  </div>
+</div>
+
+<div class="grid g-main">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>What the assistant received</h2><span class="hint">the same context a person would open</span></div>
+      <div class="panel-body stack" style="gap:12px">
+        <dl class="dl">
+          <dt>Parent story</dt><dd><a href="story.html">ACME-118 · Guest checkout without an account</a></dd>
+          <dt>Epic goal</dt><dd style="color:var(--color-text-muted)">Single-page checkout that works without an account…</dd>
+          <dt>Target release</dt><dd><a href="release.html">2.4</a> · 18 Sep</dd>
+          <dt>Linked spec</dt><dd><a href="documents.html">Checkout specification §3.2</a> — excerpt included</dd>
+          <dt>Repository</dt><dd><span class="mono">git@github.com:northwind/acme-storefront.git</span> · <span class="mono">main</span></dd>
+          <dt>Build</dt><dd class="mono">npm ci &amp;&amp; npm run build &amp;&amp; npm test</dd>
+          <dt>Moves allowed</dt><dd><span class="chips"><span class="chip">Blocked</span><span class="chip">In Review</span><span class="chip" style="opacity:.5;text-decoration:line-through">Done</span></span></dd>
+        </dl>
+        <div class="note">
+          <span>◈</span>
+          <div>The assistant runs on <strong>Dana's machine</strong>, in Dana's checkout, with Dana's git. This product never ran the build, never held the repository and never called a model — it handed over a task and received a report.</div>
+        </div>
+      </div>
+      <div class="panel-foot"><span><a href="settings-repositories.html">Where the repository and build command come from →</a></span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Pull request</h2></div>
+      <div class="panel-body">
+        <div class="linked">
+          <span style="color:var(--color-success)">◆</span>
+          <div>
+            <div><a href="task.html" class="ttl">#482 · Validate delivery addresses against the carrier list</a></div>
+            <div style="font-size:11.5px;color:var(--color-text-faint);margin-top:2px">northwind/acme-storefront · opened by dana-petrov · 3 files, +148 −22</div>
+          </div>
+          <span class="spacer"></span>
+          <span class="badge b-review"><span class="dot"></span>Awaiting review</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Comments &amp; history</h2></div>
+      <div class="panel-body feed">
+        <div class="feed-item"><span class="avatar sm">DP</span><div class="body">
+          <div class="who"><strong>Dana Petrov</strong> <span class="via">via claude-code</span><span class="t">14 min ago</span></div>
+          <div class="sys">moved this task <span class="badge b-prog"><span class="dot"></span>In Progress</span> → <span class="badge b-review"><span class="dot"></span>In Review</span> and attached <a href="task.html">PR #482</a></div>
+        </div></div>
+
+        <div class="feed-item"><span class="avatar sm">DP</span><div class="body">
+          <div class="who"><strong>Dana Petrov</strong> <span class="via">via claude-code</span><span class="t">18 min ago</span></div>
+          <div class="txt">Build failed on the first attempt — <span class="mono">npm test</span> exited 1 on <span class="mono">postcode.spec.ts</span> (2 failures). Fixed the boundary case for six-character Dutch codes and re-ran; suite green. Opening the PR.</div>
+        </div></div>
+
+        <div class="feed-item"><span class="avatar sm">DP</span><div class="body">
+          <div class="who"><strong>Dana Petrov</strong> <span class="via">via claude-code</span><span class="t">41 min ago</span></div>
+          <div class="sys">fetched this task with its story, acceptance criteria, epic goal, target release and linked spec</div>
+        </div></div>
+
+        <div class="feed-item"><span class="avatar sm">DP</span><div class="body">
+          <div class="who"><strong>Dana Petrov</strong><span class="t">this morning</span></div>
+          <div class="sys">flagged this task <span class="ai-tag">AI-eligible</span></div>
+        </div></div>
+
+        <div class="feed-item"><span class="avatar sm">RL</span><div class="body">
+          <div class="who"><strong>Rae Lindqvist</strong><span class="t">2 d ago</span></div>
+          <div class="sys">created this task under <a href="story.html">ACME-118</a> · estimate 6h</div>
+        </div></div>
+      </div>
+      <div class="panel-foot" style="display:block">
+        <div class="row" style="gap:8px;width:100%">
+          <span class="avatar sm">DP</span>
+          <input class="input" placeholder="Write a comment" style="flex:1">
+          <button class="btn btn-primary" data-mock="Post comment">Comment</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>What the assistant was refused</h2></div>
+      <div class="panel-body">
+        <div class="note bad">
+          <span>✕</span>
+          <div>
+            <strong>claude-code tried to move this task to Done.</strong>
+            <div style="margin-top:5px">Refused: <em>an assistant may move a task only where the person behind it could, and closing an issue it worked on requires a human. Moved to In&nbsp;Review instead.</em></div>
+            <div style="margin-top:5px;font-size:11.5px;color:var(--color-text-faint)">On a project with the review gate off, that same move would have been allowed — see <a href="settings-general.html">the gate</a>.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Details</h2></div>
+      <div class="panel-body">
+        <dl class="dl">
+          <dt>Type</dt><dd><span class="row" style="gap:6px"><span class="type-ic t-task">T</span> Task</span></dd>
+          <dt>Parent</dt><dd><a href="story.html">ACME-118</a></dd>
+          <dt>Assignee</dt><dd><span class="row" style="gap:6px"><span class="avatar sm">DP</span> Dana Petrov</span></dd>
+          <dt>Estimate</dt><dd class="mono">6h</dd>
+          <dt>Logged</dt><dd class="mono">2h</dd>
+          <dt>Due</dt><dd class="due-soon">Today</dd>
+          <dt>Labels</dt><dd><span class="chips"><span class="chip">checkout</span></span></dd>
+        </dl>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Assistant</h2></div>
+      <div class="panel-body stack" style="gap:11px">
+        <div class="setrow" style="padding:0;border:0">
+          <div class="txt"><strong>AI-eligible</strong><span>Only flagged tasks reach my assistant's queue</span></div>
+          <span class="spacer"></span>
+          <button class="toggle" role="switch" aria-checked="true" aria-label="AI-eligible" data-on="Now in the assistant's queue" data-off="Removed from the assistant's queue"></button>
+        </div>
+        <div class="row" style="gap:8px"><span class="ai-tag">claude-code</span><span style="font-size:11.5px;color:var(--color-text-faint)">scoped to Acme Storefront</span></div>
+        <a class="btn btn-sm" href="profile-assistants.html">Manage my assistants</a>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Where it can go</h2></div>
+      <div class="panel-body stack" style="gap:8px">
+        <a class="rank-row" href="task.html"><span class="badge b-blocked"><span class="dot"></span>Blocked</span><span class="spacer"></span><span style="font-size:11.5px;color:var(--color-text-faint)">allowed</span></a>
+        <a class="rank-row" href="task.html"><span class="badge b-review"><span class="dot"></span>In Review</span><span class="spacer"></span><span style="font-size:11.5px;color:var(--color-text-faint)">allowed</span></a>
+        <div class="rank-row" style="opacity:.55"><span class="badge b-done"><span class="dot"></span>Done</span><span class="spacer"></span><span style="font-size:11.5px;color:var(--color-danger)">needs a reviewer</span></div>
+      </div>
+      <div class="panel-foot"><span>Disabled, not hidden — you can see the move exists and why it is closed to you.</span></div>
+    </section>
+  </div>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

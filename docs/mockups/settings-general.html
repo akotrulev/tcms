@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project settings · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="projects" data-proj="ACME|Acme Storefront" data-projnav="settings" data-crumbs="Projects>projects.html|Acme Storefront>project-overview.html|Settings">
+<main class="page">
+<div class="phead"><div><h1>Project settings</h1><div class="sub">Acme Storefront</div></div></div>
+
+<nav class="subnav" aria-label="Settings sections">
+  <a href="settings-general.html" aria-current="page">General</a>
+  <a href="settings-workflow.html">Workflow</a>
+  <a href="settings-boards.html">Boards</a>
+  <a href="settings-repositories.html">Repositories</a>
+  <a href="settings-import.html">Imports</a>
+</nav>
+
+<div class="grid g-main">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Identity</h2></div>
+      <div class="panel-body" style="max-width:560px">
+        <div class="field"><label for="n">Name</label><input class="input" id="n" value="Acme Storefront"></div>
+        <div class="field">
+          <label for="k">Key</label>
+          <input class="input mono" id="k" value="ACME">
+          <div class="help">Prefixes every issue in this project — <span class="mono">ACME-124</span>. Existing links keep working if it changes.</div>
+        </div>
+        <div class="field">
+          <label for="c">Client</label>
+          <select class="input" id="c"><option>None (internal)</option><option selected>Acme Retail</option><option>Bergstrom AG</option><option>Kessler Health</option></select>
+          <div class="help">This field only exists because the company has at least one client. With none, it is not rendered at all — and no project is marked as missing one. <a href="clients.html">Clients</a></div>
+        </div>
+      </div>
+      <div class="panel-foot"><span class="spacer" style="margin-left:auto"></span><a class="btn btn-primary" href="project-overview.html">Save</a></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Issue types</h2><span class="spacer"></span><button class="btn btn-sm" data-mock="Add issue type">+ Add type</button></div>
+      <div>
+        <div class="setrow"><span class="type-ic t-epic">E</span><div class="txt"><strong>Epic</strong><span>A body of work with a goal, dates and a target release. Holds stories.</span></div><span class="spacer"></span><span class="badge b-neutral">counts by children</span></div>
+        <div class="setrow"><span class="type-ic t-story">S</span><div class="txt"><strong>Story</strong><span>What a person can pick up. Holds tasks.</span></div><span class="spacer"></span><span class="badge b-neutral">estimable</span></div>
+        <div class="setrow"><span class="type-ic t-task">T</span><div class="txt"><strong>Task</strong><span>A unit of work. Under a story, or standing alone.</span></div><span class="spacer"></span><span class="badge b-neutral">estimable</span></div>
+        <div class="setrow"><span class="type-ic t-bug">B</span><div class="txt"><strong>Bug</strong><span>Counts as unfinished work in its epic until it is done.</span></div><span class="spacer"></span><span class="badge b-neutral">in completion</span></div>
+        <div class="setrow"><span class="type-ic t-spike">?</span><div class="txt"><strong>Spike</strong><span>Time-boxed investigation.</span></div><span class="spacer"></span><span class="badge b-neutral">excluded from %</span></div>
+      </div>
+      <div class="panel-foot"><span>Tasks created before the upgrade are still called <strong>Task</strong>. Nothing you typed changed meaning underneath you.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Closing work</h2></div>
+      <div>
+        <div class="setrow">
+          <div class="txt"><strong>Require review to close issues</strong><span>A second person approves before an issue reaches a done status</span></div>
+          <span class="spacer"></span>
+          <button class="toggle" role="switch" aria-checked="true" aria-label="Require review to close issues" data-on="On — the author can no longer close their own issue" data-off="Off — the author can close their own issue"></button>
+        </div>
+        <div class="setrow">
+          <div class="txt"><strong>An assistant may never close</strong><span>Fixed. An assistant reaches In Review at most, whatever this project sets</span></div>
+          <span class="spacer"></span>
+          <span class="badge b-neutral">always on</span>
+        </div>
+      </div>
+      <div class="panel-foot"><span>A new project ships with the review gate <strong>off</strong>, so a one-person company is not dead-ended by a rule written for a team. <a href="solo-overview.html">See that case</a>.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Time</h2></div>
+      <div>
+        <div class="setrow"><div class="txt"><strong>Track time on this project</strong><span>Engineers log hours against issues</span></div><span class="spacer"></span><button class="toggle" role="switch" aria-checked="true" aria-label="Track time" data-on="Time tracking on" data-off="Time tracking off"></button></div>
+        <div class="setrow"><div class="txt"><strong>Budget</strong><span>Hours ceiling — the PM sees the burn, never the rate</span></div><span class="spacer"></span><span class="mono">600h</span><a class="btn btn-sm" href="billing.html">Edit in Billing</a></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Danger zone</h2></div>
+      <div class="panel-body stack" style="gap:10px">
+        <div style="font-size:12.5px;color:var(--color-text-muted);line-height:1.55">Archiving hides the project from lists and freezes its issues. Nothing is deleted, and its keys stay resolvable.</div>
+        <button class="btn btn-danger" data-mock="Archive project">Archive project</button>
+      </div>
+    </section>
+  </div>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

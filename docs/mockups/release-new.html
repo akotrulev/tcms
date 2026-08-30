@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New release · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="projects" data-proj="ACME|Acme Storefront" data-projnav="releases" data-crumbs="Projects>projects.html|Acme Storefront>project-overview.html|Releases>releases.html|New">
+<main class="page">
+<div class="phead">
+  <div><h1>New release</h1><div class="sub">A version, and optionally a date and a description. Nothing else is required.</div></div>
+</div>
+
+<div class="grid g-main">
+  <section class="panel">
+    <div class="panel-body" style="max-width:560px">
+      <div class="field">
+        <label for="v">Version</label>
+        <input class="input mono" id="v" placeholder="2.5" value="2.6">
+        <div class="help">Compared segment by segment — <span class="mono">1.10</span> comes after <span class="mono">1.9</span>.</div>
+      </div>
+      <div class="field">
+        <label for="d">Target date</label>
+        <input class="input" id="d" type="date">
+        <div class="help">Optional. Without one the release still exists, and shows on the timeline in the unscheduled lane.</div>
+      </div>
+      <div class="field">
+        <label for="ds">Description</label>
+        <textarea class="input" id="ds" placeholder="What this version is for."></textarea>
+      </div>
+    </div>
+    <div class="panel-foot">
+      <a class="btn" href="releases.html">Cancel</a>
+      <span class="spacer" style="margin-left:auto"></span>
+      <a class="btn btn-primary" href="releases.html">Create release</a>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Not in this product</h2></div>
+    <div class="panel-body stack" style="gap:9px">
+      <div class="bullet"><span style="color:var(--color-text-ghost)">✕</span><span style="font-size:12.5px;color:var(--color-text-muted)">Sprints</span></div>
+      <div class="bullet"><span style="color:var(--color-text-ghost)">✕</span><span style="font-size:12.5px;color:var(--color-text-muted)">Velocity and sprint burndown</span></div>
+      <div class="bullet"><span style="color:var(--color-text-ghost)">✕</span><span style="font-size:12.5px;color:var(--color-text-muted)">A release shared between two projects</span></div>
+      <div style="font-size:11.5px;color:var(--color-text-ghost);line-height:1.55;margin-top:4px">Planning has a cadence because releases have dates. Nothing here asks you to invent a two-week rhythm you do not work in.</div>
+    </div>
+  </section>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

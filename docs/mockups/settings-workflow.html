@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workflow · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="projects" data-proj="ACME|Acme Storefront" data-projnav="settings" data-crumbs="Projects>projects.html|Acme Storefront>project-overview.html|Settings">
+<main class="page">
+<div class="phead">
+  <div><h1>Project settings</h1><div class="sub">Acme Storefront</div></div>
+  <div class="actions"><button class="btn btn-sm" data-mock="Reset to default">Reset to default</button><button class="btn btn-primary" data-mock="Add status">+ Add status</button></div>
+</div>
+
+<nav class="subnav" aria-label="Settings sections">
+  <a href="settings-general.html">General</a>
+  <a href="settings-workflow.html" aria-current="page">Workflow</a>
+  <a href="settings-boards.html">Boards</a>
+  <a href="settings-repositories.html">Repositories</a>
+  <a href="settings-import.html">Imports</a>
+</nav>
+
+<div class="note" style="margin-bottom:16px">
+  <span>◈</span>
+  <div>Every percentage in this project is computed from the <strong>done</strong> column below. A status marked <em>in progress</em> is not partial credit — it is simply not done.</div>
+</div>
+
+<div class="grid g-main">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Statuses, in order</h2><span class="hint">6</span><span class="spacer"></span><span class="basis">drag ⠿ or use ↑ / ↓</span></div>
+      <div class="panel-body stack" style="gap:6px">
+
+        <div class="rank-row"><span class="grab">⠿</span><span class="n">1</span>
+          <span class="badge b-todo"><span class="dot"></span>Backlog</span>
+          <span class="ttl" style="color:var(--color-text-faint);font-size:12px">the default for a new issue</span>
+          <span class="spacer"></span><span class="sel">not started</span>
+          <span class="movers"><button class="btn btn-icon btn-sm" data-mock="Move up" aria-label="Move Backlog up">↑</button><button class="btn btn-icon btn-sm" data-mock="Move down" aria-label="Move Backlog down">↓</button></span>
+          <button class="btn btn-icon btn-sm btn-ghost" data-mock="Rename" aria-label="Rename Backlog">✎</button>
+        </div>
+
+        <div class="rank-row"><span class="grab">⠿</span><span class="n">2</span>
+          <span class="badge b-todo"><span class="dot"></span>Ready</span>
+          <span class="ttl" style="color:var(--color-text-faint);font-size:12px">refined, estimated, waiting for someone</span>
+          <span class="spacer"></span><span class="sel">not started</span>
+          <span class="movers"><button class="btn btn-icon btn-sm" data-mock="Move up" aria-label="Move Ready up">↑</button><button class="btn btn-icon btn-sm" data-mock="Move down" aria-label="Move Ready down">↓</button></span>
+          <button class="btn btn-icon btn-sm btn-ghost" data-mock="Rename" aria-label="Rename Ready">✎</button>
+        </div>
+
+        <div class="rank-row"><span class="grab">⠿</span><span class="n">3</span>
+          <span class="badge b-prog"><span class="dot"></span>In Progress</span>
+          <span class="ttl" style="color:var(--color-text-faint);font-size:12px">someone is on it</span>
+          <span class="spacer"></span><span class="sel on">in progress</span>
+          <span class="movers"><button class="btn btn-icon btn-sm" data-mock="Move up" aria-label="Move In Progress up">↑</button><button class="btn btn-icon btn-sm" data-mock="Move down" aria-label="Move In Progress down">↓</button></span>
+          <button class="btn btn-icon btn-sm btn-ghost" data-mock="Rename" aria-label="Rename In Progress">✎</button>
+        </div>
+
+        <div class="rank-row"><span class="grab">⠿</span><span class="n">4</span>
+          <span class="badge b-review"><span class="dot"></span>In Review</span>
+          <span class="ttl" style="color:var(--color-text-faint);font-size:12px">the furthest an assistant can move anything</span>
+          <span class="spacer"></span><span class="sel on">in progress</span>
+          <span class="movers"><button class="btn btn-icon btn-sm" data-mock="Move up" aria-label="Move In Review up">↑</button><button class="btn btn-icon btn-sm" data-mock="Move down" aria-label="Move In Review down">↓</button></span>
+          <button class="btn btn-icon btn-sm btn-ghost" data-mock="Rename" aria-label="Rename In Review">✎</button>
+        </div>
+
+        <div class="rank-row"><span class="grab">⠿</span><span class="n">5</span>
+          <span class="badge b-blocked"><span class="dot"></span>Blocked</span>
+          <span class="ttl" style="color:var(--color-text-faint);font-size:12px">waiting on something outside the team</span>
+          <span class="spacer"></span><span class="sel on">in progress</span>
+          <span class="movers"><button class="btn btn-icon btn-sm" data-mock="Move up" aria-label="Move Blocked up">↑</button><button class="btn btn-icon btn-sm" data-mock="Move down" aria-label="Move Blocked down">↓</button></span>
+          <button class="btn btn-icon btn-sm btn-ghost" data-mock="Rename" aria-label="Rename Blocked">✎</button>
+        </div>
+
+        <div class="rank-row" style="border-color:color-mix(in srgb, var(--color-success) 30%, transparent)"><span class="grab">⠿</span><span class="n">6</span>
+          <span class="badge b-done"><span class="dot"></span>Done</span>
+          <span class="ttl" style="color:var(--color-text-faint);font-size:12px">counts toward every percentage</span>
+          <span class="spacer"></span><span class="sel on" style="border-color:color-mix(in srgb, var(--color-success) 40%, transparent);color:var(--color-success);background:color-mix(in srgb, var(--color-success) 12%, transparent)">done</span>
+          <span class="movers"><button class="btn btn-icon btn-sm" data-mock="Move up" aria-label="Move Done up">↑</button><button class="btn btn-icon btn-sm" data-mock="Move down" aria-label="Move Done down">↓</button></span>
+          <button class="btn btn-icon btn-sm btn-ghost" data-mock="Rename" aria-label="Rename Done">✎</button>
+        </div>
+
+      </div>
+      <div class="panel-foot"><span>A brand-new project arrives with exactly this set, so nobody has to configure anything before creating their first issue.</span></div>
+    </section>
+
+    <section class="panel" style="border-color:color-mix(in srgb, var(--color-warning) 34%, transparent)">
+      <div class="panel-head"><h2>Removing "Blocked"</h2><span class="badge b-review"><span class="dot"></span>needs a decision</span></div>
+      <div class="panel-body stack" style="gap:12px">
+        <div class="note warn"><span>!</span><div><strong>4 issues currently hold this status.</strong> Removing it cannot silently orphan them, so pick where they go.</div></div>
+        <div class="field" style="max-width:340px;margin:0">
+          <label for="mv">Move those 4 issues to</label>
+          <select class="input" id="mv"><option>Backlog</option><option selected>In Progress</option><option>Ready</option></select>
+        </div>
+        <div class="chips">
+          <span class="chip"><span class="ikey">ACME-119</span> Apply a gift card</span>
+          <span class="chip"><span class="ikey">BERG-40</span> SSO handshake</span>
+          <span class="chip">+2</span>
+        </div>
+        <div class="row"><a class="btn" href="settings-workflow.html">Cancel</a><button class="btn btn-danger" data-mock="Remove status and move issues">Remove and move 4 issues</button></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Allowed moves</h2></div>
+      <div class="panel-body stack" style="gap:8px">
+        <div style="font-size:12.5px;color:var(--color-text-muted);line-height:1.55">From <span class="badge b-prog"><span class="dot"></span>In Progress</span> an issue may go to:</div>
+        <div class="chips"><span class="chip">In Review</span><span class="chip">Blocked</span><span class="chip">Ready</span></div>
+        <div style="font-size:12.5px;color:var(--color-text-muted);line-height:1.55;margin-top:4px">Not to <span class="chip">Done</span> — a review gate stands between them.</div>
+        <button class="btn btn-sm" data-mock="Edit transitions">Edit transitions</button>
+      </div>
+      <div class="panel-foot"><span>On the board, a forbidden drop is refused and the card says why rather than snapping back in silence.</span></div>
+    </section>
+  </div>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

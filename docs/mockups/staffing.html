@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Staffing · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="staffing" data-role="Project Manager" data-crumbs="Staffing">
+<main class="page">
+<div class="phead">
+  <div><h1>Staffing</h1><div class="sub">Company view · September – November 2026</div></div>
+  <div class="actions"><span class="sel" data-mock="Range picker">Next 3 months</span><button class="btn btn-primary" data-mock="Allocate a person">+ Allocate</button></div>
+</div>
+
+<div class="filters">
+  <span class="sel on">All projects</span>
+  <span class="sel" data-mock="Skill filter">Skill: any</span>
+  <span class="sel" data-mock="Availability filter">Availability: any</span>
+  <span class="spacer"></span>
+  <span class="chip" style="color:var(--color-danger);border-color:color-mix(in srgb, var(--color-danger) 34%, transparent)">1 over-allocated</span>
+</div>
+
+<section class="panel">
+  <div class="panel-head"><h2>Allocation</h2><span class="hint">percentage of capacity, per person, per month</span></div>
+  <div class="panel-body">
+    <div class="tl">
+      <div class="tl-scale" style="grid-template-columns:190px repeat(3,1fr)"><div>&nbsp;</div><div>September</div><div>October</div><div>November</div></div>
+
+      <div class="tl-row" style="grid-template-columns:190px 1fr">
+        <div class="tl-label"><span class="avatar sm">RL</span> Rae Lindqvist <span class="mono" style="color:var(--color-text-ghost);font-size:10.5px">100%</span></div>
+        <div class="tl-track" style="background:repeating-linear-gradient(to right,transparent 0,transparent calc(33.33% - 1px),var(--color-rule) calc(33.33% - 1px),var(--color-rule) 33.33%)">
+          <span class="tl-bar" style="left:0;width:100%;background:var(--color-viz-2)">Acme Storefront · 100%</span>
+        </div>
+      </div>
+
+      <div class="tl-row" style="grid-template-columns:190px 1fr">
+        <div class="tl-label"><span class="avatar sm">DP</span> Dana Petrov <span class="mono" style="color:var(--color-text-ghost);font-size:10.5px">100%</span></div>
+        <div class="tl-track" style="background:repeating-linear-gradient(to right,transparent 0,transparent calc(33.33% - 1px),var(--color-rule) calc(33.33% - 1px),var(--color-rule) 33.33%)">
+          <span class="tl-bar" style="left:0;width:60%;background:var(--color-viz-2)">Acme Storefront · 60%</span>
+          <span class="tl-bar" style="left:61%;width:39%;background:var(--color-viz-1);color:var(--color-text)">Internal · 40%</span>
+        </div>
+      </div>
+
+      <div class="tl-row" style="grid-template-columns:190px 1fr">
+        <div class="tl-label"><span class="avatar sm">MS</span> Mira Sund <span class="badge b-blocked" style="font-size:9px">130%</span></div>
+        <div class="tl-track" style="background:repeating-linear-gradient(to right,transparent 0,transparent calc(33.33% - 1px),var(--color-rule) calc(33.33% - 1px),var(--color-rule) 33.33%)">
+          <span class="tl-bar" style="left:0;width:50%;background:var(--color-viz-2)">Storefront 50%</span>
+          <span class="tl-bar" style="left:51%;width:29%;background:var(--color-viz-1);color:var(--color-text)">Loyalty 50%</span>
+          <span class="tl-bar" style="left:81%;width:19%;background:var(--color-danger);color:var(--color-surface-rail)">+30%</span>
+        </div>
+      </div>
+
+      <div class="tl-row" style="grid-template-columns:190px 1fr">
+        <div class="tl-label"><span class="avatar sm">TE</span> Tomas Ek <span class="mono" style="color:var(--color-text-ghost);font-size:10.5px">40%</span></div>
+        <div class="tl-track" style="background:repeating-linear-gradient(to right,transparent 0,transparent calc(33.33% - 1px),var(--color-rule) calc(33.33% - 1px),var(--color-rule) 33.33%)">
+          <span class="tl-bar" style="left:0;width:40%;background:var(--color-viz-2)">Storefront 40%</span>
+          <span class="tl-bar unsched" style="left:41%;width:59%">60% free</span>
+        </div>
+      </div>
+
+      <div class="tl-row" style="grid-template-columns:190px 1fr">
+        <div class="tl-label"><span class="avatar sm">JP</span> Jun Park <span class="mono" style="color:var(--color-text-ghost);font-size:10.5px">75%</span></div>
+        <div class="tl-track" style="background:repeating-linear-gradient(to right,transparent 0,transparent calc(33.33% - 1px),var(--color-rule) calc(33.33% - 1px),var(--color-rule) 33.33%)">
+          <span class="tl-bar" style="left:0;width:33%;background:var(--color-viz-2)">Kessler 100%</span>
+          <span class="tl-bar" style="left:34%;width:20%;background:var(--color-text-ghost);color:var(--color-surface-rail)">Absent</span>
+          <span class="tl-bar unsched" style="left:55%;width:45%">free</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="panel-foot"><span>Absence sets capacity to <strong>zero</strong> for those days — everywhere, not only here, so a plan cannot quietly assume someone who is away.</span></div>
+</section>
+
+<div class="grid g2" style="margin-top:16px">
+  <section class="panel" style="border-color:color-mix(in srgb, var(--color-danger) 30%, transparent)">
+    <div class="panel-head"><h2>Over 100%</h2><span class="badge b-blocked"><span class="dot"></span>1 person</span></div>
+    <div class="panel-body stack" style="gap:10px">
+      <div class="row" style="gap:9px"><span class="avatar sm">MS</span><div><div style="font-size:12.5px">Mira Sund — <strong style="color:var(--color-danger)">130%</strong> in October</div><div style="font-size:11px;color:var(--color-text-ghost)">Acme Storefront 50% + Acme Loyalty 50% + Bergstrom Portal 30%</div></div></div>
+      <div style="font-size:12.5px;color:var(--color-text-muted);line-height:1.55">Flagged, not blocked. The product does not know which of the three matters most — you do.</div>
+      <button class="btn btn-sm" data-mock="Adjust allocations">Adjust</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Free capacity</h2><span class="hint">next 3 months</span></div>
+    <div class="panel-body stack" style="gap:9px">
+      <div class="row"><span class="avatar sm">TE</span><span style="font-size:12.5px">Tomas Ek</span><span class="spacer"></span><span class="mono" style="font-size:12px;color:var(--color-success)">60%</span></div>
+      <div class="row"><span class="avatar sm">JP</span><span style="font-size:12.5px">Jun Park</span><span class="spacer"></span><span class="mono" style="font-size:12px;color:var(--color-success)">25%</span></div>
+      <div class="row"><span class="avatar sm">OB</span><span style="font-size:12.5px">Oskar Bergman</span><span class="spacer"></span><span class="mono" style="font-size:12px;color:var(--color-success)">50%</span></div>
+      <a class="btn btn-sm" href="directory.html" style="margin-top:4px">Who has which skills →</a>
+    </div>
+  </section>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

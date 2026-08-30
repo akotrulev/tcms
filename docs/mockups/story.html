@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ACME-118 Guest checkout · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="projects" data-proj="ACME|Acme Storefront" data-projnav="work" data-crumbs="Projects>projects.html|Acme Storefront>project-overview.html|ACME-101>epic.html|ACME-118">
+<main class="page">
+<div class="phead">
+  <div>
+    <div class="row" style="gap:8px;margin-bottom:4px">
+      <span class="type-ic t-story">S</span><span class="ikey">ACME-118</span>
+      <span class="badge b-review"><span class="dot"></span>In Review</span>
+      <span class="chip">epic <a href="epic.html">Checkout rebuild</a></span>
+      <span class="chip">→ <a href="release.html">2.4</a></span>
+    </div>
+    <h1>Guest checkout without an account</h1>
+  </div>
+  <div class="actions">
+    <span class="sel on" data-mock="Status picker">Move to… ▾</span>
+    <button class="btn" data-mock="Log time">◷ Log time</button>
+    <button class="btn" data-mock="Watch">★ Watching</button>
+  </div>
+</div>
+
+<div class="note" style="margin-bottom:16px">
+  <span>→</span>
+  <div><strong>Allowed moves from In Review:</strong> <span class="chip">Blocked</span> <span class="chip">In Progress</span> <span class="chip">Done</span> — and nothing else. The workflow decides, not the person; a move the project forbids is never offered.</div>
+</div>
+
+<div class="grid g-main">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Description</h2><span class="spacer"></span><button class="btn btn-sm" data-mock="Edit">Edit</button></div>
+      <div class="panel-body" style="font-size:13px;color:var(--color-text-muted);line-height:1.6">
+        A shopper with no account completes an order with an email and a delivery address. The account offer appears once, after the order is placed, and declining it does not lose the order.
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Acceptance criteria</h2><span class="hint">3 of 4</span></div>
+      <div class="panel-body stack" style="gap:9px">
+        <label class="row" style="gap:9px;align-items:flex-start"><input type="checkbox" checked style="accent-color:var(--color-success);margin-top:3px"><span style="font-size:12.5px;color:var(--color-text-muted)">Given no session, when I reach checkout, then no sign-in is required to continue</span></label>
+        <label class="row" style="gap:9px;align-items:flex-start"><input type="checkbox" checked style="accent-color:var(--color-success);margin-top:3px"><span style="font-size:12.5px;color:var(--color-text-muted)">Given a guest order is placed, then a confirmation is sent to the email given</span></label>
+        <label class="row" style="gap:9px;align-items:flex-start"><input type="checkbox" checked style="accent-color:var(--color-success);margin-top:3px"><span style="font-size:12.5px;color:var(--color-text-muted)">Given the account offer, when I decline it, then the order stands</span></label>
+        <label class="row" style="gap:9px;align-items:flex-start"><input type="checkbox" style="accent-color:var(--color-success);margin-top:3px"><span style="font-size:12.5px;color:var(--color-text)">Given an expired card, when I submit, then the error names the field and the cart survives</span></label>
+      </div>
+      <div class="panel-foot"><span>These are what an assistant receives with the task — see <a href="task.html">ACME-124</a>.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Sub-tasks</h2><span class="hint">4 · one owner each</span>
+        <span class="spacer"></span>
+        <a class="btn btn-sm" href="story-proposal.html">◈ 3 proposed by claude-code</a>
+        <a class="btn btn-sm" href="issue-new.html">+ Add sub-task</a>
+      </div>
+      <div class="tw">
+        <table class="t">
+          <thead><tr><th>Key</th><th>Task</th><th>Status</th><th>Owner</th><th class="num">Est</th></tr></thead>
+          <tbody>
+            <tr><td><span class="ikey">ACME-124</span></td><td><span class="row" style="gap:6px"><span class="type-ic t-task">T</span><a class="ttl" href="task.html">Add address validation to the checkout form</a> <span class="ai-tag">AI</span></span></td><td><span class="badge b-prog"><span class="dot"></span>In Progress</span></td><td><span class="row" style="gap:5px"><span class="avatar sm">DP</span> dev</span></td><td class="num mono">6h</td></tr>
+            <tr><td><span class="ikey">ACME-126</span></td><td><span class="row" style="gap:6px"><span class="type-ic t-task">T</span><a class="ttl" href="task.html">Validate the postcode against the carrier list</a> <span class="ai-tag">AI</span></span></td><td><span class="badge b-review"><span class="dot"></span>In Review</span></td><td><span class="row" style="gap:5px"><span class="avatar sm">DP</span> dev</span></td><td class="num mono">4h</td></tr>
+            <tr><td><span class="ikey">ACME-128</span></td><td><span class="row" style="gap:6px"><span class="type-ic t-task">T</span><a class="ttl" href="task.html">Write and run the guest-order cases</a></span></td><td><span class="badge b-done"><span class="dot"></span>Done</span></td><td><span class="row" style="gap:5px"><span class="avatar sm">MS</span> QA</span></td><td class="num mono">5h</td></tr>
+            <tr><td><span class="ikey">ACME-129</span></td><td><span class="row" style="gap:6px"><span class="type-ic t-task">T</span><a class="ttl" href="task.html">Exploratory pass on the expired-card path</a></span></td><td><span class="badge b-done"><span class="dot"></span>Done</span></td><td><span class="row" style="gap:5px"><span class="avatar sm">MS</span> QA</span></td><td class="num mono">2h</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel-foot"><span>A developer and a tester own their own part of the same story. A sub-task cannot be detached into an orphan — it belongs to this story or it is deleted.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Linked test cases</h2><span class="hint">latest result per case</span><span class="spacer"></span><button class="btn btn-sm" data-mock="Link test cases">+ Link test cases</button></div>
+      <div class="tw">
+        <table class="t">
+          <thead><tr><th>Case</th><th>Title</th><th>Latest result</th><th>Run</th><th>When</th></tr></thead>
+          <tbody>
+            <tr><td><span class="ikey">TC-308</span></td><td><a class="ttl" href="test-cases.html">Guest order, valid card</a></td><td><span class="badge b-pass"><span class="dot"></span>Passed</span></td><td><a href="test-runs.html">2.4 regression</a></td><td>2 h ago</td></tr>
+            <tr><td><span class="ikey">TC-309</span></td><td><a class="ttl" href="test-cases.html">Guest order, declined card</a></td><td><span class="badge b-pass"><span class="dot"></span>Passed</span></td><td><a href="test-runs.html">2.4 regression</a></td><td>2 h ago</td></tr>
+            <tr><td><span class="ikey">TC-311</span></td><td><a class="ttl" href="test-cases.html">Guest order, expired card</a></td><td><span class="badge b-fail"><span class="dot"></span>Failed</span></td><td><a href="test-runs.html">2.4 regression</a></td><td>2 h ago</td></tr>
+            <tr><td><span class="ikey">TC-314</span></td><td><a class="ttl" href="test-cases.html">Account offer declined, order stands</a></td><td><span class="badge b-pass"><span class="dot"></span>Passed</span></td><td><a href="test-runs.html">2.4 regression</a></td><td>2 h ago</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel-foot" style="color:var(--color-danger)"><span>TC-311 failed, so <a href="release.html">2.4 is not ready</a> even though this story would otherwise be done. "Done" and "proven" are the same screen.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Comments &amp; history</h2>
+        <span class="spacer"></span>
+        <span class="tabs"><a href="story.html" aria-current="page">All</a><a href="story.html">Comments</a><a href="story.html">History</a></span>
+      </div>
+      <div class="panel-body feed">
+        <div class="feed-item"><span class="avatar sm">MS</span><div class="body"><div class="who"><strong>Mira Sund</strong><span class="t">2 h ago</span></div><div class="txt">TC-311 fails on the expired card — the cart is emptied instead of kept. Filing it under the epic now.</div></div></div>
+        <div class="feed-item"><span class="avatar sm">DP</span><div class="body"><div class="who"><strong>Dana Petrov</strong> <span class="via">via claude-code</span><span class="t">4 h ago</span></div><div class="sys">attached a pull request — <a href="task.html">#482 Postcode carrier validation</a></div></div></div>
+        <div class="feed-item"><span class="avatar sm">DP</span><div class="body"><div class="who"><strong>Dana Petrov</strong><span class="t">yesterday</span></div><div class="sys">status <span class="badge b-prog"><span class="dot"></span>In Progress</span> → <span class="badge b-review"><span class="dot"></span>In Review</span></div></div></div>
+        <div class="feed-item"><span class="avatar sm">RL</span><div class="body"><div class="who"><strong>Rae Lindqvist</strong><span class="t">3 d ago</span></div><div class="sys">assignee <em>unassigned</em> → Dana Petrov · estimate <em>—</em> → 16h</div></div></div>
+      </div>
+      <div class="panel-foot" style="display:block">
+        <div class="row" style="gap:8px;width:100%">
+          <span class="avatar sm">DP</span>
+          <input class="input" placeholder="Write a comment — watchers are notified" style="flex:1">
+          <button class="btn btn-primary" data-mock="Post comment">Comment</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Details</h2></div>
+      <div class="panel-body">
+        <dl class="dl">
+          <dt>Type</dt><dd><span class="row" style="gap:6px"><span class="type-ic t-story">S</span> Story</span></dd>
+          <dt>Status</dt><dd><span class="badge b-review"><span class="dot"></span>In Review</span></dd>
+          <dt>Epic</dt><dd><a href="epic.html">Checkout rebuild</a></dd>
+          <dt>Release</dt><dd><a href="release.html">2.4</a></dd>
+          <dt>Assignee</dt><dd><span class="row" style="gap:6px"><span class="avatar sm">DP</span> Dana Petrov</span></dd>
+          <dt>Reporter</dt><dd>Rae Lindqvist</dd>
+          <dt>Priority</dt><dd><span class="badge b-neutral">High</span></dd>
+          <dt>Estimate</dt><dd class="mono">16h</dd>
+          <dt>Logged</dt><dd class="mono">14h <span style="color:var(--color-text-ghost);font-family:var(--font-sans)">(approved)</span></dd>
+          <dt>Due</dt><dd>4 Sep 2026</dd>
+          <dt>Labels</dt><dd><span class="chips"><span class="chip">checkout</span><span class="chip">guest</span></span></dd>
+        </dl>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Closing this story</h2></div>
+      <div class="panel-body stack" style="gap:10px">
+        <div class="note good"><span>✓</span><div>All 4 sub-tasks are done.</div></div>
+        <div style="font-size:12.5px;color:var(--color-text-muted);line-height:1.55">
+          The story did <strong>not</strong> close itself. Closing is your decision — sub-tasks finishing is evidence, not a trigger.
+        </div>
+        <div class="note warn"><span>!</span><div>The review gate is <strong>on</strong> for this project, so a second person approves the close. <a href="settings-general.html">Gate settings</a></div></div>
+        <button class="btn btn-primary" data-mock="Request approval to close">Request approval to close</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Time</h2></div>
+      <div class="panel-body stack" style="gap:10px">
+        <div class="row" style="justify-content:space-between"><span style="font-size:12px;color:var(--color-text-faint)">Estimate</span><span class="mono">16h</span></div>
+        <div class="row" style="justify-content:space-between"><span style="font-size:12px;color:var(--color-text-faint)">Logged</span><span class="mono">14h</span></div>
+        <div class="meter"><span class="done" style="width:88%"></span></div>
+        <a class="btn btn-sm" href="timesheets.html">◷ Log time against this story</a>
+        <div style="font-size:11px;color:var(--color-text-ghost)">You never see what your hour costs or bills.</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Watchers</h2><span class="hint">3</span><span class="spacer"></span><button class="btn btn-sm" data-mock="Add watcher">+</button></div>
+      <div class="panel-body"><div class="chips">
+        <span class="chip"><span class="avatar sm">DP</span> Dana</span>
+        <span class="chip"><span class="avatar sm">MS</span> Mira</span>
+        <span class="chip"><span class="avatar sm">RL</span> Rae</span>
+      </div></div>
+    </section>
+  </div>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

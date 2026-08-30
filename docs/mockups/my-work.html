@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Work · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="mywork" data-crumbs="My Work">
+<main class="page">
+<div class="phead">
+  <div>
+    <h1>My Work</h1>
+    <div class="sub">Everything on Dana Petrov's plate, across every project — Tuesday 1 September</div>
+  </div>
+  <div class="actions">
+    <a class="btn" href="timesheets.html">◷ Log time</a>
+    <a class="btn btn-primary" href="issue-new.html">+ Add</a>
+  </div>
+</div>
+
+<div class="filters">
+  <span class="sel on">All projects</span>
+  <span class="sel" data-mock="Type filter">Type: any</span>
+  <span class="sel" data-mock="Due filter">Due: any</span>
+  <label class="chip on"><input type="checkbox" checked style="accent-color:var(--color-action-primary)"> Hide done</label>
+  <span class="spacer"></span>
+  <span class="chip">7 open · 2 due today</span>
+</div>
+
+<div class="grid g-main">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Assigned issues</h2><span class="hint">4</span>
+        <span class="spacer"></span>
+        <a class="btn btn-sm" href="work-board.html">Open board</a>
+      </div>
+      <div class="tw">
+        <table class="t">
+          <thead><tr><th>Key</th><th>Issue</th><th>Project</th><th>Status</th><th>Due</th><th class="num">Est</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><span class="ikey">ACME-124</span></td>
+              <td><span class="row" style="gap:6px"><span class="type-ic t-task">T</span><a class="ttl" href="task.html">Add address validation to the checkout form</a> <span class="ai-tag">AI</span></span></td>
+              <td>Acme Storefront</td>
+              <td><span class="badge b-prog"><span class="dot"></span>In Progress</span></td>
+              <td class="due-soon">Today</td>
+              <td class="num mono">6h</td>
+            </tr>
+            <tr>
+              <td><span class="ikey">ACME-118</span></td>
+              <td><span class="row" style="gap:6px"><span class="type-ic t-story">S</span><a class="ttl" href="story.html">Guest checkout without an account</a></span></td>
+              <td>Acme Storefront</td>
+              <td><span class="badge b-review"><span class="dot"></span>In Review</span></td>
+              <td>4 Sep</td>
+              <td class="num mono">16h</td>
+            </tr>
+            <tr>
+              <td><span class="ikey">ACME-131</span></td>
+              <td><span class="row" style="gap:6px"><span class="type-ic t-bug">B</span><a class="ttl" href="story.html">Saved card list renders twice on slow networks</a></span></td>
+              <td>Acme Storefront</td>
+              <td><span class="badge b-todo"><span class="dot"></span>Ready</span></td>
+              <td class="due-over">Overdue · 28 Aug</td>
+              <td class="num mono">3h</td>
+            </tr>
+            <tr>
+              <td><span class="ikey">BERG-77</span></td>
+              <td><span class="row" style="gap:6px"><span class="type-ic t-task">T</span><a class="ttl" href="task.html">Swap the report footer to the new brand mark</a> <span class="ai-tag">AI</span></span></td>
+              <td>Bergstrom Portal</td>
+              <td><span class="badge b-todo"><span class="dot"></span>Ready</span></td>
+              <td>8 Sep</td>
+              <td class="num mono">2h</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel-foot"><span>Two projects, one list — nothing here asks which project you meant.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Test executions &amp; reviews</h2><span class="hint">3 pending</span></div>
+      <div class="tw">
+        <table class="t">
+          <thead><tr><th>What</th><th>Where</th><th>Kind</th><th>Due</th><th></th></tr></thead>
+          <tbody>
+            <tr>
+              <td><a class="ttl" href="test-runs.html">Checkout regression — 2.4</a></td>
+              <td>Acme Storefront</td>
+              <td><span class="badge b-info">Execution</span></td>
+              <td class="due-soon">Today</td>
+              <td class="num"><a class="btn btn-sm" href="test-runs.html">Run</a></td>
+            </tr>
+            <tr>
+              <td><a class="ttl" href="test-cases.html">TC-311 · Guest checkout, expired card</a></td>
+              <td>Acme Storefront</td>
+              <td><span class="badge b-review">Case review</span></td>
+              <td>3 Sep</td>
+              <td class="num"><a class="btn btn-sm" href="test-cases.html">Review</a></td>
+            </tr>
+            <tr>
+              <td><a class="ttl" href="story.html">ACME-118 · close approval</a></td>
+              <td>Acme Storefront</td>
+              <td><span class="badge b-review">Issue review</span></td>
+              <td>4 Sep</td>
+              <td class="num"><a class="btn btn-sm" href="story.html">Open</a></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>My notes</h2><span class="hint">private to me</span></div>
+      <div class="panel-body stack" style="gap:10px">
+        <div class="linked" style="align-items:flex-start">
+          <span class="type-ic t-task">T</span>
+          <div>
+            <div style="font-size:12.5px"><a href="task.html">ACME-124</a> — <em>ask Mira which postcode set is authoritative before the PR</em></div>
+            <div style="font-size:11px;color:var(--color-text-ghost);margin-top:3px">My due date: today · teammates do not see this</div>
+          </div>
+        </div>
+        <button class="btn btn-sm" data-mock="Add a personal note">+ Add a note</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>My assistant</h2></div>
+      <div class="panel-body stack" style="gap:10px">
+        <div class="row" style="gap:8px">
+          <span class="ai-tag">claude-code</span>
+          <span style="font-size:12px;color:var(--color-text-faint)">last acted 14 minutes ago</span>
+        </div>
+        <div style="font-size:12.5px;color:var(--color-text-muted);line-height:1.55">
+          2 of your 4 issues are flagged AI-eligible. Your assistant sees those and nothing else.
+        </div>
+        <div class="row">
+          <a class="btn btn-sm" href="profile-assistants.html">Manage</a>
+          <a class="btn btn-sm" href="task.html">See what it did</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>This week</h2></div>
+      <div class="panel-body">
+        <div class="grid g2" style="gap:14px">
+          <div class="kpi"><span class="n">21<span style="font-size:14px;color:var(--color-text-faint)">h</span></span><span class="l">Logged</span></div>
+          <div class="kpi"><span class="n">32<span style="font-size:14px;color:var(--color-text-faint)">h</span></span><span class="l">Capacity</span></div>
+        </div>
+        <div class="meter tall" style="margin-top:12px"><span class="done" style="width:66%"></span></div>
+        <div class="panel-foot" style="padding:10px 0 0;border:0"><a href="timesheets.html">Open my timesheet →</a></div>
+      </div>
+    </section>
+  </div>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

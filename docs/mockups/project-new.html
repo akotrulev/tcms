@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New project · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="projects" data-crumbs="Projects>projects.html|New project">
+<main class="page">
+<div class="phead"><div><h1>New project</h1><div class="sub">A whole client product — not a feature area. "Payments" is an epic or a suite, never a project.</div></div></div>
+
+<div class="grid g-main">
+  <section class="panel">
+    <div class="panel-body" style="max-width:560px">
+      <div class="field"><label for="n">Project name</label><input class="input" id="n" placeholder="Acme Loyalty" autofocus></div>
+      <div class="field"><label for="k">Key</label><input class="input mono" id="k" placeholder="LOYA" maxlength="6"><div class="help">Prefixes every issue: <span class="mono">LOYA-1</span>, <span class="mono">LOYA-2</span>…</div></div>
+      <div class="field">
+        <label for="c">Client</label>
+        <select class="input" id="c"><option selected>None (internal)</option><option>Acme Retail</option><option>Bergstrom AG</option><option>Kessler Health</option></select>
+        <div class="help">Shown because clients exist. A company with none never sees this field, and its projects are not marked as missing one.</div>
+      </div>
+      <div class="field"><label for="l">Lead</label><select class="input" id="l"><option selected>Dana Petrov</option><option>Rae Lindqvist</option><option>Mira Sund</option></select></div>
+      <div class="field"><label for="d">Description</label><textarea class="input" id="d" placeholder="What this product is."></textarea></div>
+    </div>
+    <div class="panel-foot">
+      <a class="btn" href="projects.html">Cancel</a>
+      <span class="spacer" style="margin-left:auto"></span>
+      <a class="btn btn-primary" href="project-overview.html">Create project</a>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>What it arrives with</h2></div>
+    <div class="panel-body stack" style="gap:10px">
+      <div class="linked"><span>⚙</span><div><div style="font-size:12.5px">A default workflow</div><div style="font-size:11px;color:var(--color-text-ghost)">Backlog · Ready · In Progress · In Review · Blocked · Done</div></div></div>
+      <div class="linked"><span>▦</span><div><div style="font-size:12.5px">One board</div><div style="font-size:11px;color:var(--color-text-ghost)">a column per status</div></div></div>
+      <div class="linked"><span>☐</span><div><div style="font-size:12.5px">Review gate off</div><div style="font-size:11px;color:var(--color-text-ghost)">so one person can close their own work from day one</div></div></div>
+      <div style="font-size:11.5px;color:var(--color-text-ghost);line-height:1.55">You can create an issue immediately, without configuring anything.</div>
+    </div>
+  </section>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

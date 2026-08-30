@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connect an assistant · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="profile" data-crumbs="My profile>profile-assistants.html|Connect an assistant">
+<main class="page">
+<div class="phead">
+  <div><h1>Connect an AI assistant</h1><div class="sub">Name it, scope it, take the snippet. Two minutes.</div></div>
+  <div class="actions"><a class="btn" href="profile-assistants.html">Cancel</a></div>
+</div>
+
+<div class="grid g-main">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-body" style="max-width:560px">
+        <div class="field">
+          <label for="nm">Name</label>
+          <input class="input mono" id="nm" value="claude-code">
+          <div class="help">Appears in every history line this assistant writes: "Dana Petrov, <em>via claude-code</em>".</div>
+        </div>
+        <div class="field">
+          <label for="sc">Scope</label>
+          <select class="input" id="sc"><option>Every project I can see</option><option selected>One project — Acme Storefront</option></select>
+          <div class="help">Scoped to one project, it receives nothing at all from any other — not an empty list, nothing.</div>
+        </div>
+        <div class="field">
+          <label>Reach</label>
+          <div class="note"><span>◈</span><div>Exactly what <strong>you</strong> can do, minus closing an issue it worked on. There is no separate permission list to keep in step, and nothing here can grant it more than you hold.</div></div>
+        </div>
+      </div>
+      <div class="panel-foot"><span class="spacer" style="margin-left:auto"></span><a class="btn btn-primary" href="assistant-connect.html">Create and show the snippet</a></div>
+    </section>
+
+    <section class="panel" style="border-color:var(--color-action-line)">
+      <div class="panel-head"><h2>Your setup snippet</h2><span class="badge b-review"><span class="dot"></span>shown once</span><span class="spacer"></span><button class="btn btn-sm" data-mock="Copy snippet">Copy</button></div>
+      <div class="panel-body">
+        <pre class="mono" style="margin:0;padding:14px;background:var(--color-surface-field);border:1px solid var(--color-rule);border-radius:var(--r-md);overflow-x:auto;font-size:11.5px;line-height:1.7;color:var(--color-text-muted)">claude mcp add tcms --transport http \
+  https://tcms.northwind.test/mcp \
+  --header "Authorization: Bearer tcms_pat_7f3c…9a21"</pre>
+        <div class="note warn" style="margin-top:12px"><span>!</span><div>The token is shown once. It carries your identity and your permissions — treat it like a password, and revoke it from <a href="profile-assistants.html">your profile</a> the moment a machine it lives on is out of your hands.</div></div>
+      </div>
+      <div class="panel-foot"><span class="spacer" style="margin-left:auto"></span><a class="btn btn-primary" href="profile-assistants.html">Done — I have it</a></div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Then, in your own tool</h2></div>
+      <div class="panel-body stack" style="gap:12px">
+        <div class="linked" style="align-items:flex-start;flex-direction:column;gap:6px">
+          <div style="font-size:12.5px;color:var(--color-text)">"What's on my queue?"</div>
+          <div style="font-size:11.5px;color:var(--color-text-faint);line-height:1.55">Returns your AI-eligible tasks, each with its story, acceptance criteria, epic goal, target release, linked spec excerpts, and the repository and build command the project declares.</div>
+        </div>
+        <div class="linked" style="align-items:flex-start;flex-direction:column;gap:6px">
+          <div style="font-size:12.5px;color:var(--color-text)">"Pick up ACME-124."</div>
+          <div style="font-size:11.5px;color:var(--color-text-faint);line-height:1.55">It works in your local checkout, opens a PR with your git, posts the link back and moves the task to In Review. You review the PR and close it.</div>
+        </div>
+      </div>
+      <div class="panel-foot"><span>Everything above happens on your machine. Nothing about it is hosted here.</span></div>
+    </section>
+  </div>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

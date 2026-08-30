@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My timesheet · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="timesheets" data-crumbs="Timesheets">
+<main class="page">
+<div class="phead">
+  <div><h1>Timesheets</h1><div class="sub">Dana Petrov · period 1–15 September 2026</div></div>
+  <div class="actions"><span class="sel" data-mock="Period picker">1–15 Sep</span><a class="btn" href="timesheet-approvals.html">Approvals queue</a><button class="btn btn-primary" data-mock="Submit timesheet">Submit for approval</button></div>
+</div>
+
+<div class="grid g4" style="margin-bottom:16px">
+  <div class="panel"><div class="panel-body kpi"><span class="n">21<span style="font-size:14px;color:var(--color-text-faint)">h</span></span><span class="l">Logged this period</span></div></div>
+  <div class="panel"><div class="panel-body kpi"><span class="n">64<span style="font-size:14px;color:var(--color-text-faint)">h</span></span><span class="l">Period capacity</span></div></div>
+  <div class="panel"><div class="panel-body kpi"><span class="n">16<span style="font-size:14px;color:var(--color-text-faint)">h</span></span><span class="l">Approved</span><span class="d">from the previous period</span></div></div>
+  <div class="panel"><div class="panel-body kpi"><span class="n">Open</span><span class="l">Status</span><span class="d">editable until you submit</span></div></div>
+</div>
+
+<div class="grid g-main">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Entries</h2><span class="hint">this period</span><span class="spacer"></span><button class="btn btn-sm btn-primary" data-mock="Add entry">+ Add entry</button></div>
+      <div class="tw">
+        <table class="t">
+          <thead><tr><th>Date</th><th>Against</th><th>Note</th><th class="num">Hours</th><th></th></tr></thead>
+          <tbody>
+            <tr><td>1 Sep</td><td><span class="row" style="gap:6px"><span class="type-ic t-task">T</span><a href="task.html">ACME-124</a> Address validation</span></td><td style="color:var(--color-text-faint)">carrier list spike-out</td><td class="num mono">2.0</td><td class="num"><button class="btn btn-icon btn-sm btn-ghost" data-mock="Edit entry" aria-label="Edit">✎</button></td></tr>
+            <tr><td>1 Sep</td><td><span class="badge b-neutral">Meeting</span></td><td style="color:var(--color-text-faint)">2.4 readiness review</td><td class="num mono">1.0</td><td class="num"><button class="btn btn-icon btn-sm btn-ghost" data-mock="Edit entry" aria-label="Edit">✎</button></td></tr>
+            <tr><td>31 Aug</td><td><span class="row" style="gap:6px"><span class="type-ic t-story">S</span><a href="story.html">ACME-118</a> Guest checkout</span></td><td style="color:var(--color-text-faint)">review fixes</td><td class="num mono">4.0</td><td class="num"><button class="btn btn-icon btn-sm btn-ghost" data-mock="Edit entry" aria-label="Edit">✎</button></td></tr>
+            <tr><td>30 Aug</td><td><span class="row" style="gap:6px"><span class="type-ic t-story">S</span><a href="story.html">ACME-121</a> One-page address entry</span></td><td style="color:var(--color-text-faint)">—</td><td class="num mono">6.0</td><td class="num"><button class="btn btn-icon btn-sm btn-ghost" data-mock="Edit entry" aria-label="Edit">✎</button></td></tr>
+            <tr><td>29 Aug</td><td><span class="badge b-neutral">Leave</span></td><td style="color:var(--color-text-faint)">half day</td><td class="num mono">4.0</td><td class="num"><button class="btn btn-icon btn-sm btn-ghost" data-mock="Edit entry" aria-label="Edit">✎</button></td></tr>
+            <tr><td>28 Aug</td><td><span class="row" style="gap:6px"><span class="type-ic t-task">T</span><a href="task.html">BERG-77</a> Report footer</span></td><td style="color:var(--color-text-faint)">—</td><td class="num mono">4.0</td><td class="num"><button class="btn btn-icon btn-sm btn-ghost" data-mock="Edit entry" aria-label="Edit">✎</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel-foot"><span>6 entries · two projects · two non-issue categories</span><span class="spacer" style="margin-left:auto"></span><span>Total <strong class="mono">21.0h</strong></span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Add an entry</h2></div>
+      <div class="panel-body">
+        <div class="grid g2" style="gap:0 16px">
+          <div class="field">
+            <label for="ag">Against</label>
+            <select class="input" id="ag"><option selected>An issue</option><option>Meeting</option><option>Leave</option><option>Training</option><option>Internal / admin</option></select>
+            <div class="help">Not everything is an issue. A meeting or a day off is logged here, in the same place.</div>
+          </div>
+          <div class="field"><label for="is">Issue</label><input class="input" id="is" placeholder="ACME-124 · Add address validation"></div>
+          <div class="field"><label for="dt">Date</label><input class="input" id="dt" type="date" value="2026-09-01"></div>
+          <div class="field"><label for="hr">Hours</label><input class="input" id="hr" placeholder="2.0" inputmode="decimal"></div>
+        </div>
+        <div class="field"><label for="nt">Note</label><input class="input" id="nt" placeholder="Optional"></div>
+      </div>
+      <div class="panel-foot"><span class="spacer" style="margin-left:auto"></span><button class="btn btn-primary" data-mock="Save entry">Add entry</button></div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Previous period</h2></div>
+      <div class="panel-body stack" style="gap:10px">
+        <div class="row"><span class="badge b-blocked"><span class="dot"></span>Rejected</span><span class="spacer"></span><span style="font-size:11.5px;color:var(--color-text-faint)">16–31 Aug</span></div>
+        <div class="note warn" style="align-items:flex-start">
+          <span>!</span>
+          <div><strong>Rae Lindqvist wrote:</strong> <em>the 8h on 24 Aug is against ACME-140 but that epic was on hold that week — re-point it or drop it.</em></div>
+        </div>
+        <div style="font-size:12.5px;color:var(--color-text-muted);line-height:1.55">The period is unlocked again, and editable. Fix it and re-submit.</div>
+        <button class="btn" data-mock="Open the rejected period">Open 16–31 Aug</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>What you never see here</h2></div>
+      <div class="panel-body" style="font-size:12.5px;color:var(--color-text-muted);line-height:1.6">
+        No rate, no cost, no invoice value. Logging time tells you <em>where the day went</em> and nothing about what it is worth — that is a different job, on a screen you do not have.
+      </div>
+    </section>
+  </div>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

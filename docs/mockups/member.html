@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dana Petrov · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="teams" data-role="Company Admin" data-crumbs="Teams>teams.html|Dana Petrov">
+<main class="page">
+<div class="phead">
+  <div class="row" style="gap:14px">
+    <span class="avatar lg">DP</span>
+    <div>
+      <h1>Dana Petrov</h1>
+      <div class="sub mono">dana.petrov@northwind.test · joined Mar 2025</div>
+    </div>
+  </div>
+  <div class="actions"><button class="btn" data-mock="Reset access">Reset access</button><button class="btn btn-danger" data-mock="Deactivate member">Deactivate</button></div>
+</div>
+
+<div class="grid g-main">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Company roles</h2><span class="hint">apply across the whole company</span></div>
+      <div>
+        <div class="setrow"><div class="txt"><strong>Company Admin</strong><span>Everything below, plus provisioning and settings</span></div><span class="spacer"></span><button class="toggle" role="switch" aria-checked="true" aria-label="Company Admin" data-on="Granted Company Admin" data-off="Removed Company Admin"></button></div>
+        <div class="setrow"><div class="txt"><strong>Account Manager</strong><span>Knows the clients and their contacts. Never sees money.</span></div><span class="spacer"></span><button class="toggle" role="switch" aria-checked="false" aria-label="Account Manager" data-on="Granted Account Manager — Clients gains contacts and hours" data-off="Removed Account Manager"></button></div>
+        <div class="setrow"><div class="txt"><strong>Finance</strong><span>Rate cards, budgets, invoices. Reads clients, writes money.</span></div><span class="spacer"></span><button class="toggle" role="switch" aria-checked="false" aria-label="Finance" data-on="Granted Finance — Billing appears in their sidebar" data-off="Removed Finance — Billing disappears from their sidebar"></button></div>
+      </div>
+      <div class="panel-foot"><span>A member holding only Account Manager has no Billing entry at all. Try it: switch the top bar to <strong>Account Manager</strong>.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Project grants</h2><span class="hint">a project is invisible without one</span><span class="spacer"></span><button class="btn btn-sm" data-mock="Grant access to a project">+ Grant a project</button></div>
+      <div class="tw">
+        <table class="t">
+          <thead><tr><th>Project</th><th>Role</th><th>Granted</th><th></th></tr></thead>
+          <tbody>
+            <tr>
+              <td><a href="project-overview.html">Acme Storefront</a></td>
+              <td><select class="input" style="min-width:180px"><option>Project Manager</option><option>Test Lead</option><option selected>Test Engineer</option><option>Viewer</option></select></td>
+              <td>Mar 2025 · by Rae Lindqvist</td>
+              <td class="num"><button class="btn btn-sm btn-danger" data-mock="Revoke grant">Revoke</button></td>
+            </tr>
+            <tr>
+              <td><a href="solo-overview.html">Internal Platform</a></td>
+              <td><select class="input" style="min-width:180px"><option selected>Project Manager</option><option>Test Lead</option><option>Test Engineer</option><option>Viewer</option></select></td>
+              <td>Jan 2026 · by Dana Petrov</td>
+              <td class="num"><button class="btn btn-sm btn-danger" data-mock="Revoke grant">Revoke</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel-foot"><span><strong>Project Manager</strong> sits among the project roles — it runs a project: epics, releases, the board, staffing, approving time. <strong>Account Manager</strong> and <strong>Finance</strong> are company roles, because neither is about one project.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>What Test Engineer can do on Acme Storefront</h2></div>
+      <div class="panel-body grid g2" style="gap:8px 20px">
+        <div class="bullet"><span style="color:var(--color-success)">✓</span><span style="font-size:12.5px">Create an issue</span></div>
+        <div class="bullet"><span style="color:var(--color-success)">✓</span><span style="font-size:12.5px">Edit an issue</span></div>
+        <div class="bullet"><span style="color:var(--color-success)">✓</span><span style="font-size:12.5px">Move it where the workflow allows</span></div>
+        <div class="bullet"><span style="color:var(--color-success)">✓</span><span style="font-size:12.5px">Comment, watch, log time</span></div>
+        <div class="bullet"><span style="color:var(--color-success)">✓</span><span style="font-size:12.5px">File a bug, run a test</span></div>
+        <div class="bullet"><span style="color:var(--color-success)">✓</span><span style="font-size:12.5px">Connect their own assistant</span></div>
+        <div class="bullet"><span style="color:var(--color-danger)">✕</span><span style="font-size:12.5px;color:var(--color-text-faint)">Delete an issue</span></div>
+        <div class="bullet"><span style="color:var(--color-danger)">✕</span><span style="font-size:12.5px;color:var(--color-text-faint)">Change the project's workflow</span></div>
+        <div class="bullet"><span style="color:var(--color-danger)">✕</span><span style="font-size:12.5px;color:var(--color-text-faint)">Approve a timesheet</span></div>
+        <div class="bullet"><span style="color:var(--color-danger)">✕</span><span style="font-size:12.5px;color:var(--color-text-faint)">See any rate</span></div>
+      </div>
+      <div class="panel-foot"><span>A dev and a QA are both Test Engineer. The only difference between them is which screens they open.</span></div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Assistants</h2><span class="hint">connected by Dana</span></div>
+      <div class="panel-body stack" style="gap:10px">
+        <div class="linked"><span class="ai-tag">claude-code</span><div style="flex:1"><div style="font-size:11.5px;color:var(--color-text-ghost)">scoped to Acme Storefront · last acted 14 min ago</div></div></div>
+        <div style="font-size:12px;color:var(--color-text-muted);line-height:1.55">An assistant's reach is a subset of its owner's. Revoking a grant above shrinks it immediately — there is no second place to remember.</div>
+        <a class="btn btn-sm" href="profile-assistants.html">Open the profile view</a>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Absence</h2></div>
+      <div class="panel-body stack" style="gap:8px">
+        <div class="row"><span style="font-size:12.5px">29 Aug</span><span class="spacer"></span><span class="badge b-neutral">half day</span></div>
+        <div style="font-size:11.5px;color:var(--color-text-ghost);line-height:1.5">Capacity for those days is zero everywhere — staffing, utilisation and any plan built on them.</div>
+      </div>
+    </section>
+  </div>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

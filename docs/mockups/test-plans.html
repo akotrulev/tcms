@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plans · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="projects" data-proj="ACME|Acme Storefront" data-projnav="plans" data-crumbs="Projects>projects.html|Acme Storefront>project-overview.html|Plans">
+<main class="page">
+<div class="phead">
+  <div><h1>Test plans</h1><div class="sub">Scoped to a release, which is what makes readiness answerable</div></div>
+  <div class="actions"><button class="btn btn-primary" data-mock="New plan">+ New plan</button></div>
+</div>
+
+<section class="panel">
+  <div class="tw">
+    <table class="t">
+      <thead><tr><th>Plan</th><th>Release</th><th>Suites</th><th class="num">Cases</th><th>Latest run</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><a class="ttl" href="test-runs.html">2.4 regression</a></td>
+          <td><a href="release.html">2.4</a></td>
+          <td>Checkout, Payments, Smoke</td>
+          <td class="num mono">119</td>
+          <td>2 h ago · Mira Sund</td>
+          <td><span class="row" style="gap:6px"><span class="badge b-pass">117</span><span class="badge b-fail">2</span></span></td>
+        </tr>
+        <tr>
+          <td><a class="ttl" href="test-runs.html">2.5 smoke</a></td>
+          <td>2.5</td>
+          <td>Smoke</td>
+          <td class="num mono">21</td>
+          <td><span style="color:var(--color-text-ghost)">never run</span></td>
+          <td><span class="badge b-untested"><span class="dot"></span>No run yet</span></td>
+        </tr>
+        <tr style="opacity:.8">
+          <td><a class="ttl" href="test-runs.html">2.3 sign-off</a></td>
+          <td>2.3</td>
+          <td>Accessibility, Smoke</td>
+          <td class="num mono">56</td>
+          <td>7 Aug · Tomas Ek</td>
+          <td><span class="badge b-pass">56</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="panel-foot"><span>2.5 says <strong>no run yet</strong> rather than showing zero failures. An untested version and a clean one are different claims.</span></div>
+</section>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

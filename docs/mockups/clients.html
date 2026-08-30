@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clients · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="clients" data-role="Account Manager" data-crumbs="Clients">
+<main class="page">
+<div class="phead">
+  <div><h1>Clients</h1><div class="sub">Northwind Labs · 3 clients, 4 projects between them</div></div>
+  <div class="actions"><a class="btn btn-primary" href="client-new.html">+ Add client</a></div>
+</div>
+
+<div class="filters">
+  <span class="sel on">Status: active</span>
+  <span class="sel" data-mock="Account manager filter">Account manager: anyone</span>
+  <span class="spacer"></span>
+  <span class="chip">3 shown</span>
+</div>
+
+<section class="panel">
+  <div class="tw">
+    <table class="t">
+      <thead><tr><th class="sorted-asc">Client</th><th>Projects</th><th>Contacts</th><th>Account manager</th><th class="num">Hours to date</th><th>Last invoice</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><a class="ttl" href="client.html">Acme Retail</a><div style="font-size:11px;color:var(--color-text-ghost)">Stockholm · retail</div></td>
+          <td><a href="projects.html">Acme Storefront</a>, <a href="projects.html">Acme Loyalty</a></td>
+          <td>3</td>
+          <td><span class="row" style="gap:6px"><span class="avatar sm">OB</span> Oskar Bergman</span></td>
+          <td class="num mono">1 284h</td>
+          <td>Aug 2026 · <span class="badge b-done">issued</span></td>
+        </tr>
+        <tr>
+          <td><a class="ttl" href="client.html">Bergstrom AG</a><div style="font-size:11px;color:var(--color-text-ghost)">Zürich · logistics</div></td>
+          <td><a href="projects.html">Bergstrom Portal</a></td>
+          <td>2</td>
+          <td><span class="row" style="gap:6px"><span class="avatar sm">OB</span> Oskar Bergman</span></td>
+          <td class="num mono">612h</td>
+          <td>Aug 2026 · <span class="badge b-done">issued</span></td>
+        </tr>
+        <tr>
+          <td><a class="ttl" href="client.html">Kessler Health</a><div style="font-size:11px;color:var(--color-text-ghost)">Malmö · healthcare</div></td>
+          <td><a href="projects.html">Kessler Intake</a></td>
+          <td>1</td>
+          <td><span class="row" style="gap:6px"><span class="avatar sm">JP</span> Jun Park</span></td>
+          <td class="num mono">88h</td>
+          <td><span style="color:var(--color-text-ghost)">none yet</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="panel-foot"><span>Hours are here because you are an Account Manager. <strong>Rates and invoice amounts are not</strong> — those are Finance's, on <a href="billing.html">Billing</a>, which is not in your sidebar.</span></div>
+</section>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

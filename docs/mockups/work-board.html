@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Acme Storefront — Board · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="projects" data-proj="ACME|Acme Storefront" data-projnav="work" data-crumbs="Projects>projects.html|Acme Storefront>project-overview.html|Work>work-board.html|Board">
+<main class="page">
+<div class="phead">
+  <div>
+    <h1>Work</h1>
+    <div class="sub">Board · Backlog · Table · Timeline · Calendar — one entry, one filter</div>
+  </div>
+  <div class="actions">
+    <span class="sel on" data-mock="Board picker">Team board</span>
+    <a class="btn" href="settings-boards.html">Configure boards</a>
+    <a class="btn btn-primary" href="issue-new.html">+ Add</a>
+  </div>
+</div>
+
+<div class="row" style="margin-bottom:12px">
+  <nav class="tabs" aria-label="Work views">
+    <a href="work-board.html" aria-current="page">Board</a>
+    <a href="work-backlog.html">Backlog</a>
+    <a href="work-table.html">Table</a>
+    <a href="work-timeline.html">Timeline</a>
+    <a href="work-calendar.html">Calendar</a>
+  </nav>
+  <span class="spacer" style="margin-left:auto"></span>
+  <span class="sel on" data-mock="Grouping">Group by: Epic</span>
+</div>
+
+<div class="filters">
+  <span class="chip on">checkout <span class="x">×</span></span>
+  <span class="chip on">payments <span class="x">×</span></span>
+  <span class="chip on"><span class="avatar sm">DP</span> Dana Petrov <span class="x">×</span></span>
+  <span class="chip on">AI-eligible <span class="x">×</span></span>
+  <span class="sel" data-mock="Add a filter">+ Filter</span>
+  <span class="spacer"></span>
+  <span style="font-size:11.5px;color:var(--color-text-faint)">any of the labels <strong>and</strong> that assignee · 11 of 34 shown</span>
+  <a class="btn btn-sm" href="work-board.html">Clear</a>
+</div>
+
+<div class="note" style="margin-bottom:14px">
+  <span>⌨</span>
+  <div><strong>Dragging is never the only way.</strong> Every card carries a <span class="mono">⋮</span> menu with "Move to…", so a column change is reachable from the keyboard — and the same menu is what a touch user gets.</div>
+</div>
+
+<div class="lane">
+  <div class="lane-head">
+    <button class="btn btn-icon btn-sm" data-mock="Collapse lane" aria-label="Collapse this swimlane">▾</button>
+    <span class="type-ic t-epic">E</span>
+    <a href="epic.html"><strong style="font-size:13px">Checkout rebuild</strong></a>
+    <span class="ikey">ACME-101</span>
+    <span class="spacer"></span>
+    <span class="mono" style="font-size:11.5px">70%</span>
+    <span class="meter"><span class="done" style="width:70%"></span><span class="prog" style="width:14%"></span></span>
+    <span class="basis">by estimate</span>
+  </div>
+
+  <div class="board">
+    <div class="col">
+      <div class="col-head"><span>Backlog</span><span class="n">3</span><span class="spacer"></span><span class="wip">—</span></div>
+      <div class="col-body">
+        <a class="card" href="story.html">
+          <div class="top"><span class="type-ic t-story">S</span><span class="ikey">ACME-201</span><span class="spacer"></span><button class="btn btn-icon btn-sm btn-ghost" data-mock="Move to…" aria-label="Move ACME-201">⋮</button></div>
+          <div class="ttl">Remember delivery address between visits</div>
+          <div class="bot"><span class="chip">checkout</span><span class="spacer"></span><span class="est">8h</span><span class="avatar sm">DP</span></div>
+        </a>
+        <a class="card" href="story.html">
+          <div class="top"><span class="type-ic t-spike">?</span><span class="ikey">ACME-209</span><span class="spacer"></span><button class="btn btn-icon btn-sm btn-ghost" data-mock="Move to…" aria-label="Move ACME-209">⋮</button></div>
+          <div class="ttl">Can we drop the legacy cart cookie?</div>
+          <div class="bot"><span class="badge b-neutral">spike · not in %</span><span class="spacer"></span><span class="avatar sm">DP</span></div>
+        </a>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="col-head"><span>Ready</span><span class="n">2</span><span class="spacer"></span><span class="wip">—</span></div>
+      <div class="col-body">
+        <a class="card" href="story.html">
+          <div class="top"><span class="type-ic t-bug">B</span><span class="ikey">ACME-131</span><span class="spacer"></span><button class="btn btn-icon btn-sm btn-ghost" data-mock="Move to…" aria-label="Move ACME-131">⋮</button></div>
+          <div class="ttl">Saved card list renders twice on slow networks</div>
+          <div class="bot"><span class="chip">payments</span><span class="due-over">28 Aug</span><span class="spacer"></span><span class="est">3h</span><span class="avatar sm">DP</span></div>
+        </a>
+        <a class="card" href="task.html">
+          <div class="top"><span class="type-ic t-task">T</span><span class="ikey">ACME-127</span><span class="ai-tag">AI</span><span class="spacer"></span><button class="btn btn-icon btn-sm btn-ghost" data-mock="Move to…" aria-label="Move ACME-127">⋮</button></div>
+          <div class="ttl">Extract the postcode rules into one module</div>
+          <div class="bot"><span class="chip">checkout</span><span class="spacer"></span><span class="est">4h</span><span class="avatar sm">DP</span></div>
+        </a>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="col-head"><span>In Progress</span><span class="n">4</span><span class="spacer"></span><span class="wip over" title="Work-in-progress limit exceeded">4 / 3 ⚠</span></div>
+      <div class="col-body">
+        <div class="note warn" style="padding:6px 8px;font-size:11.5px">Over the WIP limit by one. The drop was accepted; the breach is the column's to show, not the card's to refuse.</div>
+        <a class="card" href="task.html">
+          <div class="top"><span class="type-ic t-task">T</span><span class="ikey">ACME-124</span><span class="ai-tag">AI</span><span class="spacer"></span><button class="btn btn-icon btn-sm btn-ghost" data-mock="Move to…" aria-label="Move ACME-124">⋮</button></div>
+          <div class="ttl">Add address validation to the checkout form</div>
+          <div class="bot"><span class="chip">checkout</span><span class="due-soon">Today</span><span class="spacer"></span><span class="est">6h</span><span class="avatar sm">DP</span></div>
+        </a>
+        <a class="card" href="story.html">
+          <div class="top"><span class="type-ic t-story">S</span><span class="ikey">ACME-121</span><span class="spacer"></span><button class="btn btn-icon btn-sm btn-ghost" data-mock="Move to…" aria-label="Move ACME-121">⋮</button></div>
+          <div class="ttl">One-page address entry</div>
+          <div class="bot"><span class="chip">checkout</span><span class="badge b-neutral">3/5 sub-tasks</span><span class="spacer"></span><span class="est">12h</span><span class="avatar sm">DP</span></div>
+        </a>
+        <a class="card" href="story.html">
+          <div class="top"><span class="type-ic t-story">S</span><span class="ikey">ACME-122</span><span class="spacer"></span><button class="btn btn-icon btn-sm btn-ghost" data-mock="Move to…" aria-label="Move ACME-122">⋮</button></div>
+          <div class="ttl">Card capture without a redirect</div>
+          <div class="bot"><span class="chip">payments</span><span class="badge b-neutral">1/4 sub-tasks</span><span class="spacer"></span><span class="est">16h</span><span class="avatar sm">MS</span></div>
+        </a>
+        <div class="card ghost">Drop here — or use a card's ⋮ Move to…</div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="col-head"><span>In Review</span><span class="n">2</span><span class="spacer"></span><span class="wip">2 / 4</span></div>
+      <div class="col-body">
+        <a class="card" href="story.html">
+          <div class="top"><span class="type-ic t-story">S</span><span class="ikey">ACME-118</span><span class="spacer"></span><button class="btn btn-icon btn-sm btn-ghost" data-mock="Move to…" aria-label="Move ACME-118">⋮</button></div>
+          <div class="ttl">Guest checkout without an account</div>
+          <div class="bot"><span class="chip">checkout</span><span class="badge b-fail"><span class="dot"></span>TC-311 failed</span><span class="spacer"></span><span class="est">16h</span><span class="avatar sm">DP</span></div>
+        </a>
+        <a class="card" href="task.html">
+          <div class="top"><span class="type-ic t-task">T</span><span class="ikey">ACME-126</span><span class="ai-tag">AI</span><span class="spacer"></span><button class="btn btn-icon btn-sm btn-ghost" data-mock="Move to…" aria-label="Move ACME-126">⋮</button></div>
+          <div class="ttl">Validate the postcode against the carrier list</div>
+          <div class="bot"><span class="chip">checkout</span><span class="badge b-info">PR #482</span><span class="spacer"></span><span class="est">4h</span><span class="avatar sm">DP</span></div>
+        </a>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="col-head"><span>Blocked</span><span class="n">1</span><span class="spacer"></span><span class="wip">—</span></div>
+      <div class="col-body">
+        <a class="card" href="story.html">
+          <div class="top"><span class="type-ic t-story">S</span><span class="ikey">ACME-119</span><span class="spacer"></span><button class="btn btn-icon btn-sm btn-ghost" data-mock="Move to…" aria-label="Move ACME-119">⋮</button></div>
+          <div class="ttl">Apply a gift card at checkout</div>
+          <div class="bot"><span class="badge b-blocked"><span class="dot"></span>waiting on provider</span><span class="spacer"></span><span class="est">10h</span><span class="avatar sm">TE</span></div>
+        </a>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="col-head"><span>Done</span><span class="n">12</span><span class="spacer"></span><span class="wip">—</span></div>
+      <div class="col-body">
+        <a class="card" href="story.html">
+          <div class="top"><span class="type-ic t-story">S</span><span class="ikey">ACME-112</span><span class="spacer"></span><button class="btn btn-icon btn-sm btn-ghost" data-mock="Move to…" aria-label="Move ACME-112">⋮</button></div>
+          <div class="ttl">Cart survives a sign-in</div>
+          <div class="bot"><span class="badge b-pass"><span class="dot"></span>4 cases pass</span><span class="spacer"></span><span class="est">8h</span><span class="avatar sm">MS</span></div>
+        </a>
+        <div class="card ghost">11 more · <span style="color:var(--color-action-primary)">show</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="lane">
+  <div class="lane-head">
+    <button class="btn btn-icon btn-sm" data-mock="Expand lane" aria-label="Expand this swimlane">▸</button>
+    <span class="type-ic t-epic">E</span>
+    <a href="epic.html"><strong style="font-size:13px">Payments provider swap</strong></a>
+    <span class="ikey">ACME-140</span>
+    <span class="badge b-blocked"><span class="dot"></span>Blocked</span>
+    <span class="spacer"></span>
+    <span class="mono" style="font-size:11.5px">40%</span>
+    <span class="meter"><span class="done" style="width:40%"></span></span>
+    <span class="basis">by count · 4 of 10</span>
+  </div>
+  <div style="font-size:11.5px;color:var(--color-text-ghost);padding-left:14px">Collapsed to a single roll-up. Nothing is hidden from the counts — only from the screen.</div>
+</div>
+
+<div class="lane">
+  <div class="lane-head">
+    <button class="btn btn-icon btn-sm" data-mock="Expand lane" aria-label="Expand this swimlane">▸</button>
+    <span style="color:var(--color-text-faint);font-size:13px">No epic</span>
+    <span class="spacer"></span>
+    <span style="font-size:11.5px;color:var(--color-text-faint)">4 issues · a story without an epic is a normal story, not an error</span>
+  </div>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

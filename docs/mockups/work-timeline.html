@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Acme Storefront — Timeline · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="projects" data-proj="ACME|Acme Storefront" data-projnav="work" data-crumbs="Projects>projects.html|Acme Storefront>project-overview.html|Work>work-board.html|Timeline">
+<main class="page">
+<div class="phead">
+  <div><h1>Work</h1><div class="sub">Releases in version order, their epics inside them — what ships when</div></div>
+  <div class="actions"><span class="sel" data-mock="Zoom">Months</span><a class="btn btn-primary" href="issue-new.html">+ Add</a></div>
+</div>
+
+<div class="row" style="margin-bottom:12px">
+  <nav class="tabs" aria-label="Work views">
+    <a href="work-board.html">Board</a>
+    <a href="work-backlog.html">Backlog</a>
+    <a href="work-table.html">Table</a>
+    <a href="work-timeline.html" aria-current="page">Timeline</a>
+    <a href="work-calendar.html">Calendar</a>
+  </nav>
+</div>
+
+<div class="filters">
+  <span class="chip on">checkout <span class="x">×</span></span>
+  <span class="chip on">payments <span class="x">×</span></span>
+  <span class="chip on"><span class="avatar sm">DP</span> Dana Petrov <span class="x">×</span></span>
+  <span class="chip on">AI-eligible <span class="x">×</span></span>
+  <span class="spacer"></span>
+  <span style="font-size:11.5px;color:var(--color-text-faint)">the filter came with you from the board</span>
+</div>
+
+<section class="panel">
+  <div class="panel-body">
+    <div class="tl">
+      <div class="tl-scale"><div>&nbsp;</div><div>Jul</div><div>Aug</div><div>Sep</div><div>Oct</div><div>Nov</div><div>Dec</div></div>
+
+      <div class="tl-row">
+        <div class="tl-label"><span class="type-ic" style="background:var(--color-action-primary)">R</span><a href="release.html"><strong>2.4</strong></a></div>
+        <div class="tl-track"><span class="tl-today" style="left:38%"></span><a class="tl-bar rel" href="release.html" style="left:2%;width:44%">2.4 · target 18 Sep</a></div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-label" style="padding-left:14px"><span class="type-ic t-epic">E</span><a href="epic.html">Checkout rebuild</a></div>
+        <div class="tl-track"><span class="tl-today" style="left:38%"></span><a class="tl-bar epic" href="epic.html" style="left:4%;width:36%">ACME-101 · 70%</a></div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-label" style="padding-left:14px"><span class="type-ic t-epic">E</span><a href="epic.html">Payments provider swap</a></div>
+        <div class="tl-track"><span class="tl-today" style="left:38%"></span><a class="tl-bar epic" href="epic.html" style="left:16%;width:28%">ACME-140 · 40%</a></div>
+      </div>
+
+      <div class="tl-row">
+        <div class="tl-label"><span class="type-ic" style="background:var(--color-action-primary)">R</span><a href="releases.html"><strong>2.5</strong></a></div>
+        <div class="tl-track"><span class="tl-today" style="left:38%"></span><a class="tl-bar rel" href="releases.html" style="left:48%;width:34%">2.5 · target 14 Nov</a></div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-label" style="padding-left:14px"><span class="type-ic t-epic">E</span><a href="epic.html">Search relevance</a></div>
+        <div class="tl-track"><span class="tl-today" style="left:38%"></span><a class="tl-bar epic" href="epic.html" style="left:50%;width:24%">ACME-170 · 0%</a></div>
+      </div>
+
+      <div class="tl-row">
+        <div class="tl-label"><span class="type-ic" style="background:var(--color-action-primary)">R</span><a href="releases.html"><strong>2.10</strong></a></div>
+        <div class="tl-track"><span class="tl-today" style="left:38%"></span><a class="tl-bar rel" href="releases.html" style="left:84%;width:14%">2.10</a></div>
+      </div>
+
+      <div class="tl-row" style="margin-top:10px">
+        <div class="tl-label" style="color:var(--color-text-ghost)">Unscheduled</div>
+        <div class="tl-track" style="background:var(--color-overlay-1)">
+          <a class="tl-bar unsched" href="epic.html" style="left:1%;width:30%">Loyalty tie-in — no dates</a>
+          <a class="tl-bar unsched" href="epic.html" style="left:33%;width:26%">Fraud rules — no dates</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="panel-foot">
+    <span>2.10 sorts after 2.5, not between 2.1 and 2.2.</span>
+    <span class="spacer" style="margin-left:auto"></span>
+    <span style="color:var(--color-danger)">▌</span><span>today · 1 September</span>
+  </div>
+</section>
+
+<div class="note" style="margin-top:14px">
+  <span>◈</span>
+  <div>An epic with no dates does not disappear from the roadmap — it drops into the <strong>unscheduled lane</strong>, where it can be seen and given dates. Clicking any bar opens that epic.</div>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

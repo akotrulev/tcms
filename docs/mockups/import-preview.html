@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Import preview · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="projects" data-proj="ACME|Acme Storefront" data-projnav="settings" data-crumbs="Projects>projects.html|Acme Storefront>project-overview.html|Imports>settings-import.html|Preview">
+<main class="page">
+<div class="phead">
+  <div><h1>Preview · PROJ → Acme Storefront</h1><div class="sub">Read-only. Nothing has been written.</div></div>
+  <div class="actions"><a class="btn" href="settings-import.html">Cancel</a><a class="btn btn-primary" href="import-mapping.html">Continue to status mapping →</a></div>
+</div>
+
+<div class="steps">
+  <span class="step ok"><span class="num">✓</span> Connect &amp; pick</span><span class="arw">→</span>
+  <span class="step on"><span class="num">2</span> Preview</span><span class="arw">→</span>
+  <span class="step"><span class="num">3</span> Map statuses</span><span class="arw">→</span>
+  <span class="step"><span class="num">4</span> Report</span>
+</div>
+
+<div class="note good" style="margin-bottom:16px">
+  <span>✓</span>
+  <div><strong>No data has been written.</strong> Leaving this page now changes nothing in Acme Storefront — not one issue, status or label.</div>
+</div>
+
+<div class="grid g-main">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>What comes across</h2><span class="hint">1 482 issues</span></div>
+      <div class="tw">
+        <table class="t">
+          <thead><tr><th>Jira type</th><th>Becomes</th><th class="num">Count</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td>Epic</td><td><span class="row" style="gap:6px"><span class="type-ic t-epic">E</span>Epic</span></td><td class="num mono">34</td><td style="color:var(--color-text-faint)">dates and goal carried</td></tr>
+            <tr><td>Story</td><td><span class="row" style="gap:6px"><span class="type-ic t-story">S</span>Story</span></td><td class="num mono">612</td><td style="color:var(--color-text-faint)">acceptance criteria from the description</td></tr>
+            <tr><td>Task / Sub-task</td><td><span class="row" style="gap:6px"><span class="type-ic t-task">T</span>Task</span></td><td class="num mono">701</td><td style="color:var(--color-text-faint)">parent link preserved</td></tr>
+            <tr><td>Bug</td><td><span class="row" style="gap:6px"><span class="type-ic t-bug">B</span>Bug</span></td><td class="num mono">128</td><td style="color:var(--color-text-faint)">counts as unfinished work in its epic</td></tr>
+            <tr><td>Spike</td><td><span class="row" style="gap:6px"><span class="type-ic t-spike">?</span>Spike</span></td><td class="num mono">7</td><td style="color:var(--color-text-faint)">excluded from completion</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel-foot"><span>Also arriving: 214 labels · 4 892 comments · 11 306 history entries · 38 fix versions → releases</span></div>
+    </section>
+
+    <section class="panel" style="border-color:color-mix(in srgb, var(--color-warning) 34%, transparent)">
+      <div class="panel-head"><h2>What will be dropped</h2><span class="badge b-review"><span class="dot"></span>7 field types · 3 918 values</span></div>
+      <div class="tw">
+        <table class="t">
+          <thead><tr><th>Jira field</th><th>Type</th><th class="num">Values held</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr><td>Story Points</td><td>number</td><td class="num mono">598</td><td style="color:var(--color-text-faint)">estimates here are hours; points have no conversion</td></tr>
+            <tr><td>Sprint</td><td>picker</td><td class="num mono">1 204</td><td style="color:var(--color-warning)">open question — a label per sprint, or dropped</td></tr>
+            <tr><td>Epic Colour</td><td>colour</td><td class="num mono">34</td><td style="color:var(--color-text-faint)">no equivalent</td></tr>
+            <tr><td>Flagged</td><td>flag</td><td class="num mono">61</td><td style="color:var(--color-text-faint)">use a label or the Blocked status</td></tr>
+            <tr><td>Request Type</td><td>service desk</td><td class="num mono">1 482</td><td style="color:var(--color-text-faint)">this is not a service desk</td></tr>
+            <tr><td>Time Tracking (Jira)</td><td>duration</td><td class="num mono">402</td><td style="color:var(--color-text-faint)">time entries here belong to a person and a period</td></tr>
+            <tr><td>Custom: "Squad"</td><td>picker</td><td class="num mono">137</td><td style="color:var(--color-text-faint)">no custom fields in this product</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel-foot" style="color:var(--color-warning)">
+        <span><strong>These values are not imported and cannot be recovered from this product later.</strong> Export them from Jira first if you need them. This same list is kept in the import report.</span>
+      </div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Keys</h2></div>
+      <div class="panel-body stack" style="gap:10px">
+        <div style="font-size:12.5px;color:var(--color-text-muted);line-height:1.6"><span class="mono">PROJ-4812</span> stays <span class="mono">PROJ-4812</span>. Commit messages, PR titles and Slack history keep pointing at the right thing.</div>
+        <div class="linked"><span class="mono" style="font-size:12px">PROJ-4812</span><span style="color:var(--color-text-ghost)">→</span><span class="mono" style="font-size:12px;color:var(--color-success)">PROJ-4812</span></div>
+        <div style="font-size:11.5px;color:var(--color-text-ghost);line-height:1.5">Acme Storefront's own key stays <span class="mono">ACME</span>. Both prefixes resolve in this project afterwards.</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Untouched</h2></div>
+      <div class="panel-body stack" style="gap:7px">
+        <div style="font-size:12.5px;color:var(--color-text-muted)">✓ Existing ACME issues</div>
+        <div style="font-size:12.5px;color:var(--color-text-muted)">✓ Test cases, suites, plans and runs</div>
+        <div style="font-size:12.5px;color:var(--color-text-muted)">✓ Documents</div>
+        <div style="font-size:12.5px;color:var(--color-text-muted)">✓ Time entries and approvals</div>
+      </div>
+    </section>
+  </div>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

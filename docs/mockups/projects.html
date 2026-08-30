@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Projects · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="projects" data-crumbs="Projects">
+<main class="page">
+<div class="phead">
+  <div>
+    <h1>Projects</h1>
+    <div class="sub">Northwind Labs · 5 projects, 3 clients</div>
+  </div>
+  <div class="actions">
+    <a class="btn" href="clients.html">Clients</a>
+    <a class="btn btn-primary" href="project-new.html">+ New project</a>
+  </div>
+</div>
+
+<div class="filters">
+  <span class="sel on">Client: any</span>
+  <span class="sel" data-mock="Status filter">Status: active</span>
+  <span class="sel" data-mock="Lead filter">Lead: anyone</span>
+  <span class="spacer"></span>
+  <span class="chip" data-mock="Column picker">⚙ Columns</span>
+</div>
+
+<div class="note" style="margin-bottom:14px">
+  <span>◈</span>
+  <div>The <strong>Client</strong> column and filter are here because this company has clients. A company with none never sees either — and nothing marks its projects as missing one.</div>
+</div>
+
+<section class="panel">
+  <div class="tw">
+    <table class="t">
+      <thead>
+        <tr><th class="sorted-asc">Project</th><th>Key</th><th>Client</th><th>Lead</th><th>Next release</th><th>Open work</th><th class="num">Completion</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><a class="ttl" href="project-overview.html">Acme Storefront</a></td>
+          <td><span class="ikey">ACME</span></td>
+          <td><a href="client.html">Acme Retail</a></td>
+          <td><span class="row" style="gap:6px"><span class="avatar sm">RL</span> Rae Lindqvist</span></td>
+          <td><a href="release.html">2.4</a> <span style="color:var(--color-text-ghost)">· 18 Sep</span></td>
+          <td>34 issues</td>
+          <td class="num" style="min-width:150px">
+            <div class="row" style="gap:8px;justify-content:flex-end"><span class="mono">70%</span><span class="meter" style="width:80px"><span class="done" style="width:70%"></span><span class="prog" style="width:12%"></span></span></div>
+            <div class="basis" style="text-align:right">by estimate</div>
+          </td>
+        </tr>
+        <tr>
+          <td><a class="ttl" href="project-overview.html">Bergstrom Portal</a></td>
+          <td><span class="ikey">BERG</span></td>
+          <td><a href="client.html">Bergstrom AG</a></td>
+          <td><span class="row" style="gap:6px"><span class="avatar sm">IN</span> Ilya Novak</span></td>
+          <td>1.10 <span style="color:var(--color-text-ghost)">· 2 Oct</span></td>
+          <td>21 issues</td>
+          <td class="num">
+            <div class="row" style="gap:8px;justify-content:flex-end"><span class="mono">45%</span><span class="meter" style="width:80px"><span class="done" style="width:45%"></span></span></div>
+            <div class="basis" style="text-align:right">by count</div>
+          </td>
+        </tr>
+        <tr>
+          <td><a class="ttl" href="project-overview.html">Kessler Intake</a></td>
+          <td><span class="ikey">KESS</span></td>
+          <td><a href="client.html">Kessler Health</a></td>
+          <td><span class="row" style="gap:6px"><span class="avatar sm">JP</span> Jun Park</span></td>
+          <td><span style="color:var(--color-text-ghost)">—</span></td>
+          <td>8 issues</td>
+          <td class="num">
+            <div class="row" style="gap:8px;justify-content:flex-end"><span class="mono">12%</span><span class="meter" style="width:80px"><span class="done" style="width:12%"></span></span></div>
+            <div class="basis" style="text-align:right">by count</div>
+          </td>
+        </tr>
+        <tr>
+          <td><a class="ttl" href="solo-overview.html">Internal Platform</a></td>
+          <td><span class="ikey">PLAT</span></td>
+          <td><span style="color:var(--color-text-ghost)">None (internal)</span></td>
+          <td><span class="row" style="gap:6px"><span class="avatar sm">DP</span> Dana Petrov</span></td>
+          <td>0.9 <span style="color:var(--color-text-ghost)">· 12 Sep</span></td>
+          <td>11 issues</td>
+          <td class="num">
+            <div class="row" style="gap:8px;justify-content:flex-end"><span class="mono">62%</span><span class="meter" style="width:80px"><span class="done" style="width:62%"></span></span></div>
+            <div class="basis" style="text-align:right">by estimate</div>
+          </td>
+        </tr>
+        <tr>
+          <td><a class="ttl" href="project-overview.html">Acme Loyalty</a></td>
+          <td><span class="ikey">LOYA</span></td>
+          <td><a href="client.html">Acme Retail</a></td>
+          <td><span class="row" style="gap:6px"><span class="avatar sm">MS</span> Mira Sund</span></td>
+          <td>0.4 <span style="color:var(--color-text-ghost)">· 30 Sep</span></td>
+          <td>15 issues</td>
+          <td class="num">
+            <div class="row" style="gap:8px;justify-content:flex-end"><span class="mono">28%</span><span class="meter" style="width:80px"><span class="done" style="width:28%"></span></span></div>
+            <div class="basis" style="text-align:right">by count</div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="panel-foot"><span>5 of 5 · "None (internal)" is a value, not a gap.</span></div>
+</section>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

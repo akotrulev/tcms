@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Acme Storefront — Analytics · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="projects" data-proj="ACME|Acme Storefront" data-projnav="reports" data-crumbs="Projects>projects.html|Acme Storefront>project-overview.html|Reports">
+<main class="page">
+<div class="phead">
+  <div><h1>Delivery analytics</h1><div class="sub">Are we converging on 2.4?</div></div>
+  <div class="actions"><span class="sel on" data-mock="Release picker">Release: 2.4</span><span class="sel" data-mock="Export">Export</span></div>
+</div>
+
+<div class="grid g2">
+  <section class="panel">
+    <div class="panel-head"><h2>Release burn-up</h2><span class="hint">2.4 · done vs total over time</span></div>
+    <div class="panel-body">
+      <svg viewBox="0 0 520 220" width="100%" height="220" role="img" aria-label="Burn-up chart: total scope rising from 23 to 27 stories, done rising from 0 to 21 over ten weeks">
+        <g stroke="var(--color-rule)" stroke-width="1">
+          <line x1="40" y1="20" x2="500" y2="20"/><line x1="40" y1="60" x2="500" y2="60"/>
+          <line x1="40" y1="100" x2="500" y2="100"/><line x1="40" y1="140" x2="500" y2="140"/><line x1="40" y1="180" x2="500" y2="180"/>
+        </g>
+        <g fill="var(--color-text-ghost)" font-size="10" font-family="var(--font-mono)">
+          <text x="10" y="24">30</text><text x="10" y="64">22</text><text x="10" y="104">15</text><text x="10" y="144">7</text><text x="10" y="184">0</text>
+          <text x="40" y="200">1 Jul</text><text x="230" y="200">1 Aug</text><text x="420" y="200">1 Sep</text>
+        </g>
+        <polyline fill="none" stroke="var(--color-viz-2)" stroke-width="2" stroke-dasharray="4 3"
+          points="40,72 100,72 160,66 220,58 280,58 340,50 400,45 460,45 500,45"/>
+        <polyline fill="none" stroke="var(--color-success)" stroke-width="2.5"
+          points="40,180 100,166 160,142 220,124 280,110 340,88 400,70 460,58 500,52"/>
+        <polyline fill="none" stroke="var(--color-action-primary)" stroke-width="1.5" stroke-dasharray="2 4"
+          points="500,52 500,45"/>
+        <circle cx="500" cy="52" r="3.5" fill="var(--color-success)"/>
+        <circle cx="500" cy="45" r="3.5" fill="var(--color-viz-2)"/>
+      </svg>
+      <div class="chips" style="margin-top:8px">
+        <span class="chip"><span style="width:10px;height:2px;background:var(--color-success);display:inline-block"></span> Done · 21</span>
+        <span class="chip"><span style="width:10px;height:2px;background:var(--color-viz-2);display:inline-block"></span> Total scope · 27</span>
+        <span class="chip">+4 added after the release was created</span>
+      </div>
+    </div>
+    <div class="panel-foot"><span>Scope added after 2.4 was created is the step in the dashed line on 12 Aug — visible, not absorbed into the denominator silently.</span></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Cycle time</h2><span class="hint">started → done, by type, last 90 days</span></div>
+    <div class="panel-body">
+      <svg viewBox="0 0 520 220" width="100%" height="220" role="img" aria-label="Cycle time by type: stories median 6.2 days, tasks 1.8 days, bugs 3.1 days, spikes 4.0 days">
+        <g stroke="var(--color-rule)" stroke-width="1">
+          <line x1="90" y1="20" x2="500" y2="20"/><line x1="90" y1="70" x2="500" y2="70"/>
+          <line x1="90" y1="120" x2="500" y2="120"/><line x1="90" y1="170" x2="500" y2="170"/>
+        </g>
+        <g font-size="11" fill="var(--color-text-muted)" font-family="var(--font-sans)">
+          <text x="16" y="46">Story</text><text x="16" y="96">Task</text><text x="16" y="146">Bug</text><text x="16" y="196">Spike</text>
+        </g>
+        <g>
+          <rect x="90" y="32" width="230" height="16" rx="3" fill="var(--color-success)" opacity="0.75"/>
+          <rect x="90" y="82" width="66" height="16" rx="3" fill="var(--color-info)" opacity="0.75"/>
+          <rect x="90" y="132" width="115" height="16" rx="3" fill="var(--color-danger)" opacity="0.75"/>
+          <rect x="90" y="182" width="148" height="16" rx="3" fill="var(--color-warning)" opacity="0.75"/>
+        </g>
+        <g font-size="10.5" font-family="var(--font-mono)" fill="var(--color-text-faint)">
+          <text x="330" y="45">6.2 d median · 14 d p90</text>
+          <text x="166" y="95">1.8 d · 4 d p90</text>
+          <text x="215" y="145">3.1 d · 9 d p90</text>
+          <text x="248" y="195">4.0 d · 7 d p90</text>
+        </g>
+      </svg>
+    </div>
+    <div class="panel-foot"><span>No velocity chart — there are no sprints to measure it over, and inventing one would report a number nobody planned against.</span></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Flow</h2><span class="hint">issues per status, weekly</span></div>
+    <div class="panel-body">
+      <svg viewBox="0 0 520 200" width="100%" height="200" role="img" aria-label="Cumulative flow: backlog shrinking, done growing, in-progress steady around five">
+        <g>
+          <polygon fill="var(--color-success)" opacity="0.55" points="40,180 130,160 220,132 310,105 400,78 490,62 490,180"/>
+          <polygon fill="var(--color-wip)" opacity="0.45" points="40,160 130,142 220,116 310,92 400,66 490,52 490,62 400,78 310,105 220,132 130,160 40,180"/>
+          <polygon fill="var(--color-viz-2)" opacity="0.35" points="40,60 130,66 220,70 310,74 400,72 490,44 490,52 400,66 310,92 220,116 130,142 40,160"/>
+        </g>
+        <g fill="var(--color-text-ghost)" font-size="10" font-family="var(--font-mono)">
+          <text x="40" y="196">Jul</text><text x="220" y="196">Aug</text><text x="440" y="196">Sep</text>
+        </g>
+      </svg>
+      <div class="chips" style="margin-top:8px">
+        <span class="chip"><span style="width:10px;height:8px;background:var(--color-viz-2);display:inline-block;opacity:.5"></span> Not started</span>
+        <span class="chip"><span style="width:10px;height:8px;background:var(--color-wip);display:inline-block;opacity:.6"></span> In flight</span>
+        <span class="chip"><span style="width:10px;height:8px;background:var(--color-success);display:inline-block;opacity:.7"></span> Done</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Estimate accuracy</h2><span class="hint">by epic</span></div>
+    <div class="panel-body">
+      <div class="tw"><table class="t">
+        <thead><tr><th>Epic</th><th class="num">Est</th><th class="num">Logged</th><th class="num">Drift</th></tr></thead>
+        <tbody>
+          <tr><td><a href="epic.html">Checkout rebuild</a></td><td class="num mono">306h</td><td class="num mono">241h</td><td class="num mono" style="color:var(--color-success)">−21%</td></tr>
+          <tr><td><a href="epic.html">Payments provider swap</a></td><td class="num mono">180h</td><td class="num mono">214h</td><td class="num mono" style="color:var(--color-danger)">+19%</td></tr>
+          <tr><td><a href="epic.html">Accessibility pass</a></td><td class="num mono">96h</td><td class="num mono">91h</td><td class="num mono" style="color:var(--color-success)">−5%</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <div class="panel-foot"><span>Approved hours only — an unapproved timesheet is not evidence.</span></div>
+  </section>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

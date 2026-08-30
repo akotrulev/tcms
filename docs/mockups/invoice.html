@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Draft invoice · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="billing" data-role="Finance" data-crumbs="Billing>billing.html|Draft invoice">
+<main class="page">
+<div class="phead">
+  <div>
+    <div class="row" style="gap:8px;margin-bottom:4px"><span class="badge b-review"><span class="dot"></span>Draft</span><span class="chip">Acme Retail · 1–30 September 2026</span></div>
+    <h1>Draft invoice</h1>
+    <div class="sub">Every line is approved time at the rate-card rate. Billing is a report, not a spreadsheet.</div>
+  </div>
+  <div class="actions"><button class="btn" data-mock="Download PDF preview">Preview PDF</button><button class="btn" data-mock="Discard draft">Discard</button><button class="btn btn-primary" data-mock="Issue invoice">Issue invoice</button></div>
+</div>
+
+<div class="note warn" style="margin-bottom:16px">
+  <span>!</span>
+  <div><strong>38 hours are excluded because they are not approved.</strong> They are counted here so nobody wonders where they went — Tomas Ek 24h and Jun Park 14h, both awaiting <a href="timesheet-approvals.html">Rae Lindqvist's approval</a>. Approve them and this draft recalculates.</div>
+</div>
+
+<div class="grid g-main">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Lines</h2><span class="hint">grouped by project, then rate</span></div>
+      <div class="tw">
+        <table class="t">
+          <thead><tr><th>Project</th><th>Who / role</th><th class="num">Approved h</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead>
+          <tbody>
+            <tr><td><a href="project-overview.html">Acme Storefront</a></td><td>Mira Sund <span style="color:var(--color-text-ghost)">(person rate)</span></td><td class="num mono">18.0</td><td class="num mono">€110</td><td class="num mono">€1 980</td></tr>
+            <tr><td><a href="project-overview.html">Acme Storefront</a></td><td>Test Lead <span style="color:var(--color-text-ghost)">(role)</span></td><td class="num mono">12.0</td><td class="num mono">€96</td><td class="num mono">€1 152</td></tr>
+            <tr><td><a href="project-overview.html">Acme Storefront</a></td><td>Test Engineer <span style="color:var(--color-text-ghost)">(role)</span></td><td class="num mono">14.0</td><td class="num mono">€78</td><td class="num mono">€1 092</td></tr>
+            <tr><td><a href="project-overview.html">Acme Loyalty</a></td><td>Test Engineer <span style="color:var(--color-text-ghost)">(role)</span></td><td class="num mono">24.0</td><td class="num mono">€78</td><td class="num mono">€1 872</td></tr>
+            <tr style="opacity:.6"><td colspan="2"><em>Excluded — not approved</em></td><td class="num mono">38.0</td><td class="num">—</td><td class="num">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel-foot">
+        <span>4 lines · 68 approved hours</span>
+        <span class="spacer" style="margin-left:auto"></span>
+        <span>Total <strong class="mono" style="font-size:14px">€6 096</strong></span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Time entries behind these lines</h2><span class="hint">21 entries</span></div>
+      <div class="tw">
+        <table class="t">
+          <thead><tr><th>Date</th><th>Person</th><th>Against</th><th class="num">Hours</th><th>Approved</th></tr></thead>
+          <tbody>
+            <tr><td>2 Sep</td><td>Mira Sund</td><td><a href="story.html">ACME-122</a> Card capture</td><td class="num mono">6.0</td><td><span class="badge b-done">3 Sep · Rae</span></td></tr>
+            <tr><td>2 Sep</td><td>Dana Petrov</td><td><a href="task.html">ACME-124</a> Address validation</td><td class="num mono">2.0</td><td><span class="badge b-done">3 Sep · Rae</span></td></tr>
+            <tr><td>1 Sep</td><td>Mira Sund</td><td><a href="test-runs.html">2.4 regression run</a></td><td class="num mono">4.0</td><td><span class="badge b-done">3 Sep · Rae</span></td></tr>
+            <tr style="opacity:.6"><td>1 Sep</td><td>Tomas Ek</td><td><a href="story.html">ACME-119</a> Gift card</td><td class="num mono">8.0</td><td><span class="badge b-review">awaiting</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel-foot"><span>Once issued, these lines lock and each entry above shows which invoice it is on.</span></div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Invoice</h2></div>
+      <div class="panel-body">
+        <dl class="dl">
+          <dt>Client</dt><dd><a href="client.html">Acme Retail</a></dd>
+          <dt>Bill to</dt><dd>Anna Krogh<div style="font-size:11px;color:var(--color-text-ghost)" class="mono">invoices@acme.test</div></dd>
+          <dt>Period</dt><dd>1–30 Sep 2026</dd>
+          <dt>Number</dt><dd class="mono">assigned on issue</dd>
+          <dt>Currency</dt><dd>EUR</dd>
+          <dt>Terms</dt><dd>30 days</dd>
+          <dt>Total</dt><dd class="mono" style="font-size:14px">€6 096</dd>
+        </dl>
+      </div>
+      <div class="panel-foot"><span>Issuing locks the lines. It does not send anything — sending is your mail client's job.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Budget effect</h2></div>
+      <div class="panel-body stack" style="gap:10px">
+        <div class="row" style="justify-content:space-between"><span style="font-size:12px;color:var(--color-text-faint)">Acme Storefront</span><span class="mono">418 / 600h</span></div>
+        <div class="meter tall"><span class="done" style="width:70%"></span></div>
+        <div class="row" style="justify-content:space-between"><span style="font-size:12px;color:var(--color-text-faint)">Acme Loyalty</span><span class="mono">€19 200 / €40 000</span></div>
+        <div class="meter tall"><span class="done" style="width:48%"></span></div>
+      </div>
+    </section>
+  </div>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

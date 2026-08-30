@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Teams · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="teams" data-role="Company Admin" data-crumbs="Teams">
+<main class="page">
+<div class="phead">
+  <div><h1>Teams &amp; members</h1><div class="sub">Northwind Labs · 11 members</div></div>
+  <div class="actions"><button class="btn btn-primary" data-mock="Invite a member">+ Invite member</button></div>
+</div>
+
+<section class="panel">
+  <div class="panel-head"><h2>Members</h2><span class="hint">company roles, then project grants</span></div>
+  <div class="tw">
+    <table class="t">
+      <thead><tr><th>Person</th><th>Company roles</th><th>Project grants</th><th>Assistants</th><th>Last seen</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><a class="ttl" href="member.html"><span class="row" style="gap:7px"><span class="avatar sm">DP</span> Dana Petrov</span></a></td>
+          <td><span class="chips"><span class="chip">Company Admin</span></span></td>
+          <td><span class="chips"><span class="chip">ACME · Test Engineer</span><span class="chip">PLAT · Project Manager</span></span></td>
+          <td><span class="ai-tag">1</span></td>
+          <td>now</td>
+        </tr>
+        <tr>
+          <td><a class="ttl" href="member.html"><span class="row" style="gap:7px"><span class="avatar sm">RL</span> Rae Lindqvist</span></a></td>
+          <td><span class="chips"><span class="chip">—</span></span></td>
+          <td><span class="chips"><span class="chip">ACME · Project Manager</span></span></td>
+          <td><span style="color:var(--color-text-ghost)">—</span></td>
+          <td>12 min ago</td>
+        </tr>
+        <tr>
+          <td><a class="ttl" href="member.html"><span class="row" style="gap:7px"><span class="avatar sm">MS</span> Mira Sund</span></a></td>
+          <td><span class="chips"><span class="chip">—</span></span></td>
+          <td><span class="chips"><span class="chip">ACME · Test Lead</span><span class="chip">LOYA · Test Lead</span></span></td>
+          <td><span class="ai-tag">1</span></td>
+          <td>1 h ago</td>
+        </tr>
+        <tr>
+          <td><a class="ttl" href="member.html"><span class="row" style="gap:7px"><span class="avatar sm">OB</span> Oskar Bergman</span></a></td>
+          <td><span class="chips"><span class="chip">Account Manager</span></span></td>
+          <td><span class="chips"><span class="chip">ACME · Viewer</span></span></td>
+          <td><span style="color:var(--color-text-ghost)">—</span></td>
+          <td>yesterday</td>
+        </tr>
+        <tr>
+          <td><a class="ttl" href="member.html"><span class="row" style="gap:7px"><span class="avatar sm">AN</span> Astrid Nyberg</span></a></td>
+          <td><span class="chips"><span class="chip">Finance</span></span></td>
+          <td><span style="color:var(--color-text-ghost)">none</span></td>
+          <td><span style="color:var(--color-text-ghost)">—</span></td>
+          <td>3 d ago</td>
+        </tr>
+        <tr>
+          <td><a class="ttl" href="member.html"><span class="row" style="gap:7px"><span class="avatar sm">TE</span> Tomas Ek</span></a></td>
+          <td><span class="chips"><span class="chip">—</span></span></td>
+          <td><span class="chips"><span class="chip">ACME · Test Engineer</span><span class="chip">BERG · Test Engineer</span></span></td>
+          <td><span style="color:var(--color-text-ghost)">—</span></td>
+          <td>2 h ago</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="panel-foot"><span>Company membership is authentication and zero project visibility. Seeing a project needs an explicit grant on top — the two gates are independent.</span></div>
+</section>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

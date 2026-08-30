@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clients · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="clients" data-role="Company Admin" data-crumbs="Clients">
+<main class="page">
+<div class="phead">
+  <div><h1>Clients</h1><div class="sub">Northwind Labs</div></div>
+</div>
+
+<section class="panel">
+  <div class="panel-body">
+    <div class="empty" style="padding:56px 20px">
+      <span class="ei" style="font-size:26px">◈</span>
+      <h3>No clients yet</h3>
+      <p>A client is an organisation your company delivers software for. Recording one lets a project say who it is for, so hours, budgets and — later — invoices roll up to the right customer. A client never signs in and never sees anything here.</p>
+      <p style="color:var(--color-text-ghost)">If you build your own products, you may never need one. Nothing in the product will ask you again.</p>
+      <a class="btn btn-primary" href="client-new.html">Add client</a>
+    </div>
+  </div>
+</section>
+
+<div class="note" style="margin-top:16px">
+  <span>◈</span>
+  <div>
+    <strong>What is absent while this list is empty:</strong> the Client column and filter on <a href="projects.html">Projects</a>, the Client field in project settings, per-client rollups, and every "attach a client" prompt. This page stays reachable so the first one can be created — that is the only trace a client-less company sees.
+  </div>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My profile — assistants · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="profile" data-crumbs="My profile>profile-assistants.html|AI assistants">
+<main class="page">
+<div class="phead">
+  <div class="row" style="gap:14px">
+    <span class="avatar lg">DP</span>
+    <div><h1>Dana Petrov</h1><div class="sub">My profile · AI assistants</div></div>
+  </div>
+  <div class="actions"><a class="btn btn-primary" href="assistant-connect.html">+ Connect an assistant</a></div>
+</div>
+
+<nav class="subnav" aria-label="Profile sections">
+  <a href="profile-assistants.html" aria-current="page">AI assistants</a>
+  <a href="timesheets.html">My time</a>
+  <a href="my-work.html">My work</a>
+  <a href="help.html">Help</a>
+</nav>
+
+<div class="note" style="margin-bottom:16px">
+  <span>◈</span>
+  <div><strong>The assistant is yours, on your machine.</strong> This product never runs code, never holds a repository and never calls a model. It hands over a task and records what comes back as <em>you, via that assistant</em>.</div>
+</div>
+
+<div class="grid g-main">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Connected assistants</h2><span class="hint">2</span></div>
+      <div class="panel-body stack" style="gap:12px">
+
+        <div class="linked" style="flex-direction:column;align-items:stretch;gap:10px">
+          <div class="row">
+            <span class="ai-tag">claude-code</span>
+            <span class="badge b-done"><span class="dot"></span>Active</span>
+            <span class="spacer"></span>
+            <span style="font-size:11.5px;color:var(--color-text-faint)">last acted 14 minutes ago</span>
+            <button class="btn btn-sm btn-danger" data-mock="Revoke assistant">Revoke</button>
+          </div>
+          <dl class="dl">
+            <dt>Scope</dt><dd><span class="chip">Acme Storefront only</span></dd>
+            <dt>Reach</dt><dd>Whatever Dana can do on that project, minus closing an issue</dd>
+            <dt>Connected</dt><dd>12 Aug 2026</dd>
+            <dt>Recent</dt><dd><a href="task.html">ACME-124</a> moved to In Review · PR #482 attached</dd>
+          </dl>
+        </div>
+
+        <div class="linked" style="flex-direction:column;align-items:stretch;gap:10px">
+          <div class="row">
+            <span class="ai-tag">laptop-agent</span>
+            <span class="badge b-neutral">Idle</span>
+            <span class="spacer"></span>
+            <span style="font-size:11.5px;color:var(--color-text-faint)">last acted 26 days ago</span>
+            <button class="btn btn-sm btn-danger" data-mock="Revoke assistant">Revoke</button>
+          </div>
+          <dl class="dl">
+            <dt>Scope</dt><dd><span class="chip">Every project I can see</span></dd>
+            <dt>Connected</dt><dd>3 Jun 2026</dd>
+          </dl>
+        </div>
+
+      </div>
+      <div class="panel-foot"><span>Revoking is immediate and does not undo anything the assistant already did — its actions stay in each issue's history, attributed to you, via it.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>What mine did this week</h2></div>
+      <div class="panel-body feed">
+        <div class="feed-item"><span class="avatar sm">DP</span><div class="body"><div class="who"><strong>Dana Petrov</strong> <span class="via">via claude-code</span><span class="t">14 min ago</span></div><div class="sys">moved <a href="task.html">ACME-124</a> to In Review and attached PR #482</div></div></div>
+        <div class="feed-item"><span class="avatar sm">DP</span><div class="body"><div class="who"><strong>Dana Petrov</strong> <span class="via">via claude-code</span><span class="t">18 min ago</span></div><div class="sys">commented on <a href="task.html">ACME-124</a> — build failure, then green</div></div></div>
+        <div class="feed-item"><span class="avatar sm">DP</span><div class="body"><div class="who"><strong>Dana Petrov</strong> <span class="via">via claude-code</span><span class="t">yesterday</span></div><div class="sys">proposed 3 sub-tasks on <a href="story-proposal.html">ACME-118</a> — 2 accepted, 1 rejected</div></div></div>
+        <div class="feed-item"><span class="avatar sm">DP</span><div class="body"><div class="who"><strong>Dana Petrov</strong> <span class="via">via claude-code</span><span class="t">2 d ago</span></div><div class="sys">fetched the queue — 2 AI-eligible tasks returned</div></div></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>My AI-eligible work</h2></div>
+      <div class="panel-body stack" style="gap:9px">
+        <a class="linked" href="task.html"><span class="type-ic t-task">T</span><div style="flex:1"><div style="font-size:12.5px">ACME-124 Address validation</div><div style="font-size:11px;color:var(--color-text-ghost)">In Review · via claude-code</div></div></a>
+        <a class="linked" href="task.html"><span class="type-ic t-task">T</span><div style="flex:1"><div style="font-size:12.5px">BERG-77 Report footer</div><div style="font-size:11px;color:var(--color-text-ghost)">Ready · out of claude-code's scope</div></div></a>
+        <div style="font-size:11.5px;color:var(--color-text-ghost);line-height:1.55">BERG-77 is flagged but claude-code is scoped to Acme Storefront, so it gets nothing from Bergstrom Portal — not an empty list, nothing at all.</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Limits that are not yours to change</h2></div>
+      <div class="panel-body stack" style="gap:9px">
+        <div class="bullet"><span style="color:var(--color-danger)">✕</span><span style="font-size:12.5px;color:var(--color-text-muted)">Close an issue it worked on</span></div>
+        <div class="bullet"><span style="color:var(--color-danger)">✕</span><span style="font-size:12.5px;color:var(--color-text-muted)">Act beyond your own permissions</span></div>
+        <div class="bullet"><span style="color:var(--color-danger)">✕</span><span style="font-size:12.5px;color:var(--color-text-muted)">Reach a project you cannot reach</span></div>
+        <div style="font-size:11.5px;color:var(--color-text-ghost);line-height:1.55;margin-top:2px">If your own permissions are reduced tomorrow, its reach shrinks with yours the moment that happens.</div>
+      </div>
+    </section>
+  </div>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

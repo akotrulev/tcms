@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Import report · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="projects" data-proj="ACME|Acme Storefront" data-projnav="settings" data-crumbs="Projects>projects.html|Acme Storefront>project-overview.html|Imports>settings-import.html|Report">
+<main class="page">
+<div class="phead">
+  <div>
+    <div class="row" style="gap:8px;margin-bottom:4px"><span class="badge b-done"><span class="dot"></span>Completed</span><span class="chip">14 Aug 2026, 09:12 · by Oskar Bergman</span></div>
+    <h1>Import report · PROJ → Acme Storefront</h1>
+    <div class="sub">Kept indefinitely, and reachable from <a href="settings-import.html">Settings → Imports</a> long after the migration.</div>
+  </div>
+  <div class="actions"><button class="btn" data-mock="Download report">Download</button><a class="btn" href="work-board.html">Open the board</a></div>
+</div>
+
+<div class="steps">
+  <span class="step ok"><span class="num">✓</span> Connect &amp; pick</span><span class="arw">→</span>
+  <span class="step ok"><span class="num">✓</span> Preview</span><span class="arw">→</span>
+  <span class="step ok"><span class="num">✓</span> Map statuses</span><span class="arw">→</span>
+  <span class="step on"><span class="num">4</span> Report</span>
+</div>
+
+<div class="grid g4" style="margin-bottom:16px">
+  <div class="panel"><div class="panel-body kpi"><span class="n">1 482</span><span class="l">Issues imported</span><span class="d">0 failures</span></div></div>
+  <div class="panel"><div class="panel-body kpi"><span class="n">38</span><span class="l">Releases</span><span class="d">from Jira fix versions</span></div></div>
+  <div class="panel"><div class="panel-body kpi"><span class="n">4 892</span><span class="l">Comments</span><span class="d">authors matched by email</span></div></div>
+  <div class="panel"><div class="panel-body kpi"><span class="n" style="color:var(--color-warning)">3 918</span><span class="l">Values dropped</span><span class="d">7 field types</span></div></div>
+</div>
+
+<div class="grid g-main">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Keys survived</h2></div>
+      <div class="panel-body stack" style="gap:12px">
+        <div class="note good"><span>✓</span><div>Every Jira key resolves in this project. <span class="mono">PROJ-4812</span> is still <span class="mono">PROJ-4812</span>.</div></div>
+        <div class="row" style="gap:8px">
+          <span class="search" style="flex:1;min-width:0">⌕ PROJ-4812</span>
+          <a class="btn" href="story.html">Search</a>
+        </div>
+        <a class="linked" href="story.html">
+          <span class="type-ic t-story">S</span>
+          <div><div style="font-size:12.5px">Cart survives a sign-in</div><div style="font-size:11px;color:var(--color-text-ghost)"><span class="mono">PROJ-4812</span> · imported 14 Aug · <span class="badge b-done"><span class="dot"></span>Done</span></div></div>
+        </a>
+      </div>
+    </section>
+
+    <section class="panel" style="border-color:color-mix(in srgb, var(--color-warning) 34%, transparent)">
+      <div class="panel-head"><h2>Dropped fields</h2><span class="hint">the same list the preview showed</span></div>
+      <div class="tw">
+        <table class="t">
+          <thead><tr><th>Jira field</th><th>Type</th><th class="num">Values held</th></tr></thead>
+          <tbody>
+            <tr><td>Story Points</td><td>number</td><td class="num mono">598</td></tr>
+            <tr><td>Sprint</td><td>picker</td><td class="num mono">1 204</td></tr>
+            <tr><td>Epic Colour</td><td>colour</td><td class="num mono">34</td></tr>
+            <tr><td>Flagged</td><td>flag</td><td class="num mono">61</td></tr>
+            <tr><td>Request Type</td><td>service desk</td><td class="num mono">1 482</td></tr>
+            <tr><td>Time Tracking (Jira)</td><td>duration</td><td class="num mono">402</td></tr>
+            <tr><td>Custom: "Squad"</td><td>picker</td><td class="num mono">137</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel-foot" style="color:var(--color-warning)"><span>Not recoverable from this product. The report says so a year later, in the same words the preview used.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Status mapping applied</h2></div>
+      <div class="tw">
+        <table class="t">
+          <thead><tr><th>Jira status</th><th>Became</th><th class="num">Issues</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">To Do</td><td><span class="badge b-todo"><span class="dot"></span>Backlog</span></td><td class="num mono">312</td></tr>
+            <tr><td class="mono">Ready for Dev</td><td><span class="badge b-todo"><span class="dot"></span>Ready</span></td><td class="num mono">104</td></tr>
+            <tr><td class="mono">In Progress</td><td><span class="badge b-prog"><span class="dot"></span>In Progress</span></td><td class="num mono">88</td></tr>
+            <tr><td class="mono">In Review</td><td><span class="badge b-review"><span class="dot"></span>In Review</span></td><td class="num mono">41</td></tr>
+            <tr><td class="mono">Blocked</td><td><span class="badge b-blocked"><span class="dot"></span>Blocked</span></td><td class="num mono">19</td></tr>
+            <tr><td class="mono">Awaiting Deploy</td><td><span class="badge b-review"><span class="dot"></span>In Review</span></td><td class="num mono">87</td></tr>
+            <tr><td class="mono">Done</td><td><span class="badge b-done"><span class="dot"></span>Done</span></td><td class="num mono">831</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>People matched</h2></div>
+      <div class="panel-body stack" style="gap:8px">
+        <div class="row" style="gap:8px"><span class="avatar sm">RL</span><span style="font-size:12.5px">Rae Lindqvist</span><span class="spacer"></span><span class="badge b-done">matched</span></div>
+        <div class="row" style="gap:8px"><span class="avatar sm">DP</span><span style="font-size:12.5px">Dana Petrov</span><span class="spacer"></span><span class="badge b-done">matched</span></div>
+        <div class="row" style="gap:8px"><span class="avatar sm">?</span><span style="font-size:12.5px">j.arnold@old-vendor.test</span><span class="spacer"></span><span class="badge b-neutral">kept as text</span></div>
+        <div style="font-size:11.5px;color:var(--color-text-ghost);line-height:1.5;margin-top:4px">An unmatched author is preserved as text on the comment rather than reassigned to somebody who did not write it.</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Open question</h2></div>
+      <div class="panel-body">
+        <div class="note warn"><span>?</span><div><strong>Sprint membership.</strong> 1 204 values. Either a label per sprint or dropped and reported — undecided, and recorded as undecided rather than quietly resolved. See the scope document §10.</div></div>
+      </div>
+    </section>
+  </div>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

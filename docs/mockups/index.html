@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Screen map · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="" data-crumbs="Screen map">
+<main class="page">
+<div class="phead">
+  <div>
+    <h1>Project management expansion — screen map</h1>
+    <div class="sub">Every screen in <span class="mono">2026-08-30-project-management-expansion-user-stories.md</span>, rendered. Links navigate; nothing is saved.</div>
+  </div>
+  <div class="actions">
+    <a class="btn" href="project-overview.html">Start at a project</a>
+    <a class="btn btn-primary" href="my-work.html">Start at My Work</a>
+  </div>
+</div>
+
+<div class="note" style="margin-bottom:20px">
+  <span>◈</span>
+  <div><strong>Two things are live in these renders.</strong> The <em>as&nbsp;…</em> switcher in the top bar changes what the sidebar offers — Billing is absent for everyone but Finance and Company&nbsp;Admin (story&nbsp;M2). The ☾/☀ button swaps the palette; both schemes are the app's own tokens, not new ones.</div>
+</div>
+
+<div class="stack">
+  <section class="panel">
+    <div class="panel-head"><h2>Every day</h2><span class="hint">§1 navigation · §5 views</span></div>
+    <div class="panel-body">
+      <div class="map-grid">
+        <a class="map-card" href="my-work.html"><strong>My Work</strong><span>Issues, executions, reviews and case maintenance across every project, plus private notes.</span><span class="sref">B5</span></a>
+        <a class="map-card" href="projects.html"><strong>Projects</strong><span>The list, with the Client column that only exists once a client does.</span><span class="sref">C3</span></a>
+        <a class="map-card" href="project-overview.html"><strong>Project Overview</strong><span>Where opening a project lands: epics, next release, unscheduled backlog, test health.</span><span class="sref">R2 · D27</span></a>
+        <a class="map-card" href="solo-overview.html"><strong>Overview, one-person company</strong><span>The same screen for a company with no clients and no reviewer.</span><span class="sref">§13</span></a>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Work — one entry, five views</h2><span class="hint">§5 · D34 — the filter survives every switch</span></div>
+    <div class="panel-body">
+      <div class="map-grid">
+        <a class="map-card" href="work-board.html"><strong>Board</strong><span>Swimlanes by epic, WIP breach, drag <em>and</em> a keyboard move menu.</span><span class="sref">B2 · B3</span></a>
+        <a class="map-card" href="work-backlog.html"><strong>Backlog</strong><span>Rank by drag or by ↑/↓, multi-select, move to release.</span><span class="sref">B4</span></a>
+        <a class="map-card" href="work-table.html"><strong>Table</strong><span>The same filter as a sortable grid with bulk actions.</span><span class="sref">B3</span></a>
+        <a class="map-card" href="work-timeline.html"><strong>Timeline</strong><span>Releases in version order, epics inside, an unscheduled lane.</span><span class="sref">R3</span></a>
+        <a class="map-card" href="work-calendar.html"><strong>Calendar</strong><span>Due dates and release dates on a month.</span><span class="sref">§5</span></a>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>The delivery hierarchy</h2><span class="hint">§4 epics · stories · tasks</span></div>
+    <div class="panel-body">
+      <div class="map-grid">
+        <a class="map-card" href="epic.html"><strong>Epic</strong><span>Goal, dates, linked spec blocks with a "changed since linked" flag, completion by estimate.</span><span class="sref">H1 · H6</span></a>
+        <a class="map-card" href="story.html"><strong>Story</strong><span>Acceptance criteria, sub-tasks, linked test cases with latest results, comments and history.</span><span class="sref">H4 · H7 · H8</span></a>
+        <a class="map-card" href="task.html"><strong>Task</strong><span>AI-eligible, a PR link from the assistant, history that reads "via claude-code".</span><span class="sref">H3 · A4</span></a>
+        <a class="map-card" href="issue-new.html"><strong>New issue</strong><span>Quick add with one field; epic and parent both optional.</span><span class="sref">H2 · H3</span></a>
+        <a class="map-card" href="documents.html"><strong>Documents</strong><span>The spec an epic links into, at the block it links to.</span><span class="sref">H1</span></a>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Releases &amp; reporting</h2><span class="hint">§6 · §12</span></div>
+    <div class="panel-body">
+      <div class="map-grid">
+        <a class="map-card" href="releases.html"><strong>Releases</strong><span>Version-ordered so 1.10 sorts after 1.9.</span><span class="sref">R1</span></a>
+        <a class="map-card" href="release.html"><strong>Release readiness</strong><span>Stories done <em>and</em> linked tests passing — one answer to "can we ship 2.4?"</span><span class="sref">R4</span></a>
+        <a class="map-card" href="reports.html"><strong>Delivery analytics</strong><span>Burn-up with scope added after creation, cycle time by type. No velocity.</span><span class="sref">P1</span></a>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Project settings</h2><span class="hint">§5 · §8</span></div>
+    <div class="panel-body">
+      <div class="map-grid">
+        <a class="map-card" href="settings-general.html"><strong>General &amp; issue types</strong><span>Key, client, the review gate that ships off.</span><span class="sref">A6 · C2</span></a>
+        <a class="map-card" href="settings-workflow.html"><strong>Workflow</strong><span>Statuses in order, each marked not started / in progress / done, with the removal prompt.</span><span class="sref">B1</span></a>
+        <a class="map-card" href="settings-boards.html"><strong>Boards</strong><span>Two boards over the same work; every status claimed by exactly one column.</span><span class="sref">B2</span></a>
+        <a class="map-card" href="settings-repositories.html"><strong>Repositories</strong><span>Address, branch, folder, build command — optional reference for a new joiner.</span><span class="sref">A7</span></a>
+        <a class="map-card" href="settings-import.html"><strong>Imports</strong><span>The Jira import report, returnable to long after the migration.</span><span class="sref">J3</span></a>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Moving in from Jira</h2><span class="hint">§7 — preview, map, confirm, report</span></div>
+    <div class="panel-body">
+      <div class="map-grid">
+        <a class="map-card" href="import-connect.html"><strong>1 · Connect &amp; pick</strong><span>Account, then the Jira project to bring across.</span><span class="sref">J1</span></a>
+        <a class="map-card" href="import-preview.html"><strong>2 · Preview</strong><span>Counts by type and every dropped field with how many values it holds. Nothing written.</span><span class="sref">J1</span></a>
+        <a class="map-card" href="import-mapping.html"><strong>3 · Map statuses</strong><span>Pre-filled where names match; an unmapped status blocks the confirm.</span><span class="sref">J2</span></a>
+        <a class="map-card" href="import-report.html"><strong>4 · Report</strong><span>Keys survived. The same dropped-field list, kept.</span><span class="sref">J3</span></a>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Clients, time, money, people</h2><span class="hint">§3 · §9 · §10 · §11</span></div>
+    <div class="panel-body">
+      <div class="map-grid">
+        <a class="map-card" href="clients-empty.html"><strong>Clients — empty</strong><span>What a client is for, and one way forward. Nothing nags a company that has none.</span><span class="sref">C1</span></a>
+        <a class="map-card" href="clients.html"><strong>Clients</strong><span>The list once they exist.</span><span class="sref">C3</span></a>
+        <a class="map-card" href="client.html"><strong>Client</strong><span>Projects, contacts, hours and invoices to date.</span><span class="sref">C3</span></a>
+        <a class="map-card" href="client-new.html"><strong>Add client</strong><span>A name is enough; contacts, rates and contracts are optional.</span><span class="sref">C1</span></a>
+        <a class="map-card" href="timesheets.html"><strong>Timesheets — mine</strong><span>Hours per issue and per category. No rate is ever shown.</span><span class="sref">T1</span></a>
+        <a class="map-card" href="timesheet-approvals.html"><strong>Approvals</strong><span>The PM's queue; a rejection carries its note back.</span><span class="sref">T2</span></a>
+        <a class="map-card" href="billing.html"><strong>Billing</strong><span>Rate cards and budget burn. Finance and Company Admin only.</span><span class="sref">M1</span></a>
+        <a class="map-card" href="invoice.html"><strong>Draft invoice</strong><span>Approved time at the rate-card rate; unapproved excluded and counted.</span><span class="sref">M2</span></a>
+        <a class="map-card" href="staffing.html"><strong>Staffing</strong><span>Allocation by percentage, over-allocation flagged, absence zeroes capacity.</span><span class="sref">S1</span></a>
+        <a class="map-card" href="directory.html"><strong>Directory</strong><span>Filter by skill, see who is free when.</span><span class="sref">S2</span></a>
+        <a class="map-card" href="teams.html"><strong>Teams</strong><span>Members and what each holds.</span><span class="sref">F2</span></a>
+        <a class="map-card" href="member.html"><strong>Grant a role</strong><span>Project Manager among project roles; Account Manager and Finance among company roles.</span><span class="sref">F2</span></a>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Your own AI assistant</h2><span class="hint">§8 — the product never runs code and never calls a model</span></div>
+    <div class="panel-body">
+      <div class="map-grid">
+        <a class="map-card" href="profile-assistants.html"><strong>Connected assistants</strong><span>Name it, scope it to one project, see last activity, revoke.</span><span class="sref">A1</span></a>
+        <a class="map-card" href="assistant-connect.html"><strong>Connect an assistant</strong><span>The setup snippet, handed over rather than described.</span><span class="sref">A1</span></a>
+        <a class="map-card" href="story-proposal.html"><strong>Proposed breakdown</strong><span>Pending sub-tasks to accept, edit or reject — a rejection keeps its note.</span><span class="sref">A5</span></a>
+        <a class="map-card" href="help.html"><strong>Help</strong><span>Including "Connect an AI assistant".</span><span class="sref">§1</span></a>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Screens that already exist</h2><span class="hint">shown so the links out of the new work land somewhere</span></div>
+    <div class="panel-body">
+      <div class="map-grid">
+        <a class="map-card" href="test-cases.html"><strong>Test Cases</strong><span>Now also: which stories each case verifies.</span><span class="sref">H7</span></a>
+        <a class="map-card" href="test-suites.html"><strong>Suites</strong><span>Filed ∪ added ∪ tagged, flat.</span><span class="sref">—</span></a>
+        <a class="map-card" href="test-plans.html"><strong>Plans</strong><span>Scoped to a release.</span><span class="sref">R4</span></a>
+        <a class="map-card" href="test-runs.html"><strong>Runs</strong><span>The results the release readiness reads.</span><span class="sref">R4</span></a>
+      </div>
+    </div>
+  </section>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

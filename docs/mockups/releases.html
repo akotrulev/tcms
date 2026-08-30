@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Acme Storefront — Releases · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="projects" data-proj="ACME|Acme Storefront" data-projnav="releases" data-crumbs="Projects>projects.html|Acme Storefront>project-overview.html|Releases">
+<main class="page">
+<div class="phead">
+  <div><h1>Releases</h1><div class="sub">A cadence without inventing sprints — there are none, and no velocity to measure over them</div></div>
+  <div class="actions"><a class="btn" href="work-timeline.html">On the timeline</a><a class="btn btn-primary" href="release-new.html">+ New release</a></div>
+</div>
+
+<section class="panel">
+  <div class="tw">
+    <table class="t">
+      <thead><tr><th class="sorted-asc">Version</th><th>Target date</th><th>Description</th><th>Stories</th><th>Tests</th><th>Readiness</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><a class="ttl" href="release.html" style="font-size:14px">2.4</a></td>
+          <td>18 Sep 2026</td>
+          <td style="color:var(--color-text-muted)">Checkout rebuild and the provider swap</td>
+          <td><span class="row" style="gap:8px"><span class="mono">21/27</span><span class="meter" style="width:56px"><span class="done" style="width:78%"></span></span></span></td>
+          <td><span class="row" style="gap:8px"><span class="mono">61/63</span><span class="meter" style="width:56px"><span class="done" style="width:97%"></span><span class="risk" style="width:3%"></span></span></span></td>
+          <td><span class="badge b-review"><span class="dot"></span>Not ready</span></td>
+        </tr>
+        <tr>
+          <td><a class="ttl" href="release.html" style="font-size:14px">2.5</a></td>
+          <td>14 Nov 2026</td>
+          <td style="color:var(--color-text-muted)">Search relevance</td>
+          <td><span class="row" style="gap:8px"><span class="mono">0/6</span><span class="meter" style="width:56px"><span class="done" style="width:0"></span></span></span></td>
+          <td><span style="color:var(--color-text-ghost)">no run yet</span></td>
+          <td><span class="badge b-todo"><span class="dot"></span>Planned</span></td>
+        </tr>
+        <tr>
+          <td><a class="ttl" href="release.html" style="font-size:14px">2.10</a></td>
+          <td><span style="color:var(--color-text-ghost)">—</span></td>
+          <td style="color:var(--color-text-muted)">Loyalty tie-in</td>
+          <td><span class="row" style="gap:8px"><span class="mono">0/4</span><span class="meter" style="width:56px"><span class="done" style="width:0"></span></span></span></td>
+          <td><span style="color:var(--color-text-ghost)">no run yet</span></td>
+          <td><span class="badge b-todo"><span class="dot"></span>Planned</span></td>
+        </tr>
+        <tr style="opacity:.8">
+          <td><a class="ttl" href="release.html" style="font-size:14px">2.3</a></td>
+          <td>7 Aug 2026</td>
+          <td style="color:var(--color-text-muted)">Accessibility pass</td>
+          <td><span class="row" style="gap:8px"><span class="mono">14/14</span><span class="meter" style="width:56px"><span class="done" style="width:100%"></span></span></span></td>
+          <td><span class="row" style="gap:8px"><span class="mono">48/48</span><span class="meter" style="width:56px"><span class="done" style="width:100%"></span></span></span></td>
+          <td><span class="badge b-done"><span class="dot"></span>Released</span></td>
+        </tr>
+        <tr style="opacity:.8">
+          <td><a class="ttl" href="release.html" style="font-size:14px">2.2</a></td>
+          <td>19 Jun 2026</td>
+          <td style="color:var(--color-text-muted)">Cart persistence</td>
+          <td><span class="row" style="gap:8px"><span class="mono">9/9</span><span class="meter" style="width:56px"><span class="done" style="width:100%"></span></span></span></td>
+          <td><span class="row" style="gap:8px"><span class="mono">31/31</span><span class="meter" style="width:56px"><span class="done" style="width:100%"></span></span></span></td>
+          <td><span class="badge b-done"><span class="dot"></span>Released</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="panel-foot"><span><strong>2.10 sorts after 2.5</strong>, not between 2.1 and 2.2 — versions are compared segment by segment, not as text.</span></div>
+</section>
+
+<div class="note" style="margin-top:16px">
+  <span>◈</span>
+  <div>A version shipped from two projects is <strong>two releases</strong>. A release belongs to one project, so "2.4" here and "2.4" in Bergstrom Portal are unrelated and never merge in a report.</div>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boards · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="projects" data-proj="ACME|Acme Storefront" data-projnav="settings" data-crumbs="Projects>projects.html|Acme Storefront>project-overview.html|Settings">
+<main class="page">
+<div class="phead">
+  <div><h1>Project settings</h1><div class="sub">Acme Storefront</div></div>
+  <div class="actions"><button class="btn btn-primary" data-mock="New board">+ New board</button></div>
+</div>
+
+<nav class="subnav" aria-label="Settings sections">
+  <a href="settings-general.html">General</a>
+  <a href="settings-workflow.html">Workflow</a>
+  <a href="settings-boards.html" aria-current="page">Boards</a>
+  <a href="settings-repositories.html">Repositories</a>
+  <a href="settings-import.html">Imports</a>
+</nav>
+
+<div class="note" style="margin-bottom:16px">
+  <span>◈</span>
+  <div><strong>A board is a view, not a copy.</strong> The two boards below show the same issues. Move a card on one and it is in the matching column on the other; delete a board and no issue is lost.</div>
+</div>
+
+<div class="stack">
+  <section class="panel">
+    <div class="panel-head"><h2>Team board</h2><span class="hint">6 columns · used by 7 people</span><span class="spacer"></span><a class="btn btn-sm" href="work-board.html">Open</a><button class="btn btn-sm btn-danger" data-mock="Delete board">Delete</button></div>
+    <div class="panel-body">
+      <div class="board" style="padding-bottom:0">
+        <div class="col" style="flex:0 0 176px"><div class="col-head"><span>Backlog</span><span class="spacer"></span></div><div class="col-body" style="min-height:0"><div class="chips"><span class="chip">Backlog</span></div></div></div>
+        <div class="col" style="flex:0 0 176px"><div class="col-head"><span>Ready</span><span class="spacer"></span></div><div class="col-body" style="min-height:0"><div class="chips"><span class="chip">Ready</span></div></div></div>
+        <div class="col" style="flex:0 0 176px"><div class="col-head"><span>In Progress</span><span class="spacer"></span><span class="wip">WIP 3</span></div><div class="col-body" style="min-height:0"><div class="chips"><span class="chip">In Progress</span></div></div></div>
+        <div class="col" style="flex:0 0 176px"><div class="col-head"><span>In Review</span><span class="spacer"></span><span class="wip">WIP 4</span></div><div class="col-body" style="min-height:0"><div class="chips"><span class="chip">In Review</span></div></div></div>
+        <div class="col" style="flex:0 0 176px"><div class="col-head"><span>Blocked</span><span class="spacer"></span></div><div class="col-body" style="min-height:0"><div class="chips"><span class="chip">Blocked</span></div></div></div>
+        <div class="col" style="flex:0 0 176px"><div class="col-head"><span>Done</span><span class="spacer"></span></div><div class="col-body" style="min-height:0"><div class="chips"><span class="chip">Done</span></div></div></div>
+      </div>
+    </div>
+    <div class="panel-foot"><span>One status per column here, so a drop has no ambiguity about which status it means.</span></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Stakeholder board</h2><span class="hint">3 columns · used by 4 people</span><span class="spacer"></span><a class="btn btn-sm" href="work-board.html">Open</a><button class="btn btn-sm btn-danger" data-mock="Delete board">Delete</button></div>
+    <div class="panel-body">
+      <div class="board" style="padding-bottom:0">
+        <div class="col" style="flex:0 0 240px">
+          <div class="col-head"><span>Not started</span><span class="spacer"></span></div>
+          <div class="col-body" style="min-height:0"><div class="chips"><span class="chip">Backlog</span><span class="chip">Ready</span></div>
+          <div style="font-size:11px;color:var(--color-text-ghost);margin-top:6px">Default on drop: <strong>Ready</strong></div></div>
+        </div>
+        <div class="col" style="flex:0 0 240px">
+          <div class="col-head"><span>In flight</span><span class="spacer"></span></div>
+          <div class="col-body" style="min-height:0"><div class="chips"><span class="chip">In Progress</span><span class="chip">In Review</span><span class="chip">Blocked</span></div>
+          <div style="font-size:11px;color:var(--color-text-ghost);margin-top:6px">Default on drop: <strong>In Progress</strong></div></div>
+        </div>
+        <div class="col" style="flex:0 0 240px">
+          <div class="col-head"><span>Done</span><span class="spacer"></span></div>
+          <div class="col-body" style="min-height:0"><div class="chips"><span class="chip">Done</span></div>
+          <div style="font-size:11px;color:var(--color-text-ghost);margin-top:6px">Default on drop: <strong>Done</strong></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="panel-foot"><span>A card dropped into "In flight" takes that column's default status. A coarser board never invents a status the workflow does not have.</span></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Column coverage</h2></div>
+    <div class="panel-body">
+      <div class="tw"><table class="t">
+        <thead><tr><th>Status</th><th>Team board</th><th>Stakeholder board</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge b-todo"><span class="dot"></span>Backlog</span></td><td>Backlog</td><td>Not started</td></tr>
+          <tr><td><span class="badge b-todo"><span class="dot"></span>Ready</span></td><td>Ready</td><td>Not started</td></tr>
+          <tr><td><span class="badge b-prog"><span class="dot"></span>In Progress</span></td><td>In Progress</td><td>In flight</td></tr>
+          <tr><td><span class="badge b-review"><span class="dot"></span>In Review</span></td><td>In Review</td><td>In flight</td></tr>
+          <tr><td><span class="badge b-blocked"><span class="dot"></span>Blocked</span></td><td>Blocked</td><td>In flight</td></tr>
+          <tr><td><span class="badge b-done"><span class="dot"></span>Done</span></td><td>Done</td><td>Done</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <div class="panel-foot" style="color:var(--color-success)"><span>✓ Every status is claimed by exactly one column on every board. A status claimed twice, or not at all, is what this check exists to catch.</span></div>
+  </section>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

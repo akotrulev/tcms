@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Approvals · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="timesheets" data-role="Project Manager" data-crumbs="Timesheets>timesheets.html|Approvals">
+<main class="page">
+<div class="phead">
+  <div><h1>Timesheet approvals</h1><div class="sub">Period 16–31 August 2026 · 4 waiting on you</div></div>
+  <div class="actions"><span class="sel on" data-mock="Period picker">16–31 Aug</span><a class="btn" href="timesheets.html">My timesheet</a><button class="btn btn-primary" data-mock="Approve all">Approve all 4</button></div>
+</div>
+
+<div class="note" style="margin-bottom:16px">
+  <span>◈</span>
+  <div>Only <strong>approved</strong> hours reach a budget, a utilisation figure or an invoice line. Everything below is on hold until you act on it.</div>
+</div>
+
+<div class="stack">
+  <section class="panel">
+    <div class="panel-head"><h2>Mira Sund</h2><span class="badge b-review"><span class="dot"></span>Submitted 1 Sep</span><span class="spacer"></span><span class="mono">72.0h</span><button class="btn btn-sm" data-mock="Reject with a note">Reject…</button><button class="btn btn-sm btn-primary" data-mock="Approve">Approve</button></div>
+    <div class="tw">
+      <table class="t">
+        <thead><tr><th>Project</th><th>Against</th><th class="num">Hours</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td>Acme Storefront</td><td><a href="story.html">ACME-122</a> Card capture without a redirect</td><td class="num mono">38.0</td><td style="color:var(--color-text-faint)">provider sandbox was down twice</td></tr>
+          <tr><td>Acme Storefront</td><td><a href="test-runs.html">2.4 regression run</a></td><td class="num mono">16.0</td><td style="color:var(--color-text-faint)">—</td></tr>
+          <tr><td>Acme Loyalty</td><td><a href="story.html">LOYA-8</a> Tier calculation</td><td class="num mono">12.0</td><td style="color:var(--color-text-faint)">—</td></tr>
+          <tr><td>—</td><td><span class="badge b-neutral">Meeting</span></td><td class="num mono">6.0</td><td style="color:var(--color-text-faint)">planning, retro</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="panel-foot"><span>Approving posts these hours onto each issue and rolls them up to the story, epic and project.</span></div>
+  </section>
+
+  <section class="panel" style="border-color:color-mix(in srgb, var(--color-danger) 30%, transparent)">
+    <div class="panel-head"><h2>Dana Petrov</h2><span class="badge b-blocked"><span class="dot"></span>Rejected 1 Sep</span><span class="spacer"></span><span class="mono">68.0h</span><button class="btn btn-sm" data-mock="Withdraw the rejection">Withdraw rejection</button></div>
+    <div class="panel-body stack" style="gap:11px">
+      <div class="note bad" style="align-items:flex-start">
+        <span>✕</span>
+        <div><strong>Your note:</strong> <em>the 8h on 24 Aug is against ACME-140 but that epic was on hold that week — re-point it or drop it.</em></div>
+      </div>
+      <div style="font-size:12.5px;color:var(--color-text-muted);line-height:1.55">
+        The period is unlocked for Dana again, with this note visible at the top of it. A rejection is never silent, and never a deletion.
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Tomas Ek</h2><span class="badge b-review"><span class="dot"></span>Submitted 31 Aug</span><span class="spacer"></span><span class="mono">64.0h</span><button class="btn btn-sm" data-mock="Reject with a note">Reject…</button><button class="btn btn-sm btn-primary" data-mock="Approve">Approve</button></div>
+    <div class="panel-body"><div class="row" style="gap:14px;font-size:12.5px;color:var(--color-text-muted)"><span>Acme Storefront <strong class="mono">40h</strong></span><span>Bergstrom Portal <strong class="mono">16h</strong></span><span>Leave <strong class="mono">8h</strong></span></div></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Jun Park</h2><span class="badge b-todo"><span class="dot"></span>Not submitted</span><span class="spacer"></span><span class="mono" style="color:var(--color-text-ghost)">41.0h so far</span><button class="btn btn-sm" data-mock="Send a reminder">Remind</button></div>
+    <div class="panel-body"><div style="font-size:12.5px;color:var(--color-text-faint)">Still editable by Jun. It appears in this queue only once submitted — an unfinished period is not something to approve.</div></div>
+  </section>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

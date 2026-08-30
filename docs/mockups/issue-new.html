@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New issue · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="projects" data-proj="ACME|Acme Storefront" data-projnav="work" data-crumbs="Projects>projects.html|Acme Storefront>project-overview.html|Work>work-board.html|New issue">
+<main class="page">
+<div class="phead">
+  <div><h1>Add work</h1><div class="sub">Quick add is one field. Everything else is optional and stays out of the way.</div></div>
+  <div class="actions"><a class="btn" href="work-board.html">Cancel</a></div>
+</div>
+
+<div class="grid g-main">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Quick add</h2><span class="hint">what a solo or internal project needs</span></div>
+      <div class="panel-body">
+        <div class="row" style="gap:8px">
+          <span class="sel on">Task</span>
+          <input class="input" style="flex:1" placeholder="Renew the staging certificate" autofocus>
+          <a class="btn btn-primary" href="work-board.html">Add</a>
+        </div>
+        <div class="help" style="margin-top:8px;font-size:11.5px;color:var(--color-text-ghost)">
+          Creates a Task at the story level with no parent. You can attach it to an epic later — or never.
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Full form</h2></div>
+      <div class="panel-body">
+        <div class="field">
+          <label for="ty">Type</label>
+          <div class="chips" id="ty">
+            <span class="chip on"><span class="type-ic t-story">S</span> Story</span>
+            <span class="chip"><span class="type-ic t-epic">E</span> Epic</span>
+            <span class="chip"><span class="type-ic t-task">T</span> Task</span>
+            <span class="chip"><span class="type-ic t-bug">B</span> Bug</span>
+            <span class="chip"><span class="type-ic t-spike">?</span> Spike</span>
+          </div>
+          <div class="help">A bug counts as unfinished work in its epic's completion. A spike is excluded from the percentage, and the epic page says so.</div>
+        </div>
+
+        <div class="field">
+          <label for="sm">Summary</label>
+          <input class="input" id="sm" placeholder="Remember delivery address between visits">
+        </div>
+
+        <div class="field">
+          <label for="ds">Description</label>
+          <textarea class="input" id="ds" placeholder="What this is for, in the words the team uses."></textarea>
+        </div>
+
+        <div class="field">
+          <label>Acceptance criteria</label>
+          <div class="stack" style="gap:6px">
+            <input class="input" placeholder="Given … when … then …">
+            <button class="btn btn-sm" style="width:fit-content" data-mock="Add criterion">+ Add a criterion</button>
+          </div>
+        </div>
+
+        <div class="grid g2" style="gap:0 16px">
+          <div class="field">
+            <label for="ep">Epic</label>
+            <select class="input" id="ep"><option>— none —</option><option selected>Checkout rebuild (ACME-101)</option><option>Payments provider swap (ACME-140)</option></select>
+            <div class="help">Optional. A story without an epic is a normal story and appears in the backlog.</div>
+          </div>
+          <div class="field">
+            <label for="rl">Target release</label>
+            <select class="input" id="rl"><option>— none —</option><option selected>2.4 · 18 Sep</option><option>2.5 · 14 Nov</option><option>2.10</option></select>
+          </div>
+          <div class="field">
+            <label for="as">Assignee</label>
+            <select class="input" id="as"><option>— unassigned —</option><option selected>Dana Petrov</option><option>Mira Sund</option><option>Tomas Ek</option></select>
+          </div>
+          <div class="field">
+            <label for="es">Estimate</label>
+            <input class="input" id="es" placeholder="8" inputmode="numeric">
+            <div class="help">In hours — the same unit the budget and any invoice use.</div>
+          </div>
+          <div class="field">
+            <label for="dd">Due date</label>
+            <input class="input" id="dd" type="date" value="2026-09-10">
+          </div>
+          <div class="field">
+            <label for="lb">Labels</label>
+            <input class="input" id="lb" placeholder="checkout, guest">
+          </div>
+        </div>
+
+        <div class="setrow" style="padding:12px 0;border-top:1px solid var(--color-rule)">
+          <div class="txt"><strong>AI-eligible</strong><span>My assistant may pick this up</span></div>
+          <span class="spacer"></span>
+          <button class="toggle" role="switch" aria-checked="false" aria-label="AI-eligible" data-on="Flagged — it will appear in your assistant's queue" data-off="Unflagged"></button>
+        </div>
+      </div>
+      <div class="panel-foot">
+        <a class="btn" href="work-board.html">Cancel</a>
+        <span class="spacer" style="margin-left:auto"></span>
+        <a class="btn" href="issue-new.html">Save and add another</a>
+        <a class="btn btn-primary" href="story.html">Create</a>
+      </div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Where this lands</h2></div>
+      <div class="panel-body stack" style="gap:10px">
+        <div class="linked"><span class="type-ic t-epic">E</span><div><div style="font-size:12.5px">Checkout rebuild</div><div style="font-size:11px;color:var(--color-text-ghost)">completion recalculates when this is created</div></div></div>
+        <div class="linked"><span style="color:var(--color-action-primary)">⬡</span><div><div style="font-size:12.5px">Release 2.4</div><div style="font-size:11px;color:var(--color-text-ghost)">counted in readiness</div></div></div>
+        <div class="linked"><span style="color:var(--color-text-faint)">▦</span><div><div style="font-size:12.5px">Backlog, bottom of 2.4</div><div style="font-size:11px;color:var(--color-text-ghost)">rank it from <a href="work-backlog.html">Backlog</a></div></div></div>
+      </div>
+    </section>
+  </div>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

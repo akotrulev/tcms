@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Repositories · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="projects" data-proj="ACME|Acme Storefront" data-projnav="settings" data-crumbs="Projects>projects.html|Acme Storefront>project-overview.html|Settings">
+<main class="page">
+<div class="phead">
+  <div><h1>Project settings</h1><div class="sub">Acme Storefront</div></div>
+  <div class="actions"><button class="btn btn-primary" data-mock="Add repository">+ Add repository</button></div>
+</div>
+
+<nav class="subnav" aria-label="Settings sections">
+  <a href="settings-general.html">General</a>
+  <a href="settings-workflow.html">Workflow</a>
+  <a href="settings-boards.html">Boards</a>
+  <a href="settings-repositories.html" aria-current="page">Repositories</a>
+  <a href="settings-import.html">Imports</a>
+</nav>
+
+<div class="note" style="margin-bottom:16px">
+  <span>◈</span>
+  <div><strong>Reference information, nothing more.</strong> This product never holds a repository, never clones one and never runs a build. What is listed here is what a new joiner — or somebody's assistant — is told to check out. A project with none is not degraded in any way.</div>
+</div>
+
+<div class="stack">
+  <section class="panel">
+    <div class="panel-head"><h2>Repositories</h2><span class="hint">2</span></div>
+    <div class="panel-body stack" style="gap:12px">
+      <div class="linked" style="flex-direction:column;align-items:stretch;gap:9px">
+        <div class="row"><strong style="font-size:13px">acme-storefront</strong><span class="badge b-neutral">primary</span><span class="spacer"></span><button class="btn btn-sm" data-mock="Edit repository">Edit</button><button class="btn btn-sm btn-danger" data-mock="Remove repository">Remove</button></div>
+        <dl class="dl">
+          <dt>Address</dt><dd class="mono">git@github.com:northwind/acme-storefront.git</dd>
+          <dt>Default branch</dt><dd class="mono">main</dd>
+          <dt>Folder</dt><dd class="mono">/</dd>
+          <dt>Build</dt><dd class="mono">npm ci &amp;&amp; npm run build &amp;&amp; npm test</dd>
+        </dl>
+      </div>
+
+      <div class="linked" style="flex-direction:column;align-items:stretch;gap:9px">
+        <div class="row"><strong style="font-size:13px">acme-checkout-service</strong><span class="spacer"></span><button class="btn btn-sm" data-mock="Edit repository">Edit</button><button class="btn btn-sm btn-danger" data-mock="Remove repository">Remove</button></div>
+        <dl class="dl">
+          <dt>Address</dt><dd class="mono">git@github.com:northwind/acme-checkout-service.git</dd>
+          <dt>Default branch</dt><dd class="mono">develop</dd>
+          <dt>Folder</dt><dd class="mono">/services/checkout</dd>
+          <dt>Build</dt><dd class="mono">./gradlew build</dd>
+        </dl>
+      </div>
+    </div>
+    <div class="panel-foot"><span>These four values are what an assistant receives with a task — see <a href="task.html">ACME-124</a>.</span></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>A project with none</h2></div>
+    <div class="panel-body">
+      <div class="empty">
+        <span class="ei">▭</span>
+        <h3>No repositories listed</h3>
+        <p>Nothing else in the project changes. Issues, boards, releases and test runs all work exactly the same — a new joiner just has to ask where the code is, and an assistant is told the repository by the person running it.</p>
+        <button class="btn" data-mock="Add repository">Add one</button>
+      </div>
+    </div>
+  </section>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

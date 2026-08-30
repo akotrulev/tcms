@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Billing · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="billing" data-role="Finance" data-crumbs="Billing">
+<main class="page">
+<div class="phead">
+  <div><h1>Billing</h1><div class="sub">Northwind Labs · September 2026</div></div>
+  <div class="actions"><span class="sel" data-mock="Period picker">September 2026</span><a class="btn btn-primary" href="invoice.html">+ Draft an invoice</a></div>
+</div>
+
+<div class="note" style="margin-bottom:16px">
+  <span>◈</span>
+  <div><strong>Finance and Company Admin only.</strong> Switch the top bar to Test Engineer or Account Manager and this entry disappears from the sidebar entirely — not greyed out, not empty. It is not their screen.</div>
+</div>
+
+<div class="grid g4" style="margin-bottom:16px">
+  <div class="panel"><div class="panel-body kpi"><span class="n">€52.4k</span><span class="l">Invoiced, year to date</span></div></div>
+  <div class="panel"><div class="panel-body kpi"><span class="n">€6.1k</span><span class="l">Draftable now</span><span class="d">from approved September hours</span></div></div>
+  <div class="panel"><div class="panel-body kpi"><span class="n" style="color:var(--color-warning)">38<span style="font-size:14px">h</span></span><span class="l">Unapproved</span><span class="d">excluded from every draft</span></div></div>
+  <div class="panel"><div class="panel-body kpi"><span class="n">3</span><span class="l">Clients billed</span></div></div>
+</div>
+
+<div class="grid g-main">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Rate cards</h2><span class="hint">per client, per role or person</span><span class="spacer"></span><button class="btn btn-sm" data-mock="New rate card">+ New rate card</button></div>
+      <div class="tw">
+        <table class="t">
+          <thead><tr><th>Client</th><th>Applies to</th><th class="num">Rate</th><th>Effective</th><th></th></tr></thead>
+          <tbody>
+            <tr><td><a href="client.html">Acme Retail</a></td><td>Test Engineer <span style="color:var(--color-text-ghost)">(role)</span></td><td class="num mono">€78 / h</td><td>from 1 Jan 2026</td><td class="num"><button class="btn btn-icon btn-sm btn-ghost" data-mock="Edit rate" aria-label="Edit">✎</button></td></tr>
+            <tr><td><a href="client.html">Acme Retail</a></td><td>Test Lead <span style="color:var(--color-text-ghost)">(role)</span></td><td class="num mono">€96 / h</td><td>from 1 Jan 2026</td><td class="num"><button class="btn btn-icon btn-sm btn-ghost" data-mock="Edit rate" aria-label="Edit">✎</button></td></tr>
+            <tr><td><a href="client.html">Acme Retail</a></td><td>Mira Sund <span style="color:var(--color-text-ghost)">(person)</span></td><td class="num mono">€110 / h</td><td>from 1 Jul 2026</td><td class="num"><button class="btn btn-icon btn-sm btn-ghost" data-mock="Edit rate" aria-label="Edit">✎</button></td></tr>
+            <tr><td><a href="client.html">Bergstrom AG</a></td><td>All roles</td><td class="num mono">CHF 105 / h</td><td>from 1 Apr 2026</td><td class="num"><button class="btn btn-icon btn-sm btn-ghost" data-mock="Edit rate" aria-label="Edit">✎</button></td></tr>
+            <tr><td><a href="client.html">Kessler Health</a></td><td><span style="color:var(--color-text-ghost)">no rate card yet</span></td><td class="num" style="color:var(--color-text-ghost)">—</td><td><span style="color:var(--color-text-ghost)">—</span></td><td class="num"><button class="btn btn-sm" data-mock="Set a rate card">Set</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel-foot"><span>A person's rate wins over their role's rate. Without a card, approved hours are still recorded — they just cannot be priced.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Project budgets</h2><span class="hint">the ceiling a PM sees, without the rates</span></div>
+      <div class="tw">
+        <table class="t">
+          <thead><tr><th>Project</th><th>Client</th><th>Budget</th><th class="num">Approved</th><th style="width:170px">Burn</th></tr></thead>
+          <tbody>
+            <tr><td><a href="project-overview.html">Acme Storefront</a></td><td>Acme Retail</td><td class="mono">600h</td><td class="num mono">418h</td><td><span class="row" style="gap:8px"><span class="meter" style="flex:1"><span class="done" style="width:70%"></span></span><span class="mono" style="font-size:11px">70%</span></span></td></tr>
+            <tr><td><a href="project-overview.html">Acme Loyalty</a></td><td>Acme Retail</td><td class="mono">€40 000</td><td class="num mono">242h</td><td><span class="row" style="gap:8px"><span class="meter" style="flex:1"><span class="done" style="width:48%"></span></span><span class="mono" style="font-size:11px">48%</span></span></td></tr>
+            <tr style="background:color-mix(in srgb, var(--color-danger) 8%, transparent)"><td><a href="project-overview.html">Bergstrom Portal</a></td><td>Bergstrom AG</td><td class="mono">500h</td><td class="num mono">512h</td><td><span class="row" style="gap:8px"><span class="meter" style="flex:1"><span class="done" style="width:84%"></span><span class="risk" style="width:16%"></span></span><span class="mono" style="font-size:11px;color:var(--color-danger)">102%</span></span></td></tr>
+            <tr><td><a href="solo-overview.html">Internal Platform</a></td><td><span style="color:var(--color-text-ghost)">None (internal)</span></td><td class="mono">—</td><td class="num mono">126h</td><td><span style="color:var(--color-text-ghost);font-size:12px">no budget set</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel-foot"><span>A budget can be in hours or in money. Either way the PM's Overview shows the burn and never the rate.</span></div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Invoices</h2><span class="spacer"></span><a class="btn btn-sm" href="invoice.html">All</a></div>
+      <div class="panel-body stack" style="gap:8px">
+        <a class="linked" href="invoice.html"><span>⛁</span><div style="flex:1"><div class="row"><span style="font-size:12.5px">INV-2026-041</span><span class="spacer"></span><span class="mono" style="font-size:12px">€18 240</span></div><div style="font-size:11px;color:var(--color-text-ghost)">Acme Retail · Aug · issued 2 Sep</div></div></a>
+        <a class="linked" href="invoice.html"><span>⛁</span><div style="flex:1"><div class="row"><span style="font-size:12.5px">INV-2026-040</span><span class="spacer"></span><span class="mono" style="font-size:12px">CHF 12 705</span></div><div style="font-size:11px;color:var(--color-text-ghost)">Bergstrom AG · Aug · issued 2 Sep</div></div></a>
+        <a class="linked" href="invoice.html" style="border-color:var(--color-action-line)"><span>⛁</span><div style="flex:1"><div class="row"><span style="font-size:12.5px">Draft</span><span class="spacer"></span><span class="mono" style="font-size:12px">€6 116</span></div><div style="font-size:11px;color:var(--color-text-ghost)">Acme Retail · Sep so far</div></div></a>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Not billed</h2></div>
+      <div class="panel-body stack" style="gap:9px">
+        <div class="bullet"><span style="color:var(--color-text-ghost)">✕</span><span style="font-size:12.5px;color:var(--color-text-muted)">Fixed-fee and retainer invoicing</span></div>
+        <div class="bullet"><span style="color:var(--color-text-ghost)">✕</span><span style="font-size:12.5px;color:var(--color-text-muted)">AI-assistant usage — recorded as a cost, never charged to a client</span></div>
+      </div>
+    </section>
+  </div>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

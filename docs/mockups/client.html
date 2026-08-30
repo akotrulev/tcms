@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Acme Retail · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="clients" data-role="Account Manager" data-crumbs="Clients>clients.html|Acme Retail">
+<main class="page">
+<div class="phead">
+  <div>
+    <div class="row" style="gap:8px;margin-bottom:4px"><span class="chip">Stockholm · retail</span><span class="chip">since Mar 2025</span></div>
+    <h1>Acme Retail</h1>
+    <div class="sub">Account manager: Oskar Bergman</div>
+  </div>
+  <div class="actions"><button class="btn" data-mock="Edit client">Edit</button><a class="btn btn-primary" href="project-new.html">+ New project for this client</a></div>
+</div>
+
+<div class="grid g3" style="margin-bottom:16px">
+  <div class="panel"><div class="panel-body kpi"><span class="n">2</span><span class="l">Projects</span><span class="d">both active</span></div></div>
+  <div class="panel"><div class="panel-body kpi"><span class="n">1 284<span style="font-size:14px;color:var(--color-text-faint)">h</span></span><span class="l">Approved hours to date</span><span class="d">418h this quarter</span></div></div>
+  <div class="panel"><div class="panel-body kpi"><span class="n">6</span><span class="l">Invoices</span><span class="d">last issued 2 Sep</span></div></div>
+</div>
+
+<div class="grid g-main">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Projects</h2><span class="hint">2</span></div>
+      <div class="tw">
+        <table class="t">
+          <thead><tr><th>Project</th><th>Lead</th><th>Next release</th><th class="num">Hours</th><th class="num">Completion</th></tr></thead>
+          <tbody>
+            <tr><td><a class="ttl" href="project-overview.html">Acme Storefront</a></td><td>Rae Lindqvist</td><td><a href="release.html">2.4</a> · 18 Sep</td><td class="num mono">1 042h</td><td class="num"><span class="row" style="gap:8px;justify-content:flex-end"><span class="mono">70%</span><span class="meter" style="width:60px"><span class="done" style="width:70%"></span></span></span></td></tr>
+            <tr><td><a class="ttl" href="project-overview.html">Acme Loyalty</a></td><td>Mira Sund</td><td>0.4 · 30 Sep</td><td class="num mono">242h</td><td class="num"><span class="row" style="gap:8px;justify-content:flex-end"><span class="mono">28%</span><span class="meter" style="width:60px"><span class="done" style="width:28%"></span></span></span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel-foot"><span>One client, many projects. A project has at most one client — or none.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Contacts</h2><span class="hint">3</span><span class="spacer"></span><button class="btn btn-sm" data-mock="Add contact">+ Add contact</button></div>
+      <div class="tw">
+        <table class="t">
+          <thead><tr><th>Name</th><th>Role</th><th>Email</th><th>Phone</th></tr></thead>
+          <tbody>
+            <tr><td><span class="row" style="gap:7px"><span class="avatar sm">HL</span> Hanna Lund</span></td><td>Product owner</td><td class="mono">hanna.lund@acme.test</td><td class="mono">+46 8 555 0142</td></tr>
+            <tr><td><span class="row" style="gap:7px"><span class="avatar sm">PS</span> Petter Sjöberg</span></td><td>Head of e-commerce</td><td class="mono">petter@acme.test</td><td class="mono">+46 8 555 0177</td></tr>
+            <tr><td><span class="row" style="gap:7px"><span class="avatar sm">AK</span> Anna Krogh</span></td><td>Finance</td><td class="mono">invoices@acme.test</td><td class="mono">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel-foot"><span>A contact is a record of a person to talk to. None of them can sign in, and adding one creates no account.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Hours and invoices to date</h2></div>
+      <div class="tw">
+        <table class="t">
+          <thead><tr><th>Period</th><th>Project</th><th class="num">Approved hours</th><th>Invoice</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>Aug 2026</td><td>Acme Storefront</td><td class="num mono">168h</td><td><a href="invoice.html">INV-2026-041</a></td><td><span class="badge b-done">Issued</span></td></tr>
+            <tr><td>Aug 2026</td><td>Acme Loyalty</td><td class="num mono">62h</td><td><a href="invoice.html">INV-2026-041</a></td><td><span class="badge b-done">Issued</span></td></tr>
+            <tr><td>Sep 2026</td><td>Acme Storefront</td><td class="num mono">44h</td><td><a href="invoice.html">Draft</a></td><td><span class="badge b-review">Draft</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel-foot"><span>Amounts are absent for an Account Manager. Switch the top bar to <strong>Finance</strong> and this table gains a value column — and <a href="billing.html">Billing</a> appears in the sidebar.</span></div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Rate card</h2></div>
+      <div class="panel-body">
+        <div class="empty" style="padding:20px 6px">
+          <span class="ei">⛁</span>
+          <h3>Not visible to you</h3>
+          <p>Rates are Finance's. An Account Manager knows the client and the hours; never the money.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Contracts</h2><span class="spacer"></span><button class="btn btn-sm" data-mock="Attach a contract">+ Attach</button></div>
+      <div class="panel-body stack" style="gap:8px">
+        <div class="linked"><span>▭</span><div><div style="font-size:12.5px">MSA 2025-03</div><div style="font-size:11px;color:var(--color-text-ghost)">signed 4 Mar 2025 · renews annually</div></div></div>
+        <div class="linked"><span>▭</span><div><div style="font-size:12.5px">SOW · Storefront 2.x</div><div style="font-size:11px;color:var(--color-text-ghost)">signed 11 Jan 2026</div></div></div>
+      </div>
+    </section>
+  </div>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

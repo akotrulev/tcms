@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test cases · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="projects" data-proj="ACME|Acme Storefront" data-projnav="cases" data-crumbs="Projects>projects.html|Acme Storefront>project-overview.html|Test Cases">
+<main class="page">
+<div class="phead">
+  <div><h1>Test cases</h1><div class="sub">154 cases · the column on the right is new</div></div>
+  <div class="actions"><button class="btn btn-primary" data-mock="New case">+ New case</button></div>
+</div>
+
+<div class="filters">
+  <span class="sel on">Suite: Checkout</span>
+  <span class="sel" data-mock="Status filter">Status: any</span>
+  <span class="sel" data-mock="Tag filter">Tag: any</span>
+  <span class="spacer"></span>
+  <span class="chip on">Verifies a story <span class="x">×</span></span>
+</div>
+
+<section class="panel">
+  <div class="tw">
+    <table class="t">
+      <thead><tr><th>Key</th><th class="sorted-asc">Title</th><th>State</th><th>Latest result</th><th>Verifies</th></tr></thead>
+      <tbody>
+        <tr><td><span class="ikey">TC-308</span></td><td><a class="ttl" href="test-cases.html">Guest order, valid card</a></td><td><span class="badge b-done">Approved</span></td><td><span class="badge b-pass"><span class="dot"></span>Passed</span></td><td><a href="story.html">ACME-118</a></td></tr>
+        <tr><td><span class="ikey">TC-309</span></td><td><a class="ttl" href="test-cases.html">Guest order, declined card</a></td><td><span class="badge b-done">Approved</span></td><td><span class="badge b-pass"><span class="dot"></span>Passed</span></td><td><a href="story.html">ACME-118</a></td></tr>
+        <tr style="background:color-mix(in srgb, var(--color-danger) 8%, transparent)"><td><span class="ikey">TC-311</span></td><td><a class="ttl" href="test-cases.html">Guest order, expired card</a></td><td><span class="badge b-review">In review</span></td><td><span class="badge b-fail"><span class="dot"></span>Failed</span></td><td><a href="story.html">ACME-118</a></td></tr>
+        <tr><td><span class="ikey">TC-314</span></td><td><a class="ttl" href="test-cases.html">Account offer declined, order stands</a></td><td><span class="badge b-done">Approved</span></td><td><span class="badge b-pass"><span class="dot"></span>Passed</span></td><td><a href="story.html">ACME-118</a></td></tr>
+        <tr><td><span class="ikey">TC-320</span></td><td><a class="ttl" href="test-cases.html">Cart survives sign-in mid-checkout</a></td><td><span class="badge b-done">Approved</span></td><td><span class="badge b-pass"><span class="dot"></span>Passed</span></td><td><a href="story.html">ACME-112</a>, <a href="story.html">ACME-121</a></td></tr>
+        <tr><td><span class="ikey">TC-402</span></td><td><a class="ttl" href="test-cases.html">Card capture without leaving the page</a></td><td><span class="badge b-done">Approved</span></td><td><span class="badge b-fail"><span class="dot"></span>Failed</span></td><td><a href="story.html">ACME-122</a></td></tr>
+        <tr><td><span class="ikey">TC-410</span></td><td><a class="ttl" href="test-cases.html">Address validation rejects a bad postcode</a></td><td><span class="badge b-neutral">Draft</span></td><td><span class="badge b-untested"><span class="dot"></span>Untested</span></td><td><span style="color:var(--color-text-ghost)">—</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="panel-foot"><span>A case shows which stories it verifies, and a story shows the latest result of each case. Same fact, both directions — <a href="story.html">see it from ACME-118</a>.</span></div>
+</section>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

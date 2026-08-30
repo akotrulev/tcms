@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Release 2.4 · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="projects" data-proj="ACME|Acme Storefront" data-projnav="releases" data-crumbs="Projects>projects.html|Acme Storefront>project-overview.html|Releases>releases.html|2.4">
+<main class="page">
+<div class="phead">
+  <div>
+    <div class="row" style="gap:8px;margin-bottom:4px">
+      <span class="ikey">ACME</span><span class="badge b-review"><span class="dot"></span>Not ready</span>
+      <span class="chip">target 18 Sep 2026 · in 17 days</span>
+    </div>
+    <h1>Release 2.4</h1>
+    <div class="sub">Checkout rebuild and the provider swap</div>
+  </div>
+  <div class="actions">
+    <a class="btn" href="test-plans.html">Test plan</a>
+    <a class="btn" href="reports.html">Burn-up</a>
+    <button class="btn btn-primary" aria-disabled="true" data-mock="Mark released">Mark released</button>
+  </div>
+</div>
+
+<div class="note bad" style="margin-bottom:16px">
+  <span>✕</span>
+  <div>
+    <strong>2.4 is not ready.</strong>
+    <div style="margin-top:4px">Every story but six is done, but <a href="story.html"><strong>ACME-118 · Guest checkout without an account</strong></a> is marked done while its linked case <span class="mono">TC-311</span> failed in the latest run. Done and proven have to be the same answer.</div>
+  </div>
+</div>
+
+<div class="grid g3" style="margin-bottom:16px">
+  <div class="panel"><div class="panel-body">
+    <div class="row" style="justify-content:space-between;margin-bottom:8px"><strong style="font-size:12.5px">Stories</strong><span class="mono">21 / 27</span></div>
+    <div class="meter tall"><span class="done" style="width:78%"></span><span class="prog" style="width:11%"></span></div>
+    <div class="row" style="gap:10px;margin-top:8px;font-size:11.5px;color:var(--color-text-faint)"><span>3 in progress</span><span>2 not started</span><span>1 blocked</span></div>
+  </div></div>
+  <div class="panel"><div class="panel-body">
+    <div class="row" style="justify-content:space-between;margin-bottom:8px"><strong style="font-size:12.5px">Linked test cases</strong><span class="mono">61 / 63</span></div>
+    <div class="meter tall"><span class="done" style="width:96%"></span><span class="risk" style="width:4%"></span></div>
+    <div class="row" style="gap:10px;margin-top:8px;font-size:11.5px;color:var(--color-text-faint)"><span>2 failed</span><span>latest run 2 h ago</span></div>
+  </div></div>
+  <div class="panel"><div class="panel-body">
+    <div class="row" style="justify-content:space-between;margin-bottom:8px"><strong style="font-size:12.5px">Scope change</strong><span class="mono">+4</span></div>
+    <div class="meter tall"><span class="done" style="width:70%"></span><span style="width:15%;background:var(--color-viz-2)"></span></div>
+    <div class="row" style="gap:10px;margin-top:8px;font-size:11.5px;color:var(--color-text-faint)"><span>4 stories added after the release was created</span></div>
+  </div></div>
+</div>
+
+<div class="grid g-main">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>What stands between here and shipping</h2><span class="hint">6 items</span></div>
+      <div class="tw">
+        <table class="t">
+          <thead><tr><th>Key</th><th>Story</th><th>Status</th><th>Linked cases</th><th>Verdict</th></tr></thead>
+          <tbody>
+            <tr style="background:color-mix(in srgb, var(--color-danger) 8%, transparent)">
+              <td><span class="ikey">ACME-118</span></td>
+              <td><a class="ttl" href="story.html">Guest checkout without an account</a></td>
+              <td><span class="badge b-review"><span class="dot"></span>In Review</span></td>
+              <td><span class="row" style="gap:6px"><span class="badge b-pass">3 pass</span><span class="badge b-fail">1 fail</span></span></td>
+              <td><span style="color:var(--color-danger);font-size:12px">TC-311 failed</span></td>
+            </tr>
+            <tr><td><span class="ikey">ACME-119</span></td><td><a class="ttl" href="story.html">Apply a gift card at checkout</a></td><td><span class="badge b-blocked"><span class="dot"></span>Blocked</span></td><td><span class="badge b-untested">2 untested</span></td><td><span style="font-size:12px;color:var(--color-text-faint)">not started</span></td></tr>
+            <tr><td><span class="ikey">ACME-121</span></td><td><a class="ttl" href="story.html">One-page address entry</a></td><td><span class="badge b-prog"><span class="dot"></span>In Progress</span></td><td><span class="badge b-pass">4 pass</span></td><td><span style="font-size:12px;color:var(--color-text-faint)">in flight</span></td></tr>
+            <tr><td><span class="ikey">ACME-122</span></td><td><a class="ttl" href="story.html">Card capture without a redirect</a></td><td><span class="badge b-prog"><span class="dot"></span>In Progress</span></td><td><span class="row" style="gap:6px"><span class="badge b-pass">5 pass</span><span class="badge b-fail">1 fail</span></span></td><td><span style="color:var(--color-danger);font-size:12px">TC-402 failed</span></td></tr>
+            <tr><td><span class="ikey">ACME-131</span></td><td><a class="ttl" href="story.html">Saved card list renders twice</a></td><td><span class="badge b-todo"><span class="dot"></span>Ready</span></td><td><span style="color:var(--color-text-ghost)">none linked</span></td><td><span style="font-size:12px;color:var(--color-text-faint)">not started</span></td></tr>
+            <tr><td><span class="ikey">ACME-136</span></td><td><a class="ttl" href="story.html">Order confirmation email copy</a></td><td><span class="badge b-todo"><span class="dot"></span>Ready</span></td><td><span class="badge b-untested">1 untested</span></td><td><span style="font-size:12px;color:var(--color-text-faint)">not started</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Epics in 2.4</h2></div>
+      <div class="panel-body stack" style="gap:12px">
+        <a class="linked" href="epic.html" style="gap:12px">
+          <span class="type-ic t-epic">E</span>
+          <div style="flex:1"><div class="row" style="gap:8px;margin-bottom:5px"><strong style="font-size:12.5px">Checkout rebuild</strong><span class="spacer"></span><span class="mono" style="font-size:11.5px">70%</span></div><div class="meter"><span class="done" style="width:70%"></span><span class="prog" style="width:14%"></span></div></div>
+        </a>
+        <a class="linked" href="epic.html" style="gap:12px">
+          <span class="type-ic t-epic">E</span>
+          <div style="flex:1"><div class="row" style="gap:8px;margin-bottom:5px"><strong style="font-size:12.5px">Payments provider swap</strong><span class="spacer"></span><span class="mono" style="font-size:11.5px">40%</span></div><div class="meter"><span class="done" style="width:40%"></span></div></div>
+        </a>
+      </div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Test evidence</h2></div>
+      <div class="panel-body stack" style="gap:11px">
+        <dl class="dl">
+          <dt>Latest run</dt><dd><a href="test-runs.html">2.4 regression</a> · 2 h ago</dd>
+          <dt>Executed by</dt><dd>Mira Sund</dd>
+          <dt>Cases linked</dt><dd>63 across 21 stories</dd>
+          <dt>Failed</dt><dd style="color:var(--color-danger)">TC-311, TC-402</dd>
+        </dl>
+        <a class="btn btn-sm" href="test-runs.html">Open the run</a>
+      </div>
+      <div class="panel-foot"><span>Readiness reads the <em>latest</em> result per case, not the best one.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>If nothing had run</h2></div>
+      <div class="panel-body">
+        <div class="empty" style="padding:18px 6px">
+          <span class="ei">◷</span>
+          <h3>No test run against 2.5</h3>
+          <p>Release 2.5 says exactly this instead of showing zero failures — an untested version and a clean version are not the same claim.</p>
+          <a class="btn btn-sm" href="test-plans.html">Plan a run</a>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

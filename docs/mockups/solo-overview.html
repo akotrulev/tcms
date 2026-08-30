@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Internal Platform — Overview · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="projects" data-role="Company Admin" data-proj="PLAT|Internal Platform" data-projnav="overview" data-crumbs="Projects>projects.html|Internal Platform>solo-overview.html|Overview">
+<main class="page">
+<div class="phead">
+  <div>
+    <div class="row" style="gap:8px;margin-bottom:2px">
+      <span class="ikey">PLAT</span>
+      <span class="chip">Lead: Dana Petrov</span>
+    </div>
+    <h1>Internal Platform</h1>
+    <div class="sub">A company building its own product. No client, no reviewer, nothing nagging about either.</div>
+  </div>
+  <div class="actions">
+    <a class="btn" href="settings-general.html">⚙ Settings</a>
+    <a class="btn btn-primary" href="issue-new.html">+ Add</a>
+  </div>
+</div>
+
+<div class="note" style="margin-bottom:16px">
+  <span>◈</span>
+  <div><strong>The same screen, for the company that has no clients.</strong> There is no Client chip in the header, no client column anywhere, and no empty "attach a client" prompt. The Clients entry stays in the sidebar so the first one can still be created — that is the only trace.</div>
+</div>
+
+<div class="grid g4" style="margin-bottom:16px">
+  <div class="panel"><div class="panel-body kpi"><span class="n">62%</span><span class="l">0.9 complete</span><span class="basis">by estimate · 78 of 126 h</span></div></div>
+  <div class="panel"><div class="panel-body kpi"><span class="n">11</span><span class="l">Open issues</span><span class="d">none blocked</span></div></div>
+  <div class="panel"><div class="panel-body kpi"><span class="n" style="color:var(--color-passed)">100%</span><span class="l">Tests passing</span><span class="d">42 of 42 · run yesterday</span></div></div>
+  <div class="panel"><div class="panel-body kpi"><span class="n">Off</span><span class="l">Review gate</span><span class="d"><a href="settings-general.html">I can close my own work</a></span></div></div>
+</div>
+
+<div class="grid g-main">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Epics</h2><span class="hint">2 active</span><span class="spacer"></span><a class="btn btn-sm" href="issue-new.html">+ New epic</a></div>
+      <div class="panel-body stack" style="gap:12px">
+        <a class="linked" href="epic.html" style="align-items:flex-start;gap:12px">
+          <span class="type-ic t-epic">E</span>
+          <div style="flex:1;min-width:0">
+            <div class="row" style="gap:8px;margin-bottom:6px"><strong style="font-size:13px">Self-hosted install path</strong><span class="ikey">PLAT-12</span><span class="badge b-prog"><span class="dot"></span>In Progress</span><span class="spacer"></span><span class="mono" style="font-size:12px">75%</span></div>
+            <div class="meter"><span class="done" style="width:75%"></span><span class="prog" style="width:10%"></span></div>
+            <div class="row" style="gap:10px;margin-top:6px"><span class="basis">by estimate</span><span style="font-size:11.5px;color:var(--color-text-faint)">6 of 8 done</span></div>
+          </div>
+        </a>
+        <a class="linked" href="epic.html" style="align-items:flex-start;gap:12px">
+          <span class="type-ic t-epic">E</span>
+          <div style="flex:1;min-width:0">
+            <div class="row" style="gap:8px;margin-bottom:6px"><strong style="font-size:13px">Docs site</strong><span class="ikey">PLAT-30</span><span class="badge b-todo"><span class="dot"></span>Ready</span><span class="spacer"></span><span class="mono" style="font-size:12px">20%</span></div>
+            <div class="meter"><span class="done" style="width:20%"></span></div>
+            <div class="row" style="gap:10px;margin-top:6px"><span class="basis">by count</span><span style="font-size:11.5px;color:var(--color-text-faint)">1 of 5 done · 3 lack an estimate</span></div>
+          </div>
+        </a>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Quick tasks</h2><span class="hint">no epic, no story, no ceremony</span></div>
+      <div class="panel-body stack" style="gap:8px">
+        <div class="rank-row"><span class="type-ic t-task">T</span><span class="ttl"><a href="task.html">Renew the staging certificate</a></span><span class="spacer"></span><span class="badge b-todo"><span class="dot"></span>Ready</span><a class="btn btn-sm" href="task.html">Open</a></div>
+        <div class="rank-row"><span class="type-ic t-task">T</span><span class="ttl"><a href="task.html">Bump the Postgres image to 17.4</a></span><span class="spacer"></span><span class="badge b-prog"><span class="dot"></span>In Progress</span><a class="btn btn-sm" href="task.html">Open</a></div>
+        <label class="rank-row" style="border-style:dashed">
+          <span class="type-ic t-task">T</span>
+          <input class="input" style="border:0;background:transparent;min-height:24px" placeholder="Add a task and press Enter — that is the whole form">
+        </label>
+      </div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Next release</h2></div>
+      <div class="panel-body">
+        <div class="empty">
+          <span class="ei">⬡</span>
+          <h3>No releases yet</h3>
+          <p>A release is a version you ship from this project — <span class="mono">0.9</span>, <span class="mono">1.0</span> — with an optional target date. Epics and stories can point at one, and readiness is measured against it.</p>
+          <a class="btn btn-primary" href="releases.html">Create a release</a>
+        </div>
+      </div>
+      <div class="panel-foot"><span>The epics section above keeps working regardless — the sections do not depend on each other.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Test health</h2></div>
+      <div class="panel-body stack" style="gap:12px">
+        <div class="meter tall"><span class="done" style="width:100%;background:var(--color-passed)"></span></div>
+        <div class="chips"><span class="chip"><span class="badge b-pass"><span class="dot"></span>Passed</span> 42</span></div>
+        <div class="row"><a class="btn btn-sm" href="test-runs.html">Runs</a><a class="btn btn-sm" href="test-cases.html">Cases</a></div>
+      </div>
+    </section>
+  </div>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

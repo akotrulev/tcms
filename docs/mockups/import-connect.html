@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Import from Jira · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="projects" data-proj="ACME|Acme Storefront" data-projnav="settings" data-crumbs="Projects>projects.html|Acme Storefront>project-overview.html|Imports>settings-import.html|Connect">
+<main class="page">
+<div class="phead"><div><h1>Import from Jira</h1><div class="sub">Four steps, and nothing is written before the third one</div></div></div>
+
+<div class="steps">
+  <span class="step on"><span class="num">1</span> Connect &amp; pick</span><span class="arw">→</span>
+  <span class="step"><span class="num">2</span> Preview</span><span class="arw">→</span>
+  <span class="step"><span class="num">3</span> Map statuses</span><span class="arw">→</span>
+  <span class="step"><span class="num">4</span> Report</span>
+</div>
+
+<div class="grid g-main">
+  <section class="panel">
+    <div class="panel-head"><h2>Your Jira account</h2></div>
+    <div class="panel-body" style="max-width:560px">
+      <div class="field"><label for="u">Site</label><input class="input mono" id="u" value="https://northwind.atlassian.net"></div>
+      <div class="field"><label for="e">Account email</label><input class="input" id="e" value="ops@northwind.test"></div>
+      <div class="field">
+        <label for="t">API token</label>
+        <input class="input mono" id="t" type="password" value="················">
+        <div class="help">Read-only is enough. The token is used for this import and is not stored afterwards.</div>
+      </div>
+      <div class="note good" style="margin-bottom:14px"><span>✓</span><div>Connected · 4 projects visible to this account</div></div>
+
+      <div class="field">
+        <label for="p">Jira project to import</label>
+        <select class="input" id="p">
+          <option selected>PROJ · Storefront (1 482 issues)</option>
+          <option>OPS · Operations (612 issues)</option>
+          <option>MOB · Mobile (338 issues)</option>
+          <option>ARCH · Architecture (91 issues)</option>
+        </select>
+        <div class="help">Its issues arrive in <strong>Acme Storefront</strong>. One Jira project per import.</div>
+      </div>
+    </div>
+    <div class="panel-foot">
+      <a class="btn" href="settings-import.html">Cancel</a>
+      <span class="spacer" style="margin-left:auto"></span>
+      <a class="btn btn-primary" href="import-preview.html">Run the preview →</a>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>What happens next</h2></div>
+    <div class="panel-body stack" style="gap:11px">
+      <div style="font-size:12.5px;color:var(--color-text-muted);line-height:1.6">The preview <strong>reads</strong>. It writes nothing, and cancelling after it leaves this project exactly as it is now.</div>
+      <div style="font-size:12.5px;color:var(--color-text-muted);line-height:1.6">You will see counts by type, and every field that will be dropped with how many values sit in it — before you are asked to trust anything.</div>
+    </div>
+  </section>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>

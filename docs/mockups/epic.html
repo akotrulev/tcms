@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ACME-101 Checkout rebuild · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tcms-mock.css">
+</head>
+<body data-nav="projects" data-proj="ACME|Acme Storefront" data-projnav="work" data-crumbs="Projects>projects.html|Acme Storefront>project-overview.html|Work>work-board.html|ACME-101">
+<main class="page">
+<div class="phead">
+  <div>
+    <div class="row" style="gap:8px;margin-bottom:4px">
+      <span class="type-ic t-epic">E</span><span class="ikey">ACME-101</span>
+      <span class="badge b-prog"><span class="dot"></span>In Progress</span>
+      <span class="chip">→ release <a href="release.html">2.4</a></span>
+    </div>
+    <h1>Checkout rebuild</h1>
+    <div class="sub">1 Jul → 18 Sep 2026 · owned by Rae Lindqvist</div>
+  </div>
+  <div class="actions">
+    <a class="btn" href="work-board.html">On the board</a>
+    <button class="btn" data-mock="Watch">☆ Watch</button>
+    <a class="btn btn-primary" href="issue-new.html">+ Add story</a>
+  </div>
+</div>
+
+<div class="grid g-main">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-body stack" style="gap:14px">
+        <div>
+          <div class="row" style="justify-content:space-between;margin-bottom:6px">
+            <strong style="font-size:13px">Completion</strong>
+            <span class="row" style="gap:8px"><span class="mono" style="font-size:15px;font-weight:600">70%</span><span class="basis">by estimate</span></span>
+          </div>
+          <div class="meter tall"><span class="done" style="width:70%"></span><span class="prog" style="width:14%"></span></div>
+          <div class="row" style="gap:14px;margin-top:8px;font-size:11.5px;color:var(--color-text-faint)">
+            <span>12 of 17 stories done</span>
+            <span>214 of 306 h</span>
+            <span>1 spike excluded from the percentage</span>
+          </div>
+        </div>
+        <div class="note">
+          <span>◈</span>
+          <div>Weighted <strong>by estimate</strong> because every story under this epic has one. The moment one does not, this switches to <strong>by count</strong> and says so — a percentage never changes meaning silently.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Goal</h2><span class="spacer"></span><button class="btn btn-sm" data-mock="Edit description">Edit</button></div>
+      <div class="panel-body" style="font-size:13px;color:var(--color-text-muted);line-height:1.6">
+        Replace the three-step checkout with a single page that works without an account, keeps the cart across a sign-in, and captures a card without leaving the site. Success is a completed guest order in under 90 seconds on a mid-range phone.
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Linked specification</h2><span class="hint">2 blocks</span><span class="spacer"></span><button class="btn btn-sm" data-mock="Link a document block">+ Link a block</button></div>
+      <div class="panel-body stack" style="gap:12px">
+        <div class="linked" style="align-items:flex-start;flex-direction:column;gap:8px">
+          <div class="row" style="width:100%">
+            <span>▭</span><a href="documents.html"><strong style="font-size:12.5px">Checkout specification</strong></a>
+            <span class="ikey">§3.2 Guest flow</span>
+            <span class="spacer"></span>
+            <a class="btn btn-sm" href="documents.html">Open at this block</a>
+          </div>
+          <div class="excerpt">A shopper who has never signed in must be able to complete an order with an email address and a delivery address, and be offered — never required — an account at the end.</div>
+        </div>
+
+        <div class="linked" style="align-items:flex-start;flex-direction:column;gap:8px;border-color:color-mix(in srgb, var(--color-warning) 34%, transparent)">
+          <div class="row" style="width:100%">
+            <span>▭</span><a href="documents.html"><strong style="font-size:12.5px">Payments integration notes</strong></a>
+            <span class="ikey">§1 Card capture</span>
+            <span class="badge b-review"><span class="dot"></span>changed since linked</span>
+            <span class="spacer"></span>
+            <button class="btn btn-sm" data-mock="Re-confirm link">Re-confirm</button>
+          </div>
+          <div class="excerpt" style="border-left-color:color-mix(in srgb, var(--color-warning) 50%, transparent)">Card details are captured in an iframe the provider owns. The page never sees a PAN. <span style="color:var(--color-warning)">— edited 3 days ago by Mira Sund</span></div>
+          <div style="font-size:11.5px;color:var(--color-text-faint)">The excerpt above is what you linked. Re-confirming replaces it with the current text and clears this flag.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Stories, bugs and spikes</h2><span class="hint">17</span><span class="spacer"></span><a class="btn btn-sm" href="issue-new.html">+ Add</a></div>
+      <div class="tw">
+        <table class="t">
+          <thead><tr><th>Key</th><th>Summary</th><th>Status</th><th>Assignee</th><th class="num">Est</th><th class="num">Logged</th></tr></thead>
+          <tbody>
+            <tr><td><span class="ikey">ACME-112</span></td><td><span class="row" style="gap:6px"><span class="type-ic t-story">S</span><a class="ttl" href="story.html">Cart survives a sign-in</a></span></td><td><span class="badge b-done"><span class="dot"></span>Done</span></td><td><span class="avatar sm">MS</span></td><td class="num mono">8h</td><td class="num mono">7h</td></tr>
+            <tr><td><span class="ikey">ACME-118</span></td><td><span class="row" style="gap:6px"><span class="type-ic t-story">S</span><a class="ttl" href="story.html">Guest checkout without an account</a></span></td><td><span class="badge b-review"><span class="dot"></span>In Review</span></td><td><span class="avatar sm">DP</span></td><td class="num mono">16h</td><td class="num mono">14h</td></tr>
+            <tr><td><span class="ikey">ACME-119</span></td><td><span class="row" style="gap:6px"><span class="type-ic t-story">S</span><a class="ttl" href="story.html">Apply a gift card at checkout</a></span></td><td><span class="badge b-blocked"><span class="dot"></span>Blocked</span></td><td><span class="avatar sm">TE</span></td><td class="num mono">10h</td><td class="num mono">1h</td></tr>
+            <tr><td><span class="ikey">ACME-121</span></td><td><span class="row" style="gap:6px"><span class="type-ic t-story">S</span><a class="ttl" href="story.html">One-page address entry</a></span></td><td><span class="badge b-prog"><span class="dot"></span>In Progress</span></td><td><span class="avatar sm">DP</span></td><td class="num mono">12h</td><td class="num mono" style="color:var(--color-warning)">9h</td></tr>
+            <tr><td><span class="ikey">ACME-131</span></td><td><span class="row" style="gap:6px"><span class="type-ic t-bug">B</span><a class="ttl" href="story.html">Saved card list renders twice on slow networks</a></span></td><td><span class="badge b-todo"><span class="dot"></span>Ready</span></td><td><span class="avatar sm">DP</span></td><td class="num mono">3h</td><td class="num mono">0h</td></tr>
+            <tr style="opacity:.75"><td><span class="ikey">ACME-209</span></td><td><span class="row" style="gap:6px"><span class="type-ic t-spike">?</span><a class="ttl" href="story.html">Can we drop the legacy cart cookie?</a></span><div style="font-size:11px;color:var(--color-text-ghost);margin-top:2px">spike · excluded from completion</div></td><td><span class="badge b-todo"><span class="dot"></span>Backlog</span></td><td><span class="avatar sm">DP</span></td><td class="num" style="color:var(--color-text-ghost)">—</td><td class="num mono">0h</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel-foot"><span>6 of 17 shown · <a href="work-table.html">see all in Table</a></span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Estimate vs actual</h2><span class="hint">approved hours only</span></div>
+      <div class="panel-body">
+        <div class="tw">
+          <table class="t">
+            <thead><tr><th>Story</th><th class="num">Estimate</th><th class="num">Logged</th><th class="num">Drift</th><th style="width:150px">&nbsp;</th></tr></thead>
+            <tbody>
+              <tr><td><a href="story.html">ACME-112</a> Cart survives a sign-in</td><td class="num mono">8h</td><td class="num mono">7h</td><td class="num mono" style="color:var(--color-success)">−1h</td><td><span class="meter"><span class="done" style="width:88%"></span></span></td></tr>
+              <tr><td><a href="story.html">ACME-118</a> Guest checkout</td><td class="num mono">16h</td><td class="num mono">14h</td><td class="num mono" style="color:var(--color-success)">−2h</td><td><span class="meter"><span class="done" style="width:88%"></span></span></td></tr>
+              <tr><td><a href="story.html">ACME-121</a> One-page address entry</td><td class="num mono">12h</td><td class="num mono" style="color:var(--color-warning)">9h</td><td class="num mono">−3h</td><td><span class="meter"><span class="prog" style="width:75%"></span></span></td></tr>
+              <tr style="background:color-mix(in srgb, var(--color-danger) 8%, transparent)"><td><a href="story.html">ACME-122</a> Card capture without a redirect</td><td class="num mono">16h</td><td class="num mono" style="color:var(--color-danger)">19h</td><td class="num mono" style="color:var(--color-danger)">+3h</td><td><span class="meter"><span class="done" style="width:84%"></span><span class="risk" style="width:16%"></span></span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel-foot"><span>Over-estimate stories are highlighted. Totals: <strong class="mono">306h</strong> estimated · <strong class="mono">241h</strong> logged.</span></div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Details</h2><span class="spacer"></span><button class="btn btn-sm" data-mock="Edit epic">Edit</button></div>
+      <div class="panel-body">
+        <dl class="dl">
+          <dt>Status</dt><dd><span class="badge b-prog"><span class="dot"></span>In Progress</span></dd>
+          <dt>Target release</dt><dd><a href="release.html">2.4</a> · 18 Sep</dd>
+          <dt>Start</dt><dd>1 Jul 2026</dd>
+          <dt>Target</dt><dd>18 Sep 2026</dd>
+          <dt>Owner</dt><dd><span class="row" style="gap:6px"><span class="avatar sm">RL</span> Rae Lindqvist</span></dd>
+          <dt>Labels</dt><dd><span class="chips"><span class="chip">checkout</span><span class="chip">payments</span></span></dd>
+          <dt>Created</dt><dd>28 Jun 2026</dd>
+        </dl>
+      </div>
+      <div class="panel-foot"><span>An epic belongs to exactly one project. There is no cross-project epic.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Watchers</h2><span class="hint">4</span></div>
+      <div class="panel-body"><div class="chips">
+        <span class="chip"><span class="avatar sm">RL</span> Rae</span>
+        <span class="chip"><span class="avatar sm">DP</span> Dana</span>
+        <span class="chip"><span class="avatar sm">MS</span> Mira</span>
+        <span class="chip"><span class="avatar sm">OB</span> Oskar</span>
+      </div></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Activity</h2></div>
+      <div class="panel-body feed">
+        <div class="feed-item"><span class="avatar sm">MS</span><div class="body"><div class="who"><strong>Mira Sund</strong><span class="t">3 d ago</span></div><div class="sys">edited the linked block <span class="mono">Payments integration notes §1</span></div></div></div>
+        <div class="feed-item"><span class="avatar sm">DP</span><div class="body"><div class="who"><strong>Dana Petrov</strong><span class="t">4 d ago</span></div><div class="sys">moved <a href="story.html">ACME-118</a> to <span class="badge b-review"><span class="dot"></span>In Review</span> — completion 66% → 70%</div></div></div>
+        <div class="feed-item"><span class="avatar sm">RL</span><div class="body"><div class="who"><strong>Rae Lindqvist</strong><span class="t">6 d ago</span></div><div class="sys">set the target release to 2.4</div></div></div>
+      </div>
+    </section>
+  </div>
+</div>
+</main>
+<script src="assets/shell.js"></script>
+</body>
+</html>
