@@ -15353,15 +15353,22 @@ components:
         A COMPANY-scope grant covers every project in that company, present and future.
         That is what makes Company Admin work, and why nothing else is granted there.
 
-        **Seven names, and only five of them may be granted to a person.** Two are
+        **Ten names, and only eight of them may be granted to a person.** Two are
         capability ceilings a *credential* carries: `Agent` (roles spec §A6a), and
         `Automation Service` (§A6), which has been documented as "attached to API
         tokens, never people" since M0 and was made non-assignable by `V41`. Both are
         listed here because the token-issue form is the only place either is ever
         chosen, and both are refused by `POST /role-assignments`. Filter this list by
-        `assignable` when rendering a grant picker — see that field. The eighth seeded
-        row, the `Company Member` membership baseline, is filtered out server-side and
-        never appears here at all.
+        `assignable` when rendering a grant picker — see that field. The eleventh
+        seeded row, the `Company Member` membership baseline, is filtered out
+        server-side and never appears here at all.
+
+        ~~Seven names, and only five of them may be granted to a person.~~ →
+        **superseded 2026-08-30 (`V2`, plan 010): D3 of the project-management
+        expansion adds Project Manager at `PROJECT` scope and Account Manager and
+        Finance at `COMPANY` scope.** They are seeded, immutable and assignable like
+        the rest; nothing in the code checks a role name, so the three arrive
+        grantable through the screens that already exist.
       required: [id, name, scope, builtIn, assignable, description, permissions]
       properties:
         id: { type: string, format: uuid }
@@ -15370,6 +15377,9 @@ components:
           enum:
             - Instance Admin
             - Company Admin
+            - Project Manager
+            - Account Manager
+            - Finance
             - Test Lead
             - Test Engineer
             - Automation Service
