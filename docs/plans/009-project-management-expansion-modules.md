@@ -1,0 +1,1179 @@
+# 009 — The project-management expansion, as vertical modules
+
+**Date:** 2026-08-30 · **Written by:** `ep-writing-plans`
+
+> **For agentic workers:** this document is a **roadmap of modules, not a task list.** Do not execute
+> it. Each module gets its own bite-sized plan — `docs/plans/010-…` onward, one per module, written
+> with `ep-writing-plans` when that module starts and executed with `ep-executing-plans`. The skill's
+> own Scope Check requires this: *"If the spec covers multiple independent subsystems … suggest
+> breaking this into separate plans — one per subsystem. Each plan should produce working, testable
+> software on its own."* Eleven subsystems, eleven plans. **Start a module from its prompt** in
+> [Prompts — one per module](#prompts--one-per-module), and finish it with the
+> [hand-off protocol](#prompt-hand-off-protocol) — the status table there is the only record of
+> what is done. **The UI source of truth is `docs/mockups/`.**
+
+**Goal:** Deliver the expansion in `docs/specs/2026-08-30-project-management-expansion-scope.md` as
+modules that are **complete on arrival** — each one lands its own migration, its own endpoints and
+its own screens, and is usable by a person the day it merges.
+
+**Architecture:** Unchanged from the scope document. One deployable, Spring Modulith packages under
+`com.tcms`, five foundation modules and no sixth, downstream modules referencing an issue
+polymorphically and keeping their own event-fed projection (§3). What changes here is only **the
+order the work is cut in.**
+
+**Tech stack:** Postgres 17 + Flyway (one migration per module), Spring Boot 3.5.6 / Java 21,
+`openapi.yaml` + two generated clients, Vite 8 / React 19 / TanStack Query / Tailwind v4 + the kit.
+
+---
+
+## What this changes about §9, and why
+
+§9 of the scope document cuts the work **horizontally**: `P0` lands schema and roles for the whole
+expansion with *"nothing user-visible"*, and the client CRUD screens wait several phases behind the
+column they read. That ordering is defensible — it was written to make the expensive-to-retrofit
+columns cheap — but it has one property the owner has now ruled out: **for the length of P0 there is
+nothing to look at, and for the length of P1 there is a tracker with no board.**
+
+This plan cuts **vertically** instead. Each module below is db + backend + contract + frontend for
+one feature, and the phrase that ends every module is *"a person can now …"*.
+
+~~§9's phase table~~ → **superseded by this document.** §9 has been amended to point here; its
+priority ordering (must / should / nice-to-have) and its migration-version discipline survive
+intact, because neither had anything to do with the horizontal cut.
+
+**What did not survive:** `P0`'s claim that the *client tables* must land early. `project.client_id`
+is one nullable column on one existing table — adding it later costs a two-line migration, not a
+retrofit across 28 tables. The genuinely expensive-to-change things are the per-project key counter and the
+permission catalogue, and those are what M0 keeps. ~~`key_sequence`'s primary key~~ → review R1:
+the counter is a new table, and `key_sequence` is not touched.
+
+**One module is still deliberately UI-less.** M0 is a permission catalogue, one new counter table,
+one CHECK and one nullable column. There is no way to make that a feature, and spreading the role seed across eight modules
+would mean eight edits to three documents that a test pins byte-for-byte. It is one week, once.
+
+---
+
+## The modules — in the order they are done
+
+| # | Module | Migration | A person can now … | Depends on | Status |
+|---|---|---|---|---|---|
+| **M0** | Foundation | `V2` | *(nothing — see above)* | none | done 2026-08-30 @ `24f997bb` |
+| **M1** | Tracker core | `V3` | run a project's work — epics, stories, tasks, statuses, comments, spec links — and see it all on My Work | M0 | not started |
+| **M2** | Board & backlog | `V4` | work the board, rank the backlog, filter once across every view | M1 | not started |
+| **M3** | Releases, roadmap & readiness | `V5` | plan versions, see the roadmap, and answer "can we ship 2.4?" | M2 | not started |
+| **M4** | Jira offramp | `V6` | move a Jira project in, keys intact, with a preview and a report | M1 | not started |
+| **M5** | Agent execution | `V7` | connect their own assistant and have it work a task, but never close it | M1 | not started |
+| **M6** | Time | `V8` | log hours, submit a period, and have a PM approve it | M1 | not started |
+| **M7** | Staffing | `V9` | allocate people, see capacity, and find who is free | ~~M6~~ → **M0** (review R11) | not started |
+| **M8** | Billing | `V10` | price approved time and issue an invoice | M6 · Mc | not started |
+| **M9** | Delivery analytics | none | read burn-up, cycle time and flow | M3 | not started |
+| **Mc** | Clients | *next free* | record a client and attach projects to it | M0 | not started |
+
+**Status** is one of `not started` · `in progress — plan 0NN` · `done YYYY-MM-DD @ <sha>` ·
+`deferred`. The agent that finishes a module writes it, per the
+[hand-off protocol](#prompt-hand-off-protocol) below; nobody else does. The status table is the
+gate: a prompt's *Depends on* modules must read `done` here before the prompt is run.
+
+**The "Depends on" column is the dependency graph, not the schedule.** Which modules may actually
+run beside each other — by *file*, which is stricter than by dependency — is in
+[What can run in parallel](#what-can-run-in-parallel) below.
+
+**M9 needs no migration.** Every report reads `issue_fact` and `execution_fact`, both of which exist
+by M3. If that turns out to be wrong, it takes the next free version at the time — it does not
+reserve one now on the chance.
+
+**Mc is deferrable and sits anywhere after M0** — build it the week a first real client exists.
+Everything client-shaped in M8 depends on it, and nothing else does.
+
+### The migration versions are a reservation, not a fact
+
+`out-of-order` is unset in `application.yml`, so **a lower-numbered migration arriving after a higher
+one is silently not applied**, and Testcontainers builds each test database from scratch so it will
+never show you the conflict. The column above is valid *only while the order above holds*. Reorder
+two modules, defer one, or slip `Mc` in between, and the module that starts second takes **the next
+free number at the time it starts** — not the number this table reserved for it. Re-read
+`backend/src/main/resources/db/migration/` before writing the file, every time.
+
+---
+
+## What every module carries — the tax, per module rather than per phase
+
+§8 of the scope document itemises the cross-cutting cost of the whole expansion. Cut vertically, each
+module pays its own share, and **each of these is part of the module's definition of done**, not a
+cleanup pass afterwards:
+
+| Surface | Per-module obligation |
+|---|---|
+| `docs/specs/openapi.yaml` | The module's endpoints and schemas. **Every schema gets its `required` array, including on inline nested objects** — `required` does not descend. |
+| Generated clients | **Both** — `frontend/src/api/schema.d.ts` and `packages/client/src/schema.ts` — regenerated in the same commit as the contract change. |
+| `contractBodies.ts` | The marked region is byte-identical across both copies, pinned by `contractPairing.test.ts`. Edit one, edit both. |
+| Permissions | The module's slice of the catalogue, plus the roles spec, `permission-matrix-summary.md` and `README.md` — all three in one commit, or `matrixCopies.test.ts` reddens. |
+| `tierClaims.test.ts` | Any comment claiming somebody lacks a permission §A3 grants them fails the **packages** job. Written for the six-role model; three roles are new. |
+| Frontend | Screens on the render kit only. No `sx`, no CSS-in-JS, no second stylesheet. New enums into `lib/labels.ts` as `satisfies Record<Union, string>`. |
+| Frontend data | One `keys` factory, `src/api/queries/keys.ts`. **Never add a second.** Timeout budget per endpoint class. |
+| Fault switch | *Build the switch before the feature it proves* — a module with new failure modes extends `src/lib/devFaults.ts` in the same module. |
+| CLI + MCP | The module's verbs, and `docs/specs/2026-08-08-mcp-tool-and-command-surface.md` updated with them. |
+| Gates | `./gradlew build`, `npm run build && npm run lint && npm run test:run`, `npm run build` in `packages/` — **run on `shanks` via `~/bin/tcms-remote`**, per the standing directive. |
+| `docs/features.md` | The section the module replaces, rewritten — struck through and superseded, not deleted. |
+
+**The frontend reference is `docs/mockups/`.** Each module below names the mockup files it ports.
+Four are named by no module on purpose: `test-suites.html`, `test-plans.html` and `test-runs.html`
+render screens this expansion does not change — only `test-cases.html` gains a column, in M3 — and
+`solo-overview.html` is not a screen at all but the **client-less rendering of
+`project-overview.html`**, which is an acceptance criterion of M1, M3 and `Mc` rather than a build
+target of any of them.
+They are static renders on the app's own tokens, so porting is a translation into the kit and
+TanStack Query, not a redesign. **No module ports a screen it has no endpoint for** — the
+non-functional-frontend option was considered and rejected here: this repo has no mock API lane, and
+fixtures inside components would have to be ripped back out of every screen.
+
+---
+
+## M0 — Foundation
+
+**Deliverable:** `V2` applied; a per-project issue counter exists for every project and is seeded
+for every new one; `doc_link` accepts an `'ISSUE'` source; `project.client_id` exists and is
+nullable; the three new roles and the full ~91-permission catalogue are seeded and documented.
+`./gradlew build` green. **No screen changes.**
+**Depends on:** none
+
+**db** — `V2__pm_foundation.sql`
+- ~~`key_sequence` primary key `(company_id, entity_type)` → `(company_id, entity_type, project_id)`,
+  `project_id` nullable for the five existing company-scoped types~~ → **superseded (review R1).**
+  A primary key cannot contain a nullable column, so that statement never ran. Instead:
+  **`key_sequence` is not touched at all.** A new table owned by the `project` module,
+  `project_key_sequence (company_id, project_id, next_value)` with PK `(company_id, project_id)`,
+  carries the per-project issue counter; the prefix is `project.key`, which already exists with
+  `uq_project_key` and `ck_project_key_format`, so no prefix column. The same one-statement
+  `UPDATE … RETURNING` allocator, one row per project instead of per company. `V2` backfills a row
+  for every existing project. There is now no PK change on a live table, and the five existing
+  company-scoped types keep the allocator, the seed function and the seven readers they have today
+  (`tenancy/DisplayKeys.java` — whose `EntityType` enum stays at five members —
+  `CompanyProvisioningService`, `ExportCompanyService`, `SeedDemoDataCommand`, `ProjectEdit`,
+  `RunEdit`, `PlanCreateService`).
+- `doc_link.source_type` CHECK gains `'ISSUE'`.
+- `project.client_id UUID NULL` — **the column only, no `REFERENCES`.** The `client` table belongs
+  to `Mc`, so `Mc` adds the FK constraint when the table exists; the column ships nullable and
+  unread. (Review R3: an earlier draft wrote `REFERENCES client(id)` in the same sentence as "the
+  FK is added by Mc".)
+- Permission rows and the three role grants: Project Manager (project scope), Account Manager and
+  Finance (company scope).
+
+**be** — `identity` seeds the roles and permissions. `project` gains the `project_key_sequence`
+row on create (in `ProjectCreateService`) and the allocator `tracker` will call — `project` is a
+foundation module, so that import is legal. `ExportCompanyService` exports the new table beside
+`key_sequence`. No new module.
+
+**contract** — no endpoints. `Role.name` is an `enum` in `openapi.yaml` (the "seven names" note
+on the `Role` schema), so it gains three members and both generated clients move.
+
+**docs, all in one commit** — `2026-07-30-tcms-roles-permissions-naming.md` §A3,
+`permission-matrix-summary.md`, `README.md`, and the `2026-07-30-tcms-erd.md` §366 key-design
+amendment in the superseded style.
+
+**Why "no screen changes" is a claim and not a hope — verified before this plan was written.** The
+admin surface is already data-driven: `frontend/src/features/admin/RoleAssignmentTable.tsx` and
+`GrantRoleDialog.tsx` render whatever `GET /role-assignments` returns, and
+`features/admin/roleAccess.ts` branches on `role.scope` rather than on any role's name. So seeding
+Project Manager at `PROJECT` scope and Account Manager and Finance at `COMPANY` scope makes all
+three **grantable through the existing screens with no frontend work** — which is what
+`teams.html` and `member.html` in the mockups show. Confirm this still holds before starting; if a
+role name has since been hardcoded anywhere, that hardcoding is M0's first task.
+
+**Done when:** `SchemaConventionTest`, `matrixCopies.test.ts` and `tierClaims.test.ts` are green, a
+company still provisions, a new project gets its counter row, the three roles are grantable from
+the existing member screen, and `git diff --stat frontend/src` names **only**
+`frontend/src/api/schema.d.ts` — ~~is empty~~ (review R2: the contract's role enum moves the
+generated file, so "empty" was never achievable; any hand-written file in the diff is the
+hardcoding the paragraph above warns about).
+
+**Not in this module:** the `client` table, any issue table, any new screen.
+
+**The migration actually taken is `V2`**, as the table reserved: the directory held
+`V1__initial_schema.sql` and nothing else when plan 010 T2 checked it. No correction needed here or
+in the `**db**` line above.
+
+**Built and unverified:** the 33 new permission rows exist and are granted, and **no code reads any
+of them** — the first evaluation site for `issue:*` arrives with M1, for `board:*` with M2, and for
+`billing:*` with M8. A grant that is never evaluated is a grant nobody can tell is inverted, which
+is the same standing this repository already gives `doc:read` and `artifact:read` (§A3, flow audit
+C8). `ProjectKeys` is tested against a real Postgres but has **no production caller** until M1's
+issue creation — it carries an expiring entry in `ArchitectureRulesTest.UNEXERCISED_BY_DECISION`
+that **M1 deletes**. `doc_link.source_type = 'ISSUE'` is accepted by the CHECK and written by
+nothing; `project.client_id` exists, is nullable, is unmapped and is read by nothing until Mc.
+
+**What was actually clicked through, and what was not.** `V2` applied to the lab's **live,
+already-populated** database (v1 → v2) and the app started behind `hibernate.ddl-auto: validate` —
+which is the one property Testcontainers cannot demonstrate, because it always builds from empty,
+and it is the property `V2` carries the most risk on. On the lab, **Project Manager** is offered in
+the project-scope grant picker and **Account Manager**, **Finance** and **Project Manager** in the
+company-scope one, each with the id `V2` seeds, and Help → Roles and access renders all ten role
+columns and all seven new areas live from the instance. **No grant was actually submitted** — the
+check stopped at the picker. That click-through is also what found three false sentences on the
+Help page that every gate passed (`24f997bb`); `tierClaims.test.ts` cannot catch them, because it
+sweeps claims that somebody *lacks* a permission and one of the three was a positive list that had
+gone short.
+
+**A pre-existing red, unrelated to M0 and not repaired by it.** `com.tcms.reporting.FlakeScoreTest`
+fails six tests on `shanks` as of 2026-08-30 — proven pre-existing by running it against a pristine
+export of the tree without `V2`. It pins `BASE = 2026-06-01T08:00:00Z` against the shipped **90-day**
+flake window, so the fixture expired on 2026-08-30; the 06:37 UTC nightly was the last green one.
+The repair is that test's, not this module's: make `BASE` relative to the clock, or freeze the clock.
+`./gradlew build` on `shanks` is therefore **3586 of 3592 green**, with those six the only failures.
+
+---
+
+## M1 — Tracker core
+
+**Deliverable:** A person opens a project, creates an epic, adds stories under it, breaks one into
+tasks, moves them through the workflow, comments, and sees the epic's completion update — and every
+`work_item` that existed before the upgrade is still there, still called a Task, now with a key.
+**Depends on:** M0 (`key_sequence`, `doc_link`, the `issue:*` permissions)
+
+**db** — `V3__tracker_core.sql`
+- `issue`, `issue_type` (with `level` CHECK `EPIC·STORY·TASK`), `issue_status` (with `kind`),
+  `issue_transition`, `issue_link`, `issue_comment`, `issue_watcher`, `issue_doc_link`, `issue_fact`.
+- Default workflow seeded per project: Backlog · Ready · In Progress · In Review · Blocked · Done.
+  **Two seeding paths, both in this module (review R5):** `V3` backfills the workflow for every
+  project that already exists, and `project` publishes a new `ProjectCreatedEvent`
+  (a `CompanyScopedEvent`; none exists today — `ProjectCreateService` writes an audit row and
+  nothing else) which `tracker` consumes to seed the workflow for every project created after.
+  `project` cannot import `tracker`, so the event is the only legal direction.
+- Story-level type named `Task` per D29, so a solo project never needs a Story first.
+- **`work_item` → `issue` migration** as parentless Stories per D12, then **part of** the `work`
+  module retires. By file (review R4): `WorkItem`, `WorkItemController`, `WorkItemEdit`,
+  `WorkItemRepository`, `WorkItemStatus`, `WorkItemStatusUpdateRequest`, `WorkItemView`,
+  `WorkItemWriteRequest` and `Priority` go, with the `work_item` and `work_item_link` tables
+  (`work_item_link` → `issue_link`). `BoardFacts`, `BoardService`, `BoardPeople`,
+  `ItemAssignedEvent` and `derived_item_annotation` stay — see D11 below. In the contract,
+  `/work-items` and `/work-items/{workItemId}` are **removed**, not deprecated (there is no
+  external consumer of this contract), and the six `work-item` verbs in `packages/cli` and
+  `packages/mcp` become `issue` verbs in the same commit. `workitem:manage` is struck through
+  "→ superseded by `issue:*`" in the roles spec, `permission-matrix-summary.md` and `README.md`
+  together, or `matrixCopies.test.ts` reddens.
+- `issue_fact` carries `created_at`, `status_entered_at`, `done_at` and `release_assigned_at`
+  beside the fields §3 sketches. **This is M9's schema, landing here (review R12):** cycle time
+  and "scope added after the release was created" are unanswerable from a projection that holds
+  only the current status, and the alternative is M9 taking a migration it was promised it would
+  not need.
+- Every table `company_id NOT NULL`, leading every composite index, forced RLS.
+
+**be** — new `tracker` module. Issue CRUD, per-project key allocation through `project`'s
+`project_key_sequence` allocator (M0), the level/parent depth rule,
+the legal-transition set, completion computed per D8 (count, or hours when every story has an
+estimate — and the basis on the wire, never inferred by the client), epic status derived per D31,
+`issue_doc_link` staleness fed by the `HealthRecomputeOnLinksChanged` template, `issue_fact`
+published by a `CompanyScopedEvent` and **written by nothing else**.
+
+**D11 lands here, and it is easy to miss because it is a change to a screen that already works.**
+`/my-work` and `/teams/:teamId/board` are **composite** and stay composite: `work.BoardFacts` gains
+an `ISSUE` generator beside `EXECUTION`, `CASE_MAINTENANCE` and `REVIEW` — it does not retire with
+the rest of the `work` module. An issue becomes the fourth card kind, and the row-backed one.
+`derived_item_annotation` survives and matters more, not less: a personal note and a personal due
+date on a card you do not own is exactly right for a board mixing your issues with reviews somebody
+else asked of you. Replacing that composite with an issues-only list would narrow the one screen
+that already answers *"what is on my plate"*.
+
+**contract** — `/issues`, `/issues/{key}`, `/issues/{key}/comments`, `/issues/{key}/transitions`,
+`/issues/{key}/doc-links`, `/projects/{id}/workflow`.
+
+**fe** — ports `work-table.html`, `epic.html`, `story.html`, `task.html`, `issue-new.html`,
+`documents.html`, `settings-workflow.html`, `settings-general.html`, and extends the existing
+My Work screen to `my-work.html` — issues beside executions and reviews, with the private note and
+personal due date. `project-overview.html` lands here **without** its release and test-health
+panels — those are M3, and the page is built so a missing section explains itself rather than
+rendering empty.
+
+**Done when:** a person runs a project's work in the UI with no board, and My Work shows their
+issues across two projects beside their pending reviews and executions; `./gradlew build` green on
+`shanks`; the `work_item` migration verified by counting rows either side, not by reading the SQL.
+
+**Not in this module:** boards, rank, labels, releases, timeline, calendar.
+
+---
+
+## M2 — Board & backlog
+
+**Deliverable:** A person works a board with swimlanes by epic, drags a card or moves it from the
+keyboard, sees a WIP breach, ranks the backlog, and sets one filter that survives switching to Table.
+**Depends on:** M1
+
+**db** — `V4__tracker_board.sql`: `board`, `board_column`, `board_column_status` (every status
+claimed by exactly one column, enforced), `board_swimlane`, `issue_label`,
+`issue_label_assignment`, and `issue.rank` as a fractional rank.
+
+**be** — `tracker.board` package, not a module (§2). Column→status claims with a per-column default
+for the coarse board, WIP limits that **report a breach rather than refusing a drop**, rank
+rebalancing, filter state as query parameters.
+
+**A status created after the board exists (review R13):** "every status claimed by exactly one
+column" is a unique index on `board_column_status (board_id, status_id)` plus a service rule, not a
+cross-table CHECK — Postgres has none. When the workflow gains a status, the service claims it for
+every board of the project in the column that holds the default status of the same `kind`
+(a new `IN_PROGRESS`-kind status lands beside In Progress), and the settings screen shows it there
+so it can be moved. An unclaimed status is not a state the data can be in.
+
+**contract** — `/projects/{id}/boards`, `/boards/{id}`, `/boards/{id}/cards/{key}/move`,
+`/projects/{id}/backlog`, `/issues/{key}/rank`.
+
+**fe** — ports `work-board.html`, `work-backlog.html`, `settings-boards.html`. Extends the Work
+entry to the tabbed shape of D34 with the filter in the URL per the frontend rules.
+
+The board is **the hardest frontend in the whole expansion** and its own plan must say so:
+optimistic reordering on a fractional rank, swimlanes, WIP limits, and keyboard parity with the
+pointer. `frontend/src/features/board/cardMove.ts` and `boardKeyboard.ts` already exist and are the
+starting point. Every drag has a `⋮ Move to…` equivalent — WCAG 2.2 *Dragging Movements*, and story
+B3's own non-functional requirement.
+
+**Done when:** a card moved on the team board is in the matching column on the stakeholder board,
+and both are reachable with the keyboard alone.
+
+**Not in this module:** releases, the timeline, the calendar.
+
+---
+
+## M3 — Releases, roadmap & readiness
+
+**Deliverable:** A person creates a release, targets epics and stories at it, reads the roadmap, and
+gets one answer to "can we ship 2.4?" — stories done **and** linked test cases passing.
+**Depends on:** M2
+
+**db** — `V5__release.sql`: `release` (project-scoped per D13, with `created_at` — the burn-up's
+"scope added after the release was created" baseline, review R12), `issue.release_id` nullable FK —
+**no join table**, per D6 — `test_run.release_id UUID NULL REFERENCES release(id) ON DELETE SET NULL`
+beside the existing `release_version` text. **That is a real FK from an `execution` table into a
+`tracker` table, and it is allowed (review R6):** ArchUnit governs Java imports, not DDL, and §3's
+"no FK" cost applies to *polymorphic* references, which this is not. `execution` never imports
+`tracker`; it holds a UUID and the database keeps it honest.
+
+**be** — release CRUD ordered by `ReleaseSortKey` so `1.10` follows `1.9`. **`ReleaseSortKey` lives
+in `execution` today** (`backend/src/main/java/com/tcms/execution/ReleaseSortKey.java`), and
+`tracker → execution` is a forbidden crossing (review R6). It is a pure value type with no domain
+concept of its own, so **this module moves it to `api`** beside `AutomationKeys` and `PatchBody`,
+and the two `execution` readers (`TestRun`, `TestExecution`) follow the import. Story↔test-case
+links as `issue_link` with target type `TEST_CASE`; readiness joining `execution_fact` on the latest
+result per case; burn-up and completion report types in `reporting`.
+**`release_sort_key` comes off `READERLESS_BY_DECISION` in the same commit that first reads it**, or
+`ArchitectureRulesTest` fails.
+
+**contract** — `/projects/{id}/releases`, `/releases/{id}`, `/releases/{id}/readiness`,
+`/projects/{id}/roadmap`, `/issues/{key}/test-cases`.
+
+**fe** — ports `releases.html`, `release-new.html`, `release.html`, `work-timeline.html`,
+`work-calendar.html`, and the release + test-health panels of `project-overview.html` that M1 left
+out. `test-cases.html` gains its "verifies which stories" column.
+
+**No backfill (D14).** Nothing is migrated into `release`: `test_run.release_version`,
+`release_sort_key` and `test_plan.milestone_name` keep working exactly as they do. **Expect the
+roadmap to be empty on the day this merges** and readiness to have no history until somebody creates
+releases by hand — that is the trade for having no migration to get wrong, and this module's own
+plan must put it in front of whoever demos it rather than letting an empty timeline read as a bug.
+
+**Done when:** a release with a done story whose linked case failed reads **not ready** and names
+that story; a release with no run says so rather than showing zero failures.
+
+**Not in this module:** analytics beyond readiness and burn-up (M9).
+
+---
+
+## M4 — Jira offramp
+
+**Deliverable:** An admin connects Jira, previews exactly what will and will not come across, maps
+every status, confirms, and finds `PROJ-4812` still called `PROJ-4812` — with a report they can
+reopen a year later.
+**Depends on:** M1 (M2 and M3 are **not** prerequisites; an import lands issues, and a board is a
+view over them)
+
+**db** — `V6__import.sql`: `import_run` and `import_dropped_field`, so the report outlives the
+migration.
+
+**be** — ~~the existing Jira/ADO adapters gain an **importer** direction~~ → **superseded (review
+R7).** `integration/tracker/JiraAdapter` and `AzureDevOpsAdapter` are outbound *defect-link*
+clients — single-issue lookup and create, a status category — and an importer needs paging,
+comments, changelog and user resolution, none of which they have; more decisively, the importer
+**writes `issue` rows**, and `integration → tracker` is a forbidden crossing in either direction.
+So the importer is a **`tracker.imports` sub-package with its own read client** for Jira Cloud/DC
+and Azure DevOps. The outbound adapters are **not deleted and not changed** — a client mid-migration
+still links defects out. Dry-run preview writing nothing (D32), a status-mapping step that **refuses
+to confirm while one status is unmapped**, original keys preserved (D5), standard fields only with
+every dropped field counted (D15).
+
+**Still open, for this module's plan:** whether the importer reuses the per-person credential in
+`integration.tracker.TrackerIdentity` / `TrackerCredential`. Reusing it is the same forbidden
+crossing; the alternative is `import-connect.html` taking the connection for the run and storing it
+on `import_run`, encrypted the way `TrackerCredential` is. The mockup already shows the form.
+
+**contract** — `/imports/preview`, `/imports`, `/imports/{id}`.
+
+**fe** — ports `import-connect.html`, `import-preview.html`, `import-mapping.html`,
+`import-report.html`, `settings-import.html`.
+
+**Done when:** a preview leaves the project byte-identical, and the dropped-field list in the report
+matches the preview's word for word.
+
+~~**Open, and to be closed by this module's own plan:** what becomes of Jira sprint membership — a
+label per sprint, or dropped and reported. Scope §10.~~ → **closed (review R8):** sprint membership
+is **dropped and counted in the report** like any other non-standard field. A label per sprint would
+make M4 depend on M2's `issue_label`, and the point of M4 depending on M1 alone is that an import
+can land before there is a board. If M2 has already merged when M4's plan is written, that plan may
+*offer* label-per-sprint as an option in the mapping step; it is never required.
+
+---
+
+## M5 — Agent execution
+
+**Deliverable:** A developer connects their own assistant from their profile, flags a task
+AI-eligible, and the assistant fetches it with its story, acceptance criteria, epic goal, release,
+spec excerpts and build command, reports a PR back, and moves it to In Review — **and is refused
+Done, with the reason.**
+**Depends on:** M1. `release` in the fetch payload is a **nullable** field of the contract from the
+first commit, absent until M3 has landed and the task's story is targeted at one (review R9) —
+M5 does not wait for M3.
+
+**db** — `V7__agent.sql`: `project_repository` as reference data (D16), `issue.pr_url`,
+`issue.agent_eligible` (D30), `review_enabled_issue` **defaulting to `false`** (D33).
+
+**be** — the legal-transition set on the wire so the caller learns what it may do; the issue tool
+surface on MCP and CLI; a profile token that **is** the identity — **no agent principal, no
+orchestrator, no runner, no forge adapter, no model credential** (D25, D26). Actions attribute to
+`<person>, via <assistant>`.
+
+**contract** — `/me/assistants`, `/issues/{key}/transitions` gains its allowed-moves projection,
+`/projects/{id}/repositories`.
+
+**fe** — ports `profile-assistants.html`, `assistant-connect.html`, `story-proposal.html`,
+`settings-repositories.html`, the AI-eligible toggle and marker on cards and lists, and the
+"Connect an AI assistant" entry on `help.html`.
+
+**Done when:** a scoped assistant asking for another project's tasks receives nothing from it; a
+close attempt is refused and the refusal is on the issue's history.
+
+---
+
+## M6 — Time · M7 — Staffing · M8 — Billing
+
+Each one is a module on the same shape. Their own plans carry the detail; what matters at this
+altitude is the boundary between them.
+
+| | **M6 Time** (`V8`) | **M7 Staffing** (`V9`) | **M8 Billing** (`V10`) |
+|---|---|---|---|
+| **db** | `time_entry` (`subject_type` + `subject_id` — an issue, a meeting, leave), `timesheet_period` | `person_profile`, `skill`, `person_skill`, `allocation`, `absence` | `rate_card`, `rate_card_entry`, `budget`, `invoice`, `invoice_line`, `expense` |
+| **be** | log, submit, approve, reject-with-note; approved hours roll up to story, epic, project as a **`time`-owned projection joined to `issue_fact`** — `time` reads `issue_fact` and never writes it (review R10; the trap scope §3 names) | capacity, allocation percentage, over-allocation flag, absence zeroing capacity everywhere | approved time priced by rate card, budget burn, draft and issue an invoice, lines lock on issue |
+| **fe** | `timesheets.html`, `timesheet-approvals.html` | `staffing.html`, `directory.html` | `billing.html`, `invoice.html`, and the client page's hours-and-invoices table |
+| **Depends on** | M1 | ~~M6~~ → **M0** (review R11: profiles, skills, allocation, absence and capacity read no time entry — allocation is against a project, which is foundation. *Utilisation*, allocated vs logged, is the one figure that needs M6, and it is out of M7 unless M6 has landed) | M6 · Mc |
+| **A person can now** | record where the day went and have it approved | answer "who is free, and when" | turn approved hours into an invoice |
+
+**The sharpest boundary in the expansion is money, and it needs a test asserting the negative.**
+`billing:*` and `ratecard:read` are Finance and Company Admin only. A Test Engineer with `time:log`
+logs hours and cannot see what they cost; an Account Manager sees the client and the hours and never
+a rate. Assert that they *lack* it — do not read the matrix carefully and conclude it holds.
+
+**M8 excludes** fixed-fee and retainer invoicing (D24), and never bills AI-assistant usage — it is a
+cost, not a line.
+
+---
+
+## M9 — Delivery analytics
+
+**Deliverable:** A PM reads a release burn-up that distinguishes scope added after the release was
+created, and cycle time per issue type.
+**Depends on:** M3
+**db** — none. Reads `issue_fact` and `execution_fact`. **"None" holds only because M1 put
+`created_at` / `status_entered_at` / `done_at` / `release_assigned_at` on `issue_fact` and M3 put
+`created_at` on `release`** (review R12). If either was skipped, M9 takes the next free version.
+**fe** — ports `reports.html`.
+**Excludes velocity.** D6 removed the sprint it would measure; there is nothing to compute it over
+and a chart implying otherwise would be a lie about how the team plans.
+
+---
+
+## Mc — Clients *(deferrable — build it the week the first real client exists)*
+
+**Deliverable:** A company records a client, adds contacts, attaches a project to it, and the Client
+column, filter and per-client rollups appear where they are relevant.
+**Depends on:** M0
+**Migration:** the **next free version at the time it starts** — see the reservation warning above.
+
+**db** — `client`, `client_contact`; `project.client_id`'s FK constraint added to the column M0 shipped.
+**be** — new `crm` module. Client CRUD, contacts that never become logins.
+**fe** — ports `clients.html`, `client.html`, `client-new.html`, and the Client column and filter on
+`projects.html` and the Client field on `project-new.html` / `settings-general.html`.
+
+**The empty case is the acceptance criterion, not a nicety.** With no clients: no Client column, no
+Client filter, no Client field, no "attach a client" prompt, and nothing marking a project as missing
+one. `clients-empty.html` is the only trace, and it exists so the first one can be created.
+Test that absence — a company building its own products is the owner's own case.
+
+---
+
+## How a module is executed
+
+1. **Write its plan.** `ep-writing-plans` → `docs/plans/0NN-<module>.md`, flat `T1…Tn`, one
+   deliverable each, actual code in every step. Take the next free `NNN`; never renumber.
+2. **Check the migration number against the directory**, not against this document's table.
+3. **Contract first, in one commit** — `openapi.yaml`, both generated clients, `contractBodies.ts`
+   in both copies.
+4. **Execute** with `ep-executing-plans`. Commit at the end of each task, staging only that task's
+   files — `git add <paths>`, never `git add -A`, because concurrent sessions happen in this repo.
+5. **Gates on `shanks`**, per the standing directive: `~/bin/tcms-remote sync` then
+   `backend ./gradlew build`, `frontend npm run test:run`, `packages npm run build`. Read
+   `docs/specs/shanks-runner-details.md` first — `BUILD FAILED` with `Could not write XML test
+   results` and zero assertion failures is an fd limit, not a red suite.
+6. **Close the module's docs** — `docs/features.md`, the MCP surface, the roles copies.
+7. **Say what is built and unverified.** The gates prove it compiles, not that it works: a no-op
+   theme toggle, two contradictory percentages on one screen and a provider-ordering bug that
+   rendered nothing but the error page all typechecked and linted clean.
+8. **Close this document** per the [hand-off protocol](#prompt-hand-off-protocol): status table,
+   the V actually taken, and the dependent prompts rewritten. Its own commit.
+
+**One module at a time, by default.** Work in this repo is sequential — parallel lanes were tried
+four times and reversed, and two agents in one tree produced three silent losses of committed work
+with no conflict and a clean `git status`. If a second lane is genuinely wanted, read
+`docs/specs/parallel-work-rules.md` first, then [What can run in parallel](#what-can-run-in-parallel)
+below for which modules are disjoint *by file* — and note that **two modules can never run in
+parallel without pre-assigning their migration versions**, which is exactly the trap the
+reservation warning above describes.
+
+---
+
+## Prompts — one per module
+
+Each block below is what is pasted into a fresh session to start that module. They are written to
+be **complete on their own**: the agent reads the plan section, the decisions, the stories and the
+mockups it names, writes the module's own plan, executes it, and closes by editing *this* document.
+**The prompts are living text** — the agent that finishes a module rewrites the prompts of the
+modules that depend on it (see the protocol), so the block here is always the current one, not the
+one written on 2026-08-30.
+
+**The UI source of truth is `docs/mockups/`.** Open `docs/mockups/index.html` and walk the flow
+before writing a screen. The mockups are static renders on the app's own tokens
+(`assets/tcms-mock.css` mirrors `frontend/src/index.css`), so a screen is a translation into the kit
+and TanStack Query, not a redesign. The rule of precedence when they disagree: **on what a screen
+shows — layout, copy, empty state, the `⋮ Move to…` / `↑ ↓` keyboard paths — the mockup wins; on
+what the system does — permissions, module boundaries, what is written where — this plan and the
+scope spec win.** Every disagreement is recorded in the module's own plan, not resolved silently.
+
+### Prompt hand-off protocol
+
+What the agent does **after** its module's gates are green and its last commit is in, before it
+stops. This is part of the module's definition of done.
+
+1. **Status table.** Set the module's row to `done YYYY-MM-DD @ <short sha>` of the last commit.
+   If the module was cut short, `deferred` plus one line under the module section saying what was
+   left out — not `done`.
+2. **Built and unverified.** Under the module's section, add a `**Built and unverified:**` list of
+   what the gates proved compiles but nobody has clicked through — the gates prove it compiles, not
+   that it works.
+3. **The migration actually taken.** If the `V` number differs from the table, correct the table
+   and the module's `**db**` line, and *strike through* the reserved number rather than deleting it.
+4. **Rewrite the dependent prompts.** For every module whose *Depends on* names this one, edit its
+   prompt block below so it is true again: endpoint paths as they landed (not as this plan guessed),
+   a renamed table or package, a decision the module plan took that a downstream module must honour,
+   a mockup that turned out to be wrong. Edit the prompt text in place; do not append a changelog
+   under it. If nothing downstream changed, say so in the commit message rather than touching the
+   prompt.
+5. **Close what the module owned in the review table** — M4 closes R14; any module that hits R15
+   records the number it took.
+6. **Commit this document** in its own commit, `docs(plan): M<n> done`, staging only this file.
+
+The next agent trusts the status table and its prompt, and nothing else in this file is re-verified
+by it — which is why steps 1 and 4 are not optional.
+
+### M0 — Foundation
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
+(backend → /be-java with be-java-database-code and data-postgresql / data-migrations).
+Build module M0 — Foundation — of docs/plans/009-project-management-expansion-modules.md.
+
+Read, in this order: the M0 section of that plan, then "What every module carries" and "How a
+module is executed"; docs/specs/2026-08-30-project-management-expansion-scope.md §3, §7, D3, D28;
+stories F1 and F2 in docs/specs/2026-08-30-project-management-expansion-user-stories.md; and the
+mockups docs/mockups/teams.html and member.html — they show the three new roles being granted
+through the screens that already exist, and that is the claim M0 has to keep true.
+
+M0 has no dependency. Check the status table: nothing else may be in progress beside M0.
+
+Then:
+1. Before anything else, confirm the plan's "no screen changes" claim still holds: grep frontend/src
+   and packages/ for any role name hardcoded as a string. If one is found, removing it is your first
+   task.
+2. Write docs/plans/0NN-foundation.md with ep-writing-plans — next free NNN, never renumber. Check
+   backend/src/main/resources/db/migration/ for the next free V; the plan's table says V2, the
+   directory is the authority.
+3. Execute with ep-executing-plans. One commit per task, `git add <paths>` only. The contract
+   change (Role.name enum + both generated clients) is its own commit. The three roles docs —
+   roles spec §A3, permission-matrix-summary.md, README.md — change in one commit or
+   matrixCopies.test.ts reddens. The ERD amendment to key design (project_key_sequence, not a
+   key_sequence PK change — review R1) goes in the superseded style, struck through with the reason.
+4. Gates on shanks via ~/bin/tcms-remote: sync, backend ./gradlew build, frontend npm run build &&
+   lint && test:run, packages npm run build. Read docs/specs/shanks-runner-details.md first.
+5. Done when: SchemaConventionTest, matrixCopies.test.ts and tierClaims.test.ts are green; a company
+   still provisions; a new project gets its project_key_sequence row; the three roles are grantable
+   from the existing member screen; `git diff --stat frontend/src` names only
+   frontend/src/api/schema.d.ts.
+6. Close per "Prompt hand-off protocol" in the plan: status table, built-and-unverified list, the V
+   actually taken, and rewrite the prompts of M1, M7 and Mc with anything they now depend on that
+   changed (the allocator's class and method name, the event or seam project exposes).
+````
+
+### M1 — Tracker core
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
+(/be-java + be-java-database-code + data-postgresql for the backend, /fe-react for every screen).
+Build module M1 — Tracker core — of docs/plans/009-project-management-expansion-modules.md.
+
+Read, in this order: the M1 section of that plan, then "What every module carries" and "How a
+module is executed"; docs/specs/2026-08-30-project-management-expansion-scope.md §3, §4, D8, D11,
+D12, D29, D31; stories H1–H6, H8 and B1, B5 in
+docs/specs/2026-08-30-project-management-expansion-user-stories.md; and the mockups — open
+docs/mockups/index.html and walk: work-table.html, epic.html, story.html, task.html,
+issue-new.html, documents.html, settings-workflow.html, settings-general.html, my-work.html,
+project-overview.html (without its release and test-health panels — those are M3; a missing panel
+explains itself, it does not render empty) and solo-overview.html (the same overview for a company
+with no clients — an acceptance criterion, not a separate screen). The mockups are the source of
+truth for what a screen shows; the plan and the scope spec for what the system does. Record every
+disagreement in your module plan.
+
+Confirm M0 reads `done` in the plan's status table before starting. If another module is in
+progress, read "What can run in parallel" — only Mc may run beside M1.
+
+M0 landed on 2026-08-30 (`V2`, plan 010). What it gives you, and what it costs you:
+
+- The issue-key allocator is `com.tcms.project.ProjectKeys` in the `project` foundation module —
+  `allocate(UUID projectId, int count)` returning `Allocation(prefix, firstValue, count)`, with
+  `keyAt(i)` spelling `ACME-1` and `seqAt(i)` giving the `BIGINT` you sort on. Importing it from
+  `tracker` is legal; `project` is one of the five foundation modules. Do NOT reach for
+  `tenancy.DisplayKeys` — that one is per company, is unchanged, and its `EntityType` enum still has
+  five members with no `ISSUE`. It throws `IllegalStateException` when the counter row is missing OR
+  the project is not visible in the active company: those are deliberately one answer.
+- **`ProjectKeys.allocate` carries an entry in `ArchitectureRulesTest.UNEXERCISED_BY_DECISION`
+  saying it has no production caller until M1. DELETE THAT ENTRY** in the task that first calls it —
+  the rule fails in both directions, so an entry that stopped describing an unexercised method is
+  as red as an unexercised method with no entry.
+- The counter row is created by `tcms_seed_project_defaults`, not by any Java code. If you add a
+  fourth project-creation path, call that function and the row is free. That function is reproduced
+  IN FULL under `CREATE OR REPLACE` in `V2` — if you touch it, reproduce every block again or the
+  ones you omit silently stop being seeded. `ProjectKeySequenceSchemaTest` is the check that a
+  block went missing.
+- `doc_link.source_type` accepts `'ISSUE'` (named constraint `ck_doc_link_source_type`).
+  `com.tcms.documentation.LinkSourceType` deliberately does NOT — the column is wider than the enum
+  by design, and adding the member is M1's, in the slice that first writes such a row.
+- Test Engineer holds `issue:read`, `issue:create`, `issue:edit`, `issue:comment`, `board:read`,
+  `release:read`, `time:log`. Test Lead holds `issue:*` and, per D3 taken literally, NOTHING from
+  `board:*`, `release:*` or `time:*` beyond `board:read`, `release:read` and `time:log`. Viewer
+  holds `issue:read`, `issue:comment`, `board:read`, `release:read`. Automation Service gained
+  `issue:read` and `board:read` and nothing else. Agent is Test Engineer minus `company:read`,
+  derived in the migration — you do not seed it.
+- **Project Manager holds every `issue:*` key and all five `project:*` keys**, and holds no
+  test-authoring, execution or approval key at all. A screen that gates on `case:edit` will refuse
+  a PM; one that gates on `issue:edit` will not.
+- There is no `board:move`: dragging a card changes the issue's status and costs `issue:edit`.
+- `SeedDataTest.SPEC_COLUMNS` now has ten entries and `roleMatrix.ts`'s `COLUMNS` has seven. A §A3
+  table you add must carry all seven `PROJECT` columns — `IA CA PM TL TE AS V` — or `roleMatrix()`
+  will not read it as a project table, and a heading it does not know is a hard failure rather than
+  a skipped column. `SeedDataTest.nineBuiltInRoles` and `theAssignableRolesAreTheEight` enumerate
+  the role rows; `automationServiceIsTheSmallestRole` and `ApiTokenAuthenticationTest` enumerate
+  §A6's grant in two places. Any role or grant you move touches all of them.
+- The catalogue is 89 keys. If M1 needs a key M0 did not seed, that is a `V3` row plus the same five
+  documents in one commit — the tax does not get cheaper for being small.
+- **The Help page's hand-written prose is not swept by any test.** `tierClaims.test.ts` only catches
+  a claim that somebody *lacks* a permission; M0 shipped three false sentences in
+  `frontend/src/features/help/sections.tsx` that every gate passed, including a positive list of who
+  holds `project:members`. Read that file when you move a grant.
+
+Then:
+1. Write docs/plans/0NN-tracker-core.md with ep-writing-plans — next free NNN. Check
+   backend/src/main/resources/db/migration/ for the next free V; the table says V3, the directory
+   is the authority. The plan must cover, as its own tasks: the work_item → issue migration
+   (parentless Stories, verified by counting rows either side); the file-by-file retirement of
+   `work` listed in the M1 section, with BoardFacts / BoardService / BoardPeople /
+   ItemAssignedEvent / derived_item_annotation staying; the ProjectCreatedEvent that `project`
+   publishes and `tracker` consumes to seed the workflow; the V-backfill of the workflow for
+   existing projects; issue_fact with created_at / status_entered_at / done_at /
+   release_assigned_at, fed by a CompanyScopedEvent and written by nothing else; and BoardFacts
+   gaining the ISSUE generator so My Work stays composite (D11).
+2. Execute with ep-executing-plans. Contract first, in one commit: openapi.yaml (every schema with
+   its `required` array, inline objects included), both generated clients, contractBodies.ts in
+   both copies; /work-items removed, the six work-item CLI/MCP verbs replaced by issue verbs, and
+   docs/specs/2026-08-08-mcp-tool-and-command-surface.md updated. One commit per task,
+   `git add <paths>` only. New enums into lib/labels.ts; one keys factory; the fault switch in
+   src/lib/devFaults.ts before the screen that proves it; every screen through DataRegion.
+3. Gates on shanks via ~/bin/tcms-remote (sync, backend ./gradlew build, frontend build + lint +
+   test:run, packages build). Read docs/specs/shanks-runner-details.md first.
+4. Done when: a person runs a project's work in the UI with no board; My Work shows their issues
+   across two projects beside their pending reviews and executions, with the private note and
+   personal due date; every pre-upgrade work_item is still there, called a Task, with a key;
+   ./gradlew build green on shanks.
+5. Close per "Prompt hand-off protocol": status table, built-and-unverified list, the V actually
+   taken, and rewrite the prompts of M2, M4, M5 and M6 with the endpoint paths, package names,
+   event names and issue_fact columns as they actually landed.
+````
+
+### M2 — Board & backlog
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
+(/be-java for the backend, /fe-react for every screen, fe-react-accessibility for the board).
+Build module M2 — Board & backlog — of docs/plans/009-project-management-expansion-modules.md.
+
+Read, in this order: the M2 section of that plan (including the paragraph on a status created
+after a board exists), then "What every module carries" and "How a module is executed";
+docs/specs/2026-08-30-project-management-expansion-scope.md §2, D2, D34; stories B2, B3, B4 in
+docs/specs/2026-08-30-project-management-expansion-user-stories.md; and the mockups — walk
+work-board.html, work-backlog.html, settings-boards.html, and the tabbed Work entry they share with
+work-table.html (one filter, in the URL, across every view). The mockups are the source of truth
+for the screen: every card has a `⋮ Move to…`, every rankable row a `↑ ↓` pair, chip rows wrap,
+tables scroll inside themselves. The plan and the scope spec are the source of truth for behaviour.
+
+Confirm M1 reads `done` in the status table before starting. Only M6 or M7 may run beside M2.
+
+This is the hardest frontend in the expansion and your module plan must say so: optimistic
+reordering on a fractional rank, swimlanes by epic, WIP limits that report a breach rather than
+refusing a drop, and keyboard parity with the pointer. frontend/src/features/board/cardMove.ts and
+boardKeyboard.ts exist and are the starting point — extend them, do not fork them.
+
+Then:
+1. Write docs/plans/0NN-board-and-backlog.md with ep-writing-plans — next free NNN, next free V
+   from the migration directory (the table says V4). `tracker.board` is a sub-package, not a
+   module.
+2. Execute with ep-executing-plans. Contract first in one commit (openapi.yaml with `required`
+   arrays, both generated clients, contractBodies.ts ×2, the CLI/MCP verbs and the surface doc).
+   One commit per task, `git add <paths>` only. Filter state lives in the URL. The fault switch
+   for a failed move (the card snaps back and says why) lands before the board.
+3. Gates on shanks via ~/bin/tcms-remote. Read docs/specs/shanks-runner-details.md first.
+4. Done when: a card moved on the team board is in the matching column on the stakeholder board;
+   both boards are workable with the keyboard alone; a WIP breach is shown, not enforced; a filter
+   set on Board survives switching to Table; a status added to the workflow after a board exists
+   appears in the same-kind default column.
+5. Close per "Prompt hand-off protocol": status table, built-and-unverified list, the V actually
+   taken, and rewrite the M3 prompt (and M4's, if label-per-sprint is now on offer) with what
+   landed.
+````
+
+### M3 — Releases, roadmap & readiness
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
+(/be-java for the backend, /fe-react for every screen).
+Build module M3 — Releases, roadmap & readiness — of
+docs/plans/009-project-management-expansion-modules.md.
+
+Read, in this order: the M3 section of that plan (the ReleaseSortKey move to `api` and the
+test_run.release_id FK decision are settled there — review R6), then "What every module carries"
+and "How a module is executed"; docs/specs/2026-08-30-project-management-expansion-scope.md §4
+(the QA link), §5, D6, D8, D13, D14, D27; stories H7, R1–R4 in
+docs/specs/2026-08-30-project-management-expansion-user-stories.md; and the mockups — walk
+releases.html, release-new.html, release.html, work-timeline.html, work-calendar.html, the release
+and test-health panels of project-overview.html that M1 left out, solo-overview.html for the
+no-client rendering, and test-cases.html for its new "verifies which stories" column. Mockups win
+on what a screen shows; the plan and scope spec on what the system does.
+
+Confirm M2 reads `done` in the status table before starting. Only M6 or M7 may run beside M3.
+
+Then:
+1. Write docs/plans/0NN-releases.md with ep-writing-plans — next free NNN, next free V from the
+   migration directory (the table says V5). `release` carries created_at (M9's burn-up baseline);
+   `release_sort_key` comes off READERLESS_BY_DECISION in the commit that first reads it.
+2. Execute with ep-executing-plans. Contract first in one commit (openapi.yaml with `required`
+   arrays, both generated clients, contractBodies.ts ×2, CLI/MCP verbs, the surface doc). One
+   commit per task, `git add <paths>` only. No backfill (D14): nothing is migrated into `release`.
+3. Gates on shanks via ~/bin/tcms-remote. Read docs/specs/shanks-runner-details.md first.
+4. Done when: a release with a done story whose linked test case failed reads NOT READY and names
+   that story; a release with no run says so rather than showing zero failures; 1.10 sorts after
+   1.9; and — this is an acceptance criterion — the empty roadmap on the day this merges explains
+   itself and carries the action that resolves it, because nobody has created a release yet.
+5. Close per "Prompt hand-off protocol": status table, built-and-unverified list, the V actually
+   taken, and rewrite the M9 prompt (and M5's `release` field, if its shape changed) with the
+   readiness and roadmap endpoints as they landed.
+````
+
+### M4 — Jira offramp
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
+(/be-java for the backend, /fe-react for every screen).
+Build module M4 — Jira offramp — of docs/plans/009-project-management-expansion-modules.md.
+
+Read, in this order: the M4 section of that plan — the importer is a `tracker.imports`
+sub-package with its own read client, the outbound adapters in integration/tracker are neither
+reused nor changed, and sprints are dropped-and-reported (reviews R7, R8) — then "What every module
+carries" and "How a module is executed"; docs/specs/2026-08-30-project-management-expansion-scope.md
+D5, D15, D32 and §10; stories J1–J3 in
+docs/specs/2026-08-30-project-management-expansion-user-stories.md; and the mockups — walk the flow
+import-connect.html → import-preview.html → import-mapping.html → import-report.html, plus
+settings-import.html. The mockups are the source of truth for the screens; the plan and scope
+spec for behaviour.
+
+Confirm M1 reads `done` in the status table before starting. Only M7 may run beside M4.
+
+Review R14 is yours to close in your module plan: whether the importer may reuse the per-person
+credential in integration.tracker (TrackerIdentity / TrackerCredential). Reusing it is a forbidden
+module crossing; the alternative — the connection entered per run on import-connect.html and stored
+encrypted on import_run — is what the mockup already shows. Decide, write the reason, close R14 in
+the plan's review table.
+
+Then:
+1. Write docs/plans/0NN-jira-offramp.md with ep-writing-plans — next free NNN, next free V from the
+   migration directory (the table says V6). import_run and import_dropped_field so the report
+   outlives the migration.
+2. Execute with ep-executing-plans. Contract first in one commit (openapi.yaml with `required`
+   arrays, both generated clients, contractBodies.ts ×2, CLI/MCP verbs, the surface doc). One
+   commit per task, `git add <paths>` only. The preview writes nothing (D32) — prove it with a test
+   that diffs the project before and after. The mapping step refuses to confirm while one status is
+   unmapped. Original keys survive (D5). The fault switch for a Jira that stops answering mid-import
+   lands before the importer.
+3. Gates on shanks via ~/bin/tcms-remote. Read docs/specs/shanks-runner-details.md first.
+4. Done when: a preview leaves the project byte-identical; PROJ-4812 is still PROJ-4812 after
+   import; the dropped-field list in the report matches the preview's word for word; a report can
+   be reopened after the import_run's source is gone.
+5. Close per "Prompt hand-off protocol": status table, built-and-unverified list, the V actually
+   taken, R14 closed. No module depends on M4; say so in the commit message.
+````
+
+### M5 — Agent execution
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
+(/be-java for the backend, /fe-react for every screen, tooling:tool-mcp-builder and
+tool-cli-builder for the issue tool surface).
+Build module M5 — Agent execution — of docs/plans/009-project-management-expansion-modules.md.
+
+Read, in this order: the M5 section of that plan (`release` in the fetch payload is nullable from
+the first contract — review R9), then "What every module carries" and "How a module is executed";
+docs/specs/2026-08-30-project-management-expansion-scope.md D10, D16, D21, D25, D26, D30, D33;
+stories A1–A7 in docs/specs/2026-08-30-project-management-expansion-user-stories.md;
+docs/specs/2026-08-08-mcp-tool-and-command-surface.md for the surface you are extending; and the
+mockups — walk profile-assistants.html, assistant-connect.html, story-proposal.html,
+settings-repositories.html, the AI-eligible toggle and marker on task.html / work-table.html /
+work-board.html, and the "Connect an AI assistant" entry on help.html. The mockups are the source
+of truth for the screens; the plan and scope spec for behaviour — in particular: no agent
+principal, no orchestrator, no runner, no forge adapter, no model credential. The API token is the
+identity; actions attribute to "<person>, via <assistant>".
+
+Confirm M1 reads `done` in the status table before starting. Only M7 may run beside M5.
+
+Then:
+1. Write docs/plans/0NN-agent-execution.md with ep-writing-plans — next free NNN, next free V from
+   the migration directory (the table says V7). project_repository as reference data, issue.pr_url,
+   issue.agent_eligible, review_enabled_issue defaulting to false.
+2. Execute with ep-executing-plans. Contract first in one commit (openapi.yaml with `required`
+   arrays, both generated clients, contractBodies.ts ×2). The legal-transition set goes on the wire
+   so the caller learns what it may do. The CLI and MCP verbs, and the surface doc, are the feature
+   here, not the tax — build them with the tooling skills and smoke-test them against a running
+   backend. One commit per task, `git add <paths>` only.
+3. Gates on shanks via ~/bin/tcms-remote. Read docs/specs/shanks-runner-details.md first.
+4. Done when: a scoped assistant asking for another project's tasks receives nothing from it; an
+   assistant's attempt to move a task to Done is refused with the reason, and the refusal is on the
+   issue's history; a one-person company can still close its own work (A6); a fetched task carries
+   its story, acceptance criteria, epic goal, release (null until M3), spec excerpts and build
+   command.
+5. Close per "Prompt hand-off protocol": status table, built-and-unverified list, the V actually
+   taken. No module depends on M5; if M3 has not landed, leave a one-line note in the M3 prompt
+   naming the `release` field M3 must populate.
+````
+
+### M6 — Time
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
+(/be-java for the backend, /fe-react for every screen).
+Build module M6 — Time — of docs/plans/009-project-management-expansion-modules.md.
+
+Read, in this order: the M6 column of the "M6 · M7 · M8" section of that plan — approved hours roll
+up as a `time`-owned projection that READS issue_fact and never writes it (review R10) — then "What
+every module carries" and "How a module is executed";
+docs/specs/2026-08-30-project-management-expansion-scope.md §3, §7; stories T1–T3 in
+docs/specs/2026-08-30-project-management-expansion-user-stories.md; and the mockups — walk
+timesheets.html and timesheet-approvals.html, and the estimate-vs-actual figures on story.html and
+epic.html. The mockups are the source of truth for the screens; the plan and scope spec for
+behaviour.
+
+Confirm M1 reads `done` in the status table before starting. This module may run beside M2 or M3
+(it touches no tracker file); check "What can run in parallel" and the status table.
+
+Then:
+1. Write docs/plans/0NN-time.md with ep-writing-plans — next free NNN, next free V from the
+   migration directory (the table says V8; if a second lane has landed since, it is not). New
+   `time` module: time_entry (subject_type + subject_id — an issue, a meeting, leave),
+   timesheet_period.
+2. Execute with ep-executing-plans. Contract first in one commit (openapi.yaml with `required`
+   arrays, both generated clients, contractBodies.ts ×2, CLI/MCP verbs, the surface doc). One
+   commit per task, `git add <paths>` only. The money boundary needs a test asserting the negative:
+   a Test Engineer with time:log logs hours and cannot read a rate; write that test now even though
+   rates arrive in M8, so M8 inherits it.
+3. Gates on shanks via ~/bin/tcms-remote. Read docs/specs/shanks-runner-details.md first.
+4. Done when: a person logs time against an issue, a meeting and leave; submits a period; a PM
+   approves or rejects with a note; approved hours show on the story, epic and project; a rejected
+   period is editable again and a submitted one is not.
+5. Close per "Prompt hand-off protocol": status table, built-and-unverified list, the V actually
+   taken, and rewrite the M8 prompt (and M7's utilisation note) with the time endpoints and the
+   projection's table name as they landed.
+````
+
+### M7 — Staffing
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
+(/be-java for the backend, /fe-react for every screen).
+Build module M7 — Staffing — of docs/plans/009-project-management-expansion-modules.md.
+
+Read, in this order: the M7 column of the "M6 · M7 · M8" section of that plan — it depends on M0
+only (review R11); utilisation (allocated vs logged) is out unless M6 reads `done` — then "What
+every module carries" and "How a module is executed";
+docs/specs/2026-08-30-project-management-expansion-scope.md §7; stories S1, S2 in
+docs/specs/2026-08-30-project-management-expansion-user-stories.md; and the mockups — walk
+staffing.html and directory.html, and teams.html / member.html for where profiles and skills
+surface. The mockups are the source of truth for the screens; the plan and scope spec for
+behaviour.
+
+Confirm M0 reads `done` in the status table before starting. This module touches no tracker file
+and may run beside M2–M5; check "What can run in parallel" and the status table.
+
+M0 landed on 2026-08-30 (`V2`, plan 010). Staffing's five keys are split across two scopes and the
+split is load-bearing, not cosmetic:
+
+- `staffing:read` and `staffing:allocate` are **PROJECT** scope, held by Project Manager (and the
+  two admin tiers), and answer "who is on THIS project and at what percentage" — story S1. They sit
+  in roles spec §A3's `#### Staffing` PROJECT table.
+- `staffing:directory`, `staffing:profile` and `staffing:absence` are **COMPANY** scope, held by
+  Account Manager — and `staffing:directory` by Finance too, because utilisation is a money question
+  as much as a staffing one. They answer the company-wide capacity and skills questions of story S2
+  and sit in §A3's `#### Staffing — COMPANY scope` table.
+
+Do not grant a COMPANY-scope key to a PROJECT-scope role: `PermissionEvaluator.evaluateCompanyWide`
+reads the SYSTEM and COMPANY terms only, so the row would be unreachable — the defect §43 repaired
+for `company:read`, still visible as four entries in `SeedDataTest.MATRIX_DIVERGENCE_BY_DECISION`
+(Test Lead, Test Engineer, Viewer and now Project Manager).
+
+Account Manager and Finance hold **no `project:read` and no `report:view`**, deliberately (plan 010
+D-M0-8): both are COMPANY-scope, so either key would open every project in the company, present and
+future. If M7 needs an Account Manager to see something that lives inside a project, serve it from
+the staffing aggregate under `staffing:directory` rather than widening their grant.
+
+The over-allocation flag and the capacity view are company-wide reads; the per-project allocation
+editor is not. Gate each on the key from the matching scope, or the screen will 403 for the role it
+was designed for.
+
+Then:
+1. Write docs/plans/0NN-staffing.md with ep-writing-plans — next free NNN, next free V from the
+   migration directory (the table says V9; it will not be if this lane runs early). New `staffing`
+   module: person_profile, skill, person_skill, allocation, absence.
+2. Execute with ep-executing-plans. Contract first in one commit (openapi.yaml with `required`
+   arrays, both generated clients, contractBodies.ts ×2, CLI/MCP verbs, the surface doc). One
+   commit per task, `git add <paths>` only. Absence zeroes capacity everywhere it is shown.
+3. Gates on shanks via ~/bin/tcms-remote. Read docs/specs/shanks-runner-details.md first.
+4. Done when: a PM allocates a person to two projects at percentages, the over-allocation flag
+   appears at 101%, an absence zeroes that week's capacity on every screen that shows it, and
+   "who is free next month with skill X" is answerable from the directory.
+5. Close per "Prompt hand-off protocol": status table, built-and-unverified list, the V actually
+   taken. No module depends on M7; if M6 is done, say in the M9 prompt whether utilisation landed.
+````
+
+### M8 — Billing
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
+(/be-java for the backend, /fe-react for every screen).
+Build module M8 — Billing — of docs/plans/009-project-management-expansion-modules.md.
+
+Read, in this order: the M8 column of the "M6 · M7 · M8" section of that plan and the paragraph
+under it on the money boundary, then "What every module carries" and "How a module is executed";
+docs/specs/2026-08-30-project-management-expansion-scope.md §3, §7, D24; stories M1, M2 in
+docs/specs/2026-08-30-project-management-expansion-user-stories.md; and the mockups — walk
+billing.html, invoice.html, and the hours-and-invoices table on client.html. Note the `as …`
+switcher in the mockups: Billing is ABSENT from the sidebar for everyone but Finance and Company
+Admin — absent, not greyed out. The mockups are the source of truth for the screens; the plan and
+scope spec for behaviour.
+
+Confirm M6 AND Mc both read `done` in the status table before starting. Only M9 may run beside M8.
+
+Then:
+1. Write docs/plans/0NN-billing.md with ep-writing-plans — next free NNN, next free V from the
+   migration directory (the table says V10; the directory is the authority). New `billing` module:
+   rate_card, rate_card_entry, budget, invoice, invoice_line, expense. Time and materials only
+   (D24); AI-assistant usage is a cost, never a line.
+2. Execute with ep-executing-plans. Contract first in one commit (openapi.yaml with `required`
+   arrays, both generated clients, contractBodies.ts ×2, CLI/MCP verbs, the surface doc). One
+   commit per task, `git add <paths>` only. Extend the negative test M6 wrote: a Test Engineer
+   cannot see what their hours cost; an Account Manager sees the client, the hours and never a
+   rate. Assert that they LACK it — do not read the matrix and conclude it holds. Invoice lines lock
+   on issue.
+3. Gates on shanks via ~/bin/tcms-remote. Read docs/specs/shanks-runner-details.md first.
+4. Done when: approved hours are priced by the rate card, budget burn is visible, a draft invoice
+   is issued and its lines are then immutable, and the two negative permission tests are green.
+5. Close per "Prompt hand-off protocol": status table, built-and-unverified list, the V actually
+   taken. No module depends on M8.
+````
+
+### M9 — Delivery analytics
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
+(/be-java for the reporting types, /fe-react + the dataviz skill for the charts).
+Build module M9 — Delivery analytics — of docs/plans/009-project-management-expansion-modules.md.
+
+Read, in this order: the M9 section of that plan — it has NO migration, which holds only because
+M1 put created_at / status_entered_at / done_at / release_assigned_at on issue_fact and M3 put
+created_at on release (review R12); verify those columns exist before writing the plan, and if one
+is missing, M9 takes the next free V — then "What every module carries" and "How a module is
+executed"; docs/specs/2026-08-30-project-management-expansion-scope.md D6 (no velocity — there is
+no sprint to measure it over); story P1 in
+docs/specs/2026-08-30-project-management-expansion-user-stories.md; and the mockup reports.html.
+The mockup is the source of truth for the screen; the plan and scope spec for what is computed.
+
+Confirm M3 reads `done` in the status table before starting. Only M8 may run beside M9.
+
+Then:
+1. Write docs/plans/0NN-delivery-analytics.md with ep-writing-plans — next free NNN. Report types
+   in `reporting`, reading issue_fact and execution_fact; nothing imports tracker.
+2. Execute with ep-executing-plans. Contract first in one commit (openapi.yaml with `required`
+   arrays, both generated clients, contractBodies.ts ×2, CLI/MCP verbs, the surface doc). One
+   commit per task, `git add <paths>` only. Every chart reads correctly in light and dark on the
+   app's tokens, and a report with too little data says so rather than drawing a flat line.
+3. Gates on shanks via ~/bin/tcms-remote. Read docs/specs/shanks-runner-details.md first.
+4. Done when: a release burn-up distinguishes scope added after the release was created; cycle
+   time is shown per issue type; the cumulative flow reads from issue_fact's status timestamps; no
+   velocity chart exists anywhere.
+5. Close per "Prompt hand-off protocol": status table, built-and-unverified list. No module
+   depends on M9.
+````
+
+### Mc — Clients
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
+(/be-java + be-java-database-code for the backend, /fe-react for every screen).
+Build module Mc — Clients — of docs/plans/009-project-management-expansion-modules.md.
+
+Read, in this order: the Mc section of that plan — the empty case is the acceptance criterion —
+then "What every module carries" and "How a module is executed";
+docs/specs/2026-08-30-project-management-expansion-scope.md D1; stories C1–C3 in
+docs/specs/2026-08-30-project-management-expansion-user-stories.md; and the mockups — walk
+clients-empty.html, clients.html, client.html, client-new.html, the Client column and filter on
+projects.html, the Client field on project-new.html and settings-general.html, and
+solo-overview.html against project-overview.html — the same overview with nothing client-shaped on
+it. The mockups are the source of truth for the screens; the plan and scope spec for behaviour.
+
+Confirm M0 reads `done` in the status table before starting. Mc may run beside M1 (it touches
+`crm`, the projects list and project's edit form, nothing in tracker); check "What can run in
+parallel" and the status table.
+
+M0 landed on 2026-08-30 (`V2`, plan 010). Three things it decided that Mc must honour:
+
+- **`project.client_id` exists already**, as `UUID NULL`, with **no** `REFERENCES` and **not mapped**
+  on `com.tcms.project.Project`. Mc adds the FK to `client(id)` and the entity mapping together, in
+  one migration. It is unmapped on purpose: `ArchitectureRulesTest` sweeps `@Entity` fields for
+  readerless and writerless columns in both directions, so a mapping added by M0 would have been an
+  entry Mc then had to remove. A project with no client is not incomplete and nothing renders it as
+  missing — NULL is the real answer for a company running its own product.
+- `client:read`, `client:create`, `client:edit` and `client:delete` are **already seeded**, COMPANY
+  scope, held by Instance Admin, Company Admin and Account Manager, with **Finance holding
+  `client:read` alone** — an invoice has to name a client, and editing the record is the Account
+  Manager's job. Do not add client keys; do not move these grants without the five-document tax.
+- **Story C2's client picker rides `project:settings`, not `client:read`** (plan 010 D-M0-9).
+  Project Manager is PROJECT-scope, so a company-wide `client:read` would be an inert row for them,
+  and granting `client:read` to the `Company Member` baseline would break the one sentence that role
+  is defined by — "exactly `company:read` and nothing else". Serve the picker from the
+  project-settings endpoint.
+
+`ExportCompanyService` needs no change for `client` or `client_contact`: `ExportTables` derives the
+walked set from the tables carrying a `company_isolation` policy, so a company-owned table with the
+standard policy is exported by construction. `project_key_sequence` arrived that way in `V2`.
+
+Then:
+1. Write docs/plans/0NN-clients.md with ep-writing-plans — next free NNN, and the NEXT FREE V from
+   the migration directory: Mc reserved no number on purpose. New `crm` module: client,
+   client_contact (contacts never become logins); the FK constraint on the project.client_id
+   column M0 shipped without one.
+2. Execute with ep-executing-plans. Contract first in one commit (openapi.yaml with `required`
+   arrays, both generated clients, contractBodies.ts ×2, CLI/MCP verbs, the surface doc). One
+   commit per task, `git add <paths>` only.
+3. Gates on shanks via ~/bin/tcms-remote. Read docs/specs/shanks-runner-details.md first.
+4. Done when: with no clients there is no Client column, no Client filter, no Client field, no
+   "attach a client" prompt and nothing marking a project as missing one — tested as an absence,
+   because a company building its own products is the owner's own case; with one client, a project
+   attaches to it and the column, filter and per-client rollups appear where they are relevant.
+5. Close per "Prompt hand-off protocol": status table, built-and-unverified list, the V taken, and
+   rewrite the M8 prompt with the client endpoints and the client page's hours-and-invoices slot as
+   they landed.
+````
+
+---
+
+## What can run in parallel
+
+*Added 2026-08-30 from the review below.* The dependency graph is
+`M0 → M1 → {M2 → M3 → M9} · {M4} · {M5} · {M6 → M8}`, with `M7` and `Mc` after M0 and `M8` after
+M6 + Mc. **Independent in the graph is not the same as safe beside each other**: M2, M3, M4 and M5
+all edit `tracker`'s `Issue` entity and service (M2 adds `rank`, M5 adds `pr_url` and
+`agent_eligible`, M4 writes issues, M3 adds `release_id`), so they serialise regardless of what the
+table says. What is disjoint by *module and file*:
+
+| Safe beside each other | Why |
+|---|---|
+| **M1 ‖ Mc** | `tracker` vs the new `crm`; Mc's only overlap is the projects list screen and `project`'s edit form |
+| **M2 ‖ M6**, **M3 ‖ M6**, **M3 ‖ M7** | `tracker.board` / release vs `time` / `staffing`; `time` only *reads* `issue_fact` |
+| **M4 ‖ M7**, **M5 ‖ M7** | `staffing` touches no `tracker` file |
+| **M9 ‖ M8** | `reporting` reads vs `billing` writes |
+
+**Never beside each other:** M0 and anything (it edits the three pinned matrix copies and the
+`Role` enum); M2 / M3 / M4 / M5 with one another; M8 before Mc has landed.
+
+**The practical shape is two lanes at most, in two checkouts:**
+
+- **Lane A — the tracker spine:** `M0 → M1 → M2 → M3 → M5 → M4 → M9`.
+- **Lane B — people and money:** `Mc → M7 → M6 → M8`, starting once M0 has merged; M6 waits for M1,
+  M8 for M6 and Mc.
+
+Conditions, all from `parallel-work-rules.md` and none of them optional: one holder of
+`openapi.yaml` and `npm run gen:api` per commit (two regenerations do not merge); the fixture UUID
+prefix space pre-assigned; **migration versions assigned in landing order at integration, not from
+this document's table** — the moment lane B lands anything before M3, the `V8 / V9 / V10` reserved
+for M6–M8 above are wrong, and a lower number arriving after a higher one is refused on every
+already-migrated database while Testcontainers stays green.
+
+**Files both lanes touch no matter what**, so a merge is expected on each: `src/api/queries/keys.ts`,
+`lib/labels.ts`, `lib/permissions.ts`, the router and navigation, `lib/devFaults.ts`,
+`contractBodies.ts` in both copies, `docs/features.md`, and the MCP surface document.
+
+---
+
+## Review of 2026-08-30 — what was found, and what became of it
+
+The plan was checked against the code before any module plan was written. Each item is marked
+where it was resolved above; the two that need the owner or a module plan are named as such.
+
+| # | Finding | Status |
+|---|---|---|
+| R1 | M0's `key_sequence` PK `(company_id, entity_type, project_id)` with `project_id` nullable is invalid — Postgres rejects a nullable PK column. Seven Java readers and the V1 seed function were also unlisted. | **Resolved** — new `project_key_sequence` table owned by `project`; `key_sequence` untouched. M0 db + be. |
+| R2 | M0's "`git diff --stat frontend/src` is empty" contradicted "both generated clients move" — `schema.d.ts` is under `frontend/src`, and `Role.name` is a contract enum. | **Resolved** — done-when names the one generated file. |
+| R3 | M0's `project.client_id` bullet said `REFERENCES client(id)` and "the FK is added by Mc" in one sentence. | **Resolved** — column only, no `REFERENCES`. |
+| R4 | M1 said "the `work` module retires" and "`BoardFacts` does not retire" with no file list; nothing said what happens to `/work-items`, its CLI/MCP verbs, or `workitem:manage` in the three pinned copies. | **Resolved** — file list, contract removal and matrix strike-through in M1 db. |
+| R5 | M1 seeds the workflow "per project" but `project` cannot import `tracker`, and no project-created event exists. | **Resolved** — `V3` backfill + new `ProjectCreatedEvent` consumed by `tracker`. |
+| R6 | M3: `ReleaseSortKey` lives in `execution`, so `tracker` importing it is a forbidden crossing; `test_run.release_id` as a hard FK looked like it broke §3. | **Resolved** — `ReleaseSortKey` moves to `api`; the FK is kept, with the reason. |
+| R7 | M4's "existing Jira/ADO adapters gain an importer direction" — they are outbound single-issue clients, and an importer in `integration` writing `issue` is a forbidden crossing. | **Resolved** — importer is `tracker.imports` with its own read client; adapters untouched. |
+| R8 | M4's dependency on M1 alone held only if Jira sprints are not turned into labels (M2). | **Resolved** — sprints dropped and reported; label-per-sprint optional if M2 already exists. |
+| R9 | M5's fetch payload included `release`, which is M3. | **Resolved** — nullable from the first contract. |
+| R10 | M6 "roll up … via `issue_fact`" read as `time` writing `issue_fact` — the trap §3 forbids. | **Resolved** — reworded as a `time`-owned projection. |
+| R11 | M7 depended on M6 for nothing it reads. | **Resolved** — M7 depends on M0; utilisation stays out unless M6 landed. |
+| R12 | M9 "needs no migration" was only true if M1/M3 stored timestamps `issue_fact` was not sketched with. | **Resolved** — four timestamps on `issue_fact` in M1, `release.created_at` in M3. |
+| R13 | M2 did not say what happens to a workflow status added after a board exists. | **Resolved** — auto-claimed by the same-`kind` default column; unique index, not a CHECK. |
+| R14 | M4: whether the importer may reuse `integration.tracker`'s per-person credential. | **Open — for M4's own plan.** Reuse is the same forbidden crossing; the alternative is the connection entered per run and stored on `import_run`. |
+| R15 | The migration numbers `V8 / V9 / V10` for M6–M8 are wrong the moment a second lane lands anything out of table order. | **Open by design** — the reservation warning already covers it; the parallel section restates it because that is where it bites. |
+
+---
+
+## What this plan does not claim
+
+- **Not that the modules are equal in size.** M2 is the hardest and probably the longest; M0 and M9
+  are the shortest. The cut is by *what a person can do*, not by effort.
+- **Not that the estimates are here.** There are none in this document on purpose — a module's own
+  plan sizes it once its tasks exist, and a number written now would be a guess dressed as a plan.
+- **Not that §9 was wrong.** It optimised for cheap schema; this optimises for a working product at
+  every boundary. Both are defensible, and §9's reasoning is preserved rather than deleted so the
+  next reader can see it was considered.
+- **Not that the mockups are the design.** They are a reference on the right tokens. A screen is
+  finished when it is on the kit, wired to real endpoints, and handles the loading / loaded / failed
+  / empty / stale matrix through `DataRegion` — which no static render exercises.
