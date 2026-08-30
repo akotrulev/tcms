@@ -80,14 +80,56 @@ describe('RunSchedulePage', () => {
     expect(await screen.findByTestId('RunSchedules.Region.Empty')).toBeInTheDocument()
   })
 
-  it('renders a schedule with its cadence and zone', async () => {
+  it('reads the cadence out loud, and keeps the expression for whoever has to edit it', async () => {
+    // Renders audit 1.9: this cell printed the raw `0 0 3 * * MON-FRI`, where render G writes
+    // `Every weekday at 03:00 · Europe/Sofia`. The expression stays as the cell's title, because
+    // the prose is for reading and the string is for editing.
     mockReads([aRunSchedule()])
     renderPage()
 
     const row = await screen.findByTestId('RunSchedules.Row')
     expect(within(row).getByText('Nightly smoke')).toBeInTheDocument()
-    expect(within(row).getByText('0 0 3 * * MON-FRI')).toBeInTheDocument()
-    expect(within(row).getByText('Europe/Sofia')).toBeInTheDocument()
+    const cadence = within(row).getByTestId('RunSchedules.Row.Cadence')
+    expect(cadence).toHaveTextContent('Every weekday at 03:00 · Europe/Sofia')
+    expect(cadence).toHaveAttribute('title', '0 0 3 * * MON-FRI')
+  })
+
+  it('leads with the switch, because that is what this index is', async () => {
+    // Render G's caption: "the only index whose rows have an on/off, so the switch is the first
+    // column". The build had no Active column at all.
+    mockReads([aRunSchedule()])
+    renderPage()
+
+    const row = await screen.findByTestId('RunSchedules.Row')
+    expect(within(row).getByTestId('RunSchedules.Row.Active')).toBeInTheDocument()
+  })
+
+  it('pauses a schedule by restating the whole of it, never a patch of one field', async () => {
+    // There is no field-level endpoint, and the server reads an omission as a clear — so the
+    // switch has to send back the fields it shows no control for, exactly as the dialog does.
+    const stored = aRunSchedule({
+      assigneeId: 'user-9',
+      configurationId: 'cfg-1',
+      scope: { planId: 'plan-1', caseIds: ['c1'], suiteIds: ['s1'], tags: ['smoke'] },
+    })
+    mockReads([stored])
+    const put = vi.spyOn(api, 'put').mockResolvedValue({ ...stored, enabled: false } as never)
+    renderPage()
+
+    await settled('RunSchedules.Row.Active')
+    await userEvent.click(screen.getByTestId('RunSchedules.Row.Active'))
+
+    await waitFor(() =>
+      expect(put).toHaveBeenCalledWith(`/projects/${PROJECT}/run-schedules/rs-1`, {
+        name: stored.name,
+        cronExpression: stored.cronExpression,
+        zoneId: stored.zoneId,
+        scope: stored.scope,
+        configurationId: 'cfg-1',
+        assigneeId: 'user-9',
+        enabled: false,
+      }),
+    )
   })
 
   /** The feature's honesty, and the assertion that keeps it. */
@@ -127,7 +169,8 @@ describe('RunSchedulePage', () => {
     await waitFor(() => expect(create).toBeDisabled())
 
     expect(screen.getByTestId('RunSchedules.Row.Edit')).toBeDisabled()
-    expect(screen.getByTestId('RunSchedules.Row.Delete')).toBeDisabled()
+    // The switch is a write too, and §31 applies to it the same way: present and refused.
+    expect(screen.getByTestId('RunSchedules.Row.Active')).toBeDisabled()
   })
 
   it('keeps the enabled-only filter in the URL, not in component state', async () => {
@@ -139,7 +182,9 @@ describe('RunSchedulePage', () => {
     renderPage(`/projects/${PROJECT}/run-schedules?enabled=true`)
 
     await waitFor(() => expect(screen.getAllByTestId('RunSchedules.Row')).toHaveLength(1))
-    expect(screen.getByText('Active')).toBeInTheDocument()
+    // `getAllByText` and a length check: "Active" is now also the switch column's header, so a
+    // `getByText` here would fail on the header rather than on the row it means to assert.
+    expect(screen.getAllByText('Active').length).toBeGreaterThan(0)
     expect(screen.queryByText('Paused')).not.toBeInTheDocument()
   })
 
@@ -222,16 +267,32 @@ describe('RunSchedulePage', () => {
     ).toBeInTheDocument()
   })
 
-  it('deletes a schedule', async () => {
+  it('deletes a schedule from inside the dialog, and only on a second press', async () => {
+    // Delete moved off the row when the switch arrived (rule 7: a destructive act must not sit as
+    // the peer of a reversible one). It keeps a confirmation, which the switch deliberately does
+    // not have — that difference is the reason they are not neighbours.
     mockReads([aRunSchedule()])
     const del = vi.spyOn(api, 'del').mockResolvedValue(undefined as never)
     renderPage()
 
-    await settled('RunSchedules.Row.Delete')
-    await userEvent.click(screen.getByTestId('RunSchedules.Row.Delete'))
+    await settled('RunSchedules.Row.Edit')
+    await userEvent.click(screen.getByTestId('RunSchedules.Row.Edit'))
 
+    const remove = await screen.findByTestId('RunSchedules.Dialog.Delete')
+    await userEvent.click(remove)
+    expect(del).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByTestId('RunSchedules.Dialog.Delete'))
     await waitFor(() => expect(del).toHaveBeenCalledWith(
       `/projects/${PROJECT}/run-schedules/rs-1`,
     ))
+  })
+
+  it('offers no delete on the row at all', async () => {
+    mockReads([aRunSchedule()])
+    renderPage()
+
+    await screen.findByTestId('RunSchedules.Row')
+    expect(screen.queryByTestId('RunSchedules.Row.Delete')).not.toBeInTheDocument()
   })
 })

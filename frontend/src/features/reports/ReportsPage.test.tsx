@@ -20,7 +20,7 @@ import type { PermissionKey, ReportDefinition, ReportJob } from '../../api/types
  * its meaning.
  *
  * **The job list is the server's, and the poll stops.** ~~The set of jobs this screen shows is the
- * set this tab created.~~ → §227. The polling pair moved here from `ReportJobCard.test.tsx` when
+ * set this tab created.~~ → §227. The polling pair moved here from `ReportJobRow.test.tsx` when
  * the card stopped fetching, and it is still a pair for the reason it always was: "a finished list
  * stops polling" alone is satisfied by a component that never polls, by a query client with
  * intervals disabled, and by a wait shorter than one interval. Only the running half proves the

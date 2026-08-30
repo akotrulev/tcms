@@ -10,6 +10,7 @@ import {
 } from '../../api/queries';
 import type { RunSchedule, RunScheduleInput } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
+import { describeCron } from '../../lib/cron';
 import { Identifier } from '../../components/Identifier';
 import {
   Banner,
@@ -75,12 +76,30 @@ import { formatDateTime } from '../../lib/format';
  * ## What the port took from the render, and what it did not
  *
  * `renders/01-index-tables.html` frame G is this screen, and its one structural note is that the
- * switch is the **first column** — this is the only index whose rows have an on/off. That is
- * deliberately **not** done here: the row's enabled flag is an Edit-dialog field, and promoting it
- * to a row control is a write on every click with no confirmation and no field-level endpoint, so
- * it is a behaviour change rather than a port. The rest of the frame is applied — the paused row
- * stays in the table at reduced weight with its reason (*disable, don't hide*), and its next run is
- * the sentence rather than a stale time.
+ * switch is the **first column** — this is the only index whose rows have an on/off.
+ *
+ * ~~That is deliberately not done here: the row's enabled flag is an Edit-dialog field, and
+ * promoting it to a row control is a write on every click with no confirmation and no field-level
+ * endpoint, so it is a behaviour change rather than a port.~~ → **superseded, 2026-08-30 (renders
+ * audit 1.9).** Two of the three objections do not survive contact with what the control is. There
+ * is no field-level endpoint, true, and the switch therefore PUTs the whole schedule — the same
+ * total statement the Edit dialog makes, built the same way and for the same reason, so nothing is
+ * dropped. "No confirmation" is the right policy for a destructive act and the wrong one here:
+ * pausing a schedule is undone by the same switch in the same place, and a confirmation on a
+ * reversible toggle is the dialog nobody reads. What remains true is that it is a behaviour change
+ * — which is what the audit asked for, the render's caption calling this the organising idea of the
+ * screen.
+ *
+ * The rest of the frame is applied — the paused row stays in the table at reduced weight with its
+ * reason (*disable, don't hide*), and its next run is the sentence rather than a stale time.
+ *
+ * **The cadence is read out loud** (`lib/cron.ts`), not printed as `0 30 2 * * *`. The raw
+ * expression stays as the cell's `title`, because a reader who needs to edit it needs the string.
+ *
+ * ~~And each row offers Delete.~~ → **superseded with the switch.** Rule 7's worked example for
+ * this very screen is a paused schedule keeping its row with its date and reason; a Delete beside
+ * the switch offers a destructive act as the peer of a reversible one. Deletion is still reachable,
+ * from inside the Edit dialog, where it is a decision rather than a mis-click.
  *
  * This file also dropped the MUI slot-prop test-id helper, whose whole reason for existing was that
  * MUI types slot props too narrowly to accept a `data-*`. A Radix switch takes one directly.
@@ -178,6 +197,9 @@ export function RunSchedulePage() {
             <Table data-testid="RunSchedules.Table">
               <TableHead>
                 <TableRow>
+                  {/* First column, because it is the organising idea of this screen — the only
+                      index whose rows have an on/off. Render G's caption says so. */}
+                  <TableHeaderCell className="w-[72px]">Active</TableHeaderCell>
                   <TableHeaderCell>Name</TableHeaderCell>
                   <TableHeaderCell className="w-[230px]">Cadence</TableHeaderCell>
                   <TableHeaderCell className="w-[170px]">Next run</TableHeaderCell>
@@ -192,7 +214,9 @@ export function RunSchedulePage() {
                     each time — rather than "owner", which reads as a person to ask and is not.
                   */}
                   <TableHeaderCell className="w-[150px]">Fires as</TableHeaderCell>
-                  <TableHeaderCell align="right" className="w-[150px]" />
+                  <TableHeaderCell align="right" className="w-[90px]">
+                    <span className="sr-only">Actions</span>
+                  </TableHeaderCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -232,7 +256,7 @@ function ScheduleRow({
   schedule: RunSchedule;
   onEdit: () => void;
 }) {
-  const remove = useDeleteRunSchedule(projectId);
+  const update = useUpdateRunSchedule(projectId, schedule.id);
 
   return (
     <TableRow
@@ -244,6 +268,42 @@ function ScheduleRow({
       */
       className={schedule.enabled ? undefined : 'opacity-60'}
     >
+      <TableCell>
+        <PermissionGate projectId={projectId} permission="run:create">
+          {({ allowed, reason }) => (
+            <Switch
+              checked={schedule.enabled}
+              disabled={!allowed || update.isPending}
+              title={reason}
+              aria-label={`${schedule.enabled ? 'Pause' : 'Resume'} ${schedule.name}`}
+              onCheckedChange={(next) => {
+                /*
+                  A PUT of the WHOLE schedule, not a patch of one field — there is no field-level
+                  endpoint, and the server reads an omission as a clear. Every field is restated
+                  from the row exactly as the Edit dialog restates them from its form, which is the
+                  rule §244 exists for: a payload that leaves out `assigneeId` does not fail to
+                  save, it silently drops an assignee somebody set elsewhere.
+                */
+                update.mutate({
+                  name: schedule.name,
+                  cronExpression: schedule.cronExpression,
+                  zoneId: schedule.zoneId,
+                  scope: {
+                    planId: schedule.scope.planId,
+                    caseIds: schedule.scope.caseIds,
+                    suiteIds: schedule.scope.suiteIds,
+                    tags: schedule.scope.tags,
+                  },
+                  configurationId: schedule.configurationId,
+                  assigneeId: schedule.assigneeId,
+                  enabled: next,
+                });
+              }}
+              data-testid="RunSchedules.Row.Active"
+            />
+          )}
+        </PermissionGate>
+      </TableCell>
       <TableCell
         variant="title"
         subtitle={
@@ -267,8 +327,15 @@ function ScheduleRow({
         <span className="font-semibold">{schedule.name}</span>
       </TableCell>
       <TableCell>
-        <Identifier variant="muted">{schedule.cronExpression}</Identifier>
-        <span className="mt-0.5 block text-[11.5px] text-ink-4">{schedule.zoneId}</span>
+        {/*
+          The cadence in words, with the expression itself on the `title` — the render writes
+          `Every day at 01:00 · Europe/Sofia`, and the raw form is what somebody about to edit it
+          needs. `describeCron` hands back the expression unchanged for anything it cannot prove,
+          so this cell never states a cadence the scheduler does not keep.
+        */}
+        <span title={schedule.cronExpression} data-testid="RunSchedules.Row.Cadence">
+          {describeCron(schedule.cronExpression, schedule.zoneId)}
+        </span>
       </TableCell>
       <TableCell
         className="font-mono text-[12px] tabular-nums text-ink-4"
@@ -309,20 +376,6 @@ function ScheduleRow({
                 data-testid="RunSchedules.Row.Edit"
               >
                 Edit
-              </Button>
-            )}
-          </PermissionGate>
-          <PermissionGate projectId={projectId} permission="run:create">
-            {({ allowed, reason }) => (
-              <Button
-                size="sm"
-                variant="danger"
-                disabled={!allowed || remove.isPending}
-                title={reason}
-                onClick={() => remove.mutate(schedule.id)}
-                data-testid="RunSchedules.Row.Delete"
-              >
-                Delete
               </Button>
             )}
           </PermissionGate>
@@ -429,6 +482,7 @@ function ScheduleDialog({
 }) {
   const create = useCreateRunSchedule(projectId);
   const update = useUpdateRunSchedule(projectId, schedule?.id ?? '');
+  const remove = useDeleteRunSchedule(projectId);
   const save = schedule ? update : create;
 
   const [name, setName] = useState(schedule?.name ?? '');
@@ -438,6 +492,12 @@ function ScheduleDialog({
   const [zoneId, setZoneId] = useState(schedule?.zoneId ?? 'UTC');
   const [tags, setTags] = useState((schedule?.scope.tags ?? []).join(', '));
   const [enabled, setEnabled] = useState(schedule?.enabled ?? true);
+  /*
+    A two-press delete rather than a second dialog on top of this one. A nested modal is the shape
+    that traps focus twice and closes the wrong layer on Escape; the button restating itself is one
+    element, one focus, and still an explicit second act.
+  */
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   /*
     Two readings of one failure, and they are not interchangeable. `ApiError.fieldErrors` is keyed
@@ -531,6 +591,29 @@ function ScheduleDialog({
         </div>
 
         <DialogFooter>
+          {/*
+            Delete lives here rather than on the row (see this file's header). It keeps its own
+            confirmation, which the row switch deliberately does not have: one is reversible by the
+            control that did it and the other is not, and that difference is the whole reason they
+            are not peers.
+          */}
+          {schedule && (
+            <Button
+              variant="danger"
+              className="mr-auto"
+              disabled={remove.isPending}
+              onClick={() => {
+                if (confirmingDelete) {
+                  remove.mutate(schedule.id, { onSuccess: () => onClose() });
+                  return;
+                }
+                setConfirmingDelete(true);
+              }}
+              data-testid="RunSchedules.Dialog.Delete"
+            >
+              {confirmingDelete ? 'Delete — are you sure?' : 'Delete schedule'}
+            </Button>
+          )}
           <Button onClick={onClose} data-testid="RunSchedules.Dialog.Cancel">
             Cancel
           </Button>

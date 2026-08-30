@@ -4,9 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as client from '../../api/client'
 import * as download from '../../lib/download'
 import type { ReportJob } from '../../api/types'
+import { Table, TableBody } from '../../components/kit'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
-import { ReportJobCard } from './ReportJobCard'
+import { ReportJobRow } from './ReportJobRow'
 
 /**
  * The card that renders one generation job.
@@ -52,15 +53,23 @@ const job = (over: Partial<ReportJob> = {}): ReportJob => {
   return row
 }
 
+/**
+ * A row now, not a card (renders audit 1.8), so it needs a table around it — a `<tr>` rendered into
+ * a bare div is invalid HTML and jsdom will not place its cells.
+ */
 function renderCard(row: ReportJob) {
   return render(
     <TestProviders client={createTestQueryClient()}>
-      <ReportJobCard projectId={PROJECT} job={row} />
+      <Table>
+        <TableBody>
+          <ReportJobRow projectId={PROJECT} job={row} />
+        </TableBody>
+      </Table>
     </TestProviders>,
   )
 }
 
-describe('ReportJobCard', () => {
+describe('ReportJobRow', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
   })

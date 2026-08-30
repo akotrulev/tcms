@@ -302,7 +302,7 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
         {/*
           Discard leaves this editor for the page it was editing, so it is a real `<Link>` wearing
           the button's classes rather than an `onClick` that calls `navigate` — which is what earns
-          it middle-click, ⌘-click and copy-link, the same rule `features/reports/ReportJobCard.tsx`
+          it middle-click, ⌘-click and copy-link, the same rule `features/reports/ReportJobRow.tsx`
           states for its view control.
         */}
         <Button asChild data-testid={`${TestIdPrefix}.Cancel`}>

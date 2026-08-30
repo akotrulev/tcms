@@ -32,7 +32,7 @@ import {
 import { describeError } from '../../lib/describeError';
 import { humanize } from '../../lib/labels';
 import { GenerateReportDialog } from './GenerateReportDialog';
-import { ReportJobCard } from './ReportJobCard';
+import { ReportJobRow } from './ReportJobRow';
 
 /**
  * §6e's reports screen — F1 of the M2.5 plan, and the first client for §87's pipeline.
@@ -152,11 +152,33 @@ export function ReportsPage() {
           }}
         >
           {(rows) => (
-            <div className="flex flex-col gap-3" data-testid="Reports.Jobs.List">
-              {rows.map((job) => (
-                <ReportJobCard key={job.jobId} projectId={projectId} job={job} />
-              ))}
-            </div>
+            /*
+              The same table CI ingestion draws, deliberately — render F pairs the two screens on
+              purpose and the build had drawn this half as a stack of panels (renders audit 1.8).
+              Same columns, same order, same header treatment; only the noun in the first column
+              differs.
+            */
+            <Table data-testid="Reports.Jobs.List">
+              <TableHead>
+                <TableRow>
+                  <TableHeaderCell>Report</TableHeaderCell>
+                  <TableHeaderCell className="w-[120px]">Kind</TableHeaderCell>
+                  <TableHeaderCell className="w-[150px]">State</TableHeaderCell>
+                  <TableHeaderCell align="right" className="w-[100px]">
+                    Size
+                  </TableHeaderCell>
+                  <TableHeaderCell className="w-[180px]">Generated</TableHeaderCell>
+                  <TableHeaderCell align="right" className="w-[140px]">
+                    <span className="sr-only">Download</span>
+                  </TableHeaderCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {rows.map((job) => (
+                  <ReportJobRow key={job.jobId} projectId={projectId} job={job} />
+                ))}
+              </TableBody>
+            </Table>
           )}
         </DataRegion>
       </section>

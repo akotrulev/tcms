@@ -11,7 +11,7 @@ import { reportFormatLabels } from '../../lib/labels';
 /**
  * The one place a report becomes a file on somebody's disk.
  *
- * Extracted from `ReportJobCard` in F2, when the on-screen view became a second place a report can
+ * Extracted from `ReportJobRow` (then `ReportJobCard`) in F2, when the on-screen view became a second place a report can
  * be downloaded from. `ui-rules` §8 is the reason it is an extraction rather than a copy: two
  * implementations of a download would be two implementations of the *authenticated* download — the
  * transport, the filename fallback, the busy guard and the in-place failure — and the two would
