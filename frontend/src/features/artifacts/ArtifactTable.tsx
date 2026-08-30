@@ -1,5 +1,13 @@
 import { MoreVertical } from 'lucide-react';
-import { Badge, Table, TableBody, TableCell, TableHead, TableRow } from '../../components/kit';
+import {
+  Badge,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from '../../components/kit';
 import {
   Button,
   DropdownMenu,
@@ -55,15 +63,24 @@ export function ArtifactTable({
     <ScrollX>
       <Table data-testid="Artifacts.Grid">
         <TableHead>
+          {/*
+            `TableHeaderCell`, not `TableCell`. Built from TableCell this emitted `<td>` inside
+            `<thead>`: a screen reader got no column headers at all, and the table was visibly the
+            odd one out — sentence case in IBM Plex Sans against mono uppercase on every other
+            table in the product, because the header cell is what carries that treatment. Renders
+            audit 1.10, and the only accessibility defect it found.
+          */}
           <TableRow>
-            <TableCell className="text-ink-2" style={{ width: 130 }}>Category</TableCell>
-            <TableCell className="text-ink-2">Artifact</TableCell>
-            <TableCell className="text-ink-2" style={{ width: 120 }}>Kind</TableCell>
-            <TableCell className="text-ink-2" style={{ width: 100 }}>
-              Size
-            </TableCell>
-            <TableCell className="text-ink-2" style={{ width: 170 }}>Updated</TableCell>
-            <TableCell style={{ width: 48 }}   />
+            <TableHeaderCell style={{ width: 130 }}>Category</TableHeaderCell>
+            <TableHeaderCell>Artifact</TableHeaderCell>
+            <TableHeaderCell style={{ width: 120 }}>Kind</TableHeaderCell>
+            <TableHeaderCell style={{ width: 100 }}>Size</TableHeaderCell>
+            <TableHeaderCell style={{ width: 170 }}>Updated</TableHeaderCell>
+            {/* The action column's header is empty, but it is still a header: an empty `<td>` in
+                a header row is what makes the row ambiguous to a screen reader. */}
+            <TableHeaderCell style={{ width: 48 }}>
+              <span className="sr-only">Actions</span>
+            </TableHeaderCell>
           </TableRow>
         </TableHead>
         <TableBody>

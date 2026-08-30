@@ -1,13 +1,13 @@
 import { useState } from 'react';
-import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom';
 import { useProjects } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { Badge, HBar } from '../../components/kit';
 import { PageHeader } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
-import { Button } from '../../components/ui';
-import { formatCount, pluralNoun } from '../../lib/format';
+import { Button, Switch } from '../../components/ui';
+import { formatCount, plural } from '../../lib/format';
 import { ProjectCreateDialog } from './ProjectCreateDialog';
 
 /**
@@ -26,13 +26,40 @@ import { ProjectCreateDialog } from './ProjectCreateDialog';
  * render draws two more bars per card, `Automated` and `Last run`; neither is on
  * `ProjectSummary`, so neither is drawn. A bar over a number the response does not carry is the
  * defect the plan's §9.3 warns about.
+ *
+ * The 2026-08-30 renders audit raised those two missing bars again (finding 1.12). The answer is
+ * still this paragraph: they need two fields on `ProjectSummary` and the services behind them, and
+ * that is a contract change rather than a screen fix — it is on plan 008 T19's deferred list. The
+ * audit's third item on this card, a `Current` badge, is not drawn for a related reason: this route
+ * carries no `:projectId`, and the app has no persisted "last project" to read, so the badge would
+ * have to invent a current project rather than mark one.
  */
 export function ProjectsPage() {
   const projects = useProjects();
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
 
-  const rows = projects.data ?? [];
+  /*
+    In the URL rather than in `useState`, this repo's rule for filter state, and the same shape
+    `PlanListPage` uses for the same switch: somebody who ticked it to find last spring's project
+    sends the link on, and component state sends a list the project is not in.
+  */
+  const [params, setParams] = useSearchParams();
+  const showArchived = params.get('archived') === 'true';
+
+  const all = projects.data ?? [];
+  /*
+    Hidden by default, with a switch — the render draws one, and the audit found the list showing
+    every retired project unconditionally (finding 1.12).
+
+    This does not reopen the decision the archived badge's comment below records. That comment is
+    about *omitting* a project, which would make it unreachable; the switch is the opposite of
+    omitting, and the count of what it is holding back is printed beside it, so nothing is
+    silently missing.
+  */
+  const archivedCount = all.filter((project) => project.archived).length;
+  const rows = showArchived ? all : all.filter((project) => !project.archived);
+  const hiddenByTheSwitch = all.length > 0 && rows.length === 0;
   /*
     Guarded at 1 rather than at 0: a list where every project has no cases would divide by zero and
     render `NaN%`-wide bars. One means every bar is empty, which is the truthful drawing of that.
@@ -46,13 +73,31 @@ export function ProjectsPage() {
         title="Projects"
         subtitle="Pick a project to work in. A project is a whole client product — Payments is a feature inside one, never a project of its own."
         actions={
-          /*
+          <div className="flex items-center gap-4">
+          {/*
+            The switch the render draws, and the count of what it is holding back — so a hidden
+            project is marked as hidden rather than simply absent. Ungated: which projects are
+            retired is not a secret from anyone who can already see them listed.
+          */}
+          {archivedCount > 0 && (
+            <label className="flex items-center gap-2 text-[12px] text-ink-3">
+              <Switch
+                checked={showArchived}
+                onCheckedChange={(next) =>
+                  setParams(next ? { archived: 'true' } : {}, { replace: true })
+                }
+                data-testid="Projects.ShowArchived"
+              />
+              Show archived ({formatCount(archivedCount)})
+            </label>
+          )}
+          {/*
             The app's only COMPANY-scope affordance, and therefore the only `PermissionGate` that
             asks the company question: `project:create` is held by Company Admin and above, and
             there is no project for it to be held on. Disabled with a reason rather than hidden —
             a Test Lead seeing a greyed "New project" learns the capability exists and who to ask;
             seeing nothing at all learns the product cannot do it, which is a lie.
-          */
+          */}
           <PermissionGate projectId="company" permission="project:create">
             {({ allowed }) => (
               <Button
@@ -65,6 +110,7 @@ export function ProjectsPage() {
               </Button>
             )}
           </PermissionGate>
+          </div>
         }
       />
 
@@ -88,14 +134,27 @@ export function ProjectsPage() {
       <DataRegion
         testId="Projects.List"
         state={{ ...projects, refetch: () => void projects.refetch() }}
-        isEmpty={(items) => items.length === 0}
-        empty={{
-          kind: 'no-records',
-          title: 'No projects',
-          body: "You don't have access to any project yet. Ask an administrator to add you to one.",
-        }}
+        isEmpty={() => rows.length === 0}
+        empty={
+          hiddenByTheSwitch
+            ? {
+                kind: 'no-filter-match',
+                title: 'Every project you can open is archived',
+                hidden: all.length,
+                filters: 1,
+                noun: 'project',
+                onClearFilters: () => setParams({ archived: 'true' }, { replace: true }),
+              }
+            : {
+                kind: 'no-records',
+                title: 'No projects',
+                body:
+                  "You don't have access to any project yet. Ask an administrator to add you to "
+                  + 'one.',
+              }
+        }
       >
-        {(items) => (
+        {() => (
           <div
             /*
               Intrinsically responsive: reflows 3 → 2 → 1 with no media query, so it cannot
@@ -104,7 +163,7 @@ export function ProjectsPage() {
             className="grid gap-4"
             style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 18rem), 1fr))' }}
           >
-            {items.map((project) => (
+            {rows.map((project) => (
               <RouterLink
                 key={project.id}
                 to={`/projects/${project.id}`}
@@ -137,8 +196,19 @@ export function ProjectsPage() {
                   fraction={project.caseCount / largest}
                   value={formatCount(project.caseCount)}
                 />
-                <span className="mt-2 flex flex-wrap gap-4 text-[11.5px] text-ink-4">
-                  <span>{pluralNoun(project.caseCount, 'case')}</span>
+                <span
+                  className="mt-2 flex flex-wrap gap-4 text-[11.5px] text-ink-4"
+                  data-testid="Projects.Card.Meta"
+                >
+                  {/*
+                    `plural`, not `pluralNoun`. `pluralNoun` returns the NOUN only (`lib/format.ts`
+                    documents that, and the dashboard wants it that way because it wraps the number
+                    in an `Identifier`), so this line rendered the bare word "cases" under a bar
+                    whose own label already said `Cases` — and with `myRole` null for a Company
+                    Admin, correctly omitted below, the whole line was one dangling noun. Renders
+                    audit 1.12.
+                  */}
+                  <span>{plural(project.caseCount, 'case')}</span>
                   {/* myRole is null when the caller reaches this project through a
                       COMPANY-scope grant, which is the contract's stated meaning and not a
                       missing value. Rendering the label anyway printed a dangling

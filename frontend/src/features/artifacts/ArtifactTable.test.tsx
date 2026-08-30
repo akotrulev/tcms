@@ -316,3 +316,21 @@ describe('ArtifactTable', () => {
     })
   })
 })
+
+describe('the table has real column headers', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    mockPermissions(['artifact:edit'])
+  })
+
+  it('emits th, not td, in its header row', () => {
+    // Renders audit 1.10, the only accessibility defect it found: built from `TableCell`, this
+    // header row emitted `<td>`, so a screen-reader user got no column headers at all — and it
+    // was visibly the odd table out, sentence case in the sans face against mono uppercase
+    // everywhere else, because `TableHeaderCell` is what carries that treatment.
+    const { container } = renderTable()
+    const head = container.querySelector('thead')!
+    expect(head.querySelectorAll('th').length).toBeGreaterThan(0)
+    expect(head.querySelectorAll('td')).toHaveLength(0)
+  })
+})

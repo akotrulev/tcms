@@ -14,7 +14,7 @@ import {
 } from '../../components/kit';
 import { PageHeader } from '../../components/PageHeader';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui';
-import { formatDateTime } from '../../lib/format';
+import { formatCount, formatDateTime } from '../../lib/format';
 import { proposalStatusLabels } from '../../lib/labels';
 import { VerdictChip } from './VerdictChip';
 
@@ -52,6 +52,22 @@ export function ProposalsPage() {
   const project = useProject(projectId);
   const proposals = useAiProposals(projectId, status);
 
+  /*
+    A count on every tab, because this is a review queue and the render says so: *"a review queue,
+    so the tabs carry counts and the default is what needs you"* (renders audit 1.13). The build's
+    tabs were bare labels, which leaves the one question a queue exists to answer — is there
+    anything waiting for me — unanswerable without clicking through it.
+
+    Three queries rather than one summary endpoint: they are the SAME queries the tabs themselves
+    run, so a count and the rows behind it cannot disagree, and TanStack caches them — the two the
+    reader is not looking at cost one request each on arrival and make switching tabs instant.
+    A `total` that has not landed yet renders as nothing rather than as `0`: a zero the server
+    never said is the wrong half of this to guess at.
+  */
+  const waiting = useAiProposals(projectId, 'PENDING');
+  const accepted = useAiProposals(projectId, 'ACCEPTED');
+  const rejected = useAiProposals(projectId, 'REJECTED');
+
   return (
     <div>
       <PageHeader
@@ -78,9 +94,18 @@ export function ProposalsPage() {
           data-testid="Proposals.Tabs"
         >
           <TabsList className="mb-3">
-            <TabsTrigger value="PENDING">Waiting</TabsTrigger>
-            <TabsTrigger value="ACCEPTED">Accepted</TabsTrigger>
-            <TabsTrigger value="REJECTED">Rejected</TabsTrigger>
+            <TabsTrigger value="PENDING" data-testid="Proposals.Tab.PENDING">
+              Waiting
+              <TabCount total={waiting.data?.total} />
+            </TabsTrigger>
+            <TabsTrigger value="ACCEPTED" data-testid="Proposals.Tab.ACCEPTED">
+              Accepted
+              <TabCount total={accepted.data?.total} />
+            </TabsTrigger>
+            <TabsTrigger value="REJECTED" data-testid="Proposals.Tab.REJECTED">
+              Rejected
+              <TabCount total={rejected.data?.total} />
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value={status}>
@@ -212,4 +237,10 @@ function emptyFor(status: ProposalStatus) {
     title: 'No cases waiting for review',
     body: 'An agent files proposals here through the MCP server or the tcms CLI, using an API token with the Agent role. Nothing it proposes reaches the repository until somebody accepts it on this screen.',
   };
+}
+
+/** The count beside a tab's label — absent, not zero, until the server has said a number. */
+function TabCount({ total }: { total: number | undefined }) {
+  if (total === undefined) return null;
+  return <span className="ml-1.5 tabular-nums text-ink-3">{formatCount(total)}</span>;
 }
