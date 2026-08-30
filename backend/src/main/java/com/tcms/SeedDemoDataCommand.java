@@ -56,6 +56,11 @@ import org.springframework.stereotype.Component;
  *   <li>{@code 2} — usage error. Nothing was written.</li>
  *   <li>{@code 1} — the run failed. Whatever had already committed stands, and re-running tops
  *       the rest up rather than duplicating it.</li>
+ *   <li>{@code 3} — the run completed, but at least one documented fixture element was refused and
+ *       the printed report says which. The instance holds everything that did succeed. This exists
+ *       because the command used to exit {@code 0} over a fixture with no test plans and no doc
+ *       pages, with the refusals only in {@code WARN} lines above a report headed "Seeded demo
+ *       data" — which sends the next reader hunting a frontend bug that is not there.</li>
  * </ul>
  */
 @Component
@@ -66,6 +71,7 @@ public class SeedDemoDataCommand implements ApplicationRunner {
     private static final int EXIT_OK = 0;
     private static final int EXIT_FAILED = 1;
     private static final int EXIT_USAGE = 2;
+    private static final int EXIT_INCOMPLETE = 3;
 
     private static final String FORCE_FLAG = "force";
 
@@ -122,7 +128,7 @@ public class SeedDemoDataCommand implements ApplicationRunner {
         try {
             DemoSeedReport report = seeder.seed(force);
             System.out.println(report.render());
-            exit(EXIT_OK);
+            exit(report.isComplete() ? EXIT_OK : EXIT_INCOMPLETE);
         } catch (RuntimeException e) {
             log.error("Seeding failed. Whatever had already committed stands; re-running tops up "
                     + "the rest rather than duplicating it.", e);

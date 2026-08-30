@@ -179,7 +179,7 @@ public class DemoDataSeeder {
                     ids.put(project.key(), created.view().id());
                     report.line(label, "project " + project.key() + " — " + project.name());
                 }
-                default -> report.note(
+                default -> report.refusal(
                         "project " + project.key() + " was refused: " + outcome.getClass().getSimpleName());
             }
         }

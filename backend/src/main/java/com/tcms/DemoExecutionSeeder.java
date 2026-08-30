@@ -153,13 +153,14 @@ public class DemoExecutionSeeder {
         }
 
         List<UUID> caseIds = cases.stream().map(TestCaseDetailView::id).toList();
-        UUID planId = seedPlan(cast, spec, projectId, suiteIds, full);
+        UUID planId = seedPlan(cast, spec, projectId, suiteIds, full, report);
 
         // The finished run: every case, a spread of verdicts, then closed.
         UUID completed = seedRun(cast, projectId, planId, configurationId, caseIds,
-                "Regression — " + releaseOf(spec) + " release candidate", releaseOf(spec), "1841");
+                "Regression — " + releaseOf(spec) + " release candidate", releaseOf(spec), "1841",
+                report);
         if (completed != null) {
-            int recorded = recordVerdicts(cast, projectId, completed, statusIds, full, true);
+            int recorded = recordVerdicts(cast, projectId, completed, statusIds, full, true, report);
             runStatus.setStatus(cast.lead(), projectId, completed, new RunStatusRequest("COMPLETED"));
             report.line(label, spec.key() + " — run closed with " + recorded + " results");
         }
@@ -168,16 +169,16 @@ public class DemoExecutionSeeder {
             // The run in flight: the first three cases have verdicts and the rest do not, which is
             // the state the execution screen is actually designed around.
             UUID inProgress = seedRun(cast, projectId, planId, configurationId, caseIds,
-                    "Smoke — nightly", releaseOf(spec), "1842");
+                    "Smoke — nightly", releaseOf(spec), "1842", report);
             if (inProgress != null) {
-                recordVerdicts(cast, projectId, inProgress, statusIds, true, false);
+                recordVerdicts(cast, projectId, inProgress, statusIds, true, false, report);
                 report.line(label, spec.key() + " — one run in progress");
             }
 
             // The run nobody has opened. No results at all, so the empty execution state is
             // reachable without deleting anything.
             seedRun(cast, projectId, planId, configurationId, caseIds,
-                    "Accessibility sweep — not started", releaseOf(spec), "1843");
+                    "Accessibility sweep — not started", releaseOf(spec), "1843", report);
 
             seedIngestion(cast, projectId, configurationId, cases, report, label);
             seedSchedule(cast, projectId, configurationId, suiteIds, report, label);
@@ -217,7 +218,8 @@ public class DemoExecutionSeeder {
             DemoSeedPlan.ProjectSpec spec,
             UUID projectId,
             Map<String, UUID> suiteIds,
-            boolean full) {
+            boolean full,
+            DemoSeedReport report) {
 
         List<PlanSectionInput> sections = suiteIds.entrySet().stream()
                 .map(entry -> new PlanSectionInput(entry.getKey(), List.of(),
@@ -252,11 +254,15 @@ public class DemoExecutionSeeder {
             case PlanCreateService.Outcome.Replayed replayed -> replayed.view().id();
             case PlanCreateService.Outcome.Invalid invalid -> {
                 log.warn("Plan for {} was refused: Invalid {}", releaseOf(spec), invalid.errors());
+                report.refusal("Plan for %s was refused: Invalid %s"
+                        .formatted(releaseOf(spec), invalid.errors()));
                 yield null;
             }
             default -> {
                 log.warn("Plan for {} was refused: {}", releaseOf(spec),
                         outcome.getClass().getSimpleName());
+                report.refusal("Plan for %s was refused: %s"
+                        .formatted(releaseOf(spec), outcome.getClass().getSimpleName()));
                 yield null;
             }
         };
@@ -275,7 +281,8 @@ public class DemoExecutionSeeder {
             List<UUID> caseIds,
             String name,
             String release,
-            String build) {
+            String build,
+            DemoSeedReport report) {
 
         RunCreateService.Outcome outcome = runCreate.create(cast.lead(), projectId,
                 new com.tcms.execution.RunWriteRequest(
@@ -289,6 +296,8 @@ public class DemoExecutionSeeder {
             case RunCreateService.Outcome.Replayed replayed -> replayed.view().id();
             default -> {
                 log.warn("Run '{}' was refused: {}", name, outcome.getClass().getSimpleName());
+                report.refusal("Run '%s' was refused: %s"
+                        .formatted(name, outcome.getClass().getSimpleName()));
                 yield null;
             }
         };
@@ -307,7 +316,8 @@ public class DemoExecutionSeeder {
             UUID runId,
             Map<String, UUID> statusIds,
             boolean withEvidence,
-            boolean everything) {
+            boolean everything,
+            DemoSeedReport report) {
 
         Optional<TestRunDetailView> detail = runs.findOne(cast.lead(), projectId, runId);
         if (detail.isEmpty()) {
@@ -343,6 +353,8 @@ public class DemoExecutionSeeder {
             if (!(outcome instanceof ExecutionService.Outcome.Recorded)) {
                 log.warn("Result for execution {} was refused: {}", target.id(),
                         outcome.getClass().getSimpleName());
+                report.refusal("Result for execution %s was refused: %s"
+                        .formatted(target.id(), outcome.getClass().getSimpleName()));
                 continue;
             }
             recorded++;
@@ -463,7 +475,7 @@ public class DemoExecutionSeeder {
         if (outcome instanceof IngestionService.Outcome.Ingested) {
             report.line(label, "one CI-ingested run and its ingestion job");
         } else {
-            report.note("ingestion was refused: " + outcome.getClass().getSimpleName());
+            report.refusal("ingestion was refused: " + outcome.getClass().getSimpleName());
         }
     }
 

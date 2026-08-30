@@ -29,9 +29,28 @@ final class DemoSeedReport {
         credentials.add("  %-28s %-18s %s".formatted(email, role, company));
     }
 
+    private final List<String> refusals = new ArrayList<>();
+
     /** Something the operator should know that is not a created object — a skip, mostly. */
     void note(String note) {
         notes.add(note);
+    }
+
+    /**
+     * A documented fixture element the run asked for and did not get.
+     *
+     * <p>Separate from {@link #note} on purpose: a note is a skip the operator chose (a project that
+     * already had content), a refusal is the run disagreeing with itself. Only the second one makes
+     * the exit code non-zero, because only the second one leaves the next reader hunting a frontend
+     * bug that is not there. Refusals used to be {@code WARN} lines above a report that then said
+     * "Seeded demo data" over a fixture with no test plans and no doc pages.
+     */
+    void refusal(String refusal) {
+        refusals.add(refusal);
+    }
+
+    boolean isComplete() {
+        return refusals.isEmpty();
     }
 
     String render() {
@@ -44,6 +63,11 @@ final class DemoSeedReport {
         if (!notes.isEmpty()) {
             out.append("\nNotes\n");
             notes.forEach(note -> out.append("  ").append(note).append('\n'));
+        }
+
+        if (!refusals.isEmpty()) {
+            out.append("\nRefusals — this fixture is INCOMPLETE\n");
+            refusals.forEach(refusal -> out.append("  ").append(refusal).append('\n'));
         }
 
         out.append("\nSign in with any of these — the password is the same for all of them.\n\n");

@@ -132,7 +132,8 @@ public class DemoWorkspaceSeeder {
                         List.of("Search", "Storefront Squad", "Nightly"),
                         List.of("Account", "Quality Engineering", "Weekly")), null),
                 new DocBlockInput(null, DocBlockType.CODE, null,
-                        "npm run test:e2e -- --project=checkout --reporter=junit", null, null)));
+                        "npm run test:e2e -- --project=checkout --reporter=junit", null, null)),
+                report);
 
         if (parent == null) {
             return;
@@ -143,19 +144,22 @@ public class DemoWorkspaceSeeder {
                 new DocBlockInput(null, DocBlockType.PARAGRAPH, null,
                         "A build enters test when it deploys clean and the smoke suite passes. "
                                 + "It leaves when the exit criteria on the release plan are met, "
-                                + "or when somebody signs off on why they are not.", null, null)));
+                                + "or when somebody signs off on why they are not.", null, null)),
+                report);
 
         if (full) {
             createPage(cast, projectId, "Environments — draft", parent, List.of(
                     new DocBlockInput(null, DocBlockType.PARAGRAPH, null,
                             "Still being written. Staging, the payments sandbox and what each of "
-                                    + "them can and cannot do.", null, null)));
+                                    + "them can and cannot do.", null, null)),
+                    report);
         }
         report.line(label, "a documentation tree, one page published and one still a draft");
     }
 
     private UUID createPage(
-            DemoCast cast, UUID projectId, String title, UUID parentId, List<DocBlockInput> blocks) {
+            DemoCast cast, UUID projectId, String title, UUID parentId, List<DocBlockInput> blocks,
+            DemoSeedReport report) {
 
         DocPageWriteService.Outcome outcome = docPages.create(cast.lead(), projectId,
                 new DocPageInput(title, parentId, blocks),
@@ -166,8 +170,11 @@ public class DemoWorkspaceSeeder {
         }
         if (outcome instanceof DocPageWriteService.Outcome.Invalid invalid) {
             log.warn("Doc page '{}' was refused: Invalid {}", title, invalid.errors());
+            report.refusal("Doc page '%s' was refused: Invalid %s".formatted(title, invalid.errors()));
         } else {
             log.warn("Doc page '{}' was refused: {}", title, outcome.getClass().getSimpleName());
+            report.refusal("Doc page '%s' was refused: %s"
+                    .formatted(title, outcome.getClass().getSimpleName()));
         }
         return null;
     }
@@ -180,23 +187,25 @@ public class DemoWorkspaceSeeder {
                 ArtifactScope.PROJECT, null, "Standards", ArtifactKind.EXTERNAL_URL,
                 "Northwind accessibility standard (WCAG 2.2 AA)",
                 "The standard the accessibility sweep is judged against.",
-                null, "https://standards.northwind.test/accessibility", null, false, null));
+                null, "https://standards.northwind.test/accessibility", null, false, null), report);
 
         create(cast, projectId, new ArtifactInput(
                 ArtifactScope.PROJECT, null, "Reference", ArtifactKind.EXTERNAL_URL,
                 "Payments sandbox test cards",
                 "Which card number produces which decline reason.",
-                null, "https://docs.payments.test/sandbox/cards", null, false, null));
+                null, "https://docs.payments.test/sandbox/cards", null, false, null), report);
 
         report.line(label, "two catalogue artifacts");
     }
 
-    private void create(DemoCast cast, UUID projectId, ArtifactInput input) {
+    private void create(DemoCast cast, UUID projectId, ArtifactInput input, DemoSeedReport report) {
         ArtifactWriteService.Outcome outcome = artifacts.create(cast.lead(), projectId, input,
                 DemoProjectSeeder.idempotencyKey(projectId, "artifact", input.title()));
         if (!(outcome instanceof ArtifactWriteService.Outcome.Created)) {
             log.warn("Artifact '{}' was refused: {}", input.title(),
                     outcome.getClass().getSimpleName());
+            report.refusal("Artifact '%s' was refused: %s"
+                    .formatted(input.title(), outcome.getClass().getSimpleName()));
         }
     }
 
@@ -311,7 +320,7 @@ public class DemoWorkspaceSeeder {
                 List.of(new NotificationChannelInput.SubscriptionInput(
                                 OutboxEvents.RUN_COMPLETED, 1),
                         new NotificationChannelInput.SubscriptionInput(
-                                OutboxEvents.REVIEW_REQUESTED, 0))));
+                                OutboxEvents.REVIEW_REQUESTED, 0))), report);
 
         created += channel(cast, projectId, "Release leads", new NotificationChannelInput(
                 NotificationChannelKind.EMAIL,
@@ -320,7 +329,7 @@ public class DemoWorkspaceSeeder {
                 List.of("lead@northwind.test", "admin@northwind.test"),
                 null,
                 List.of(new NotificationChannelInput.SubscriptionInput(
-                        OutboxEvents.REVIEW_APPROVED, 0))));
+                        OutboxEvents.REVIEW_APPROVED, 0))), report);
 
         if (created > 0) {
             report.line(label, created + " notification channel"
@@ -337,7 +346,8 @@ public class DemoWorkspaceSeeder {
      * the expected answer on a re-run and so is not worth a line, but anything else is.
      */
     private int channel(
-            DemoCast cast, UUID projectId, String name, NotificationChannelInput input) {
+            DemoCast cast, UUID projectId, String name, NotificationChannelInput input,
+            DemoSeedReport report) {
 
         NotificationChannelService.Outcome outcome =
                 channels.create(cast.adminId(), projectId, input);
@@ -346,6 +356,8 @@ public class DemoWorkspaceSeeder {
         }
         if (!(outcome instanceof NotificationChannelService.Outcome.Invalid)) {
             log.warn("Channel '{}' was refused: {}", name, outcome.getClass().getSimpleName());
+            report.refusal("Channel '%s' was refused: %s"
+                    .formatted(name, outcome.getClass().getSimpleName()));
         }
         return 0;
     }
@@ -357,17 +369,18 @@ public class DemoWorkspaceSeeder {
     private void seedApiTokens(
             DemoCast cast, UUID projectId, DemoSeedReport report, String label) {
 
-        issue(cast, projectId, "Automation Service", "Nightly CI", null);
+        issue(cast, projectId, "Automation Service", "Nightly CI", null, report);
         // An agent token is refused without an expiry — ApiTokenService states why: it lives on
         // somebody's machine rather than in a pipeline. Ninety days is far enough out that the
         // fixture is not born expired and near enough to be a date somebody would accept.
         issue(cast, projectId, "Agent", "Case-drafting agent",
-                clock.instant().plus(Duration.ofDays(90)));
+                clock.instant().plus(Duration.ofDays(90)), report);
         report.line(label, "two API tokens (Automation Service, Agent)");
     }
 
     private void issue(
-            DemoCast cast, UUID projectId, String roleName, String tokenName, Instant expiresAt) {
+            DemoCast cast, UUID projectId, String roleName, String tokenName, Instant expiresAt,
+            DemoSeedReport report) {
         Optional<Role> role = roles.findByName(roleName);
         if (role.isEmpty()) {
             return;
@@ -376,8 +389,11 @@ public class DemoWorkspaceSeeder {
                 new ApiTokenIssueRequest(tokenName, role.get().getId(), projectId, expiresAt));
         if (outcome instanceof ApiTokenService.Outcome.Invalid invalid) {
             log.warn("Token '{}' was refused: Invalid {}", tokenName, invalid.errors());
+            report.refusal("Token '%s' was refused: Invalid %s".formatted(tokenName, invalid.errors()));
         } else if (!(outcome instanceof ApiTokenService.Outcome.Issued)) {
             log.warn("Token '{}' was refused: {}", tokenName, outcome.getClass().getSimpleName());
+            report.refusal("Token '%s' was refused: %s"
+                    .formatted(tokenName, outcome.getClass().getSimpleName()));
         }
     }
 }
