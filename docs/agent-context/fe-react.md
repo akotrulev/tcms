@@ -1,6 +1,6 @@
 # fe-react — orientation cache
 
-**Baseline commit:** `f6315aeb` · **Last verified:** 2026-08-31 · **Verdict this run:** DELTA (011 T6's cache was one commit old and the delta touched no code, so the version lane and every seam held; the seams below moved because 011 T7 replaced two screens and added three)
+**Baseline commit:** `ac848172` · **Last verified:** 2026-08-31 · **Verdict this run:** DELTA (the delta since `f6315aeb` was 012 T1–T5 — backend, contract and both generated schema copies — so the version lane and every frontend seam held; the seams below moved because 012 T6 added the project board's data layer)
 
 Per `ep-agent-orientation-cache`: validate this against a git delta before trusting it. A changed
 `frontend/package.json`, `package-lock.json`, `tsconfig*.json` or `vite.config.ts` invalidates the
@@ -47,7 +47,13 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 
 | Seam | Where |
 |---|---|
-| Server state | **TanStack Query owns all of it.** `src/api/queries/`, one file per domain behind a barrel. **One** `keys` factory in `keys.ts` — never add a second. `tracker.ts` is the **external** Jira/ADO integration; the product's own issues are `issues.ts`, and the three boards are `board.ts` (~~`workItems.ts`~~, renamed with the endpoint in 011 D-a) |
+| Server state | **TanStack Query owns all of it.** `src/api/queries/`, one file per domain behind a barrel. **One** `keys` factory in `keys.ts` — never add a second. `tracker.ts` is the **external** Jira/ADO integration; the product's own issues are `issues.ts` |
+| The FOUR boards, and two of the files are one letter apart | `board.ts` is the **composite** board — `GET /board`, four card kinds, columns assembled from the cards by `cardMove.columnsFor` — serving the project, My Work and team boards (~~`workItems.ts`~~, renamed in 011 D-a). **`projectBoards.ts`** is 012 M2's **project** board: `GET /boards/{id}` + `/cards`, issues only, columns are `board_column` rows. ~~`boards.ts`~~ → the long name is the point of the name. `keys.workItems` → **`keys.compositeBoard`** (012 T6) |
+| The project board's key roots | `['projects', p, 'boards']` (the picker) · `['boards', id]` (**configuration**) · **`['board-cards', id, filters]`** with `keys.boardCardsRoot = ['board-cards']` · `['projects', p, 'backlog', filters]` with `backlogRoot` · `['projects', p, 'labels']`. Cards are **NOT** under `['boards', id]` and 012 D-u is why: prefix matching means a column edit would evict the cards, and sweeping every board's cards would evict every board's configuration |
+| The one optimistic mutation in the product | `useRankIssue` in `projectBoards.ts` — patch, snapshot, rollback, and `rebalanced: true` **drops** the patch rather than rolling it back. `useMoveCard` beside it is deliberately **not** optimistic (scope §12.4 verbatim). The asymmetry is information, not preference: a status change's legality is on the card, a rank change's is the server's neighbours (012 D-c) |
+| The move decision, two boards, one file | `features/board/cardMove.ts` — `columnsFor` + `resolveCardMove` + `refusalFor` + `immobileReason` for the composite board; `serverColumnsOf` + `resolveColumnMove` + `columnRefusalFor` at the **foot** of the file for the project board. `serverColumnsOf` exists because `statusIds: readonly string[]` and a status *name* is a string too, so the wrong map typechecks and then refuses every legal drop (012 D-x) |
+| Keyboard drag | `features/board/boardKeyboard.ts` — `boardKeyboardCoordinates(columnOrder, laneOrder = [])`. Left/right steps a column; up/down steps a **swimlane** when `laneOrder` is non-empty and otherwise falls through to `@dnd-kit`'s 25px nudge. One `stepAlongAxis` behind both, so the nearest-centre and edge rules exist once. ~~`ColumnRect`~~ → `BandRect` |
+| The board's filter | **`BoardFilters` in `api/types.ts`, and it is NOT `IssueFilters`** — they differ in both directions (`statusId`/`parentKey` vs `labelId`/`priority`), so neither widens to cover the other (012 D-v) |
 | Client state | Session in Context; **filter state lives in the URL** (`useSearchParams`) |
 | Component library | **shadcn/ui over Radix** in `components/ui/` (18 files) + the house kit in `components/kit/` (16). ~~MUI v9~~ → gone in T16; `@mui/*`, `@emotion/*`, `notistack` are in no import and no `package.json` |
 | Styling authority | **Tailwind v4, single authority.** Preflight on, one stylesheet (`src/index.css`), no `sx`, no CSS-in-JS, no CSS Modules. Tokens are custom properties bridged into utility names by `@theme inline` (*inline* is load-bearing — it emits `var(…)` so the `[data-color-scheme]` swap moves every utility). `app/tokenSystem.test.ts` checks the system against itself |
@@ -59,7 +65,7 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 | Display logic | **Shared layer, never the page**: `lib/labels.ts` (each `satisfies Record<Union, string>`, so a new enum member is a compile error until labeled), `lib/format.ts`, `lib/results.ts`, `lib/permissions.ts`, `components/Identifier` for anything monospace |
 | `data-testid` | ~1470 (676 literal + 794 composed), `Domain.Thing` PascalCase, per-file `TestIdPrefix` const. `ClassificationPicker.tsx:150` documents `Classification.Value.<id>` as a **locator contract QA page objects key on** — do not rename it here |
 | Field ↔ error wiring | `components/kit/Field.tsx` clones its child to add `aria-describedby` pointing at `${htmlFor}-message`. Callers pass nothing; do not re-add per-call-site ids |
-| Dev fault switches | `lib/devFaults.ts` behind `src/api/client.ts`; `tcmsFaults.{status,hang,expire,drift,only,tracker,issue,off}()` in the console. Both guards are a **literal** `import.meta.env.DEV` so Rollup drops the module — routing that check through an imported constant ships it. `issue('conflict')` fabricates the 409 that names the legal moves, which no ordinary session can produce because the picker only offers legal ones |
+| Dev fault switches | `lib/devFaults.ts` behind `src/api/client.ts`; `tcmsFaults.{status,hang,expire,drift,only,tracker,issue,rank,wip,off}()` in the console. Both guards are a **literal** `import.meta.env.DEV` so Rollup drops the module — routing that check through an imported constant ships it. `issue('conflict')` fabricates the 409 that names the legal moves (and since 012 T6 answers the board's move endpoint too, which its own comment had always promised); `rank('conflict')` is the 409 that proves the rank rollback, `rank('rebalance')` the 200 that must **drop** the patch, and `wip()` the breach on a move that still lands. Every arm's path test is **anchored** — an unanchored `startsWith('/issues')` would fault the detail read |
 | Issue screens | `features/tracker/` — `WorkTablePage` (`/projects/:id/work`, five views on `?view=`), `IssueNewPage` (`/work/new`), `IssueDetailPage` (**`/issues/:key`, outside the project segment**, dispatching on `type.level` to `EpicPanels`/`StoryPanels`/`TaskPanels`). `TypeIcon` derives its colour from `level` + `countsTowardCompletion`, never from the type's name |
 | Project front door | `/projects/:projectId` is **`features/projects/ProjectOverviewPage.tsx`** (011 T7). ~~`features/dashboard/DashboardPage.tsx`~~ no longer exports a page — it exports `DashboardBody` and `HealthPanel`, the repository-dashboard **regions**, which the overview mounts below its delivery half. **The file keeps its name deliberately**: `DashboardPage.tsx` is cited from `lib/statusColors.ts`, from `HealthTileOrderTest.java` in the backend suite, and from `renders/06-analytics.html` |
 | The three boards | `BoardPage` and `TeamBoardPage` mount `Board` (kanban). **`MyWorkPage` does not** — `my-work.html` is two tables over ONE `GET /board?mine=true`, split on `kind === 'ISSUE'`, plus a private notes panel (011 T7). `linkFor` lives in `features/board/cardLink.ts`, not in `BoardPage.tsx`: a file exporting a component and a function is oxlint's `react(only-export-components)`, and the gate is zero warnings |
@@ -71,7 +77,9 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 
 - **Contract conformance** — every exchange crossing a `fetch` double is compared against
   `openapi.yaml`. Use `src/test/fixtures.ts`; anchor path-keyed mock arms (`/^\/projects\/[^/]+$/`)
-  so a sub-resource isn't caught by a prefix.
+  so a sub-resource isn't caught by a prefix. `/boards/{id}` vs `/boards/{id}/cards` is exactly the
+  collision. **`drivingAFailedWrite()` / `drivingAFailedRead()` / `renderingIntoAnErrorBoundary()`
+  take NO arguments** — the reason goes in a comment beside the call, not in a parameter.
 - **Never build your own `QueryClient` in a test** — only `createTestQueryClient`'s has the caches.
 - A test whose render trips an error boundary **fails** unless it calls
   `renderingIntoAnErrorBoundary()` / `drivingAFailedRead()` / `drivingAFailedWrite()` and says why.
@@ -124,8 +132,32 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 - The renders were opened at 1680px only. No claim holds at 1280px, against a real API, or with a
   fifty-step case (design-language §0, §9.1).
 - E2E / Playwright surfaces belong to the `qa-ui-typescript` peer; none are mapped here.
+- **012 T6 left twelve of `projectBoards.ts`'s fourteen hooks with no caller** — the reads and the
+  label/board writes typecheck against the contract and are unexercised until T7–T9. `useUpdateBoard`
+  is the one whose behaviour is worth doubting: it invalidates `keys.board(board.id)` from the
+  *response's* id rather than the argument's, which is right and untested.
+- **Nothing in 012 M2 renders.** `?view=board` still shows M1's placeholder panel until T7, and the
+  three new fault arms have been driven through mocked `api.*` calls but never armed in a browser
+  against a real backend.
 
 ## Session log
+
+- **2026-08-31** — 012 T6, `fe` (`99133dbc`, `6bf9885a`; plan `ac848172`). The fault switch, the
+  project board's data layer and the move decision — **no screen**, deliberately, because the switch
+  lands before the feature it proves. Four things worth carrying. **The plan's key shape was wrong
+  and its own comment said why**: cards under `['boards', id, 'cards']` cannot both survive a column
+  edit and be swept across boards, because TanStack matches by prefix — hence the second root
+  `['board-cards']` (D-u). **`serverColumnsOf` is the one function this task added that the plan did
+  not ask for**, and it is earned rather than tidy: `statusIds` is `readonly string[]`, a status
+  *name* is a string, so mapping names instead of ids typechecks, lints clean and then refuses every
+  drop on every board with no error anywhere. **`citedFiles.test.ts` reddened the packages job for a
+  file this task deliberately does not have** — two comments saying *"not `boards.ts`"* named an
+  absent path, and the fix is the repo's strikethrough notation (`~~x~~ → y`), which is what that
+  check's own message tells you. And **two sessions committed into this checkout inside one minute**:
+  a `git commit --amend` written against a `git log` read thirty seconds earlier amended the *other*
+  session's commit, silently, with no conflict and a clean `git status`. `git reset --soft <theirs>`
+  then `git commit -- <paths>` recovered it; the standing lesson is that `git add <paths>` is not
+  enough when another session is live — commit **by pathspec**, never from the index (D-y).
 
 - **2026-08-31** — 011 T7, both parts, `fe` (`8bf37408`, `7bd43361`, `f6315aeb`). **The module's
   close-out rode with this task**, which is the point of the cut: it is the session that knows what
