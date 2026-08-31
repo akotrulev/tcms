@@ -54,6 +54,7 @@ import type {
   CompletionBasis,
   IssueLevel,
   IssueStatusKind,
+  SwimlaneBy,
 } from '../api/types';
 
 /**
@@ -190,6 +191,26 @@ export const issueStatusKinds = {
   IN_PROGRESS: 'in progress',
   DONE: 'done',
 } as const satisfies Record<IssueStatusKind, string>;
+
+/**
+ * `SwimlaneBy` — how story B3's board bands its rows.
+ *
+ * Four members, and the fifth is the mechanism rather than an omission: `RELEASE` is B3's list
+ * too, and M3 adding it to the contract makes **this line** a compile error until it is worded,
+ * which is the whole reason the map is `satisfies Record<Union, string>` and not a lookup with a
+ * default. A default would have shipped a grouping labelled `RELEASE`.
+ *
+ * `NONE` is worded as what the reader chose ("No swimlanes"), not as the absence of a choice: it
+ * is a selectable option in the board settings, and "None" beside three nouns reads as a
+ * placeholder for one of them.
+ */
+export const swimlaneByLabels = {
+  NONE: 'No swimlanes',
+  EPIC: 'Epic',
+  ASSIGNEE: 'Assignee',
+  LABEL: 'Label',
+  PRIORITY: 'Priority',
+} as const satisfies Record<SwimlaneBy, string>;
 
 /**
  * How a status kind reads as colour — the one place a per-project status name becomes a tone.

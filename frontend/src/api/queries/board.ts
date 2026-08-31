@@ -7,8 +7,11 @@
  * `POST /work-items` and `PATCH /work-items/{id}` are gone outright — creating an issue is
  * `POST /issues` and moving one is `POST /issues/{key}/transitions`, both in `issues.ts`.
  *
- * The keys keep their `workItem*` names on purpose: the argument for one root is unchanged, and
- * renaming eleven call sites would say nothing new. `keys.ts` records that.
+ * The keys kept their `workItem*` names on that ground — the argument for one root was unchanged,
+ * and renaming eleven call sites would have said nothing new. **One of them has since moved**:
+ * `keys.workItems` is `keys.compositeBoard` as of 012 T6, because M2 added a second, genuinely
+ * different board and three more keys with `board` in the name. `keys.workItemRoot` keeps its name,
+ * and `keys.ts` records both halves.
  */
 import { useQuery, useMutation, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { api, qs } from '../client';
@@ -17,7 +20,7 @@ import { keys } from './keys';
 
 export function useBoard(projectId: string, mine: boolean): UseQueryResult<BoardCard[]> {
   return useQuery({
-    queryKey: keys.workItems(projectId, mine),
+    queryKey: keys.compositeBoard(projectId, mine),
     queryFn: ({ signal }) =>
       api.get<BoardCard[]>(`/board${qs({ projectId, mine: mine ? 'true' : undefined })}`, { signal }),
   });

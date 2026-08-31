@@ -261,6 +261,29 @@ export {
 } from './admin';
 export { type AuditPage, useCompanyAuditEvents, useProjectAuditEvents } from './audit';
 export { useBoard, useMyWork, usePutCardAnnotation, useTeamBoard } from './board';
+/*
+  The PROJECT board (012 M2). `board.ts` above is the composite board, and the two are a different
+  endpoint, a different card shape and a different set of columns (D-a) — which is why this module
+  carries the long name, ~~`boards.ts`~~ → `projectBoards.ts`.
+*/
+export {
+  reorder,
+  useBacklog,
+  useBoardCards,
+  useBoardConfig,
+  useBoards,
+  useCreateBoard,
+  useCreateLabel,
+  useDeleteBoard,
+  useDeleteLabel,
+  useLabels,
+  useMoveCard,
+  usePutIssueLabels,
+  useRankIssue,
+  useUpdateBoard,
+  useUpdateLabel,
+  type RankPlacement,
+} from './projectBoards';
 export {
   EPIC_COMPLETION_LIMIT,
   useCreateIssue,

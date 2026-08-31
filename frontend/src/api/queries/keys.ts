@@ -10,7 +10,7 @@
  * call site re-deriving the shape and getting it subtly wrong.
  */
 import type { QueryClient } from '@tanstack/react-query';
-import type { AuditFilters, CaseFilters, IssueFilters } from '../types';
+import type { AuditFilters, BoardFilters, CaseFilters, IssueFilters } from '../types';
 
 export const keys = {
   me: ['me'] as const,
@@ -428,7 +428,14 @@ export const keys = {
    * leave the other's cache alone.
    */
   emailDomains: ['identity-provider-email-domains'] as const,
-  workItems: (p: string, mine: boolean) => ['board', p, mine] as const,
+  /**
+   * The **composite** board — `GET /board`, the four-kind card, one project or the caller's own.
+   *
+   * ~~`workItems`.~~ → renamed in 012 T6, and the reason is a collision that had not happened yet:
+   * this module now holds three keys with `board` in the name, and the one still spelled after
+   * `work_item` named a table `V4` dropped. The root literal stays `'board'`, which is the path.
+   */
+  compositeBoard: (p: string, mine: boolean) => ['board', p, mine] as const,
   /**
    * The prefix every board shares — invalidate this and all three refresh.
    *
@@ -475,6 +482,71 @@ export const keys = {
    * requests no hook sends.
    */
   teamBoard: (teamId: string) => ['board', 'TEAM', teamId] as const,
+
+  /*
+    The PROJECT board (012 M2) — a different board, a different endpoint, a different card shape
+    (D-a). Nothing here shares a root with the four entries above, and that is deliberate: the
+    composite board's cards and a project board's cards are answers from two operations, so one
+    invalidation must never be able to sweep the other's cache and leave the reader wondering which
+    board refreshed.
+  */
+  /**
+   * A project's boards. Under the project so archiving or renaming one sweeps its boards with it,
+   * and so a board created or deleted refreshes the picker.
+   */
+  boards: (p: string) => ['projects', p, 'boards'] as const,
+  /**
+   * One board's **configuration** — its columns and its swimlane axis.
+   *
+   * Deliberately not under `keys.boards`: editing one board's columns must not evict the picker's
+   * list, and the two have different lifetimes (D-h).
+   */
+  board: (id: string) => ['boards', id] as const,
+  /**
+   * One board's **cards**, keyed by the filter — and under a root of its own rather than under
+   * {@link board}, which is the shape D-h's reason actually requires rather than the one its
+   * sentence suggests.
+   *
+   * `['boards', id, 'cards', filters]` is the obvious spelling and it cannot express either half of
+   * what D-h asks for. TanStack matches by prefix, so a configuration invalidation (`['boards', id]`)
+   * would evict the cards too and relayout the board on every column edit — the flicker D-h names —
+   * while sweeping *every* board's cards after a move would need `['boards']`, which evicts every
+   * board's configuration as well. Two roots give both: config and cards are invalidated apart, and
+   * {@link boardCardsRoot} reaches all the cards without touching any layout.
+   *
+   * Two filters are two lists, and the filter lives in the URL (D34), so the key is derived from
+   * there rather than from component state — a slow answer for one chip set must not land under
+   * another's.
+   */
+  boardCards: (id: string, filters: BoardFilters) => ['board-cards', id, filters] as const,
+  /**
+   * Every board's cards, as a prefix — what a move invalidates.
+   *
+   * Not the moved card's own board only: a project has several boards over the same statuses (D2),
+   * and that is what makes the M2 done-criterion — *"a card moved on the team board is in the
+   * matching column on the stakeholder board"* — true on screen rather than only in the database.
+   * `staleTime` is 30 s, so switching boards inside half a minute would otherwise serve the order
+   * from before the move.
+   */
+  boardCardsRoot: ['board-cards'] as const,
+  /**
+   * The ranked backlog, keyed by the same filter the board carries — one filter, three views (D34).
+   */
+  backlog: (p: string, filters: BoardFilters) => ['projects', p, 'backlog', filters] as const,
+  /**
+   * Every backlog list this project has, as a prefix — what the rank write targets.
+   *
+   * The optimistic patch and its snapshot rollback both go through this rather than through one
+   * filter's key: a drag on a filtered list reorders rows in the unfiltered one too, and a rollback
+   * that restored only the list on screen would leave the other holding the order the server
+   * refused.
+   */
+  backlogRoot: (p: string) => ['projects', p, 'backlog'] as const,
+  /**
+   * The project's labels — beside `statuses` and `configurations` rather than under an issue,
+   * because a label is the project's vocabulary and outlives every issue that wears one.
+   */
+  labels: (p: string) => ['projects', p, 'labels'] as const,
   /**
    * The caller's permissions with **no project in the question** — a different answer from
    * `permissions(projectId)` and therefore a different key.

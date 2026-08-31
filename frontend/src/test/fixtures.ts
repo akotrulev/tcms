@@ -86,6 +86,16 @@ import type {
   IssueSummary,
   IssueTypeRef,
   ProjectWorkflow,
+  BacklogRow,
+  BoardConfig,
+  BoardContents,
+  BoardIssueCard,
+  BoardLane,
+  BoardSummary,
+  CardMoveResult,
+  IssueCompletion,
+  IssueLabel,
+  RankResult,
 } from '../api/types'
 
 /** A fixed instant, so a body carrying a timestamp does not carry a different one each run. */
@@ -439,6 +449,119 @@ export function aBoardCard(overrides: Partial<BoardCard> = {}): BoardCard {
     allowedTransitions: [],
     ...overrides,
   }
+}
+
+/**
+ * A card on a **project** board — the 012 M2 shape, which is not {@link aBoardCard}'s.
+ *
+ * `allowedTransitions` is empty by default for `aBoardCard`'s reason, and here it carries a second
+ * one: an Epic reaches this shape with an empty set whatever the target (D-r), so the inert value is
+ * also the one the contract's own comment singles out.
+ */
+export function aBoardIssueCard(overrides: Partial<BoardIssueCard> = {}): BoardIssueCard {
+  return {
+    key: 'PRJ-1',
+    title: 'An item',
+    typeName: 'Story',
+    typeLevel: 'STORY',
+    iconCode: 'story',
+    countsTowardCompletion: true,
+    columnId: 'col-1',
+    status: aStatusRef(),
+    rank: '1024',
+    labels: [],
+    allowedTransitions: [],
+    subtaskTotal: 0,
+    subtaskDone: 0,
+    ...overrides,
+  }
+}
+
+/**
+ * A completion, **with its basis**, which is the whole reason it is on the wire (D8).
+ *
+ * `COUNT` rather than `ESTIMATE` by default: an estimate basis is the case where every counted issue
+ * carries an estimate, so it is the narrower state and a fixture asserting against it should say so.
+ */
+export function aCompletion(overrides: Partial<IssueCompletion> = {}): IssueCompletion {
+  return { percent: 0, basis: 'COUNT', done: 0, total: 0, excludedSpikes: 0, ...overrides }
+}
+
+export function aBoardLane(overrides: Partial<BoardLane> = {}): BoardLane {
+  return { key: null, label: 'No epic', cards: [], completion: aCompletion(), ...overrides }
+}
+
+/**
+ * A board's cards.
+ *
+ * `breaches` is empty by default — the normal case, and the one a test that is not about WIP limits
+ * should be starting from.
+ */
+export function boardContents(overrides: Partial<BoardContents> = {}): BoardContents {
+  return {
+    boardId: 'b1',
+    swimlaneBy: 'NONE',
+    lanes: [aBoardLane()],
+    breaches: [],
+    ...overrides,
+  }
+}
+
+export function aBoardSummary(overrides: Partial<BoardSummary> = {}): BoardSummary {
+  return { id: 'b1', name: 'Team board', columnCount: 4, swimlaneBy: 'NONE', ...overrides }
+}
+
+export function aBoardConfig(overrides: Partial<BoardConfig> = {}): BoardConfig {
+  return {
+    id: 'b1',
+    projectId: 'p1',
+    name: 'Team board',
+    swimlaneBy: 'NONE',
+    columns: [
+      {
+        id: 'col-1',
+        name: 'Backlog',
+        position: 0,
+        wipLimit: null,
+        statuses: [aStatusRef()],
+        defaultStatusId: 's1',
+      },
+    ],
+    ...overrides,
+  }
+}
+
+/**
+ * A row in the ranked backlog. **No epic appears here** (D-r) — an epic's status is derived from its
+ * stories, so it has nothing to be ranked against.
+ */
+export function aBacklogRow(overrides: Partial<BacklogRow> = {}): BacklogRow {
+  return {
+    key: 'PRJ-1',
+    title: 'An item',
+    typeName: 'Story',
+    typeLevel: 'STORY',
+    iconCode: 'story',
+    position: 1,
+    rank: '1024',
+    status: aStatusRef(),
+    labels: [],
+    ...overrides,
+  }
+}
+
+/** Where a rank write landed. `rebalanced` is false by default — a respace is the rare answer. */
+export function aRankResult(overrides: Partial<RankResult> = {}): RankResult {
+  return { key: 'PRJ-1', rank: '1536', rebalanced: false, ...overrides }
+}
+
+/** A move that landed with no breach — the ordinary case; a test about WIP passes one in. */
+export function aCardMoveResult(overrides: Partial<CardMoveResult> = {}): CardMoveResult {
+  return { card: aBoardIssueCard(), ...overrides }
+}
+
+export function anIssueLabel(overrides: Partial<IssueLabel> = {}): IssueLabel {
+  return { id: 'lab1', name: 'needs-design', color: 'label-3', ...overrides }
 }
 
 /** A row in a list — the work table, an epic's children, a story's sub-tasks. */

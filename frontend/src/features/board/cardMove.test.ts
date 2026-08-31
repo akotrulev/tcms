@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import type { BoardCard, IssueStatusRef } from '../../api/types'
-import { columnsFor, immobileReason, refusalFor, resolveCardMove } from './cardMove'
+import type { BoardCard, BoardIssueCard, IssueStatusRef } from '../../api/types'
+import {
+  columnRefusalFor,
+  columnsFor,
+  immobileReason,
+  refusalFor,
+  resolveCardMove,
+  resolveColumnMove,
+  type ServerColumn,
+} from './cardMove'
 
 /**
  * Where a dragged card lands — **the only part of drag-and-drop that can be wrong rather than
@@ -195,5 +203,172 @@ describe('immobileReason — a card that can go nowhere says which kind of nowhe
   it('tells a derived card to update its source', () => {
     const execution = card({ derived: true, kind: 'EXECUTION', allowedTransitions: [] })
     expect(immobileReason(execution)).toContain('an execution')
+  })
+})
+
+/**
+ * `resolveColumnMove` — the **project** board's decision, over columns the server defined (D-b).
+ *
+ * A second entry point in the same file rather than a second file, because it answers the same
+ * question about a different board and a fork would be two copies of the one part of drag-and-drop
+ * that can be wrong. What differs is where legality lives: the composite board matches a column by
+ * *name* against the card's own transition refs, because two projects spell "In Progress" with two
+ * ids; a project board's columns are rows with real ids and may claim **several** statuses each.
+ */
+
+const IN_REVIEW: IssueStatusRef = { id: 's-review', name: 'In Review', kind: 'IN_PROGRESS', position: 2 }
+const BLOCKED: IssueStatusRef = { id: 's-blocked', name: 'Blocked', kind: 'IN_PROGRESS', position: 3 }
+
+/** The stakeholder board's coarse column: three statuses, defaulting to the first. */
+const IN_FLIGHT: ServerColumn = {
+  id: 'in-flight',
+  name: 'In flight',
+  position: 1,
+  wipLimit: 3,
+  statusIds: [PROGRESS.id, IN_REVIEW.id, BLOCKED.id],
+  defaultStatusId: PROGRESS.id,
+}
+
+const DONE_COLUMN: ServerColumn = {
+  id: 'done',
+  name: 'Done',
+  position: 2,
+  wipLimit: null,
+  statusIds: [DONE.id],
+  defaultStatusId: DONE.id,
+}
+
+const READY_COLUMN: ServerColumn = {
+  id: 'ready',
+  name: 'Ready',
+  position: 0,
+  wipLimit: null,
+  statusIds: [READY.id],
+  defaultStatusId: READY.id,
+}
+
+const BOARD = [READY_COLUMN, IN_FLIGHT, DONE_COLUMN]
+
+function issueCard(partial: Partial<BoardIssueCard> = {}): BoardIssueCard {
+  return {
+    key: 'OLB-14',
+    title: 'Reconcile the settlement file',
+    typeName: 'Story',
+    typeLevel: 'STORY',
+    iconCode: 'story',
+    countsTowardCompletion: true,
+    columnId: READY_COLUMN.id,
+    status: READY,
+    rank: '1024',
+    labels: [],
+    allowedTransitions: [PROGRESS, DONE],
+    subtaskTotal: 0,
+    subtaskDone: 0,
+    ...partial,
+  }
+}
+
+describe('resolveColumnMove — the four ways a project-board drag ends in nothing', () => {
+  it('does nothing without an active card, and nothing when dropped outside every column', () => {
+    expect(resolveColumnMove(null, IN_FLIGHT.id, BOARD)).toEqual({ outcome: 'NONE' })
+    expect(resolveColumnMove(issueCard(), null, BOARD)).toEqual({ outcome: 'NONE' })
+    expect(resolveColumnMove(issueCard(), undefined, BOARD)).toEqual({ outcome: 'NONE' })
+  })
+
+  it('does nothing when dropped on an id that is not a column of this board', () => {
+    // A stale droppable from a drag that outlived a re-render — `resolveCardMove`'s third arm, and
+    // the reason the columns are a parameter rather than read from the drag event.
+    expect(resolveColumnMove(issueCard(), 'OLB-9', BOARD)).toEqual({ outcome: 'NONE' })
+  })
+
+  it('does nothing when dropped back in the column it came from', () => {
+    expect(resolveColumnMove(issueCard(), READY_COLUMN.id, BOARD)).toEqual({ outcome: 'NONE' })
+  })
+
+  it('does nothing when the target column already claims the card’s status', () => {
+    /*
+      **NOT a move**, and this is the case a project board has that the composite one cannot: a
+      coarse column claims three statuses, so a card in In Review dragged into the "In flight" that
+      already contains it is already there. Sending the move would write the column's DEFAULT and
+      silently walk the card backwards to In Progress — looking exactly like the board undoing a
+      drag. The card's own column id is different here, so only the claimed-status check stops it.
+    */
+    const card = issueCard({
+      columnId: 'a-different-column-id',
+      status: IN_REVIEW,
+      allowedTransitions: [DONE],
+    })
+    expect(resolveColumnMove(card, IN_FLIGHT.id, BOARD)).toEqual({ outcome: 'NONE' })
+  })
+})
+
+describe('resolveColumnMove — the move and the refusal', () => {
+  it('allows a drop into a coarse column when ANY claimed status is reachable', () => {
+    /*
+      "In flight" claims In Progress, In Review and Blocked, and its default is In Progress. A card
+      in Ready may reach In Progress but not Blocked. Asking only about the DEFAULT would be right
+      here by luck — the interesting half is the next test, where the default is the unreachable one.
+    */
+    const card = issueCard({ status: READY, allowedTransitions: [PROGRESS] })
+    expect(resolveColumnMove(card, IN_FLIGHT.id, BOARD)).toEqual({
+      outcome: 'MOVE',
+      toColumnId: IN_FLIGHT.id,
+    })
+  })
+
+  it('allows it when the reachable status is NOT the column’s default', () => {
+    /*
+      The case that tells the two rules apart. The column's default is In Progress and this card can
+      only reach Blocked, which the column also claims. A default-only check would refuse a drop the
+      server accepts — the column's default is what the drop MEANS and the server picks it, so the
+      question the client can answer is whether any claim is reachable at all.
+    */
+    const card = issueCard({ status: READY, allowedTransitions: [BLOCKED] })
+    expect(resolveColumnMove(card, IN_FLIGHT.id, BOARD)).toMatchObject({ outcome: 'MOVE' })
+  })
+
+  it('refuses with the workflow’s sentence when nothing claimed is reachable', () => {
+    const card = issueCard({ status: READY, allowedTransitions: [PROGRESS] })
+    const move = resolveColumnMove(card, DONE_COLUMN.id, BOARD)
+
+    expect(move.outcome).toBe('REFUSED')
+    if (move.outcome !== 'REFUSED') throw new Error('unreachable')
+    expect(move.reason).toContain('workflow decides')
+    expect(move.reason).toContain('OLB-14')
+    expect(move.reason).toContain(DONE_COLUMN.name)
+  })
+
+  it('never names a derived source, because no card on this board can be one', () => {
+    // `refusalFor`'s derived sentences are unreachable here and must stay that way: every card is an
+    // issue with a real key, so "mirrors an execution" would eventually be shown about one wrongly.
+    const card = issueCard({ status: READY, allowedTransitions: [PROGRESS] })
+    const move = resolveColumnMove(card, DONE_COLUMN.id, BOARD)
+
+    if (move.outcome !== 'REFUSED') throw new Error('unreachable')
+    expect(move.reason).not.toContain('mirrors')
+  })
+
+  it('tells an epic its status comes from its stories, whatever the column', () => {
+    /*
+      D-r: an epic IS a card here and its `allowedTransitions` is empty, so the refusal is one fact
+      about the epic rather than a verdict about this column. That is also why T7 gives such a card
+      no move affordance at all instead of a menu of disabled columns.
+    */
+    const epic = issueCard({ key: 'OLB-1', typeLevel: 'EPIC', allowedTransitions: [] })
+    const move = resolveColumnMove(epic, DONE_COLUMN.id, BOARD)
+
+    if (move.outcome !== 'REFUSED') throw new Error('unreachable')
+    expect(move.reason).toContain('derived from its stories')
+    expect(move.reason).not.toContain(DONE_COLUMN.name)
+  })
+
+  it('gives the ⋮ Move to… menu the identical sentence the drop path produces', () => {
+    // Two affordances, one rule, one wording — `refusalFor`'s argument, at the second board. WCAG
+    // 2.2 requires the menu, so the menu is not a fallback whose copy may drift.
+    const card = issueCard({ status: READY, allowedTransitions: [PROGRESS] })
+    const dropped = resolveColumnMove(card, DONE_COLUMN.id, BOARD)
+
+    if (dropped.outcome !== 'REFUSED') throw new Error('expected a refusal')
+    expect(dropped.reason).toBe(columnRefusalFor(card, DONE_COLUMN))
   })
 })

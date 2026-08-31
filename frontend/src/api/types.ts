@@ -687,6 +687,88 @@ export type ProjectWorkflow = S['ProjectWorkflow'];
 export type WorkflowTransition = ProjectWorkflow['transitions'][number];
 export type StatusRemovalInput = S['StatusRemovalInput'];
 
+// tracker.board (012 M2) — the PROJECT board, which is not the composite one above
+/**
+ * Story B3's grouping axis. `RELEASE` is absent until M3, deliberately: a member whose data does
+ * not exist would group every card into one lane called "None", which reads as a broken board
+ * rather than an unbuilt feature. `lib/labels.ts::swimlaneByLabels` is where adding it becomes a
+ * compile error.
+ */
+export type SwimlaneBy = S['SwimlaneBy'];
+/** A row in the board picker — `columnCount` rather than the columns, which the picker never draws. */
+export type BoardSummary = S['BoardSummary'];
+/**
+ * A board's **configuration** — its columns and its swimlane axis, and nothing about cards.
+ *
+ * Named `BoardConfig` rather than `Board` for the reason the operation is `getBoardConfig` rather
+ * than `getBoard`: the composite board already owns the bare word here and in the contract, and
+ * two shapes called `Board` one import apart is how a wrong type survives review (D-a).
+ */
+export type BoardConfig = S['Board'];
+/**
+ * One configured column. **Not `features/board/cardMove.ts`'s `BoardColumn`**, which is assembled
+ * from the cards for the two cross-project boards and carries no id (D-b). This one is a
+ * `board_column` row and knows about statuses no card currently holds.
+ */
+export type BoardColumnConfig = S['BoardColumn'];
+export type BoardInput = S['BoardInput'];
+export type BoardColumnInput = S['BoardColumnInput'];
+/** The cards on one board, in lanes, with the project's WIP breaches beside them. */
+export type BoardContents = S['BoardContents'];
+export type BoardLane = S['BoardLane'];
+/**
+ * A card on a project board — every one of them an issue with a real key.
+ *
+ * **Not {@link BoardCard}**, which is the composite board's card and carries four `kind`s, a
+ * `derived` flag and a synthetic id. An Epic reaches this shape with its **derived** status and an
+ * **empty** `allowedTransitions` (D-r), so a move affordance for one is absent rather than
+ * disabled-and-empty.
+ */
+export type BoardIssueCard = S['BoardIssueCard'];
+/**
+ * A column over its limit **right now**, counted over the whole project.
+ *
+ * It does not shrink when a filter is applied, which is the point: a limit is a property of the
+ * column, not of what happens to be on screen. Never recomputed client-side from the cards that
+ * arrived.
+ */
+export type WipBreach = S['WipBreach'];
+export type CardMoveResult = S['CardMoveResult'];
+export type BacklogRow = S['BacklogRow'];
+/**
+ * Where an issue landed, and whether the project's ranks were respaced to fit it.
+ *
+ * `rank` is a decimal **as a string** and stays one: `NUMERIC` is arbitrary precision and a
+ * `JSON.parse` into a double would silently round a value the server distinguishes. Sort on it,
+ * never do arithmetic with it.
+ */
+export type RankResult = S['RankResult'];
+/**
+ * A project's label — `IssueLabel` rather than the contract's bare `Label`, which would read as
+ * display copy beside `lib/labels.ts` and means the opposite thing.
+ */
+export type IssueLabel = S['Label'];
+export type IssueLabelInput = S['LabelInput'];
+export type IssueLabelsInput = S['IssueLabelsInput'];
+
+/**
+ * The one filter the board, the backlog and the table share (D34) — and it is the board's
+ * parameter set, which is **not** {@link IssueFilters}.
+ *
+ * The two differ in both directions and neither difference is incidental: a board takes `labelId`
+ * and `priority`, which the table's shape has never carried, and it takes no `statusId` or
+ * `parentKey`, because a status filter over a board would empty columns the board is drawn from.
+ * A single widened interface would let a screen send a parameter its endpoint answers 400 for.
+ */
+export interface BoardFilters {
+  labelId?: string[];
+  assigneeId?: string[];
+  epicKey?: string;
+  level?: IssueLevel;
+  priority?: Priority[];
+  unparented?: boolean;
+}
+
 /**
  * Work-table filter state. Mirrored into the URL so a view is shareable and survives a switch
  * between the five views (D34), which is the whole reason it is not component state.

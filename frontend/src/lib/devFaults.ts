@@ -17,6 +17,8 @@
  *     tcmsFaults.only('cases')    // scope the fault to paths containing 'cases'
  *     tcmsFaults.tracker('403')   // the tracker refuses THIS viewer — see below
  *     tcmsFaults.issue('conflict')// the workflow refuses a move — see below
+ *     tcmsFaults.rank('conflict') // the rank write loses a race — see below
+ *     tcmsFaults.wip()            // every card move lands the column over its limit — see below
  *     tcmsFaults.off()
  *
  * ## Why this lives here and not in a mock transport
@@ -73,6 +75,32 @@
  *     it — a wholly unrecognisable body is easy to reject, and a body that is *almost* right is
  *     the one that slips through.
  *
+ * ## The board's two switches, and why neither is reachable by using the app (012 T6)
+ *
+ * These land **before the screens that prove them**, which is CLAUDE.md's working agreement: a
+ * resilience behaviour you cannot trigger is one you have not tested.
+ *
+ *   - `rank('conflict')` — `PUT /issues/{key}/rank` answers **409**. Unreachable in an ordinary
+ *     session: it needs a second person to move the neighbour between this client's read and its
+ *     write, inside one drag. It is also the only thing that proves the optimistic rank drag rolls
+ *     back — the machinery M2 earned and M1 deliberately did not (012 D-c) — so without this
+ *     switch the rollback ships untested and looks identical to a board that simply never fails.
+ *   - `rank('rebalance')` — **200 with `rebalanced: true`, which is not a failure**, and is the
+ *     easier of the two to get backwards. The placement succeeded; what is now stale is every
+ *     *other* row's rank, so the client must **drop** its optimistic order and refetch rather than
+ *     roll it back. A client that keeps its patch here shows an order the server does not have,
+ *     and nothing on screen says the two disagree.
+ *   - `wip()` — every card move answers with a `breach`. Proves that the move still **lands** and
+ *     that the breach is reported rather than enforced (story B3), which a real WIP limit only
+ *     reaches after somebody drags three cards into one column.
+ *
+ * `wip()` fabricates a whole `CardMoveResult`, and its `card` is therefore **not the card that
+ * moved** — the seam sits in front of `fetch` and never sees the request body, so there is no
+ * `toColumnId` to answer with. Nothing reads it: the move's success invalidates the board and the
+ * real cards arrive from the refetch, and `breach` is the only member a consumer takes. Said out
+ * loud because a developer watching the network tab would otherwise read the placeholder card as a
+ * defect in the endpoint.
+ *
  * ## Tree-shaking
  *
  * **This module must stay free of top-level side effects.** Both entry points are called behind a
@@ -99,6 +127,10 @@ export interface FaultState {
   tracker: TrackerFault | null;
   /** How this product's own issue tracker is misbehaving, or `null` for one that works. */
   issue: IssueFault | null;
+  /** How the rank write misbehaves, or `null` for one that lands. */
+  rank: RankFault | null;
+  /** Every card move reports the target column over its WIP limit. */
+  wip: boolean;
 }
 
 /** The five ways somebody else's tracker fails us. See this module's header. */
@@ -111,6 +143,14 @@ export type TrackerFault = 'slow' | '401' | '403' | 'down' | 'drift';
  */
 export type IssueFault = 'conflict' | 'drift';
 
+/**
+ * Which fabricated answer the rank endpoint gives.
+ *
+ * **`'rebalance'` is not a failure**, and that is why it is an arm here rather than something a
+ * developer could approximate with `status()`. See this module's header.
+ */
+export type RankFault = 'conflict' | 'rebalance';
+
 const faults: FaultState = {
   status: null,
   retryAfter: null,
@@ -120,6 +160,8 @@ const faults: FaultState = {
   pathContains: null,
   tracker: null,
   issue: null,
+  rank: null,
+  wip: false,
 };
 
 /**
@@ -143,6 +185,28 @@ function isTrackerPath(path: string): boolean {
  */
 function isIssuePath(path: string): boolean {
   return path.startsWith('/issues') || path.startsWith('/board') || path.includes('/workflow');
+}
+
+/**
+ * `PUT /issues/{key}/rank`, and only that.
+ *
+ * Anchored rather than a `startsWith('/issues')`: `/issues/{key}` and `/issues/{key}/comments` are
+ * the same prefix, and a rank fault that answered a detail read would fabricate a `RankResult`
+ * where an `Issue` was expected — the drifted-body failure, injected by accident, three arms away
+ * from the one being tested.
+ */
+function isRankWrite(path: string, method: string): boolean {
+  return method === 'PUT' && /^\/issues\/[^/]+\/rank$/.test(path);
+}
+
+/** `POST /boards/{boardId}/cards/{key}/move`, anchored for {@link isRankWrite}'s reason. */
+function isCardMove(path: string, method: string): boolean {
+  return method === 'POST' && /^\/boards\/[^/]+\/cards\/[^/]+\/move$/.test(path);
+}
+
+/** The issue key a path names, decoded — the fabricated bodies have to answer about the right one. */
+function keyIn(path: string, position: number): string {
+  return decodeURIComponent(path.split('/')[position] ?? 'ACME-1');
 }
 
 /** The tracker's own message, per arm — shown only to the person whose credential it is. */
@@ -187,6 +251,19 @@ export function verdictFor(path: string, method = 'GET'): FaultVerdict {
   if (faults.issue !== null && isIssuePath(path) && applies(path)) {
     const verdict = issueVerdict(faults.issue, path, method);
     if (verdict.kind !== 'none') return verdict;
+  }
+
+  /*
+    The rank and WIP arms, third and fourth, and scoped by path for the two arms above's reason.
+    Both fabricate the shape of one specific operation, so a `only()`-style substring match would
+    serve a `RankResult` where a board was expected.
+  */
+  if (faults.rank !== null && isRankWrite(path, method) && applies(path)) {
+    return rankVerdict(faults.rank, path);
+  }
+
+  if (faults.wip && isCardMove(path, method) && applies(path)) {
+    return breachedMoveVerdict(path);
   }
 
   if (!applies(path)) return { kind: 'none' };
@@ -283,7 +360,14 @@ function trackerVerdict(fault: TrackerFault, path: string, method: string): Faul
  */
 function issueVerdict(fault: IssueFault, path: string, method: string): FaultVerdict {
   if (fault === 'conflict') {
-    if (method !== 'POST' || !path.endsWith('/transitions')) return { kind: 'none' };
+    /*
+      The board card move is the **same refusal at a second door** (012 M2): the endpoint resolves
+      the target column's default status and delegates to the same transition, so it answers the
+      same 409. `isIssuePath`'s comment above already promised the board this arm, and until M2
+      there was no board endpoint of its own for it to reach.
+    */
+    const refusable = (method === 'POST' && path.endsWith('/transitions')) || isCardMove(path, method);
+    if (!refusable) return { kind: 'none' };
     return {
       kind: 'body',
       status: 409,
@@ -320,6 +404,79 @@ function issueVerdict(fault: IssueFault, path: string, method: string): FaultVer
       allowedTransitions: [],
       createdAt: new Date().toISOString(),
       completion: { percent: 70, done: 12, total: 17, excludedSpikes: 1 },
+    },
+  };
+}
+
+/**
+ * What the rank write does instead of landing.
+ *
+ * `'conflict'` is the 409 the contract declares for *"a neighbour moved between the read and the
+ * write"* — and the title matters as much as the status: `describeError` reads
+ * *"Someone else saved first"* as the lost-update case and any other title as a refusal that keeps
+ * its own `detail`. This is a lost update, so it carries that title and the sentence names what
+ * happened rather than the status code.
+ *
+ * `'rebalance'` is a **success**, and the one arm here whose point is that it is not a failure. The
+ * rank it answers with is the respaced one, so a client that kept its optimistic order would be
+ * showing an order derived from ranks the server has just rewritten.
+ */
+function rankVerdict(fault: RankFault, path: string): FaultVerdict {
+  const key = keyIn(path, 2);
+
+  if (fault === 'conflict') {
+    return {
+      kind: 'body',
+      status: 409,
+      body: {
+        type: 'stale-write',
+        title: 'Someone else saved first',
+        status: 409,
+        detail:
+          'The issue you dropped this next to was moved by somebody else while you were dragging. '
+          + 'Nothing was changed \u2014 the list has been refreshed, so try again.',
+        permission: null,
+        scope: null,
+        line: null,
+      },
+    };
+  }
+
+  return { kind: 'body', status: 200, body: { key, rank: '2048', rebalanced: true } };
+}
+
+/**
+ * A card move that landed **and** put its column over the limit — story B3's 200 carrying a fact.
+ *
+ * The `card` is a placeholder for the reason this module's header gives: the seam never sees the
+ * request body, so there is no target column to answer about. `breach` is the member a consumer
+ * reads, and its `count` is deliberately one past its `limit` — a column *at* its limit is not in
+ * breach, and a fault that fabricated an equal pair would arm the off-by-one rather than the state.
+ */
+function breachedMoveVerdict(path: string): FaultVerdict {
+  const key = keyIn(path, 4);
+  const columnId = '00000000-0000-4000-8000-0000000000fa';
+
+  return {
+    kind: 'body',
+    status: 200,
+    body: {
+      card: {
+        key,
+        title: 'The card the fault could not read',
+        typeName: 'Story',
+        typeLevel: 'STORY',
+        iconCode: 'story',
+        countsTowardCompletion: true,
+        columnId,
+        status: { id: 'fault-status', name: 'In Progress', kind: 'IN_PROGRESS', position: 1 },
+        rank: '1024',
+        labels: [],
+        allowedTransitions: [],
+        subtaskTotal: 0,
+        subtaskDone: 0,
+      },
+      breach: { columnId, limit: 3, count: 4 },
     },
   };
 }
@@ -454,6 +611,27 @@ export function installFaultConsole(): void {
           : `[tcms faults] issues are now: ${fault}`,
       );
     },
+    /**
+     * How the rank write misbehaves. `tcmsFaults.rank(null)` restores it without clearing anything
+     * else, for `tracker()`'s reason.
+     */
+    rank(fault: RankFault | null) {
+      faults.rank = fault;
+      console.info(
+        fault === null
+          ? '[tcms faults] the rank write lands again'
+          : `[tcms faults] the rank write is now: ${fault}`,
+      );
+    },
+    /** Every card move reports its column over the limit. `tcmsFaults.wip(false)` restores it. */
+    wip(on = true) {
+      faults.wip = on;
+      console.info(
+        on
+          ? '[tcms faults] every card move will land its column over its WIP limit'
+          : '[tcms faults] WIP limits are respected again',
+      );
+    },
     only(pathContains: string | null) {
       faults.pathContains = pathContains;
       console.info(`[tcms faults] scoped to paths containing ${JSON.stringify(pathContains)}`);
@@ -467,6 +645,8 @@ export function installFaultConsole(): void {
       faults.pathContains = null;
       faults.tracker = null;
       faults.issue = null;
+      faults.rank = null;
+      faults.wip = false;
       console.info('[tcms faults] cleared');
     },
     state: () => ({ ...faults }),
@@ -475,6 +655,6 @@ export function installFaultConsole(): void {
   (window as unknown as Record<string, unknown>).tcmsFaults = api;
   console.info(
     '[tcms faults] available — try tcmsFaults.status(500), .hang(), .expire(), '
-      + ".tracker('403'), .issue('conflict'), .off()",
+      + ".tracker('403'), .issue('conflict'), .rank('conflict'), .wip(), .off()",
   );
 }
