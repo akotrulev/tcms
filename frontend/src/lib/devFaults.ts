@@ -16,6 +16,7 @@
  *     tcmsFaults.drift()          // a 200 with the wrong shape — must read as FAILED, not empty
  *     tcmsFaults.only('cases')    // scope the fault to paths containing 'cases'
  *     tcmsFaults.tracker('403')   // the tracker refuses THIS viewer — see below
+ *     tcmsFaults.issue('conflict')// the workflow refuses a move — see below
  *     tcmsFaults.off()
  *
  * ## Why this lives here and not in a mock transport
@@ -54,6 +55,24 @@
  * a different sentence there and the same chip everywhere else, which is exactly the shape the
  * product has and the reason a single "make the tracker fail" switch could not prove it.
  *
+ * ## The tracker's namesake, and why the issue arm is a third kind again (011 T6)
+ *
+ * `tracker()` above is 004's *external* Jira/ADO integration. This module's `issue()` is the
+ * product's **own** issue tracker, and its two faults are specific to it because neither can be
+ * produced by using the app:
+ *
+ *   - `'conflict'` is the one worth having. The server refuses a transition the workflow forbids
+ *     with a **409 that names the moves that are allowed**, and the screen has to show that
+ *     refusal beside the picker rather than as a toast that scrolls away. The only way to see it
+ *     during development is to force it, **because the picker only ever offers legal moves** — it
+ *     is built from `Issue.allowedTransitions`, so an ordinary session cannot ask for a refused
+ *     one. The same 409 is what an Epic gets whatever the target (D31).
+ *   - `'drift'` on `GET /issues/{key}` serves an issue whose `completion.basis` is absent. It must
+ *     read as **FAILED**, not as a percentage with no caption: a number whose basis is missing is
+ *     exactly the thing D8 says must never render, and the ordinary `drift()` above cannot prove
+ *     it — a wholly unrecognisable body is easy to reject, and a body that is *almost* right is
+ *     the one that slips through.
+ *
  * ## Tree-shaking
  *
  * **This module must stay free of top-level side effects.** Both entry points are called behind a
@@ -78,10 +97,19 @@ export interface FaultState {
   pathContains: string | null;
   /** How the tracker is misbehaving, or `null` for a tracker that works. */
   tracker: TrackerFault | null;
+  /** How this product's own issue tracker is misbehaving, or `null` for one that works. */
+  issue: IssueFault | null;
 }
 
 /** The five ways somebody else's tracker fails us. See this module's header. */
 export type TrackerFault = 'slow' | '401' | '403' | 'down' | 'drift';
+
+/**
+ * The tracker's own fault modes, beyond the four every path family gets.
+ *
+ * See this module's header for why each exists and why neither is reachable by using the app.
+ */
+export type IssueFault = 'conflict' | 'drift';
 
 const faults: FaultState = {
   status: null,
@@ -91,6 +119,7 @@ const faults: FaultState = {
   drift: false,
   pathContains: null,
   tracker: null,
+  issue: null,
 };
 
 /**
@@ -103,6 +132,17 @@ const faults: FaultState = {
  */
 function isTrackerPath(path: string): boolean {
   return path.includes('/tracker/') || path.startsWith('/me/tracker-identities');
+}
+
+/**
+ * Which requests the issue arm applies to — the three path families M1 added.
+ *
+ * `/board` is deliberately included: a board card's move is the same transition, refused by the
+ * same rule, and a fault that could not reach the board would leave the one screen where a
+ * refusal is easiest to mis-handle (a card that visibly lands and then snaps back) unprovable.
+ */
+function isIssuePath(path: string): boolean {
+  return path.startsWith('/issues') || path.startsWith('/board') || path.includes('/workflow');
 }
 
 /** The tracker's own message, per arm — shown only to the person whose credential it is. */
@@ -137,6 +177,16 @@ export function verdictFor(path: string, method = 'GET'): FaultVerdict {
   */
   if (faults.tracker !== null && isTrackerPath(path) && applies(path)) {
     return trackerVerdict(faults.tracker, path, method);
+  }
+
+  /*
+    The issue arm, second, and scoped by path for the tracker arm's reason: it fabricates the
+    shapes of specific operations, so applying it to `/cases` would serve a case list a body from
+    a different contract. `only()` still narrows it further.
+  */
+  if (faults.issue !== null && isIssuePath(path) && applies(path)) {
+    const verdict = issueVerdict(faults.issue, path, method);
+    if (verdict.kind !== 'none') return verdict;
   }
 
   if (!applies(path)) return { kind: 'none' };
@@ -213,6 +263,65 @@ function trackerVerdict(fault: TrackerFault, path: string, method: string): Faul
   }
 
   return { kind: 'none' };
+}
+
+/**
+ * What this product's own tracker does instead of working.
+ *
+ * **`conflict` answers the transition POST and nothing else.** The reads have to keep succeeding
+ * or the screen under test never renders the picker the refusal has to appear beside — a fault
+ * that broke the detail read would prove the failed-region branch, which four other switches
+ * already prove, and not this.
+ *
+ * The 409 body is the contract's `Problem`, and its `detail` **names the legal moves**, which is
+ * the half a plain `status(409)` cannot fabricate. That sentence is the whole requirement: a
+ * refusal that says only "conflict" leaves a configured workflow looking like a broken one.
+ *
+ * `drift` is deliberately *narrow*. It serves a real `Issue` shape with `completion` present and
+ * `basis` missing — the almost-right body — because a wholly unrecognisable one is easy to
+ * reject and this is the one D8 forbids rendering.
+ */
+function issueVerdict(fault: IssueFault, path: string, method: string): FaultVerdict {
+  if (fault === 'conflict') {
+    if (method !== 'POST' || !path.endsWith('/transitions')) return { kind: 'none' };
+    return {
+      kind: 'body',
+      status: 409,
+      body: {
+        type: 'workflow-move-refused',
+        title: 'The workflow forbids this move',
+        status: 409,
+        detail:
+          'This issue can only move to Blocked or In Review from where it stands. '
+          + 'The project\u2019s workflow decides which moves exist, not the person making them.',
+        permission: null,
+        scope: null,
+        line: null,
+      },
+    };
+  }
+
+  // `drift`: a body that is almost an Issue. Only the detail read — a list of these would be
+  // rejected for a different reason and would say nothing about the basis.
+  if (method !== 'GET' || !/^\/issues\/[^/]+$/.test(path)) return { kind: 'none' };
+  return {
+    kind: 'body',
+    status: 200,
+    body: {
+      key: 'ACME-101',
+      seq: 101,
+      title: 'An epic whose completion lost its basis',
+      type: { id: 'drift-type', name: 'Epic', level: 'EPIC', countsTowardCompletion: false },
+      status: { id: 'drift-status', name: 'In Progress', kind: 'IN_PROGRESS', position: 1 },
+      projectId: 'drift-project',
+      projectKey: 'ACME',
+      watchers: [],
+      children: [],
+      allowedTransitions: [],
+      createdAt: new Date().toISOString(),
+      completion: { percent: 70, done: 12, total: 17, excludedSpikes: 1 },
+    },
+  };
 }
 
 /**
@@ -333,6 +442,18 @@ export function installFaultConsole(): void {
           : `[tcms faults] the tracker is now: ${fault}`,
       );
     },
+    /**
+     * How this product's own tracker misbehaves. `tcmsFaults.issue(null)` restores it without
+     * clearing anything else, for `tracker()`'s reason — a session usually wants one thing broken.
+     */
+    issue(fault: IssueFault | null) {
+      faults.issue = fault;
+      console.info(
+        fault === null
+          ? '[tcms faults] issues behave again'
+          : `[tcms faults] issues are now: ${fault}`,
+      );
+    },
     only(pathContains: string | null) {
       faults.pathContains = pathContains;
       console.info(`[tcms faults] scoped to paths containing ${JSON.stringify(pathContains)}`);
@@ -345,6 +466,7 @@ export function installFaultConsole(): void {
       faults.drift = false;
       faults.pathContains = null;
       faults.tracker = null;
+      faults.issue = null;
       console.info('[tcms faults] cleared');
     },
     state: () => ({ ...faults }),
@@ -352,6 +474,7 @@ export function installFaultConsole(): void {
 
   (window as unknown as Record<string, unknown>).tcmsFaults = api;
   console.info(
-    "[tcms faults] available — try tcmsFaults.status(500), .hang(), .expire(), .tracker('403'), .off()",
+    '[tcms faults] available — try tcmsFaults.status(500), .hang(), .expire(), '
+      + ".tracker('403'), .issue('conflict'), .off()",
   );
 }

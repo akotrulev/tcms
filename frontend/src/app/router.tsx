@@ -109,6 +109,12 @@ const ArtifactsPage = lazy(() =>
   import('../features/artifacts/ArtifactsPage').then((m) => ({ default: m.ArtifactsPage })),
 );
 const BoardPage = lazy(() => import('../features/board/BoardPage').then((m) => ({ default: m.BoardPage })));
+const WorkTablePage = lazy(() =>
+  import('../features/tracker/WorkTablePage').then((m) => ({ default: m.WorkTablePage })),
+);
+const IssueNewPage = lazy(() =>
+  import('../features/tracker/IssueNewPage').then((m) => ({ default: m.IssueNewPage })),
+);
 const MyWorkPage = lazy(() => import('../features/board/MyWorkPage').then((m) => ({ default: m.MyWorkPage })));
 const TeamBoardPage = lazy(() =>
   import('../features/board/TeamBoardPage').then((m) => ({ default: m.TeamBoardPage })),
@@ -542,6 +548,34 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <BoardPage />
+              </Suspense>
+            }
+          />
+          {/*
+            §5's Work screen (011 D34) — **one route for five views**, which switch on `?view=` so
+            the filter travels between them in the query string rather than in a store the URL
+            cannot restore. Four of the five are not built in M1 and say which module builds them;
+            `/board` above is the board that exists today and stays reachable, because a link that
+            leads nowhere is worse than a tab that explains itself.
+
+            `new` is declared before nothing here — the sub-path is a literal segment with no
+            sibling parameter to be mistaken for, unlike `/cases/new`. It is still a child route
+            rather than a `?new` on this one, because the create form is a page with its own title,
+            its own breadcrumb and its own back-out.
+          */}
+          <Route
+            path="/projects/:projectId/work"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <WorkTablePage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/projects/:projectId/work/new"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <IssueNewPage />
               </Suspense>
             }
           />

@@ -618,10 +618,87 @@ export type IdentityProviderKind = S['IdentityProviderKind'];
 /** The domains one company claims, as a whole set — both the request and the response shape. */
 export type EmailDomains = S['EmailDomains'];
 
-// work
-export type WorkItem = S['WorkItem'];
-export type WorkItemStatus = S['WorkItemStatus'];
-export type WorkItemInput = S['WorkItemInput'];
+// work — the board, which composes issues with the four derived generators (011 D-a)
+/**
+ * A card on any of the three boards — ~~`WorkItem`~~, renamed with the endpoint in 011 D-a.
+ *
+ * The path named a table that no longer exists: `work_item` is gone and a row-backed card is a
+ * `tracker` issue now, so `GET /work-items` became `GET /board` and the shape came with it. Only
+ * one of the seven kinds is a row; the rest are projections whose status is computed from their
+ * source on every read, which is what stops a card diverging from its execution.
+ */
+export type BoardCard = S['BoardCard'];
+/**
+ * A card's status — **an object since M1, and there is no `WorkItemStatus` enum any more**
+ * (011 D-c). A project names its own statuses, so the five-member enum could not spell one
+ * without a mapping table, and a card carrying both spellings is the two-contradictory-values
+ * failure this repo has shipped once already.
+ */
+export type BoardCardStatus = BoardCard['status'];
+export type BoardCardKind = BoardCard['kind'];
+/** The viewer's OWN note, personal due date and flag on a card — never another viewer's. */
+export type CardAnnotation = S['CardAnnotation'];
+export type CardAnnotationInput = S['CardAnnotationInput'];
+
+// tracker (011) — issues, the project's workflow, and the four edges hanging off an issue
+/**
+ * Where a type sits in the hierarchy. The depth rule is expressed in LEVELS, not in type names:
+ * Story, Bug and Spike all sit at `STORY`, so a fourth story-level type is a row rather than a
+ * migration.
+ */
+export type IssueLevel = S['IssueLevel'];
+/**
+ * What a status MEANS, so a percentage can be computed without knowing what a project called its
+ * columns. Every completion figure in the product is `DONE` over the counted total; `IN_PROGRESS`
+ * is not partial credit (D8).
+ */
+export type IssueStatusKind = S['IssueStatusKind'];
+export type IssueTypeRef = S['IssueTypeRef'];
+export type IssueStatusRef = S['IssueStatusRef'];
+/**
+ * An epic's completion, **with its basis on the wire** (D8).
+ *
+ * The client never infers the basis and never recomputes the percentage: an epic weighted by
+ * hours and one counted by heads are different measurements, and a number that changes meaning
+ * when somebody clears an estimate is the number people learn to distrust.
+ */
+export type IssueCompletion = S['IssueCompletion'];
+export type CompletionBasis = IssueCompletion['basis'];
+export type IssueSummary = S['IssueSummary'];
+export type Issue = S['Issue'];
+export type IssueInput = S['IssueInput'];
+export type IssueUpdate = S['IssueUpdate'];
+export type IssueTransitionInput = S['IssueTransitionInput'];
+/** One acceptance criterion, ordered and individually done (story H1/H4). */
+export type AcceptanceCriterion = NonNullable<Issue['acceptanceCriteria']>[number];
+export type IssueComment = S['IssueComment'];
+export type IssueCommentInput = S['IssueCommentInput'];
+/**
+ * `tracker`'s projection of a `doc_link` row — **read-only from this module's endpoint.**
+ *
+ * The write is `documentation`'s block-link POST, because `tracker` may not import that module
+ * and does not own the edge. What is served here is the projection, which is what carries
+ * `stale` and the excerpt **as it was when linked**.
+ *
+ * Not to be confused with {@link IssueLink}, which is 004's link out to a *Jira or ADO* issue.
+ */
+export type IssueDocLink = S['IssueDocLink'];
+export type ProjectWorkflow = S['ProjectWorkflow'];
+export type WorkflowTransition = ProjectWorkflow['transitions'][number];
+export type StatusRemovalInput = S['StatusRemovalInput'];
+
+/**
+ * Work-table filter state. Mirrored into the URL so a view is shareable and survives a switch
+ * between the five views (D34), which is the whole reason it is not component state.
+ */
+export interface IssueFilters {
+  level?: IssueLevel;
+  epicKey?: string;
+  parentKey?: string;
+  statusId?: string[];
+  assigneeId?: string[];
+  unparented?: boolean;
+}
 
 // enums
 export type LifecycleStatus = S['LifecycleStatus'];

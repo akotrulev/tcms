@@ -1,7 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { WorkItem } from '../../api/types'
+import type { BoardCard } from '../../api/types'
 import { createTestQueryClient } from '../../test/queryClient'
 import { TestProviders } from '../../test/TestProviders'
 import { Board } from './BoardPage'
@@ -35,31 +35,31 @@ import { drivingAFailedRead } from '../../test/renderFailures'
 const OLB = '11111111-1111-4111-8111-111111111111'
 const MOB = '11111111-1111-4111-8111-111111111112'
 
-const card = (partial: Partial<WorkItem> & Pick<WorkItem, 'id' | 'title'>): WorkItem => {
-  // Typed on its own line and never `as WorkItem` — §79's repair, which §80 measured: a new
+const card = (partial: Partial<BoardCard> & Pick<BoardCard, 'id' | 'title'>): BoardCard => {
+  // Typed on its own line and never `as BoardCard` — §79's repair, which §80 measured: a new
   // required field on the contract becomes one build error here rather than a page of runtime ones.
-  const base: WorkItem = {
+  const base: BoardCard = {
     id: partial.id,
     title: partial.title,
     derived: false,
     sourceType: null,
     sourceId: null,
-    kind: 'TASK',
+    kind: 'ISSUE',
     description: null,
-    status: 'TODO',
+    status: { name: 'Ready', kind: 'NOT_STARTED' },
     priority: 'MEDIUM',
     dueDate: null,
     overdue: false,
     projectId: OLB,
     projectKey: 'OLB',
     linkedKey: null,
-    allowedTransitions: ['IN_PROGRESS', 'IN_REVIEW', 'DONE'],
+    allowedTransitions: [],
   }
   return { ...base, ...partial }
 }
 
 /** Records every path requested, so a test can assert what was actually asked of the server. */
-function mockBoard(items: WorkItem[], paths: string[] = []) {
+function mockBoard(items: BoardCard[], paths: string[] = []) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     paths.push(path)
     return items
@@ -85,7 +85,7 @@ describe('What My Work asks the server for', () => {
     // Asserted as the whole query string rather than with `toContain('mine=true')`: a request that
     // carried BOTH would pass a containment check and be a different endpoint — one project's
     // personal board, rendered under a title that promises every project.
-    expect(paths).toEqual(['/work-items?mine=true'])
+    expect(paths).toEqual(['/board?mine=true'])
   })
 
   it('never sends an empty projectId', async () => {
@@ -185,7 +185,7 @@ describe('The states this screen must not confuse', () => {
 
 describe('The affordances this screen deliberately lacks', () => {
   it('offers no Everyone/Assigned-to-me filter, because the server refuses one of them', async () => {
-    // `GET /work-items` with no projectId and `mine=false` is a 400. A chip that produced it would
+    // `GET /board` with no projectId and `mine=false` is a 400. A chip that produced it would
     // be `ui-rules` §4's render-then-reject: a control whose only outcome is an error.
     mockBoard([card({ id: '1', title: 'Anything' })])
     renderPage()
@@ -202,25 +202,38 @@ describe('The affordances this screen deliberately lacks', () => {
 
     await screen.findByTestId('Board.Card')
 
-    expect(screen.queryByTestId('Board.NewTask')).toBeNull()
+    expect(screen.queryByTestId('Board.NewIssue')).toBeNull()
   })
 })
 
 describe('The board underneath is the project board’s own', () => {
-  it('files cross-project cards into the same columns by status code', async () => {
-    // The reuse is the point: two implementations of §6l's one board drift on the first change to
-    // either. If this ever needs its own column logic, that is the signal the screens diverged.
+  it('files cross-project cards into the same columns, by the status each one names', async () => {
+    /*
+      The reuse is the point: two implementations of §6l's one board drift on the first change to
+      either. If this ever needs its own column logic, that is the signal the screens diverged.
+
+      **The two projects' workflows are different rows with the same words**, which is the one
+      thing this screen has that a project board does not: `columnsFor` keys on the status NAME, so
+      OLB's `In Progress` and MOB's are one column — the only reading available, since neither id
+      means anything to the other project.
+    */
     mockBoard([
-      card({ id: '1', title: 'Waiting', status: 'TODO', projectKey: 'OLB' }),
-      card({ id: '2', title: 'Underway', status: 'IN_PROGRESS', projectId: MOB, projectKey: 'MOB' }),
+      card({ id: 'OLB-1', title: 'Waiting', projectKey: 'OLB' }),
+      card({
+        id: 'MOB-1',
+        title: 'Underway',
+        status: { name: 'In Progress', kind: 'IN_PROGRESS' },
+        projectId: MOB,
+        projectKey: 'MOB',
+      }),
     ])
     renderPage()
 
     await waitFor(() => expect(screen.getAllByTestId('Board.Card')).toHaveLength(2))
 
-    expect(within(screen.getByTestId('Board.Column.TODO')).getByText('Waiting')).toBeTruthy()
+    expect(within(screen.getByTestId('Board.Column.Ready')).getByText('Waiting')).toBeTruthy()
     expect(
-      within(screen.getByTestId('Board.Column.IN_PROGRESS')).getByText('Underway'),
+      within(screen.getByTestId('Board.Column.In Progress')).getByText('Underway'),
     ).toBeTruthy()
   })
 })

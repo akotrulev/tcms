@@ -78,7 +78,14 @@ import type {
   TestPlan,
   TestPlanSummary,
   TestRun,
-  WorkItem,
+  BoardCard,
+  Issue,
+  IssueComment,
+  IssueDocLink,
+  IssueStatusRef,
+  IssueSummary,
+  IssueTypeRef,
+  ProjectWorkflow,
 } from '../api/types'
 
 /** A fixed instant, so a body carrying a timestamp does not carry a different one each run. */
@@ -396,18 +403,109 @@ export function planStatistics(overrides: Partial<PlanStatistics> = {}): PlanSta
   }
 }
 
-export function aWorkItem(overrides: Partial<WorkItem> = {}): WorkItem {
+/**
+ * A status ref — id, name, kind and position, which is what a *transition target* carries.
+ *
+ * The name is the project's own, so the default is a plausible one rather than a code: there is
+ * no enum behind it any more (011 D-c) and a fixture spelling `TODO` would be a project nobody
+ * has.
+ */
+export function aStatusRef(overrides: Partial<IssueStatusRef> = {}): IssueStatusRef {
+  return { id: 's1', name: 'Backlog', kind: 'NOT_STARTED', position: 0, ...overrides }
+}
+
+export function anIssueType(overrides: Partial<IssueTypeRef> = {}): IssueTypeRef {
+  return { id: 'ty1', name: 'Story', level: 'STORY', countsTowardCompletion: true, ...overrides }
+}
+
+/**
+ * A card on any of the three boards — ~~`aWorkItem`~~, renamed with the shape (011 D-a/D-c).
+ *
+ * `allowedTransitions` is empty by default, which is the inert value and also the honest one: a
+ * card that can go nowhere is what a derived card and an epic both are, and a test that wants a
+ * movable card says so.
+ */
+export function aBoardCard(overrides: Partial<BoardCard> = {}): BoardCard {
   return {
-    id: 'w1',
+    id: 'PRJ-1',
     derived: false,
-    kind: 'TASK',
+    kind: 'ISSUE',
     title: 'An item',
-    status: 'TODO',
+    status: { name: 'Backlog', kind: 'NOT_STARTED' },
     priority: 'MEDIUM',
     overdue: false,
     projectId: 'p1',
     projectKey: 'PRJ',
     allowedTransitions: [],
+    ...overrides,
+  }
+}
+
+/** A row in a list — the work table, an epic's children, a story's sub-tasks. */
+export function anIssueSummary(overrides: Partial<IssueSummary> = {}): IssueSummary {
+  return {
+    key: 'PRJ-1',
+    title: 'An issue',
+    type: anIssueType(),
+    status: aStatusRef(),
+    projectId: 'p1',
+    projectKey: 'PRJ',
+    ...overrides,
+  }
+}
+
+/**
+ * One issue.
+ *
+ * `completion` is **absent** by default and not a zeroed object: it is epics-only on the wire, and
+ * a fixture that always carried one would let a story page render a meter the server can never
+ * send it (D8).
+ */
+export function anIssue(overrides: Partial<Issue> = {}): Issue {
+  return {
+    key: 'PRJ-1',
+    seq: 1,
+    title: 'An issue',
+    type: anIssueType(),
+    status: aStatusRef(),
+    projectId: 'p1',
+    projectKey: 'PRJ',
+    watchers: [],
+    children: [],
+    allowedTransitions: [],
+    createdAt: AT,
+    ...overrides,
+  }
+}
+
+export function anIssueComment(overrides: Partial<IssueComment> = {}): IssueComment {
+  return { id: 'c1', body: 'A comment', author: aUserRef(), createdAt: AT, ...overrides }
+}
+
+/** A spec link as `tracker` projects it — `stale` false, which is the state a fresh link is in. */
+export function anIssueDocLink(overrides: Partial<IssueDocLink> = {}): IssueDocLink {
+  return {
+    id: 'dl1',
+    targetKind: 'DOC_BLOCK',
+    relationship: 'REFERENCES',
+    stale: false,
+    ...overrides,
+  }
+}
+
+/**
+ * A project's workflow — one status, one type, no transitions.
+ *
+ * Deliberately the least interesting workflow the contract admits: a test about the legal-move set
+ * states its own, and one about a screen that merely needs a vocabulary does not inherit a
+ * plausible six-status one it never asserted.
+ */
+export function aProjectWorkflow(overrides: Partial<ProjectWorkflow> = {}): ProjectWorkflow {
+  return {
+    projectId: 'p1',
+    statuses: [aStatusRef()],
+    types: [anIssueType()],
+    transitions: [],
     ...overrides,
   }
 }

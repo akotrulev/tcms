@@ -20,6 +20,21 @@ import { docBlockTypeLabel, linkRelationshipHelp, linkRelationshipLabels, linkSo
 type SourceType = BlockLink['sourceType'];
 
 /**
+ * What **this dialog** can pick, which is not the whole enum any more (011 T4).
+ *
+ * `BlockLink.sourceType` gained `ISSUE` when `tracker` became a writer of `doc_link`, and this
+ * picker iterated the label map's keys — so the member arrived as a third tab with no picker
+ * behind it and a `sourceId` that could never be filled. The other end of an issue's link is
+ * created from the **issue's** page ("+ Link a block" on `epic.html`), where the issue is already
+ * known; there is no "which issue?" question to ask here, and a tab that asks one the screen
+ * cannot answer is worse than the member's absence.
+ *
+ * A literal rather than an omission from `linkSourceTypeLabels`: that map is the contract's enum
+ * and the *docs* screen's "Linked from" panel must be able to label an `ISSUE` link it reads.
+ */
+const PICKABLE: readonly SourceType[] = ['TEST_CASE', 'SUITE'];
+
+/**
  * `LinkDialog` and not `Link`: the list this dialog writes into is `Docs.Block.Links`, and two
  * prefixes differing by one character is a locator somebody reads wrong once and a test asserts
  * against the wrong element for ever.
@@ -189,7 +204,7 @@ export function LinkBlockDialog({
             aria-label="What is being linked"
             className="inline-flex w-fit gap-0.5 rounded-[8px] bg-wash-1 p-0.5"
           >
-            {(Object.keys(linkSourceTypeLabels) as SourceType[]).map((value) => (
+            {PICKABLE.map((value) => (
               <button
                 key={value}
                 type="button"

@@ -264,7 +264,17 @@ function projectNav(
       items: [
         { label: 'Test plans', to: `${p}/plans`, icon: <ClipboardList className="size-4" /> },
         { label: 'Test runs', to: `${p}/runs`, icon: <ListChecks className="size-4" /> },
-        { label: 'Board', to: `${p}/board`, icon: <Kanban className="size-4" /> },
+        /*
+          §5's Work screen (011 D34) — **one entry, five views**, which is the decision this
+          replaces the `Board` entry with. ~~`Board`, at `${p}/board`.~~ Board, Backlog, Table,
+          Timeline and Calendar are one dataset with different renderers and one shared filter, so
+          five rail entries would be five names for one place — and the filter a person set on one
+          would be invisible on the next.
+
+          The board route survives and is still linked from the Work screen's own Board tab, which
+          names the module that folds it in. Only the rail entry is gone.
+        */
+        { label: 'Work', to: `${p}/work`, icon: <Kanban className="size-4" /> },
         /*
           §6e's reports (§89). Execution rather than Project, because what a report is *of* is
           execution results — the only one that exists today summarises a run, and every one §6e

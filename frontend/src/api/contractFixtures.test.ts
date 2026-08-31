@@ -7,7 +7,7 @@
  * at *runtime* (`comments.length` of `undefined`) with **zero type errors**, because the fixture
  * ended `} as Review`. The repair was to delete the cast, and it worked: §80 measured the next
  * required field arriving as one build error in one place. Seven files then wrote the rule down in
- * prose — *"Declared as `Condition[]` and NOT cast — §79's rule"*, *"no `as WorkItem`, which is
+ * prose — *"Declared as `Condition[]` and NOT cast — §79's rule"*, *"no `as BoardCard`, which is
  * §79's repair applied here"* — and there it stopped, because **a rule that lives in comments is
  * enforced by whoever happens to read one.**
  *

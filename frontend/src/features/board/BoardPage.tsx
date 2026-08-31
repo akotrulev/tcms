@@ -11,12 +11,12 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core';
 import { GripVertical, X } from 'lucide-react';
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
-import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAnnounce } from '../../a11y/useAnnounce';
 import { ApiError } from '../../api/client';
-import { useMoveWorkItem, useProject, useWorkItems } from '../../api/queries';
-import type { WorkItem, WorkItemStatus } from '../../api/types';
+import { useBoard, useProject, useTransitionIssue } from '../../api/queries';
+import type { BoardCard } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
 import { PermissionGate } from '../../components/PermissionGate';
 import { Badge, Banner } from '../../components/kit';
@@ -29,11 +29,10 @@ import {
   DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu';
 import { formatCount, joinMeta } from '../../lib/format';
-import { healthLabels, priorityLabels, workItemColumns, workItemStatusLabels } from '../../lib/labels';
+import { healthLabels, issueStatusKinds, priorityLabels } from '../../lib/labels';
 import { toast } from '../../notifications/toast';
 import { boardKeyboardCoordinates } from './boardKeyboard';
-import { refusalFor, resolveCardMove } from './cardMove';
-import { TaskCreateDialog } from './TaskCreateDialog';
+import { columnsFor, immobileReason, resolveCardMove, type BoardColumn } from './cardMove';
 
 /**
  * The kanban board (plan §6l).
@@ -60,40 +59,21 @@ import { TaskCreateDialog } from './TaskCreateDialog';
  */
 
 /**
- * The columns, left to right, as the contract's status codes.
+ * ~~The columns, left to right, as the contract's status codes.~~ → **superseded by 011 D-c.**
  *
- * The *vocabulary* is the contract's (`WorkItemStatus`) and the words are
- * `workItemStatusLabels`'. Before §53 all three were one array of English strings written here,
- * which is how the board and the mock came to agree on a spelling no server had ever been asked
- * to produce.
+ * The vocabulary used to be a five-member `WorkItemStatus` enum, and the board's columns were
+ * derived from its label map — with a compile-time guard here asserting every member had a column,
+ * because a status with no column is a card that exists, is returned by the API, and appears
+ * nowhere on screen. That guard is gone with the type it guarded, and the property it protected is
+ * now structural rather than asserted: {@link columnsFor} builds the columns **from the cards**, so
+ * a card whose status has no column is not a state this board can reach.
  *
- * The list itself moved to `lib/labels.ts` in §54, because the board is no longer its only
- * consumer: the mock's `POST /work-items` computes `allowedTransitions` from the same set, and it
- * held its own literal — one column behind the server the moment a fifth arrived.
+ * What the project calls its statuses is a per-project decision now, so there is no constant here
+ * at all. `Board` computes its columns per render from the cards it was handed.
  */
-const COLUMNS = workItemColumns;
-type Column = WorkItemStatus;
 
-/**
- * Every `WorkItemStatus` has a column — asserted by the compiler, not by a reader.
- *
- * `workItemColumns` is derived from the label map's keys, so this should hold structurally. It is
- * asserted anyway because the derivation ends in a type assertion (`as WorkItemStatus[]`), and an
- * assertion is a claim the compiler stops checking. The thing being claimed is the whole reason
- * §53 refused to add `BLOCKED` to the contract on its own: a status with no column is a card that
- * exists, is returned by the API, and appears **nowhere on screen** — invisible rather than
- * misplaced, and nothing fails.
- *
- * Written as a `Record` rather than the shorter `extends never ? true : never` on purpose — that
- * form errors with "Type 'true' is not assignable to type 'never'", which says nothing, while
- * this one **names the missing status**: *Property 'BLOCKED' is missing*. A guard whose failure
- * message does not identify the cause gets silenced rather than fixed.
- */
-const _everyStatusHasAColumn: Record<Exclude<WorkItemStatus, (typeof COLUMNS)[number]>, never> = {};
-void _everyStatusHasAColumn;
-
-const kindLabels: Record<WorkItem['kind'], string> = {
-  TASK: 'Task',
+const kindLabels: Record<BoardCard['kind'], string> = {
+  ISSUE: 'Issue',
   EXECUTION: 'Execution',
   REVIEW: 'Review',
   DOC_UPDATE: 'Documentation',
@@ -104,12 +84,12 @@ const kindLabels: Record<WorkItem['kind'], string> = {
 
 export function BoardPage() {
   const { projectId = '' } = useParams();
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const mine = params.get('mine') === 'true';
 
   const project = useProject(projectId);
-  const items = useWorkItems(projectId, mine);
-  const [creating, setCreating] = useState(false);
+  const items = useBoard(projectId, mine);
 
   /*
     ~~`PageHeader` raised the arrival announcement and the tab title.~~ → superseded by 007 T13:
@@ -149,7 +129,7 @@ export function BoardPage() {
             Board
           </h1>
           <p className="m-0 mt-1 max-w-[74ch] text-[13px] text-ink-3">
-            Tasks alongside the work the repository already knows about — assigned executions,
+            Issues alongside the work the repository already knows about — assigned executions,
             pending reviews, cases that need attention and tests somebody has quarantined.
           </p>
         </div>
@@ -193,35 +173,27 @@ export function BoardPage() {
             that the capability exists and is worth asking for. Hiding it would teach that the
             product cannot do it, which is a lie.
           */}
-          <PermissionGate projectId={projectId} permission="workitem:manage">
+          {/*
+            ~~A dialog on this page, gated on `workitem:manage`.~~ → **superseded by 011.** That
+            permission is retired, the create is `POST /issues`, and the form is a route of its own
+            (`/work/new`) because quick add is one field with a full form under it — more than a
+            dialog beside a board should carry, and the same form the work table links to.
+          */}
+          <PermissionGate projectId={projectId} permission="issue:create">
             {({ allowed }) => (
               <Button
                 variant="primary"
                 size="sm"
                 disabled={!allowed}
-                onClick={() => setCreating(true)}
-                data-testid="Board.NewTask"
+                onClick={() => navigate(`/projects/${projectId}/work/new`)}
+                data-testid="Board.NewIssue"
               >
-                New task
+                Add work
               </Button>
             )}
           </PermissionGate>
         </div>
       </header>
-
-      {/*
-        Conditionally rendered, so the form — and the create hook's per-intent Idempotency-Key —
-        mount fresh each time. See the dialog's header: left permanently mounted, one key would
-        serve every task typed on this page and the second create would replay the first.
-      */}
-      {creating && (
-        <TaskCreateDialog
-          projectId={projectId}
-          open
-          onClose={() => setCreating(false)}
-          onCreated={(task) => toast(`Added “${task.title}”`, { variant: 'success' })}
-        />
-      )}
 
       <DataRegion
         testId="Board.Content"
@@ -270,7 +242,7 @@ export function BoardPage() {
  * rendering as its own fragments joined by a middot with nothing failing anywhere. Anything else
  * passes through untouched, which is the behaviour every future kind gets by default.
  */
-function describeCard(item: WorkItem): string {
+function describeCard(item: BoardCard): string {
   if (item.kind !== 'CASE_MAINTENANCE' || !item.description) return item.description ?? '';
   return item.description
     .split(',')
@@ -307,9 +279,15 @@ function describeCard(item: WorkItem): string {
  * `/projects/{OLB}/cases/{a case OLB does not contain}` — a 404 on the one affordance the card
  * exists to offer, and on the project board it is the same value, so nothing would have looked
  * different where anybody was testing. `projectId` has been **required** on every card since §53
- * (`WorkItem.projectId`), so there is no fallback arm and no route parameter to disagree with.
+ * (`BoardCard.projectId`), so there is no fallback arm and no route parameter to disagree with.
  */
-function linkFor(item: WorkItem): string {
+function linkFor(item: BoardCard): string {
+  // An `ISSUE` card is the one kind that is a ROW, and since M1 it has a page of its own. Its
+  // `id` IS the key — `ACME-124` — which is what `/issues/:key` takes, and what makes this the
+  // only arm that needs no project segment: a key is unique in the only scope RLS lets a caller
+  // see. Before M1 this fell through to a case search that could not have found it.
+  if (item.kind === 'ISSUE' && !item.derived) return `/issues/${encodeURIComponent(item.id)}`;
+
   const projectId = item.projectId;
   const search = `/projects/${projectId}/cases?q=${encodeURIComponent(item.linkedKey ?? '')}`;
   if (!item.sourceId) return item.linkedKey ? search : `/projects/${projectId}/cases`;
@@ -338,11 +316,19 @@ function linkFor(item: WorkItem): string {
  * `crossProject` is presentation only: on a board that is already one project's, stamping every
  * card with that project is noise the reader has to filter out on every glance.
  */
-export function Board({ items, crossProject = false }: { items: WorkItem[]; crossProject?: boolean }) {
+export function Board({ items, crossProject = false }: { items: BoardCard[]; crossProject?: boolean }) {
   const announce = useAnnounce();
-  const move = useMoveWorkItem();
-  const [dragging, setDragging] = useState<WorkItem | null>(null);
+  const move = useTransitionIssue();
+  const [dragging, setDragging] = useState<BoardCard | null>(null);
   const [rejected, setRejected] = useState<string | null>(null);
+
+  /*
+    The columns are the cards', not a constant (011 D-c) — see `columnsFor`. Memoised because the
+    keyboard sensor is constructed from them: a new array each render would rebuild the sensor
+    mid-drag, which drops the lift.
+  */
+  const columns = useMemo(() => columnsFor(items), [items]);
+  const columnNames = useMemo(() => columns.map((column) => column.name), [columns]);
 
   /*
     Pointer + keyboard, and the pointer one needs the 5px constraint for §94's reason one screen
@@ -353,7 +339,7 @@ export function Board({ items, crossProject = false }: { items: WorkItem[]; cros
   */
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: boardKeyboardCoordinates(COLUMNS) }),
+    useSensor(KeyboardSensor, { coordinateGetter: boardKeyboardCoordinates(columnNames) }),
   );
 
   /**
@@ -362,8 +348,8 @@ export function Board({ items, crossProject = false }: { items: WorkItem[]; cros
    * The decision — including the three ways a drag ends in nothing and the one way it is refused —
    * is `resolveCardMove`'s, so it can be asked directly rather than through a jsdom pointer.
    */
-  const commit = async (item: WorkItem | null, over: string | number | null | undefined) => {
-    const outcome = resolveCardMove(item, over, COLUMNS);
+  const commit = async (item: BoardCard | null, over: string | number | null | undefined) => {
+    const outcome = resolveCardMove(item, over, columns);
     if (outcome.outcome === 'NONE') return;
     if (outcome.outcome === 'REFUSED') {
       setRejected(outcome.reason);
@@ -374,17 +360,24 @@ export function Board({ items, crossProject = false }: { items: WorkItem[]; cros
     }
 
     setRejected(null);
-    const item_ = item as WorkItem;
+    const item_ = item as BoardCard;
     try {
-      await move.mutateAsync({ id: item_.id, status: outcome.to });
-      announce(`Moved ${item_.title} to ${workItemStatusLabels[outcome.to]}`);
+      // The card's `id` is its issue KEY — a derived card never reaches here, because it has no
+      // legal transition to resolve into one.
+      await move.mutateAsync({ key: item_.id, statusId: outcome.to.id });
+      announce(`Moved ${item_.title} to ${outcome.to.name}`);
     } catch (error) {
       /*
-        The card is already back where it was — `useMoveWorkItem` restores its snapshot in
-        `onError`. So this says what happened rather than doing the undo, and it says it twice on
-        purpose: the banner persists (a toast about a card that has visibly snapped back is gone
-        before the eye returns to it) and the announcement reaches a screen reader, for whom the
-        snap-back is otherwise completely silent.
+        ~~The card is already back where it was — the move hook restores its snapshot.~~ →
+        **superseded by 011: the transition is not optimistic**, so the card never left. This says
+        what happened, and says it twice on purpose: the banner persists (a toast about a refused
+        move is gone before the eye returns to the card) and the announcement reaches a screen
+        reader, for whom nothing on screen changed at all.
+
+        The 409 the workflow answers with **names the legal moves**, and `ApiError.detail` is that
+        sentence — which is why it is rendered rather than replaced with a generic one, and why
+        `tcmsFaults.issue('conflict')` exists to produce it: the picker only ever offers legal
+        moves, so no ordinary session can.
       */
       const reason =
         error instanceof ApiError ? error.detail : "Couldn't move that card. Check your connection and try again.";
@@ -432,8 +425,8 @@ export function Board({ items, crossProject = false }: { items: WorkItem[]; cros
         )}
 
         {/*
-          The column count is `COLUMNS.length`, not the literal 5: a status added to the contract
-          gets a column here the moment it is labelled. Tailwind cannot name a dynamic class, so
+          The column count is the board's own, not a literal: a project with seven statuses gets
+          seven columns and one with three gets three. Tailwind cannot name a dynamic class, so
           the count travels as a custom property and the arbitrary `grid-template-columns` reads
           it — which keeps the breakpoint in the class list rather than in an inline media query
           nothing can express.
@@ -443,30 +436,37 @@ export function Board({ items, crossProject = false }: { items: WorkItem[]; cros
             'grid items-start gap-3 sm:grid-cols-2 ' +
             'lg:[grid-template-columns:repeat(var(--board-columns),minmax(0,1fr))]'
           }
-          style={{ '--board-columns': COLUMNS.length } as CSSProperties}
+          style={{ '--board-columns': columns.length } as CSSProperties}
         >
-          {COLUMNS.map((column) => {
+          {columns.map((column) => {
             const columnItems = items
-              .filter((item) => item.status === column)
+              .filter((item) => item.status.name === column.name)
               // Overdue first, then by priority, with the id as a unique tiebreaker so cards
               // don't reshuffle on every refetch.
               .sort((a, b) => {
                 const rank = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+                // `priority` is optional on the wire, and an absent one sorts as MEDIUM rather
+                // than as nothing: a derived card carries none, and dropping those to the bottom
+                // would put every execution below every task regardless of its date.
                 return (
                   Number(b.overdue) - Number(a.overdue) ||
-                  rank[a.priority] - rank[b.priority] ||
+                  rank[a.priority ?? 'MEDIUM'] - rank[b.priority ?? 'MEDIUM'] ||
                   a.id.localeCompare(b.id)
                 );
               });
 
             return (
               <BoardColumn
-                key={column}
+                key={column.name}
                 column={column}
                 count={columnItems.length}
                 // Only a column that can legally accept the dragged card highlights, so the
                 // invalid drop is discouraged before it is attempted rather than refused after.
-                canAccept={dragging ? dragging.allowedTransitions.includes(column) : false}
+                canAccept={
+                  dragging
+                    ? dragging.allowedTransitions.some((status) => status.name === column.name)
+                    : false
+                }
                 dragging={dragging !== null}
               >
                 {columnItems.length === 0 ? (
@@ -538,18 +538,21 @@ function BoardColumn({
   dragging,
   children,
 }: {
-  column: Column;
+  column: BoardColumn;
   count: number;
   canAccept: boolean;
   dragging: boolean;
   children: ReactNode;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: column, disabled: dragging && !canAccept });
+  const { setNodeRef, isOver } = useDroppable({
+    id: column.name,
+    disabled: dragging && !canAccept,
+  });
 
   return (
     <section
       ref={setNodeRef}
-      data-testid={`Board.Column.${column}`}
+      data-testid={`Board.Column.${column.name}`}
       data-over={isOver ? 'true' : undefined}
       className={cn(
         'flex min-h-0 flex-col rounded-[8px] border border-line bg-panel',
@@ -564,18 +567,23 @@ function BoardColumn({
         className={cn(
           'm-0 flex items-center gap-2 border-b border-line px-3 py-2.5',
           'text-[11px] font-semibold uppercase tracking-[.08em]',
-          column === 'BLOCKED' ? 'text-[color:var(--color-blocked)]' : 'text-ink-3',
+          // ~~`BLOCKED` earns the colour.~~ → the render's rule survives D-c, but the test that
+          // picks the column out cannot be a status *name* any more: a project may call it
+          // anything. `NOT_STARTED` is the kind a blocked column carries, and it is the one a
+          // reader is scanning for.
+          column.kind === 'NOT_STARTED' ? 'text-[color:var(--color-blocked)]' : 'text-ink-3',
         )}
       >
         {/* The label is its own element: the count sits in the same heading, and a test — or a
             reader — asking for the column by name must not have to know that. */}
-        <span>{workItemStatusLabels[column]}</span>
+        <span>{column.name}</span>
         <span className="ml-auto font-mono tracking-normal text-ink-4">{formatCount(count)}</span>
       </h2>
       <div
         className={cn(
           'flex min-h-[120px] flex-col gap-2 p-2.5',
-          column === 'DONE' && 'opacity-[.62]',
+          // "Done loses its colour" — present for counting, quiet for scanning.
+          column.kind === 'DONE' && 'opacity-[.62]',
           dragging && canAccept && 'bg-wash-1',
         )}
       >
@@ -591,10 +599,10 @@ function WorkCard({
   onMove,
   overlay = false,
 }: {
-  item: WorkItem;
+  item: BoardCard;
   /** Show which project the card belongs to — true only on the cross-project board (§83). */
   crossProject: boolean;
-  onMove: (column: Column) => void;
+  onMove: (columnName: string) => void;
   /** The copy inside `DragOverlay`: no draggable registration, no hiding of the original. */
   overlay?: boolean;
 }) {
@@ -616,7 +624,8 @@ function WorkCard({
       className={cn(
         'rounded-[5px] border border-line bg-paper px-[11px] py-2.5 text-[13px] leading-[1.5]',
         'hover:border-line-strong',
-        item.status === 'BLOCKED' && 'border-[color:color-mix(in_oklab,var(--color-blocked)_26%,transparent)]',
+        item.status.kind === 'NOT_STARTED'
+          && 'border-[color:color-mix(in_oklab,var(--color-blocked)_26%,transparent)]',
         // The original stays in place and fades while the overlay copy follows the cursor;
         // removing it would collapse the column under the pointer mid-drag.
         isDragging && 'opacity-40',
@@ -695,9 +704,11 @@ function WorkCard({
         )}
 
         <span className="flex-1" />
-        <Badge tone="plain" className="text-[10.5px]">
-          {priorityLabels[item.priority]}
-        </Badge>
+        {item.priority && (
+          <Badge tone="plain" className="text-[10.5px]">
+            {priorityLabels[item.priority]}
+          </Badge>
+        )}
       </div>
 
       <span data-testid="Board.Card.Title" className="mb-2 block font-[450] text-ink">
@@ -725,7 +736,7 @@ function WorkCard({
           data-testid="Board.Card.Reason"
           className={cn(
             'm-0 mb-1 text-[11.5px] leading-[1.5] text-ink-4',
-            item.status === 'BLOCKED' && 'mt-[7px] border-t border-line pt-[7px]',
+            item.status.kind === 'NOT_STARTED' && 'mt-[7px] border-t border-line pt-[7px]',
           )}
         >
           {describeCard(item)}
@@ -793,13 +804,35 @@ function WorkCard({
         explained nothing. A menu item does not need the trick: a disabled item renders its reason
         as its own second line, in the menu, where the reader is already looking.
       */}
-      {!overlay && (
+      {/*
+        A card with no legal move renders its trigger DISABLED WITH THE REASON BESIDE IT, not
+        absent — `task.html`'s rule, and the tooltip trick the paragraphs above describe is not
+        available on a disabled control (`disabled:pointer-events-none` means no hover reaches
+        it). A line of text under the button costs one row and is readable by everybody.
+      */}
+      {!overlay && !movable && (
+        <div className="mt-2">
+          <Button
+            size="sm"
+            disabled
+            aria-label={`Move ${item.title}`}
+            data-testid="Board.Card.Move"
+            className="min-h-6 px-2 py-0.5 text-[11px]"
+          >
+            Move to…
+          </Button>
+          <p data-testid="Board.Card.Immobile" className="m-0 mt-1 text-[10.5px] text-ink-4">
+            {immobileReason(item)}
+          </p>
+        </div>
+      )}
+
+      {!overlay && movable && (
         <div className="mt-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 size="sm"
-                disabled={!movable}
                 aria-label={`Move ${item.title}`}
                 data-testid="Board.Card.Move"
                 className="min-h-6 px-2 py-0.5 text-[11px]"
@@ -808,29 +841,33 @@ function WorkCard({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              {COLUMNS.filter((column) => column !== item.status).map((column) => {
-                const allowed = item.allowedTransitions.includes(column);
-                return (
-                  <DropdownMenuItem
-                    key={column}
-                    disabled={!allowed}
-                    onSelect={() => onMove(column)}
-                    data-testid={`Board.Card.MoveTo.${column}`}
-                  >
-                    <span className="flex flex-col">
-                      <span>{workItemStatusLabels[column]}</span>
-                      {/*
-                        The same sentence a refused DROP produces (`cardMove.refusalFor`). Two
-                        affordances, one rule, one wording — they were two hand-written strings
-                        until §106 and had already drifted apart in tense and in what they named.
-                      */}
-                      {!allowed && (
-                        <span className="text-[10.5px] text-ink-4">{refusalFor(item, column)}</span>
-                      )}
-                    </span>
-                  </DropdownMenuItem>
-                );
-              })}
+              {/*
+                **Every destination the CARD states, not every column on the board** (011 D-c).
+
+                Before, the board's five columns were the contract's five statuses, so "every
+                column except this one" and "every status this issue could name" were the same
+                list. They no longer are: a cross-project board draws the union of several
+                workflows, and offering one project's `Ready for QA` on another project's card
+                would be a destination the server has never heard of — which `ui-rules` forbids
+                more strongly than it forbids hiding one.
+
+                So the disabled-not-hidden rule is served on the ISSUE PAGE, where the workflow is
+                known and every status can be listed with its reason (`task.html`). Here the menu
+                is the card's own legal set, and a card with none is refused at the trigger with
+                the same sentence `refusalFor` produces.
+              */}
+              {item.allowedTransitions.map((status) => (
+                <DropdownMenuItem
+                  key={status.id}
+                  onSelect={() => onMove(status.name)}
+                  data-testid={`Board.Card.MoveTo.${status.name}`}
+                >
+                  <span className="flex flex-col">
+                    <span>{status.name}</span>
+                    <span className="text-[10.5px] text-ink-4">{issueStatusKinds[status.kind]}</span>
+                  </span>
+                </DropdownMenuItem>
+              ))}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

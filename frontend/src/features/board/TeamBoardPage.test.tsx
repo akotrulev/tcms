@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../../api/client'
-import type { Team, WorkItem } from '../../api/types'
+import type { Team, BoardCard } from '../../api/types'
 import { createTestQueryClient } from '../../test/queryClient'
 import { TestProviders } from '../../test/TestProviders'
 import { TeamBoardPage } from './TeamBoardPage'
@@ -37,25 +37,25 @@ const OLB = '11111111-1111-4111-8111-111111111111'
 const MOB = '11111111-1111-4111-8111-111111111112'
 const TEAM = '22222222-2222-4222-8222-222222222221'
 
-const card = (partial: Partial<WorkItem> & Pick<WorkItem, 'id' | 'title'>): WorkItem => {
-  // Typed on its own line and never `as WorkItem` — §79's repair, which §80 measured: a new
+const card = (partial: Partial<BoardCard> & Pick<BoardCard, 'id' | 'title'>): BoardCard => {
+  // Typed on its own line and never `as BoardCard` — §79's repair, which §80 measured: a new
   // required field on the contract becomes one build error here rather than a page of runtime ones.
-  const base: WorkItem = {
+  const base: BoardCard = {
     id: partial.id,
     title: partial.title,
     derived: false,
     sourceType: null,
     sourceId: null,
-    kind: 'TASK',
+    kind: 'ISSUE',
     description: null,
-    status: 'TODO',
+    status: { name: 'Ready', kind: 'NOT_STARTED' },
     priority: 'MEDIUM',
     dueDate: null,
     overdue: false,
     projectId: OLB,
     projectKey: 'OLB',
     linkedKey: null,
-    allowedTransitions: ['IN_PROGRESS', 'IN_REVIEW', 'DONE'],
+    allowedTransitions: [],
   }
   return { ...base, ...partial }
 }
@@ -77,7 +77,7 @@ const CHECKOUT: Team = {
  * be raised the way `api.get` raises it — an `ApiError` with **no detail body**, because that is
  * what the server sends and what makes the default copy useless.
  */
-function mockApi(board: WorkItem[] | Error, teams: Team[] | Error = [CHECKOUT], paths: string[] = []) {
+function mockApi(board: BoardCard[] | Error, teams: Team[] | Error = [CHECKOUT], paths: string[] = []) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     paths.push(path)
     if (path.startsWith('/teams')) {
@@ -115,7 +115,7 @@ describe('What the team board asks the server for', () => {
     // Asserted as the whole query string rather than with `toContain('teamId=')`: a request that
     // also carried `mine=true` would pass a containment check and is a **400** — two boards at
     // once — and one that carried a `projectId` is a different, legal, narrower board.
-    expect(paths).toContain(`/work-items?teamId=${TEAM}`)
+    expect(paths).toContain(`/board?teamId=${TEAM}`)
     expect(paths.some((path) => path.includes('mine='))).toBe(false)
     expect(paths.some((path) => path.includes('projectId='))).toBe(false)
   })

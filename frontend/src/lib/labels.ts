@@ -51,7 +51,9 @@ import type {
   StepKeyword,
   SuiteActionKind,
   VerdictSource,
-  WorkItemStatus,
+  CompletionBasis,
+  IssueLevel,
+  IssueStatusKind,
 } from '../api/types';
 
 /**
@@ -158,44 +160,61 @@ export const automationLabels = {
 } as const satisfies Record<AutomationStatus, string>;
 
 /**
- * Board columns (plan §6l).
+ * `IssueLevel`. Shown in the type picker's grouping and nowhere else — the icon carries it
+ * elsewhere.
  *
- * The reason this map exists at all: until §53 the board compared `item.status` against
- * these English strings *directly*, and the contract typed `status` as an unconstrained
- * `string`. The mock served 'To do' because the page expected 'To do', so mock mode agreed
- * with itself and no gate could see that a real server choosing `TODO` would file every
- * card into no column and render an empty board. Naming the codes here puts the vocabulary
- * on the contract's side of the comparison — §52's lesson, one level down.
+ * ~~`workItemStatusLabels` and `workItemColumns` stood here.~~ → **deleted with the type they
+ * labelled** (011 D-c). `WorkItemStatus` was a five-member enum for a status a project *names*,
+ * so the board's columns were the contract's vocabulary and a per-project status could not be
+ * spelled at all. Board card tones now come from {@link issueStatusKinds}, and the columns from
+ * the project's own workflow. The old map's lesson survives it and is worth keeping: the board
+ * once compared `item.status` against English strings, and the mock agreed with the page, so no
+ * gate could see that a real server would file every card into no column.
  */
-export const workItemStatusLabels = {
-  TODO: 'To do',
-  IN_PROGRESS: 'In progress',
-  BLOCKED: 'Blocked',
-  IN_REVIEW: 'In review',
-  DONE: 'Done',
-} as const satisfies Record<WorkItemStatus, string>;
+export const issueLevels = {
+  EPIC: 'Epic',
+  STORY: 'Story level',
+  TASK: 'Sub-task level',
+} as const satisfies Record<IssueLevel, string>;
 
 /**
- * The board's columns, left to right — §6l's order.
+ * `IssueStatusKind`. **NOT a status name** — a project names its own statuses, and this is what a
+ * status MEANS.
  *
- * Here rather than in `BoardPage`: order is a display decision and this is the display layer, and
- * more than one screen needs it. (It was also what the mock's `POST /work-items` computed
- * `allowedTransitions` from, back when a hand-written array there could leave mock mode a column
- * behind the server — that reason retired with the mock; the one above did not.)
- *
- * **Derived from the label map, which is the part that makes it exhaustive.** That map is
- * `satisfies Record<WorkItemStatus, string>`, so a status added to the contract is a compile error
- * until it is labelled — and taking the columns from its keys means it then has a column too,
- * automatically. Writing them out again as a second literal is what would let the two diverge, and
- * the direction it diverges is a card that exists, is returned by the API, and appears nowhere on
- * screen (§53's reason for leaving BLOCKED out until §54 could add all three pieces at once).
- *
- * The assertion is the one cast in this file and it is justified by the line above it: the object
- * has exactly the enum's keys, checked by the compiler, so `Object.keys` cannot produce anything
- * else. `BoardPage` additionally asserts the result covers `WorkItemStatus` — a guard that fails
- * loudly if this reasoning ever stops holding.
+ * Rendered on the workflow settings screen beside each status, and used to pick a badge tone
+ * everywhere else. Lower case because it is read as a caption beside a name the project chose
+ * ("In Review · in progress"), never as a heading of its own.
  */
-export const workItemColumns = Object.keys(workItemStatusLabels) as WorkItemStatus[];
+export const issueStatusKinds = {
+  NOT_STARTED: 'not started',
+  IN_PROGRESS: 'in progress',
+  DONE: 'done',
+} as const satisfies Record<IssueStatusKind, string>;
+
+/**
+ * How a status kind reads as colour — the one place a per-project status name becomes a tone.
+ *
+ * A status the project invented has no tone of its own, so the tone comes from what the status
+ * *means*. `NOT_STARTED` is `untested` rather than `plain`: a badge with no tone reads as
+ * metadata, and a status is the card's primary fact.
+ */
+export const issueStatusKindTones = {
+  NOT_STARTED: 'untested',
+  IN_PROGRESS: 'steel',
+  DONE: 'passed',
+} as const satisfies Record<IssueStatusKind, BadgeTone>;
+
+/**
+ * The basis of a completion percentage (D8), and it is rendered VERBATIM beside every number.
+ *
+ * `epic.html` and `project-overview.html` both show it as a small caption — "by estimate",
+ * "by count" — because a percentage that changes meaning silently is the failure D8 exists to
+ * prevent, and the caption is the whole mitigation.
+ */
+export const completionBases = {
+  COUNT: 'by count',
+  ESTIMATE: 'by estimate',
+} as const satisfies Record<CompletionBasis, string>;
 
 export const priorityLabels = {
   CRITICAL: 'Critical',
@@ -780,14 +799,17 @@ export const linkRelationshipHelp = {
 /**
  * What is at the *other* end of a block's link — `BlockLink.sourceType`.
  *
- * Two values and not four. `doc_link.source_type` also permits `DEFECT` and `DOC_PAGE`; the
+ * ~~Two values and not four.~~ **Three since M1**, and the third arrived exactly the way the
+ * sentence below predicted. `doc_link.source_type` also permits `DEFECT` and `DOC_PAGE`; the
  * contract's enum omits both because neither has a writer, and this map is keyed off the contract's
  * enum rather than the column's so a value nothing can produce cannot get a label that implies it
- * can. `satisfies` makes the day one of them gains a writer a compile error here.
+ * can. `satisfies` makes the day one of them gains a writer a compile error here — which is what
+ * `ISSUE` was when 011 T4 gave `tracker` a writer for it.
  */
 export const linkSourceTypeLabels = {
   TEST_CASE: 'Test case',
   SUITE: 'Suite',
+  ISSUE: 'Issue',
 } as const satisfies Record<BlockLink['sourceType'], string>;
 
 // ------------------------------------------------- notifications (§218) ----

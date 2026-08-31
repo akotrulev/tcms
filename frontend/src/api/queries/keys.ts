@@ -10,7 +10,7 @@
  * call site re-deriving the shape and getting it subtly wrong.
  */
 import type { QueryClient } from '@tanstack/react-query';
-import type { AuditFilters, CaseFilters } from '../types';
+import type { AuditFilters, CaseFilters, IssueFilters } from '../types';
 
 export const keys = {
   me: ['me'] as const,
@@ -316,6 +316,43 @@ export const keys = {
    */
   issueLinks: (p: string, caseId: string) =>
     ['projects', p, 'cases', caseId, 'issue-links'] as const,
+  /**
+   * A project's issues, keyed by the filter and the sort — the work table (§5's Table view).
+   *
+   * Under `['projects', p]` rather than a root of its own, so archiving or renaming a project
+   * sweeps its issues with it. The filter object is part of the key because two filters are two
+   * caches: D34 says the filter survives switching views, which is a URL concern, but a filter
+   * that survived into the WRONG cache would serve one filter's rows under another's chips.
+   */
+  issues: (p: string, filters: IssueFilters, sort: string) =>
+    ['projects', p, 'issues', { ...filters, sort }] as const,
+  /**
+   * Every issue list this project has, as a prefix (§250's rule) — what a create or a delete
+   * invalidates, since neither knows which filters are on screen.
+   */
+  issuesRoot: (p: string) => ['projects', p, 'issues'] as const,
+  /**
+   * One issue, BY KEY and not by id — the key is what the route carries and what a person types.
+   *
+   * Not under `keys.issues`' filter-bearing entry: a detail read must not be swept by a list
+   * invalidation that only changed which rows matched a chip.
+   */
+  issue: (k: string) => ['issues', k] as const,
+  issueComments: (k: string) => ['issues', k, 'comments'] as const,
+  issueDocLinks: (k: string) => ['issues', k, 'doc-links'] as const,
+  /**
+   * The prefix every issue detail shares. A transition changes the issue AND its epic's
+   * completion, so a move invalidates this root and `keys.issues` together — the epic's
+   * percentage is on a different screen and must not be able to lag behind the status that
+   * produced it (D8: one number, one place).
+   */
+  issueRoot: ['issues'] as const,
+  /**
+   * The project's statuses, types and legal moves. Beside `statuses` and `configurations` rather
+   * than under an issue, because it is a property of the PROJECT and outlives every issue that
+   * names it — an issue-scoped key would be refetched by every issue write.
+   */
+  workflow: (p: string) => ['projects', p, 'workflow'] as const,
   users: ['users'] as const,
   teams: ['teams'] as const,
   /**
@@ -391,32 +428,36 @@ export const keys = {
    * leave the other's cache alone.
    */
   emailDomains: ['identity-provider-email-domains'] as const,
-  workItems: (p: string, mine: boolean) => ['work-items', p, mine] as const,
+  workItems: (p: string, mine: boolean) => ['board', p, mine] as const,
   /**
    * The prefix every board shares — invalidate this and all three refresh.
    *
-   * Named here rather than spelled `['work-items']` at each call site, which is what the three
-   * entries below argue for and what `workItems.ts` had privately. §121 phase 4 gave it a second
-   * module's worth of callers: quarantining a case changes a card on a board the case screen does
-   * not know about, so the literal was about to exist twice.
+   * Named here rather than spelled `['board']` at each call site, which is what the three
+   * entries below argue for and what ~~`workItems.ts`~~ → `board.ts` had privately. §121 phase 4
+   * gave it a second module's worth of callers: quarantining a case changes a card on a board the
+   * case screen does not know about, so the literal was about to exist twice.
+   *
+   * **The root literal is `'board'` since M1**, matching the path `GET /work-items` moved to
+   * (011 D-a). The four entries keep their *names* — the argument for one root is unchanged, and
+   * renaming them would rewrite eleven call sites to say nothing new.
    */
-  workItemRoot: ['work-items'] as const,
+  workItemRoot: ['board'] as const,
   /**
-   * §6l's cross-project personal board (§83) — **under the same `work-items` root as the project
+   * §6l's cross-project personal board (§83) — **under the same `board` root as the project
    * board, and that is the point.**
    *
    * The two boards show overlapping cards: a task assigned to me in this project is on both, and a
    * review I owe is on both. So a move made on either has to refresh the other, and keeping one
-   * root lets `['work-items']` do it as a prefix — neither board has to name the other's key, which
+   * root lets `['board']` do it as a prefix — neither board has to name the other's key, which
    * is how the invalidation would drift the first time a third board arrives.
    *
    * `'ALL'` sits where a project id goes and cannot collide with one: project ids are UUIDs.
    * `true` is not a parameter — there is no unfiltered cross-project board. The server answers
    * **400** for that request rather than narrowing it, so the key space has no entry for it either.
    */
-  myWork: ['work-items', 'ALL', true] as const,
+  myWork: ['board', 'ALL', true] as const,
   /**
-   * §6l's **team board** (§84) — under the same `work-items` root, for `myWork`'s reason.
+   * §6l's **team board** (§84) — under the same `board` root, for `myWork`'s reason.
    *
    * A team board's cards overlap both other boards: an execution assigned to a colleague is on
    * their My Work, on their project's board, and on every team board they are a member of. So a
@@ -433,7 +474,7 @@ export const keys = {
    * "swimlanes by member" is a layout nothing renders yet. Both would be key-space entries for
    * requests no hook sends.
    */
-  teamBoard: (teamId: string) => ['work-items', 'TEAM', teamId] as const,
+  teamBoard: (teamId: string) => ['board', 'TEAM', teamId] as const,
   /**
    * The caller's permissions with **no project in the question** — a different answer from
    * `permissions(projectId)` and therefore a different key.

@@ -1,0 +1,219 @@
+import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { Route, Routes, useLocation } from 'react-router-dom'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { api } from '../../api/client'
+import { createTestQueryClient } from '../../test/queryClient'
+import { heldPermissions } from '../../test/permissions'
+import { TestProviders } from '../../test/TestProviders'
+import { drivingAFailedRead } from '../../test/renderFailures'
+import {
+  aProject,
+  aProjectWorkflow,
+  aStatusRef,
+  anIssueSummary,
+  anIssueType,
+} from '../../test/fixtures'
+import { WorkTablePage } from './WorkTablePage'
+
+/**
+ * `work-table.html`, and the four failures a static render cannot show.
+ *
+ * 1. **A failed read must not look like an empty project.** An empty table and a failed one are
+ *    the same picture, and only one of them is recoverable.
+ * 2. **An empty project must offer the action that resolves it.** The mockups' own rule.
+ * 3. **The filter survives a view switch** (D34) — a URL assertion, not a component one, because
+ *    the filter lives in the query string precisely so that it can.
+ * 4. **Columns M1 has no data for are ABSENT from the picker** (D-f). A greyed Release column
+ *    would teach that this issue has no release; the product cannot hold one at all.
+ */
+
+const READY = aStatusRef({ id: 'st-ready', name: 'Ready', kind: 'NOT_STARTED', position: 0 })
+const REVIEW = aStatusRef({ id: 'st-review', name: 'In Review', kind: 'IN_PROGRESS', position: 1 })
+
+const STORY = anIssueType({ id: 'ty-story', name: 'Story', level: 'STORY' })
+const SPIKE = anIssueType({
+  id: 'ty-spike',
+  name: 'Spike',
+  level: 'STORY',
+  countsTowardCompletion: false,
+})
+
+/** Prints the current address, so a test can assert what a view switch did to the query string. */
+function Address() {
+  const location = useLocation()
+  return <span data-testid="Address">{`${location.pathname}${location.search}`}</span>
+}
+
+function renderPage(route = '/projects/p1/work') {
+  return render(
+    <TestProviders client={createTestQueryClient()} route={route}>
+      <Routes>
+        <Route
+          path="/projects/:projectId/work"
+          element={
+            <>
+              <WorkTablePage />
+              <Address />
+            </>
+          }
+        />
+      </Routes>
+    </TestProviders>,
+  )
+}
+
+function mockReads(issues = [anIssueSummary({ key: 'ACME-118', title: 'Guest checkout' })]) {
+  const paths: string[] = []
+  vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
+    paths.push(path)
+    if (path.startsWith('/me/permissions')) return heldPermissions(['issue:read', 'issue:create'])
+    // Anchored, so `/projects/p1/workflow` is not caught by the project arm's prefix.
+    if (/^\/projects\/[^/]+\/workflow$/.test(path)) {
+      return aProjectWorkflow({ statuses: [READY, REVIEW], types: [STORY, SPIKE] })
+    }
+    if (/^\/projects\/[^/]+\/members$/.test(path)) return []
+    if (/^\/projects\/[^/]+$/.test(path)) return aProject({ id: 'p1', name: 'Acme Storefront' })
+    if (path.startsWith('/issues')) return issues
+    throw new Error(`unmocked read: ${path}`)
+  }) as never)
+  return paths
+}
+
+beforeEach(() => {
+  vi.restoreAllMocks()
+})
+
+describe('The table', () => {
+  it('renders a row per issue, keyed and linked to the issue’s own page', async () => {
+    mockReads([
+      anIssueSummary({ key: 'ACME-118', title: 'Guest checkout', status: REVIEW, type: STORY }),
+    ])
+    renderPage()
+
+    const row = await screen.findByTestId('WorkTable.Row')
+    expect(within(row).getByText('ACME-118')).toBeTruthy()
+    // No project segment: a key is unique in the only scope RLS lets a caller see, and it is what
+    // a person types into a commit message.
+    expect(within(row).getByTestId('WorkTable.Row.Title')).toHaveAttribute('href', '/issues/ACME-118')
+  })
+
+  it('shows the project’s own status name rather than a code', async () => {
+    // There is no status enum any more (D-c). A screen that printed `IN_PROGRESS` would be
+    // inventing a vocabulary the project did not choose.
+    mockReads([anIssueSummary({ status: REVIEW })])
+    renderPage()
+
+    expect(await screen.findByTestId('WorkTable.Row.Status')).toHaveTextContent('In Review')
+  })
+})
+
+describe('The states no static render exercises', () => {
+  it('renders the failed state through DataRegion rather than an empty table', async () => {
+    // The work table must say the read failed — an empty table and a failed read look identical
+    // to a reader, and only the second one is recoverable.
+    drivingAFailedRead()
+    vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
+      if (path.startsWith('/me/permissions')) return heldPermissions(['issue:read'])
+      if (/^\/projects\/[^/]+\/workflow$/.test(path)) return aProjectWorkflow()
+      if (/^\/projects\/[^/]+\/members$/.test(path)) return []
+      if (/^\/projects\/[^/]+$/.test(path)) return aProject({ id: 'p1' })
+      throw new Error('the issue read failed')
+    }) as never)
+
+    renderPage()
+
+    expect(await screen.findByTestId('WorkTable.Content.Error')).toBeInTheDocument()
+    expect(screen.queryByTestId('WorkTable.Table')).toBeNull()
+  })
+
+  it('offers a first action when the project has no issues at all', async () => {
+    // An empty state carries the action that resolves it — the mockups' own rule, and the reason
+    // `solo-overview.html`'s release panel is the template for this one.
+    mockReads([])
+    renderPage()
+
+    const empty = await screen.findByTestId('WorkTable.Content.Empty')
+    expect(within(empty).getByTestId('WorkTable.Empty.Add')).toHaveAttribute(
+      'href',
+      '/projects/p1/work/new',
+    )
+  })
+})
+
+describe('The view switcher (D34)', () => {
+  it('keeps the filter across a view switch', async () => {
+    /*
+      D34, and it is a URL assertion rather than a component one: the filter lives in the query
+      string precisely so two views can share it, and a filter held in component state would pass
+      every rendering assertion and lose the value on the first switch.
+    */
+    mockReads()
+    renderPage('/projects/p1/work?level=EPIC&statusId=st-ready')
+
+    await userEvent.click(await screen.findByTestId('WorkTable.View.timeline'))
+
+    await waitFor(() => {
+      const address = screen.getByTestId('Address').textContent ?? ''
+      expect(address).toContain('level=EPIC')
+      expect(address).toContain('statusId=st-ready')
+      expect(address).toContain('view=timeline')
+    })
+  })
+
+  it('names the module a view it does not build arrives in, rather than hiding the tab', async () => {
+    // A tab that vanishes and reappears between releases teaches that the product is unstable;
+    // one that says when it arrives teaches the roadmap. The tab is in the switcher because D34
+    // makes Work one entry.
+    mockReads()
+    renderPage('/projects/p1/work?view=timeline')
+
+    const panel = await screen.findByTestId('WorkTable.NotYet.timeline')
+    expect(panel).toHaveTextContent('M3')
+    expect(screen.queryByTestId('WorkTable.Table')).toBeNull()
+  })
+
+  it('leaves the board that exists today reachable from the tab that defers it', async () => {
+    // The rail entry is gone (D34 makes Work one entry). A tab naming M2 with no way through to
+    // the working board would be the absence this panel exists to avoid.
+    mockReads()
+    renderPage('/projects/p1/work?view=board')
+
+    expect(await screen.findByTestId('WorkTable.NotYet.board.Existing')).toHaveAttribute(
+      'href',
+      '/projects/p1/board',
+    )
+  })
+})
+
+describe('The column picker (D-f)', () => {
+  it('offers only the columns this build has data for', async () => {
+    /*
+      Release, Logged and labels belong to M3, M6 and M2, and they are **absent rather than
+      greyed** — the opposite of this product's usual disable-don't-hide rule, because of what the
+      absence would say. A greyed permission teaches "this exists and you may ask for it"; an
+      empty Release column teaches "this issue has no release", which is a statement about the
+      data in a product that cannot hold releases at all.
+    */
+    mockReads()
+    renderPage()
+
+    await userEvent.click(await screen.findByTestId('WorkTable.Columns'))
+
+    expect(await screen.findByTestId('WorkTable.Columns.status')).toBeInTheDocument()
+    expect(screen.queryByTestId('WorkTable.Columns.release')).toBeNull()
+    expect(screen.queryByTestId('WorkTable.Columns.logged')).toBeNull()
+    expect(screen.queryByTestId('WorkTable.Columns.labels')).toBeNull()
+  })
+
+  it('ignores a column a later release named, rather than drawing an empty header', async () => {
+    // The same rule arriving through a shared link instead of the picker: a `cols=release` from a
+    // future build must not produce a header with no renderer behind it.
+    mockReads()
+    renderPage('/projects/p1/work?cols=summary,release')
+
+    await screen.findByTestId('WorkTable.Table')
+    expect(screen.getByTestId('WorkTable.Header.summary')).toBeInTheDocument()
+    expect(screen.queryByTestId('WorkTable.Header.release')).toBeNull()
+  })
+})

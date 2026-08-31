@@ -260,4 +260,18 @@ export {
   useUsers,
 } from './admin';
 export { type AuditPage, useCompanyAuditEvents, useProjectAuditEvents } from './audit';
-export { useCreateWorkItem, useMoveWorkItem, useMyWork, useTeamBoard, useWorkItems } from './workItems';
+export { useBoard, useMyWork, usePutCardAnnotation, useTeamBoard } from './board';
+export {
+  useCreateIssue,
+  useCreateIssueComment,
+  useDeleteIssue,
+  useIssue,
+  useIssueComments,
+  useIssueDocLinks,
+  useIssues,
+  useProjectWorkflow,
+  useSetIssueWatch,
+  useTransitionIssue,
+  useUpdateIssue,
+  type IssueSort,
+} from './issues';
