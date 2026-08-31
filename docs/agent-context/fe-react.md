@@ -1,6 +1,6 @@
 # fe-react — orientation cache
 
-**Baseline commit:** `7818740c` · **Last verified:** 2026-08-29 · **Verdict this run:** FULL (fingerprint changed — `package.json` + lockfile moved in the T16 delta, invalidating the version lane and everything keyed to it)
+**Baseline commit:** `71777f9a` · **Last verified:** 2026-08-31 · **Verdict this run:** DELTA (the version lane held — `package.json` gained only prettier; the seams below moved because 011 T1–T4 retired the `work` module's contract out from under this stack)
 
 Per `ep-agent-orientation-cache`: validate this against a git delta before trusting it. A changed
 `frontend/package.json`, `package-lock.json`, `tsconfig*.json` or `vite.config.ts` invalidates the
@@ -47,7 +47,7 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 
 | Seam | Where |
 |---|---|
-| Server state | **TanStack Query owns all of it.** `src/api/queries/`, one file per domain behind a barrel. **One** `keys` factory in `keys.ts` — never add a second |
+| Server state | **TanStack Query owns all of it.** `src/api/queries/`, one file per domain behind a barrel. **One** `keys` factory in `keys.ts` — never add a second. `tracker.ts` is the **external** Jira/ADO integration; the product's own issues are `issues.ts`, and the three boards are `board.ts` (~~`workItems.ts`~~, renamed with the endpoint in 011 D-a) |
 | Client state | Session in Context; **filter state lives in the URL** (`useSearchParams`) |
 | Component library | **shadcn/ui over Radix** in `components/ui/` (18 files) + the house kit in `components/kit/` (16). ~~MUI v9~~ → gone in T16; `@mui/*`, `@emotion/*`, `notistack` are in no import and no `package.json` |
 | Styling authority | **Tailwind v4, single authority.** Preflight on, one stylesheet (`src/index.css`), no `sx`, no CSS-in-JS, no CSS Modules. Tokens are custom properties bridged into utility names by `@theme inline` (*inline* is load-bearing — it emits `var(…)` so the `[data-color-scheme]` swap moves every utility). `app/tokenSystem.test.ts` checks the system against itself |
@@ -59,7 +59,8 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 | Display logic | **Shared layer, never the page**: `lib/labels.ts` (each `satisfies Record<Union, string>`, so a new enum member is a compile error until labeled), `lib/format.ts`, `lib/results.ts`, `lib/permissions.ts`, `components/Identifier` for anything monospace |
 | `data-testid` | ~1470 (676 literal + 794 composed), `Domain.Thing` PascalCase, per-file `TestIdPrefix` const. `ClassificationPicker.tsx:150` documents `Classification.Value.<id>` as a **locator contract QA page objects key on** — do not rename it here |
 | Field ↔ error wiring | `components/kit/Field.tsx` clones its child to add `aria-describedby` pointing at `${htmlFor}-message`. Callers pass nothing; do not re-add per-call-site ids |
-| Dev fault switches | `lib/devFaults.ts` behind `src/api/client.ts`; `tcmsFaults.{status,hang,expire,drift,only,off}()` in the console. Both guards are a **literal** `import.meta.env.DEV` so Rollup drops the module — routing that check through an imported constant ships it |
+| Dev fault switches | `lib/devFaults.ts` behind `src/api/client.ts`; `tcmsFaults.{status,hang,expire,drift,only,tracker,issue,off}()` in the console. Both guards are a **literal** `import.meta.env.DEV` so Rollup drops the module — routing that check through an imported constant ships it. `issue('conflict')` fabricates the 409 that names the legal moves, which no ordinary session can produce because the picker only offers legal ones |
+| Issue screens | `features/tracker/` — `WorkTablePage` (`/projects/:id/work`, five views on `?view=`), `IssueNewPage` (`/work/new`), `IssueDetailPage` (**`/issues/:key`, outside the project segment**, dispatching on `type.level` to `EpicPanels`/`StoryPanels`/`TaskPanels`). `TypeIcon` derives its colour from `level` + `countsTowardCompletion`, never from the type's name |
 
 ## Test-harness rules the suites enforce
 
@@ -89,11 +90,21 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 
 ## Known unknowns
 
-- **84 tests fail on a clean checkout, in 18 files, and they are T16 port residue** — not the
-  audit-fix pass, which reduced them from 137. Five distinct causes, each needing a judgment call
-  about whether the test or the component is wrong (e.g. `HealthChip` puts its `data-testid` on the
-  `TooltipTrigger asChild` wrapper while the colour sits on the `Pill` inside, so the test reads
-  black). Unowned.
+- ~~**84 tests fail on a clean checkout, in 18 files, and they are T16 port residue.**~~ → **gone.
+  164 test files pass on `71777f9a`**, verified on shanks. Nothing in 011 T6 repaired them
+  deliberately; they were fixed in the backend lanes between 2026-08-29 and now.
+- **Two disagreements between `tracker`'s contract prose and its code, found while building T6 and
+  NOT fixed here** (both are backend):
+  1. `IssueDocLink.blockExcerpt` is documented as *"what you linked, not what the block says now"*,
+     and `IssueDocLinkFacts.refreshIssueDocLinks` `DELETE`s and re-`INSERT`s the whole projection
+     from the block's **current** flattened text. So the excerpt is always current, and the
+     "changed since linked" card shows the new text under a caption promising the old one.
+  2. There is **no re-confirm operation on the contract**, which is correct — `stale` is a
+     comparison, not a stored decision — but 011 T6 Part B step 5 says the button "targets that
+     endpoint". `LinkedSpecPanel` sends an empty `PATCH /issues/{key}` instead, which is the
+     mechanism `IssueDocLinkFacts`' own javadoc describes. **Unverified against a running server**:
+     whether a no-op PATCH moves `updated_at`, and whether the event-driven projection has caught
+     up by the refetch.
 - ~~**Nothing in `docs/specs/assets/renders/` is implemented.**~~ → 007 landed T6–T16; all 42
   screens are on the render kit.
 - The renders were opened at 1680px only. No claim holds at 1280px, against a real API, or with a
@@ -101,6 +112,26 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 - E2E / Playwright surfaces belong to the `qa-ui-typescript` peer; none are mapped here.
 
 ## Session log
+
+- **2026-08-31** — 011 T6, both parts, `fe` (`3bc9cec7`, `71777f9a`). **`master` was red on
+  arrival** and had been since T4: `WorkItem`, `WorkItemStatus` and `WorkItemInput` were gone from
+  the regenerated schema while `types.ts` still aliased them — 17 `tsc` errors in 6 files. Part A
+  repaired that as its own precondition rather than as scope creep: `workItems.ts` → `board.ts` on
+  the renamed `/board` path, `TaskCreateDialog` deleted (`POST /work-items` is gone; the create is
+  a route now), and **the board's columns are assembled from the cards** (`cardMove.columnsFor`)
+  because a project names its own statuses and no single request answers "every status on this
+  board" for the two cross-project ones. Two things worth carrying: the first cut of that sort
+  ordered by `position` with unknowns last, which put **`Ready` behind `Done`** on every board
+  whose backlog is never a transition target — the fix is kind first, position within the kind; and
+  the transition is **not optimistic** (a move can be refused, and M2 gets the rollback machinery
+  where a drag earns it), so `useMoveWorkItem`'s optimistic patch and its snapshot-restore test are
+  gone with it. `TypeIcon` deliberately does **not** give a Bug the mockup's red: an issue type is
+  a row, so a map keyed on the English word breaks silently on a project that renames it, and the
+  contract's `level` + `countsTowardCompletion` answer four of the mockup's five colours honestly.
+  `LinkBlockDialog` stopped iterating `linkSourceTypeLabels`' keys — `ISSUE` arrived there and
+  would have grown a third tab with no picker behind it. `citedFiles.test.ts` caught the one stale
+  citation this run produced (`workItems.ts` in `keys.ts`), from the `packages` job, as its header
+  predicts.
 
 - **2026-08-29** — fe-react conformance audit (`docs/audits/001-fe-react-conformance-r1.md`, 18
   findings) then Mode FIX over it. **`master` was red on arrival and had been since T16** — 60 `tsc`
