@@ -278,6 +278,60 @@ should see the three contract failures narrow as its five board-configuration op
 handlers; T4 should see them reach zero. Six `FlakeScoreTest` failures survive all of it and belong
 to another lane.
 
+**Measured after T3** (`7c9883b9`, shanks, 3703 tests): **eight failures.** `ContractEnumTest` is
+green — `SwimlaneBy` was the only enum in the set and T3's server type closed it. The two that
+remain name T4's nine operations and T4's twelve schemas and nothing else; both lists are copied
+into T4's prompt, so a name outside them is a regression rather than a leftover.
+
+### D-n — T3's five names came out different from the plan's pseudo-code, and the house pattern is why
+
+Taken by T3, and recorded here because T4 and T6 both bind to these.
+
+| The T3 block wrote | Landed | Why |
+|---|---|---|
+| `throw new UnprocessableException(...)` | a sealed `BoardConfigService.Outcome` — `Unprocessable(title, detail)` · `Written(BoardView)` · `Deleted()` | **there is no `UnprocessableException` in this codebase.** Every service here returns a sealed `Outcome` inside a `GateResult`, so the controller's `switch` is exhaustive at compile time — the failure that shape exists to prevent is a fourth outcome added later and handled in two endpoints of three |
+| `service.create(projectId, input)` | `create(userId, projectId, input)` → `GateResult<Outcome>` | `ProjectService.writeGranted(userId, projectId, key, fn)` is the gate, and it takes the caller. The same for `update(userId, boardId, …)` and `delete(userId, boardId)`; the two reads are `list(userId, projectId)` and `board(userId, boardId)`, both `Optional`, both through `readVisible` |
+| the `BoardColumn` schema paired with the entity | a **second** record, `BoardColumnView` | `ContractConventionTest`'s own rule: pairing a schema to an entity is how a column becomes a field nobody meant to publish. `board.lock_version` is the instance — on the row, not on the wire |
+| `BoardSwimlane` / `BoardSwimlaneId` | **not written** | `board_swimlane` is per-viewer collapse state and **the contract has no endpoint that writes it**. `ArchitectureRulesTest.everyEntityIsWritableByTheProduct` fails an entity whose table the product cannot put a row in, so mapping it two tasks before its writer would have reddened the gate. T7 renders lane collapse; whoever gives it a door writes the entity then |
+| `BoardConfigControllerTest` | `BoardConfigEndpointTest` | every endpoint test in this repository is `*EndpointTest`, and that suffix is how somebody greps for them |
+
+Two things the same session found that the next backend task will hit:
+
+- **`TrackerEndpointTestBase` is `public` now.** A test in `com.tcms.tracker.board` is in a different
+  package from the fixture plumbing it needs, and duplicating the company/user/grant/seed fixture is
+  how two definitions of "a seeded project" start disagreeing.
+- **A test calling a service in-process must open the company scope itself** —
+  `try (var ignored = CompanyContext.open(companyId))`. A request arrives with one because the
+  session establishes it; a direct call does not, and without it `app.current_company` is unset, RLS
+  filters every row, and the gate answers *no such project*. Nine tests failed exactly that way
+  before the guard went in, all of them reading as an authorization defect.
+
+### D-o — a board `PATCH` parks its columns at negative positions before it renumbers them
+
+Taken by T3. `uq_board_column_position (company_id, board_id, position)` is not deferrable and
+Hibernate flushes its updates in an order of its own choosing, so rotating three columns by one place
+collides with the index on whichever update goes first — **a legal reorder refused by a constraint
+about a state it only passes through.** `BoardConfigService.rebuildColumns` therefore moves every
+kept column to a negative position and flushes, then writes the final `0..n-1` and flushes again.
+
+The alternative was deleting every column and re-inserting, which is one pass and loses the column
+ids — and the contract says in as many words that a column carrying an id is *kept and updated*.
+`reorderingColumnsKeepsTheirIdentity` is the test that would have gone green under the wrong one.
+
+### D-p — restoring a project's workflow in a fixture must delete the board FIRST
+
+Taken by T3, and it is a **standing trap for every test that edits a workflow**, not a T3 detail.
+
+`tcms_seed_project_defaults`' board block is guarded by `NOT EXISTS (SELECT 1 FROM board …)`. Deleting
+a project's `issue_status` rows fires `board_follows_status_removal`, which takes the columns with
+them — so a fixture that deletes the statuses and re-seeds gets its six statuses back and a board
+with **zero columns**, silently, because the guard sees the board row still there and skips.
+
+`WorkflowEndpointTest.restoreWorkflow` has done exactly this since T2 and nothing noticed, because
+nothing in that class looks at a board. It is why `BoardConfigService.claimNewStatus` skips a board
+with no columns rather than indexing into an empty list. The fix in the two T3 fixtures that need it
+is one line and an ordering: `DELETE FROM board` first, then the statuses, then the seed.
+
 ---
 
 ## File structure
@@ -587,25 +641,52 @@ that can be subtly wrong rather than merely unwired.
 
 READ, IN THIS ORDER:
   1. docs/plans/012-board-and-backlog.md — D-d (the rank), D-e (labels take no new permission),
-     D-k (the rank DEFAULT is a trigger, and why RankService must not re-implement it), D-m (nine
-     failures that are not yours, and how many of them YOU are expected to clear), and the T4 block.
+     D-k (the rank DEFAULT is a trigger, and why RankService must not re-implement it), D-m (the
+     failures that are not yours, and how many of them YOU are expected to clear), D-n (T3's names,
+     which are the ones you bind to), D-o and D-p (two traps T3 hit that you will too), and the T4
+     block.
   2. backend/src/main/java/com/tcms/tracker/TransitionService.java — you DELEGATE to it. Do not
      reimplement "may this issue go there"; two implementations of that question is how two
      answers to it start disagreeing.
   3. backend/src/main/java/com/tcms/tracker/board/BoardConfigService.java — T3's, for the column
-     and claim repositories you read here.
+     and claim repositories you read here, for the sealed-Outcome shape you copy, and for
+     `viewOf`, which is already the "columns in position order, statuses in workflow order" read.
   4. docs/specs/2026-08-30-project-management-expansion-scope.md §12.2 (filter semantics, labels)
      and §12.4 (the drag rule — it constrains the CONTRACT you are serving).
   5. Stories B3 and B4.
 
 TRAPS THIS TASK WILL HIT:
-  * YOU ARE THE TASK THAT CLEARS THE CONTRACT SUITES (D-m). ContractParameterBindingTest,
-    ContractConventionTest and ContractEnumTest have been red since T1 because the contract declares
-    fourteen operations, seventeen object schemas and the SwimlaneBy enum ahead of any server. T3
-    served five of the operations; the other nine are yours, and so are the records the seventeen
-    schemas pair with. YOUR GATE IS GREEN WHEN ONLY THE SIX FlakeScoreTest FAILURES REMAIN — those
-    were red on master in the 2026-08-31 nightly and belong to no task in this plan. If a contract
-    test still names one of your nine, that is your finding, not a pre-existing one.
+  * YOU ARE THE TASK THAT CLEARS THE CONTRACT SUITES (D-m). T3's gate on shanks measured it:
+    3703 tests, EIGHT failures. ContractEnumTest went green when SwimlaneBy gained a server type,
+    so what is left is ContractParameterBindingTest naming YOUR NINE OPERATIONS —
+    GET /boards/{boardId}/cards, POST /boards/{boardId}/cards/{key}/move,
+    GET /projects/{projectId}/backlog, PUT /issues/{key}/rank, the four /labels operations and
+    PUT /issues/{key}/labels — and ContractConventionTest naming YOUR TWELVE SCHEMAS: BoardContents,
+    BoardLane, WipBreach, BoardIssueCard, CardMoveInput, CardMoveResult, BacklogRow, RankInput,
+    RankResult, Label, LabelInput, IssueLabelsInput. Both lists are copied from that run, so a name
+    on either that is not in them is a regression you caused. YOUR GATE IS GREEN WHEN ONLY THE SIX
+    FlakeScoreTest FAILURES REMAIN — those were red on master in the 2026-08-31 nightly and belong
+    to no task in this plan.
+  * PAIRING A SCHEMA IS AN EDIT TO A TEST FILE, and T3 is the worked example: a named schema goes in
+    `ContractConventionTest.RESPONSE_RECORDS` as a class literal, an inline object in
+    `INLINE_RECORDS`, and a named enum in `ContractEnumTest.OWNERS` as a fully-qualified string.
+    A schema pairs with a VIEW RECORD and never with an entity — that rule is what made T3 write
+    `BoardColumnView` beside the `BoardColumn` entity (D-n).
+  * T3'S SERVICE DOES NOT THROW (D-n). `BoardConfigService` returns
+    `GateResult<BoardConfigService.Outcome>` with a sealed `Outcome` of `Unprocessable(title,
+    detail)` / `Written(BoardView)` / `Deleted()`, and every method takes the caller's userId first:
+    `create(userId, projectId, input)`, `update(userId, boardId, input)`,
+    `delete(userId, boardId)`, `list(userId, projectId)`, `board(userId, boardId)`. Follow that
+    shape rather than the pseudo-code in the T4 block, which predates it.
+  * A TEST THAT CALLS A SERVICE IN-PROCESS OPENS THE COMPANY SCOPE ITSELF —
+    `try (var ignored = CompanyContext.open(companyId))`. Without it `app.current_company` is unset,
+    RLS filters every row and the gate answers "no such project": nine of T3's tests failed exactly
+    that way and every one of them read as an authorization defect (D-n).
+  * A FIXTURE THAT RESTORES A WORKFLOW DELETES THE BOARD FIRST (D-p). The seed function's board
+    block is guarded by NOT EXISTS, and deleting issue_status rows takes the columns with them via
+    the V5 trigger — so "delete statuses, re-seed" leaves a board with zero columns, silently.
+  * `TrackerEndpointTestBase` IS PUBLIC since T3, so a test in `com.tcms.tracker.board` extends it
+    rather than restating the company / user / grant / seed fixture.
   * `issue.rank` IS ALREADY NOT NULL AND ALREADY FILLED ON INSERT, by V5's `issue_rank_default`
     trigger (D-k). It stands aside whenever an insert supplies a rank, so RankService.place just
     writes one — do NOT add a creation-path default in IssueService, and do NOT assume a new issue
@@ -641,7 +722,8 @@ TRAPS THIS TASK WILL HIT:
     assigneeId=c` is (a or b) and c.
 
 GATE: ~/bin/tcms-remote sync && ~/bin/tcms-remote backend 'ulimit -n 65535; ./gradlew build'
-      Green here means SIX failures — FlakeScoreTest only. (fd-limit note in T2.)
+      You start from EIGHT failures and green here means SIX — FlakeScoreTest only. (fd-limit note
+      in T2.)
 
 COMMIT: `git add <paths>` only — the new classes in tracker/board and their tests.
 
@@ -2256,6 +2338,7 @@ versions, and out-of-order is unset."
 
 ## T3 — board configuration
 
+**Landed:** `7c9883b9`
 **Deliverable:** `GET|POST /projects/{projectId}/boards` and `GET|PATCH|DELETE /boards/{boardId}`
 are served by `com.tcms.tracker.board`; a status added to a project's workflow is claimed by every
 board of that project in the column holding the default status of the same `kind`, proven by a test;
@@ -4018,7 +4101,19 @@ rendered nothing but the error page, all of which typechecked and linted clean.
       every object schema carries `required`, that no operationId is duplicated and that no response
       property is credential-shaped. **Not one of them establishes that a handler could serve any of
       these shapes** — the first task that finds out is T3, and the first that finds out about the
-      cards, the rank and the labels is T4.
+      cards, the rank and the labels is T4. → **five of the ten are answered.** T3's
+      `BoardConfigEndpointTest` drives all five configuration operations through MockMvc and gets
+      the declared statuses back, 422 included and as `application/problem+json`. The other five are
+      still this bullet.
+- [ ] **A board created, renamed or re-columned by a person.** T3 proves the five operations answer
+      and that a rotation keeps every column's id through the position-parking pass (D-o), but
+      `settings-boards.html` is T9 — nobody has submitted one of these bodies from a form, and the
+      one thing a form does that a test fixture does not is send a column list somebody built by
+      hand.
+- [ ] **A folded column's WIP limit round-tripping.** `wipLimit` is written, stored and served, and
+      `null` means no limit; what nothing has done is set one and look at it. The breach arithmetic
+      is T4's and the header that shows it is T7's, so the column is currently a number with no
+      reader outside its own test.
 - [ ] `V5` applied to an instance that **already holds issues** — the property Testcontainers
       structurally cannot show, because it always builds from empty, and the one the `rank` backfill
       and the `NOT NULL` that follows it carry the most risk on. T2 exercised the loop by hand
