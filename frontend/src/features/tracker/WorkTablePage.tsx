@@ -31,6 +31,7 @@ import { cn } from '../../lib/cn';
 import { formatCount, plural } from '../../lib/format';
 import { issueLevels } from '../../lib/labels';
 import { NativeSelect } from '../../components/ui/native-select';
+import { ProjectBoardView } from '../board/ProjectBoardView';
 import { StatusBadge } from './StatusBadge';
 import { TypeIcon } from './TypeIcon';
 
@@ -41,10 +42,16 @@ import { TypeIcon } from './TypeIcon';
  *
  * Board, Backlog, Table, Timeline and Calendar are one screen with a view switcher, not five rail
  * entries, and the filter is shared across them — which is why it lives in the URL rather than in
- * component state. **Four of the five are not built in M1**, and each renders a panel naming the
- * module it arrives in rather than vanishing: a tab that disappears and reappears between releases
- * teaches that the product is unstable, while one that says *when* teaches the roadmap. The tab is
- * in the switcher because D34 makes Work one entry; it is empty because M1 built one view.
+ * component state. ~~**Four of the five are not built in M1**~~ → **three, since 012 T7 landed the
+ * board** (`features/board/ProjectBoardView.tsx`, which is the *project* board and not
+ * `BoardPage.tsx`'s composite one). Backlog arrives in T8; Timeline and Calendar are M3's, and each
+ * still renders a panel naming the module it arrives in rather than vanishing: a tab that disappears
+ * and reappears between releases teaches that the product is unstable, while one that says *when*
+ * teaches the roadmap.
+ *
+ * **The board's panel named the previous board as still reachable and no longer does**, because the
+ * absence that sentence covered is gone: `/projects/:id/board` still exists and still works, and it
+ * is a different board (D-a) rather than this one's predecessor.
  *
  * <h2>Columns M1 has no data for are ABSENT from the picker, not greyed (D-f)</h2>
  *
@@ -68,19 +75,7 @@ const TEST_ID = 'WorkTable';
  * module and what the view will do — because "coming soon" names nothing a reader can plan around.
  */
 const VIEWS = [
-  {
-    id: 'board',
-    label: 'Board',
-    module: 'M2',
-    body:
-      'The board arrives with the delivery module, which rebuilds it on issues and puts it behind '
-      + 'this switcher so a filter set here survives the move to it.',
-    // The board that exists today is the previous one and is still reachable. Naming it here is
-    // not a contradiction of "not built": what M2 builds is the board *inside this switcher*,
-    // sharing this filter — and leaving the reader with no way to the working one would be the
-    // absence this panel exists to avoid.
-    existing: 'board',
-  },
+  { id: 'board', label: 'Board', module: null, body: '', existing: null },
   {
     id: 'backlog',
     label: 'Backlog',
@@ -136,10 +131,18 @@ export function WorkTablePage() {
 
   const project = useProject(projectId);
   const workflow = useProjectWorkflow(projectId);
-  // Gated on the filter strip being on screen at all: the table view is the only one that reads
-  // it, and the four not-yet views must not fire a request whose only use is a chip they do not
-  // render.
-  const members = useProjectMembers(projectId, params.get('view') === null || params.get('view') === 'table');
+  /*
+    Gated on the filter strip being on screen at all: the two not-yet views must not fire a request
+    whose only use is a chip they do not render.
+
+    ~~The table view is the only one that reads it.~~ → the board reads it too since 012 T7, and asks
+    for it itself rather than through a prop: the query key is the same, so TanStack serves one
+    request to both and the gate here stays about *this* strip.
+  */
+  const members = useProjectMembers(
+    projectId,
+    params.get('view') === null || params.get('view') === 'table',
+  );
 
   const view = params.get('view') ?? 'table';
   const sort = (params.get('sort') ?? 'key') as IssueSort;
@@ -252,8 +255,14 @@ export function WorkTablePage() {
           >
             Work
           </h1>
+          {/*
+            ~~"The same issues the board is showing — a different shape, not a different query."~~ →
+            that sentence was written when this header belonged to the table alone. The board is now
+            one of the views under it, so the subtitle is `work-board.html`'s, which names the whole
+            switcher and the one thing every view shares.
+          */}
           <p className="m-0 mt-1 max-w-[74ch] text-[13px] text-ink-3">
-            The same issues the board is showing — a different shape, not a different query.
+            Board · Backlog · Table · Timeline · Calendar — one entry, one filter.
           </p>
         </div>
 
@@ -300,7 +309,15 @@ export function WorkTablePage() {
         })}
       </nav>
 
-      {current.module !== null ? (
+      {/*
+        The board is a view of this screen, not a screen of its own — D34, and the reason the filter
+        lives in the query string: switching to it keeps every chip. `ProjectBoardView` reads the
+        same URL and maps it onto `BoardFilters`, which is a different parameter set from the table's
+        (D-v) rather than the same one narrowed.
+      */}
+      {current.id === 'board' ? (
+        <ProjectBoardView projectId={projectId} />
+      ) : current.module !== null ? (
         <section data-testid={`${TEST_ID}.NotYet.${current.id}`}>
           <Banner tone="steel">
             <div className="min-w-0">

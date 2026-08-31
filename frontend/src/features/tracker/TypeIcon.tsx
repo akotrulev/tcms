@@ -46,7 +46,16 @@ export function TypeIcon({
   className,
   ...rest
 }: {
-  type: IssueTypeRef;
+  /**
+   * The three fields the glyph and the tone are derived from — **not the whole `IssueTypeRef`**.
+   *
+   * Widened in 012 T7, when the project board's card arrived: `BoardIssueCard` carries `typeName`,
+   * `typeLevel` and `countsTowardCompletion` and **no type id**, so a caller there had two choices —
+   * synthesise an id this component has never read, or say in the type which fields it actually
+   * needs. The second is the one a reader can check. Every existing caller passes a full
+   * `IssueTypeRef` and is unaffected, because this is a widening.
+   */
+  type: Pick<IssueTypeRef, 'name' | 'level' | 'countsTowardCompletion'>;
   className?: string;
   'data-testid'?: string;
 }) {

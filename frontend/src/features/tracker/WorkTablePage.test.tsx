@@ -8,11 +8,14 @@ import { heldPermissions } from '../../test/permissions'
 import { TestProviders } from '../../test/TestProviders'
 import { drivingAFailedRead } from '../../test/renderFailures'
 import {
+  aBoardConfig,
+  aBoardSummary,
   aProject,
   aProjectWorkflow,
   aStatusRef,
   anIssueSummary,
   anIssueType,
+  boardContents,
 } from '../../test/fixtures'
 import { WorkTablePage } from './WorkTablePage'
 
@@ -73,6 +76,18 @@ function mockReads(issues = [anIssueSummary({ key: 'ACME-118', title: 'Guest che
       return aProjectWorkflow({ statuses: [READY, REVIEW], types: [STORY, SPIKE] })
     }
     if (/^\/projects\/[^/]+\/members$/.test(path)) return []
+    /*
+      The board view's four reads (012 T7). They are here rather than in a second helper because the
+      switcher renders one of two views under one header, so a test that switches views crosses both
+      sets — and a double that answered only the table's would report the board as a failed region.
+
+      `/boards/{id}` and `/boards/{id}/cards` are one segment apart and both anchored: the harness
+      names that pair as exactly the prefix collision to avoid.
+    */
+    if (/^\/projects\/[^/]+\/boards$/.test(path)) return [aBoardSummary({ id: 'b1' })]
+    if (/^\/projects\/[^/]+\/labels$/.test(path)) return []
+    if (/^\/boards\/[^/]+$/.test(path)) return aBoardConfig({ id: 'b1' })
+    if (/^\/boards\/[^/]+\/cards/.test(path)) return boardContents()
     if (/^\/projects\/[^/]+$/.test(path)) return aProject({ id: 'p1', name: 'Acme Storefront' })
     if (path.startsWith('/issues')) return issues
     throw new Error(`unmocked read: ${path}`)
@@ -173,16 +188,26 @@ describe('The view switcher (D34)', () => {
     expect(screen.queryByTestId('WorkTable.Table')).toBeNull()
   })
 
-  it('leaves the board that exists today reachable from the tab that defers it', async () => {
-    // The rail entry is gone (D34 makes Work one entry). A tab naming M2 with no way through to
-    // the working board would be the absence this panel exists to avoid.
+  it('renders the board itself now, rather than a panel deferring it', async () => {
+    /*
+      ~~"leaves the board that exists today reachable from the tab that defers it"~~ → **superseded
+      by 012 T7**, which built the board this tab was deferring. The old assertion was that the
+      `M2` panel linked out to `/projects/p1/board`, and both halves of it are gone: the panel is
+      gone because the view exists, and the link with it because the absence it covered is over.
+
+      `/projects/:id/board` still works and is still a different board (D-a) — the *composite* one,
+      over `GET /board`, with four card kinds. It is not this one's predecessor and this tab is no
+      longer the way to it.
+
+      Asserted through the board's own root rather than through its content: what this test is about
+      is the **switcher's** wiring, and the board's behaviour has a file of its own.
+    */
     mockReads()
     renderPage('/projects/p1/work?view=board')
 
-    expect(await screen.findByTestId('WorkTable.NotYet.board.Existing')).toHaveAttribute(
-      'href',
-      '/projects/p1/board',
-    )
+    expect(await screen.findByTestId('ProjectBoard.View')).toBeInTheDocument()
+    expect(screen.queryByTestId('WorkTable.NotYet.board')).toBeNull()
+    expect(screen.queryByTestId('WorkTable.Table')).toBeNull()
   })
 })
 
