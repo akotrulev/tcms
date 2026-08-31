@@ -35,7 +35,7 @@ import { UnlinkDialog } from '../../components/UnlinkDialog';
 import { Button } from '../../components/ui';
 import { cn } from '../../lib/cn';
 import { formatCount, formatDateTime } from '../../lib/format';
-import { docPageStatusLabel } from '../../lib/labels';
+import { docPageStatusLabel, linkRelationshipLabels } from '../../lib/labels';
 import { CreateDocPageDialog, DeleteDocPageDialog } from './DocPageDialogs';
 import { LinkBlockDialog } from './LinkBlockDialog';
 
@@ -119,6 +119,12 @@ export function DocsPage() {
   */
   const [searchParams, setSearchParams] = useSearchParams();
   const intendedCaseId = searchParams.get('linkCase') ?? undefined;
+  /*
+    `documents.html`'s opening state — *"Opened at §3.2 — the block ACME-101 links to"*. Read here
+    and drilled, for `intendedCase`'s reason: one answer for the whole screen rather than every
+    paragraph reading the query string for itself.
+  */
+  const openedBlockId = searchParams.get('block');
   /*
     §235 — the search, in the URL for the same reason the carried case is: a reader deep-links a
     colleague at "everything we say about chargebacks", reloads, or presses Back out of a page they
@@ -351,6 +357,7 @@ export function DocsPage() {
                       projectId={projectId}
                       onDelete={setDeleting}
                       intendedCase={intended.data ?? null}
+                      openedBlockId={openedBlockId}
                     />
                     <div className="mt-6">
                       <PageAttachments page={data} projectId={projectId} />
@@ -634,6 +641,7 @@ function PageView({
   projectId,
   onDelete,
   intendedCase,
+  openedBlockId,
 }: {
   page: DocPage;
   projectId: string;
@@ -643,6 +651,8 @@ function PageView({
    * block reading the search param for itself would issue one case request per paragraph.
    */
   intendedCase: TestCaseSummary | null;
+  /** The block the address named, drilled for `intendedCase`'s reason. */
+  openedBlockId: string | null;
 }) {
   const { blocks } = coverageOf(page);
 
@@ -691,6 +701,7 @@ function PageView({
             pageId={page.id}
             attachments={page.attachments}
             intendedCase={intendedCase}
+            opened={block.id === openedBlockId}
           />
         ))
       )}
@@ -709,9 +720,27 @@ function PageView({
 function PageFacts({ page }: { page: DocPage }) {
   const { coverable, untested, failing, passing, notRun } = coverageOf(page);
 
+  /*
+    **Split since 011 M1, and the split is a correctness repair rather than a new feature.**
+
+    `BlockLink.sourceType` gained `ISSUE` when `tracker` became a writer of `doc_link`, and this
+    map fed a section headed "Cases linked here" — so an epic linking to a paragraph would have
+    been counted and listed as a case, under a heading saying so. One panel per kind of thing at
+    the other end, because they are answers to different questions: a case linked here is coverage,
+    and an issue linked here is somebody building against this text.
+
+    The section is the nearest preceding heading, derived here because `BlockLink` carries no
+    section of its own — the mockup's `§3.2` is the document's structure, not a field.
+  */
   const linked = new Map<string, BlockLink>();
+  const issueLinks: { link: BlockLink; section: string | null }[] = [];
+  let heading: string | null = null;
   for (const block of page.blocks ?? []) {
-    for (const link of block.links) linked.set(link.id, link);
+    if (block.blockType === 'heading') heading = block.text;
+    for (const link of block.links) {
+      if (link.sourceType === 'ISSUE') issueLinks.push({ link, section: heading });
+      else linked.set(link.id, link);
+    }
   }
 
   return (
@@ -764,6 +793,53 @@ function PageFacts({ page }: { page: DocPage }) {
           <p className="mt-2 mb-0 text-[12px] leading-[1.5] text-ink-4">
             Editing a block marks the cases that cite it <em>Linked spec changed</em> until someone
             re-reads them.
+          </p>
+        </section>
+      )}
+
+      {/*
+        `documents.html`'s **"Linked from"** panel — the issues that build against this page.
+
+        Its footer states the rule from this end, which is the same `stale` the epic's own linked-
+        spec panel states from the other: editing a linked block flags every link to it as "changed
+        since linked" until someone re-confirms. Two screens, one sentence, because the reader who
+        is about to edit a paragraph is the one who most needs to know what it costs.
+
+        **No per-type icon**, unlike the mockup's `E`/`S` squares. A block-end link carries the
+        source's key, title and relationship and not its type — the level is the *issue's* fact and
+        this is the block's view of the row — so drawing an icon here would mean guessing a level
+        from a key, or a second request per link to find out.
+      */}
+      {issueLinks.length > 0 && (
+        <section className="mb-5" data-testid="Docs.Content.LinkedFrom">
+          <h2 className={SECTION_HEADING}>
+            Linked from
+            <span className="font-sans text-[11px] font-normal tracking-normal text-ink-4 normal-case">
+              {formatCount(issueLinks.length)}
+            </span>
+          </h2>
+          {issueLinks.map(({ link, section }) => (
+            <RouterLink
+              key={link.id}
+              // The issue's own page, by key — `BlockLink.sourceKey` is `ACME-101`, which is
+              // exactly what `/issues/:key` takes. No project segment: a key is unique in the only
+              // scope RLS lets a caller see.
+              to={`/issues/${encodeURIComponent(link.sourceKey)}`}
+              data-testid="Docs.Content.LinkedFrom.Item"
+              className="block py-1 text-[12.5px] text-ink-3 no-underline hover:text-steel"
+            >
+              <span className="block truncate">
+                <Identifier variant="muted">{link.sourceKey}</Identifier> {link.sourceTitle}
+              </span>
+              <span className="block text-[11px] text-ink-4">
+                {section ? `${section} · ` : ''}
+                {linkRelationshipLabels[link.relationship].toLowerCase()}
+              </span>
+            </RouterLink>
+          ))}
+          <p className="mt-2 mb-0 text-[12px] leading-[1.5] text-ink-4">
+            Editing a linked block flags every link to it as &ldquo;changed since linked&rdquo;
+            until someone re-confirms.
           </p>
         </section>
       )}
@@ -924,12 +1000,25 @@ function BlockView({
   pageId,
   attachments,
   intendedCase,
+  opened,
 }: {
   block: DocBlock;
   projectId: string;
   pageId: string;
   attachments: DocPage['attachments'];
   intendedCase: TestCaseSummary | null;
+  /**
+   * This is the block the address named — `?block=<id>`, which is what the epic's "Open at this
+   * block" link sends (`documents.html`'s opening line: *"Opened at §3.2 — the block ACME-101
+   * links to"*).
+   *
+   * **A query parameter and not the `#` fragment**, even though `id` above is already an anchor
+   * and `:target` already draws an outline. The fragment is consumed by the browser and is gone
+   * from the URL a reader copies out of the bar; the block is also the thing the top-of-page line
+   * has to name, and a component cannot read another component's `:target`. So the parameter is
+   * the fact, and the anchor stays for the scroll.
+   */
+  opened: boolean;
 }) {
   const isHeading = block.blockType === 'heading';
 
@@ -938,13 +1027,22 @@ function BlockView({
       // The stable block id is the anchor. It never changes when the text does, which is the
       // whole reason a case's link to it can be trusted years later.
       id={block.id}
-      data-testid="Docs.Block"
+      data-testid={opened ? 'Docs.Block.Opened' : 'Docs.Block'}
       className={cn(
         'scroll-mt-[72px] target:rounded-sm target:outline-2 target:outline-offset-[6px]',
         'target:outline-[color:var(--color-action-primary)]',
         isHeading ? 'mt-6 mb-1' : 'mb-4',
+        opened
+          && 'rounded-[6px] border border-[color:var(--color-steel-line)] bg-[color:var(--color-steel-glow)] p-3.5',
       )}
     >
+      {opened && (
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <Badge tone="steel" data-testid="Docs.Block.Opened.Marker">
+            the block you followed
+          </Badge>
+        </div>
+      )}
       <DocBlockBody block={block} attachments={attachments} testId="Docs.Block" />
       {/*
         No coverage line on a heading, which is not a styling choice: a heading is structure rather

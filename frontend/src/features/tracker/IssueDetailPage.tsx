@@ -1,0 +1,252 @@
+import { useEffect } from 'react';
+import { Link as RouterLink, useParams } from 'react-router-dom';
+import { useAnnounce } from '../../a11y/useAnnounce';
+import { useIssue, useProjectWorkflow, useSetIssueWatch } from '../../api/queries';
+import { useCurrentUserId } from '../../auth/useAuth';
+import { DataRegion } from '../../components/DataRegion';
+import { Identifier } from '../../components/Identifier';
+import { Panel } from '../../components/PageHeader';
+import { Badge } from '../../components/kit';
+import { Button } from '../../components/ui';
+import { formatDate, formatDateTime } from '../../lib/format';
+import { priorityLabels } from '../../lib/labels';
+import { CommentFeed } from './CommentFeed';
+import { EpicPanels } from './EpicPanels';
+import { StatusBadge } from './StatusBadge';
+import { StoryPanels, ClosingThisStory } from './StoryPanels';
+import { TaskPanels } from './TaskPanels';
+import { TransitionMenu } from './TransitionMenu';
+import { TypeIcon } from './TypeIcon';
+
+/**
+ * `epic.html`, `story.html` and `task.html` — **one URL, three panel sets.**
+ *
+ * They are one route because **a key does not say its level.** Somebody following `ACME-118` out
+ * of a commit message, a Slack line or a CLI verb does not know which of the three they are
+ * getting, and three routes would mean the client had to learn the level before it could build the
+ * address — a read to decide where to navigate, on the read it was navigating to.
+ *
+ * So `/issues/:key` reads the issue and dispatches on `type.level`. The **shell is shared** —
+ * header chips, title, the transition menu, comments, watchers, the Details list — and only the
+ * body panels differ, which is what keeps the three from drifting into three spellings of one
+ * screen.
+ *
+ * **No project segment**, and that is the contract's own decision: `project.key` is unique per
+ * company and the counter is per project, so the pair is unique in the only scope RLS lets a
+ * caller see. A project id in the path would be a second, guessable copy of a fact the key
+ * already carries.
+ */
+
+const TEST_ID = 'Issue';
+
+export function IssueDetailPage() {
+  const { key = '' } = useParams();
+  const issue = useIssue(key);
+  const announce = useAnnounce();
+
+  useEffect(() => {
+    if (issue.data) announce(`${issue.data.key} ${issue.data.title} loaded`);
+  }, [issue.data, announce]);
+
+  return (
+    <div>
+      <title>{issue.data ? `${issue.data.key} ${issue.data.title} · TCMS` : `${key} · TCMS`}</title>
+
+      <DataRegion
+        testId={`${TEST_ID}.Content`}
+        state={{ ...issue, refetch: () => void issue.refetch() }}
+      >
+        {(data) => <IssueBody issue={data} />}
+      </DataRegion>
+    </div>
+  );
+}
+
+function IssueBody({ issue }: { issue: ReturnType<typeof useIssue>['data'] & {} }) {
+  const workflow = useProjectWorkflow(issue.projectId);
+  const watch = useSetIssueWatch(issue.key);
+  const me = useCurrentUserId();
+  // The non-throwing reader: a test that mounts no auth provider gets `undefined`, which reads as
+  // "not watching" rather than throwing on a screen that has nothing to do with the session.
+  const watching = me !== undefined && issue.watchers.some((watcher) => watcher.id === me);
+
+  return (
+    <>
+      <header
+        data-testid={`${TEST_ID}.Header`}
+        className="mb-4 flex flex-wrap items-start gap-3 border-b border-line pb-3"
+      >
+        <div className="min-w-0 flex-1">
+          <nav aria-label="Breadcrumb" className="mb-1.5 flex flex-wrap items-center gap-2 text-[12.5px]">
+            <RouterLink
+              to={`/projects/${issue.projectId}/work`}
+              className="text-ink-3 no-underline hover:text-ink-2"
+              data-testid={`${TEST_ID}.Header.Breadcrumb`}
+            >
+              Work
+            </RouterLink>
+            {/*
+              The ancestor, when there is one — an epic for a story, a story for a sub-task. It is
+              a crumb rather than a Details row because it is how the reader got here and how they
+              get back out, which is the only thing a breadcrumb is for.
+            */}
+            {issue.parentKey && (
+              <>
+                <span className="text-ink-4">/</span>
+                <RouterLink
+                  to={`/issues/${encodeURIComponent(issue.parentKey)}`}
+                  className="text-ink-3 no-underline hover:text-ink-2"
+                  data-testid={`${TEST_ID}.Header.Parent`}
+                >
+                  {issue.parentKey}
+                </RouterLink>
+              </>
+            )}
+            <span className="text-ink-4">/</span>
+            <b className="font-medium text-ink-2">{issue.key}</b>
+          </nav>
+
+          <div className="mb-1.5 flex flex-wrap items-center gap-2">
+            <TypeIcon type={issue.type} data-testid={`${TEST_ID}.Header.Type`} />
+            <Identifier variant="muted">{issue.key}</Identifier>
+            <StatusBadge status={issue.status} data-testid={`${TEST_ID}.Header.Status`} />
+            {issue.overdue && <Badge tone="failed">overdue</Badge>}
+          </div>
+
+          <h1
+            data-testid={`${TEST_ID}.Header.Title`}
+            className="m-0 text-[22px] leading-[1.25] font-[620] tracking-[-.02em] text-balance text-ink"
+          >
+            {issue.title}
+          </h1>
+        </div>
+
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {/*
+            Idempotent in both directions, which is why it is a PUT with a boolean: the star has
+            two states and the request says which one the person wants, not which one they think it
+            is in — so a double press cannot toggle twice.
+          */}
+          <Button
+            size="sm"
+            disabled={watch.isPending}
+            aria-pressed={watching}
+            onClick={() => watch.mutate(!watching)}
+            data-testid={`${TEST_ID}.Watch`}
+          >
+            {watching ? '★ Watching' : '☆ Watch'}
+          </Button>
+        </div>
+      </header>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="flex flex-col gap-4">
+          {/*
+            The dispatch. Three panel sets, one shell — see this file's header for why the level
+            is read here rather than encoded in three routes.
+          */}
+          {issue.type.level === 'EPIC' && <EpicPanels issue={issue} />}
+          {issue.type.level === 'STORY' && <StoryPanels issue={issue} />}
+          {issue.type.level === 'TASK' && <TaskPanels issue={issue} />}
+
+          <CommentFeed issueKey={issue.key} projectId={issue.projectId} testId={`${TEST_ID}.Comments`} />
+        </div>
+
+        <aside className="flex flex-col gap-4">
+          <Panel title={issue.type.level === 'EPIC' ? 'Status' : 'Where it can go'} testId={`${TEST_ID}.Moves`}>
+            <TransitionMenu issue={issue} workflow={workflow.data} testId={`${TEST_ID}.Transitions`} />
+          </Panel>
+
+          {issue.type.level === 'STORY' && <ClosingThisStory issue={issue} />}
+
+          <Panel title="Details" testId={`${TEST_ID}.Details`}>
+            <dl className="m-0 grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] gap-x-3 gap-y-2 text-[12.5px]">
+              <Term label="Type">
+                <span className="flex items-center gap-1.5">
+                  <TypeIcon type={issue.type} /> {issue.type.name}
+                </span>
+              </Term>
+              <Term label="Status">
+                <StatusBadge status={issue.status} />
+              </Term>
+              {issue.epicKey && (
+                <Term label="Epic">
+                  <RouterLink
+                    to={`/issues/${encodeURIComponent(issue.epicKey)}`}
+                    className="text-steel no-underline hover:underline"
+                  >
+                    {issue.epicTitle ?? issue.epicKey}
+                  </RouterLink>
+                </Term>
+              )}
+              <Term label="Assignee">
+                {issue.assignee?.displayName ?? <span className="text-ink-4">Unassigned</span>}
+              </Term>
+              <Term label="Reporter">
+                {issue.reporter?.displayName ?? <span className="text-ink-4">&mdash;</span>}
+              </Term>
+              {issue.priority && (
+                <Term label="Priority">
+                  <Badge tone="plain">{priorityLabels[issue.priority]}</Badge>
+                </Term>
+              )}
+              {issue.estimateHours != null && (
+                <Term label="Estimate">
+                  <Identifier variant="muted">{`${issue.estimateHours}h`}</Identifier>
+                </Term>
+              )}
+              {issue.startDate && <Term label="Start">{formatDate(issue.startDate)}</Term>}
+              {issue.targetDate && <Term label="Target">{formatDate(issue.targetDate)}</Term>}
+              {issue.dueDate && <Term label="Due">{formatDate(issue.dueDate)}</Term>}
+              <Term label="Created">{formatDateTime(issue.createdAt)}</Term>
+            </dl>
+            {/*
+              `epic.html`'s footer, kept because it answers the question the Details list otherwise
+              invites: there is no project row, and this says why there does not need to be one.
+            */}
+            {issue.type.level === 'EPIC' && (
+              <p className="m-0 mt-3 border-t border-line pt-2.5 text-[11.5px] text-ink-4">
+                An epic belongs to exactly one project. There is no cross-project epic.
+              </p>
+            )}
+          </Panel>
+
+          <Panel
+            title="Watchers"
+            testId={`${TEST_ID}.Watchers`}
+            actions={<span className="text-[11.5px] text-ink-4">{issue.watchers.length}</span>}
+          >
+            {issue.watchers.length === 0 ? (
+              <p className="m-0 text-[12.5px] text-ink-3">
+                Nobody yet. Commenting adds you — watchers are notified of status and assignee
+                changes.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {issue.watchers.map((watcher) => (
+                  <span
+                    key={watcher.id}
+                    data-testid={`${TEST_ID}.Watchers.Item`}
+                    className="rounded-[5px] border border-line px-[9px] py-[3px] text-[12px] text-ink-2"
+                  >
+                    {watcher.displayName}
+                  </span>
+                ))}
+              </div>
+            )}
+          </Panel>
+        </aside>
+      </div>
+    </>
+  );
+}
+
+/** One `dt`/`dd` pair. A component so the two halves cannot drift apart in the class list. */
+function Term({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <>
+      <dt className="font-mono text-[11px] tracking-[.06em] text-ink-4 uppercase">{label}</dt>
+      <dd className="m-0 min-w-0 text-ink-2">{children}</dd>
+    </>
+  );
+}

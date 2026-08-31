@@ -115,6 +115,9 @@ const WorkTablePage = lazy(() =>
 const IssueNewPage = lazy(() =>
   import('../features/tracker/IssueNewPage').then((m) => ({ default: m.IssueNewPage })),
 );
+const IssueDetailPage = lazy(() =>
+  import('../features/tracker/IssueDetailPage').then((m) => ({ default: m.IssueDetailPage })),
+);
 const MyWorkPage = lazy(() => import('../features/board/MyWorkPage').then((m) => ({ default: m.MyWorkPage })));
 const TeamBoardPage = lazy(() =>
   import('../features/board/TeamBoardPage').then((m) => ({ default: m.TeamBoardPage })),
@@ -405,6 +408,31 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <TeamBoardPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            One route for the epic, the story and the sub-task (011 T6) — and **outside the project
+            segment**, which is the third route to sit there beside `/my-work` and
+            `/teams/:teamId/board`.
+
+            The contract addresses an issue by its display KEY rather than by a uuid, because that
+            is what a person types into a commit message and what every screen shows; `project.key`
+            is unique per company and the counter is per project, so the pair is unique in the only
+            scope RLS lets a caller see. A project id in the path would therefore be a second copy
+            of a fact the key already carries — and one a reader following `ACME-118` out of a
+            commit message does not have.
+
+            Which of the three screens it is depends on `type.level`, which the key does not say.
+            That is the whole argument for one route rather than three: three would need a read to
+            decide where to navigate, on the read being navigated to.
+          */}
+          <Route
+            path="/issues/:key"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <IssueDetailPage />
               </Suspense>
             }
           />
