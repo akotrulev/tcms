@@ -18,7 +18,16 @@ import {
   caseSummary,
   dashboard,
   dimension,
+  backlogRow,
+  board,
   boardCard,
+  boardContents,
+  boardIssueCard,
+  boardLane,
+  boardSummary,
+  label,
+  userRef,
+  wipBreach,
   issue,
   issueComment,
   issueDocLink,
@@ -332,6 +341,96 @@ describe('tcms_triage', () => {
     ]);
     expect(answer['ingestions']).toBeUndefined();
     expect(stub.sent.some((request) => request.path.endsWith('/ingestions'))).toBe(false);
+  });
+});
+
+describe('tcms_read_board', () => {
+  const BOARDS = {
+    'GET /boards': { status: 200, body: [boardSummary()] },
+    'GET /boards/bd-1': { status: 200, body: board() },
+  } as const;
+
+  it('lists the project\'s boards when nothing is named', async () => {
+    const stub = api(agentRoutes(BOARDS));
+
+    const answer = await run(stub, 'tcms_read_board', {});
+
+    expect(answer['items']).toEqual([
+      { id: 'bd-1', name: 'Team board', columnCount: 3, swimlaneBy: 'NONE' },
+    ]);
+    expect(stub.sent.some((request) => request.path.endsWith('/cards'))).toBe(false);
+  });
+
+  it('puts the cards inside their columns, named, and never sends a status id', async () => {
+    const stub = api(agentRoutes({
+      ...BOARDS,
+      'GET /boards/bd-1/cards': {
+        status: 200,
+        body: boardContents({
+          lanes: [boardLane({
+            cards: [boardIssueCard({ columnId: 'bc-2', status: issueStatus({ id: 'is-2', name: 'In Progress', kind: 'IN_PROGRESS', position: 1 }) })],
+          })],
+          breaches: [wipBreach()],
+        }),
+      },
+    }));
+
+    const answer = await run(stub, 'tcms_read_board', { board: 'team board' });
+
+    // The column's NAME on the card, so the model reading a board does not have to join a
+    // `columnId` against a list it was handed separately.
+    expect(answer['lanes']).toMatchObject([{ cards: [{ key: 'ACME-124', column: 'In flight' }] }]);
+    expect(answer['breaches']).toEqual([{ column: 'In flight', limit: 2, count: 3 }]);
+    expect(JSON.stringify(answer)).not.toContain('is-2');
+  });
+
+  it('resolves label and assignee NAMES to the ids the filter takes', async () => {
+    const stub = api(agentRoutes({
+      ...BOARDS,
+      'GET /labels': { status: 200, body: [label()] },
+      'GET /members': { status: 200, body: [userRef()] },
+      'GET /boards/bd-1/cards': { status: 200, body: boardContents() },
+    }));
+
+    await run(stub, 'tcms_read_board', { board: 'Team board', label: ['Flaky'], assignee: ['Ana Engineer'] });
+
+    const query = queryOf(stub, '/boards/bd-1/cards');
+    expect(query.getAll('labelId')).toEqual(['lb-1']);
+    expect(query.getAll('assigneeId')).toEqual(['u-1']);
+  });
+
+  it('refuses a label the project does not have rather than filtering by nothing', async () => {
+    /*
+      The failure this guards is silent: an unresolved name sent as a filter matches no row, and an
+      empty board is exactly what a model reads as "there is no work here".
+    */
+    const stub = api(agentRoutes({ ...BOARDS, 'GET /labels': { status: 200, body: [label()] } }));
+
+    await expect(run(stub, 'tcms_read_board', { board: 'Team board', label: ['Regression'] }))
+      .rejects.toThrow(/It has: Flaky/);
+    expect(stub.sent.some((request) => request.path.endsWith('/cards'))).toBe(false);
+  });
+
+  it('reads the backlog in rank order, with the rank left as the string it is', async () => {
+    const stub = api(agentRoutes({
+      'GET /backlog': {
+        status: 200,
+        body: [backlogRow({ rank: '0.30000000000000004' })],
+      },
+    }));
+
+    const answer = await run(stub, 'tcms_read_board', { backlog: true });
+
+    // A decimal string, never parsed: `NUMERIC` is arbitrary precision and a double is not, so a
+    // client that read it as a number would collide two cards a few hundred inserts in.
+    expect(answer['items']).toMatchObject([{ position: 1, rank: '0.30000000000000004' }]);
+  });
+
+  it('refuses a board this project does not have, and names the ones it does', async () => {
+    const stub = api(agentRoutes(BOARDS));
+
+    await expect(run(stub, 'tcms_read_board', { board: 'Stakeholders' }))
+      .rejects.toThrow(/It has: Team board/);
   });
 });
 

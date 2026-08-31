@@ -20,8 +20,15 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
+  board,
+  boardSummary,
+  cardMoveResult,
   casePage,
   caseDetail,
+  label,
+  rankResult,
+  userRef,
+  wipBreach,
   caseStatus,
   caseSummary,
   condition,
@@ -246,6 +253,14 @@ function scaffolding(): Record<string, { status: number; body?: unknown }> {
     'GET /reviews': { status: 200, body: [REVIEW] },
     // `issue create` and `issue move` resolve a NAME against this — the point of taking one.
     'GET /workflow': { status: 200, body: projectWorkflow() },
+    /*
+      Method-keyed, and it has to be: `/projects/p-1/labels` and `/issues/ACME-124/labels` both end
+      in `/labels`, so an unkeyed route would answer the issue's PUT with the project's list.
+    */
+    'GET /boards': { status: 200, body: [boardSummary()] },
+    'GET /boards/bd-1': { status: 200, body: board() },
+    'GET /labels': { status: 200, body: [label()] },
+    'GET /members': { status: 200, body: [userRef()] },
   };
 }
 
@@ -1080,5 +1095,127 @@ describe('the issue commands', () => {
     expect(JSON.parse(stub.write('/comments').body ?? '{}')).toEqual({ body: 'Reproduced on staging.' });
     // A side effect nobody asked for by name, so the command says it happened (story H8).
     expect(out.stdout).toContain('Watching');
+  });
+});
+
+describe('the board verbs', () => {
+  it('sends the COLUMN and lets the server resolve which status it means', async () => {
+    const out = recorder();
+    const stub = api({
+      ...scaffolding(),
+      'POST /cards/ACME-124/move': { status: 200, body: cardMoveResult() },
+    });
+
+    expect(await mainWith(
+      ['board', 'move', 'ACME-124', '--column', 'in flight'], out, stub.fetch,
+    )).toBe(EXIT.ok);
+
+    // `In flight` claims two statuses and the card takes the column's default. A client that
+    // picked one would need a copy of the mapping this endpoint exists to keep server-side.
+    expect(JSON.parse(stub.write('/move').body ?? '{}')).toEqual({ toColumnId: 'bc-2' });
+  });
+
+  it('prints the WIP breach and still exits 0, because the move succeeded', async () => {
+    const out = recorder();
+    const stub = api({
+      ...scaffolding(),
+      'POST /cards/ACME-124/move': {
+        status: 200,
+        body: cardMoveResult({ breach: wipBreach() }),
+      },
+    });
+
+    /*
+      Story B3 in its automation spelling. A non-zero exit would make a WIP breach fail somebody's
+      script, which is the "limit people route around" the story rejects — so the breach is
+      reported and the command reports success, because the card is where it was asked to go.
+    */
+    expect(await mainWith(
+      ['board', 'move', 'ACME-124', '--column', 'In flight'], out, stub.fetch,
+    )).toBe(EXIT.ok);
+    expect(out.stderr).toContain('Over the limit');
+  });
+
+  it('refuses a column the board does not have, and sends nothing', async () => {
+    const out = recorder();
+    const stub = api(scaffolding());
+
+    expect(await mainWith(
+      ['board', 'move', 'ACME-124', '--column', 'Blocked'], out, stub.fetch,
+    )).toBe(EXIT.usage);
+    expect(out.stderr).toContain('It has: To Do, In flight, Done');
+    expect(stub.sent.some((request) => request.path.endsWith('/move'))).toBe(false);
+  });
+
+  it('refuses --after with --before without sending a request', async () => {
+    const out = recorder();
+    const stub = api(scaffolding());
+
+    expect(await mainWith(
+      ['rank', 'ACME-1', '--after', 'ACME-2', '--before', 'ACME-3'], out, stub.fetch,
+    )).toBe(EXIT.usage);
+    // The message names the FLAGS a person typed, not `afterKey`/`beforeKey` — fields of a JSON
+    // body they never composed, which is what the server's own 400 would have named.
+    expect(out.stderr).toContain('exactly one of --after or --before');
+    expect(stub.sent).toHaveLength(0);
+  });
+
+  it('refuses neither of them the same way, because the top is --before the first row', async () => {
+    const out = recorder();
+    const stub = api(scaffolding());
+
+    expect(await mainWith(['rank', 'ACME-1'], out, stub.fetch)).toBe(EXIT.usage);
+    expect(out.stderr).toContain('exactly one of --after or --before');
+  });
+
+  it('reports a rebalance as a success carrying an instruction, and exits 0', async () => {
+    const out = recorder();
+    const stub = api({
+      ...scaffolding(),
+      'PUT /issues/ACME-1/rank': { status: 200, body: rankResult({ key: 'ACME-1', rebalanced: true }) },
+    });
+
+    expect(await mainWith(['rank', 'ACME-1', '--before', 'ACME-2'], out, stub.fetch)).toBe(EXIT.ok);
+
+    expect(JSON.parse(stub.write('/rank').body ?? '{}')).toEqual({ beforeKey: 'ACME-2' });
+    expect(out.stderr).toContain('respaced');
+  });
+
+  it('replaces the whole label set, resolving each name against the project', async () => {
+    const out = recorder();
+    const stub = api({
+      ...scaffolding(),
+      'PUT /issues/ACME-124/labels': { status: 200, body: [label()] },
+    });
+
+    expect(await mainWith(
+      ['label', 'set', 'ACME-124', '--labels', 'Flaky'], out, stub.fetch,
+    )).toBe(EXIT.ok);
+
+    expect(JSON.parse(stub.write('/issues/ACME-124/labels').body ?? '{}'))
+      .toEqual({ labelIds: ['lb-1'] });
+  });
+
+  it('clears every label when --labels is empty, because the set is a replacement', async () => {
+    const out = recorder();
+    const stub = api({
+      ...scaffolding(),
+      'PUT /issues/ACME-124/labels': { status: 200, body: [] },
+    });
+
+    expect(await mainWith(['label', 'set', 'ACME-124', '--labels', ''], out, stub.fetch))
+      .toBe(EXIT.ok);
+
+    expect(JSON.parse(stub.write('/issues/ACME-124/labels').body ?? '{}')).toEqual({ labelIds: [] });
+  });
+
+  it('refuses a label the project does not have rather than filtering by nothing', async () => {
+    const out = recorder();
+    const stub = api(scaffolding());
+
+    expect(await mainWith(
+      ['label', 'set', 'ACME-124', '--labels', 'Regression'], out, stub.fetch,
+    )).toBe(EXIT.usage);
+    expect(out.stderr).toContain('It has: Flaky');
   });
 });

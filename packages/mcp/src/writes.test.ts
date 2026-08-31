@@ -18,8 +18,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  board,
+  boardSummary,
+  cardMoveResult,
   caseDetail,
   bulkResult,
+  label,
+  rankResult,
+  wipBreach,
   caseStatus,
   casePage,
   caseSummary,
@@ -46,7 +52,7 @@ import { roleMatrix, type Role } from '../../client/src/test/roleMatrix.js';
 import { armFor } from './server.js';
 import { TOOLS } from './tools.js';
 import { WRITE_TOOLS } from './writes.js';
-import type { ToolDefinition } from './tool.js';
+import { isListed, type ToolDefinition } from './tool.js';
 import { AGENT_KEYS, agentRoutes, api, sessionWith, withApi, type Api } from './test/harness.js';
 
 function tool(name: string): ToolDefinition {
@@ -607,6 +613,11 @@ describe('tcms_review_verdict', () => {
 
 describe('tcms_write_issue', () => {
   const WORKFLOW = { 'GET /workflow': { status: 200, body: projectWorkflow() } } as const;
+  const BOARDS = {
+    'GET /boards': { status: 200, body: [boardSummary()] },
+    'GET /boards/bd-1': { status: 200, body: board() },
+  } as const;
+  const LABELS = { 'GET /labels': { status: 200, body: [label()] } } as const;
 
   it('resolves the type NAME to the id the contract takes', async () => {
     /*
@@ -666,6 +677,62 @@ describe('tcms_write_issue', () => {
       .toHaveLength(0);
   });
 
+  it('names a COLUMN and lets the server pick the status it means', async () => {
+    /*
+      The whole of why `move-card` is not `move` with extra steps. `In flight` claims In Progress
+      and In Review, and the card takes the column's DEFAULT — which the server resolves, because
+      the caller does not know the mapping and would have to hold a copy of it to send a status.
+    */
+    const stub = api(agentRoutes({
+      ...BOARDS,
+      'POST /cards/ACME-124/move': { status: 200, body: cardMoveResult() },
+    }));
+
+    await run(stub, 'tcms_write_issue', {
+      action: 'move-card', issue: 'ACME-124', column: 'in flight',
+    });
+
+    expect(JSON.parse(stub.write('/cards/ACME-124/move').body ?? '{}')).toEqual({ toColumnId: 'bc-2' });
+  });
+
+  it('answers the WIP breach as part of a success, because the card still landed', async () => {
+    const stub = api(agentRoutes({
+      ...BOARDS,
+      'POST /cards/ACME-124/move': {
+        status: 200,
+        body: cardMoveResult({ breach: wipBreach() }),
+      },
+    }));
+
+    // Story B3's automation spelling: a breach is a 200 carrying a fact, so it reaches the model as
+    // data on a successful call rather than as a refusal it would retry.
+    const answered = await run(stub, 'tcms_write_issue', {
+      action: 'move-card', issue: 'ACME-124', column: 'In flight',
+    }) as { breach?: { count: number } };
+
+    expect(answered.breach?.count).toBe(3);
+  });
+
+  it('refuses a column this board does not have, and never sends the move', async () => {
+    const stub = api(agentRoutes(BOARDS));
+
+    await expect(run(stub, 'tcms_write_issue', {
+      action: 'move-card', issue: 'ACME-124', column: 'Blocked',
+    })).rejects.toThrow(/It has: To Do, In flight, Done/);
+    expect(stub.sent.some((request) => request.path.endsWith('/move'))).toBe(false);
+  });
+
+  it('replaces the whole label set, so an empty array takes them all off', async () => {
+    const stub = api(agentRoutes({
+      ...LABELS,
+      'PUT /issues/ACME-124/labels': { status: 200, body: [] },
+    }));
+
+    await run(stub, 'tcms_write_issue', { action: 'label', issue: 'ACME-124', labels: [] });
+
+    expect(JSON.parse(stub.write('/issues/ACME-124/labels').body ?? '{}')).toEqual({ labelIds: [] });
+  });
+
   it('is listed for a Viewer, and says which actions they may use', () => {
     /*
       The `any` gate, and the reason for it: Viewer holds `issue:comment` and neither of the other
@@ -678,6 +745,68 @@ describe('tcms_write_issue', () => {
     const viewer = writeIssue.narrow?.(new Set(['issue:comment']));
     expect(viewer).toContain('comment');
     expect(viewer).not.toContain('create');
+  });
+});
+
+describe('tcms_write_backlog', () => {
+  const LABELS = { 'GET /labels': { status: 200, body: [label()] } } as const;
+
+  it('refuses after and before together without sending a request', async () => {
+    const stub = api(agentRoutes());
+
+    await expect(run(stub, 'tcms_write_backlog', {
+      action: 'rank', issue: 'ACME-124', after: 'ACME-99', before: 'ACME-98',
+    })).rejects.toThrow(/exactly one/);
+    expect(stub.sent.some((request) => request.path.endsWith('/rank'))).toBe(false);
+  });
+
+  it('refuses neither of them the same way, because an empty body is not "to the top"', async () => {
+    // D-q. The endpoint answers 400 for both-or-neither and the top of the list is reachable as
+    // `before` the current first row, so requiring exactly one closes nothing off.
+    const stub = api(agentRoutes());
+
+    await expect(run(stub, 'tcms_write_backlog', { action: 'rank', issue: 'ACME-124' }))
+      .rejects.toThrow(/exactly one/);
+    expect(stub.sent.some((request) => request.path.endsWith('/rank'))).toBe(false);
+  });
+
+  it('answers a rebalance as a success carrying an instruction to read again', async () => {
+    const stub = api(agentRoutes({
+      'PUT /issues/ACME-124/rank': { status: 200, body: rankResult({ rebalanced: true }) },
+    }));
+
+    const answered = await run(stub, 'tcms_write_backlog', {
+      action: 'rank', issue: 'ACME-124', before: 'ACME-98',
+    }) as { rebalanced: boolean };
+
+    // Not an error: the placement happened. What changed is every OTHER row's rank, which is why
+    // the flag has to reach the model rather than being swallowed as a detail of the write.
+    expect(answered.rebalanced).toBe(true);
+    expect(JSON.parse(stub.write('/rank').body ?? '{}')).toEqual({ beforeKey: 'ACME-98' });
+  });
+
+  it('carries the colour it was not given, because LabelInput requires both fields', async () => {
+    const stub = api(agentRoutes({
+      ...LABELS,
+      'PATCH /labels/lb-1': { status: 200, body: label({ name: 'Flaky again' }) },
+    }));
+
+    await run(stub, 'tcms_write_backlog', {
+      action: 'label-update', label: 'Flaky', name: 'Flaky again',
+    });
+
+    // A rename that sent only the name would clear the colour — `LabelInput` requires both, so the
+    // arm reads the current row and lays the change on top.
+    expect(JSON.parse(stub.write('/labels/lb-1').body ?? '{}'))
+      .toEqual({ name: 'Flaky again', color: 'label-3' });
+  });
+
+  it('is hidden from a Test Engineer, who holds neither of its keys', () => {
+    // §2's rule doing its job in the direction that is easy to get wrong. Ordering the backlog is
+    // Project Manager and up (roles spec §A3), so an Agent credential — Test Engineer entire — is
+    // not shown a tool every arm of which it would be refused on.
+    expect(isListed(tool('tcms_write_backlog'), new Set(AGENT_KEYS))).toBe(false);
+    expect(isListed(tool('tcms_write_issue'), new Set(AGENT_KEYS))).toBe(true);
   });
 });
 
@@ -753,7 +882,7 @@ describe('registry declarations', () => {
 });
 
 describe('the surface as a whole — surface spec §2 and §4.1', () => {
-  it('is 26 tools', () => {
+  it('is 28 tools', () => {
     // The count is an OUTCOME of "a tool never spans two permissions on its write path", not a
     // target. It is asserted so that a merge or a split has to be a decision somebody records.
     // ~~21~~ → 23 with audit C10: `tcms_list_artifacts` and `tcms_write_artifact`, which arrived
@@ -767,7 +896,12 @@ describe('the surface as a whole — surface spec §2 and §4.1', () => {
     // reads cost `issue:read` and its writes cost three other keys, so folding them into
     // `tcms_write_issue` would gate a read on a write permission and hide the project's issues
     // from every Viewer.
-    expect(TOOLS).toHaveLength(26);
+    // ~~26~~ → 28 with 012 T5's board verbs, and they are TWO tools rather than one for §2's
+    // reason: `tcms_read_board` is `board:read`, which every role holds, and `tcms_write_backlog`
+    // is `board:rank` + `board:configure`, which is Project Manager and up. Moving a card and
+    // labelling an issue are neither — they cost `issue:edit` and are arms of `tcms_write_issue`,
+    // so a Test Engineer reaches them without being shown a tool two thirds of which 403s.
+    expect(TOOLS).toHaveLength(28);
   });
 
   it('names every tool in the tcms_ namespace', () => {
@@ -836,7 +970,7 @@ describe('the surface as a whole — surface spec §2 and §4.1', () => {
  *
  * `shapesContract.test.ts` pins `core/shapes.ts` to `openapi.yaml`, five questions deep and mostly
  * both ways, so the catalogue cannot become a fifth copy *of the contract*. It asks nothing of the
- * eleven write tools, and ten of them hand-write their `inputSchema` — only `tcms_write_case`
+ * ~~eleven~~ twelve write tools, and eleven of them hand-write their `inputSchema` — only `tcms_write_case`
  * renders one through `jsonSchemaFor`. So `tcms_shape` could tell a model one thing about a suite
  * and `tcms_write_suite` declare another, and nothing in the repository would fire.
  *

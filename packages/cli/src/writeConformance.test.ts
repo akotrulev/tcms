@@ -35,6 +35,9 @@ import {
   declaredHeadersOf,
 } from '../../client/src/test/contractBodies.js';
 import {
+  board,
+  boardSummary,
+  cardMoveResult,
   caseDetail,
   casePage,
   caseStatus,
@@ -44,6 +47,9 @@ import {
   docPageSummary,
   execution,
   executionSummary,
+  label,
+  rankResult,
+  userRef,
   issue,
   issueComment,
   plan,
@@ -87,7 +93,7 @@ describe('write conformance — surface spec §8.3', () => {
   it('finds every write command in the registry', () => {
     // A vacuity guard: a registry this could not see would pass every assertion below by having
     // nothing to assert on, which reads exactly like a green run.
-    expect(writes.length).toBeGreaterThanOrEqual(17);
+    expect(writes.length).toBeGreaterThanOrEqual(21);
   });
 
   it.each(writes.map((command) => [command.name, command] as const))(
@@ -171,6 +177,7 @@ const RUN = runFixture({ id: 'tr-5', key: 'TR-5', status: 'IN_PROGRESS' });
 const PASSED = caseStatus({ id: 'st-1', name: 'Passed', kind: 'PASSED' });
 const REVIEW = review({ subjectId: 'c-9' });
 const ISSUE = issue();
+const BOARD = board();
 
 /** The four `TestCaseInput` requires, plus the step a STRUCTURED case needs to be acceptable. */
 const PROPOSABLE = {
@@ -218,6 +225,15 @@ function scaffolding(): Record<string, Answer> {
     'GET /reviews': { status: 200, body: [REVIEW] },
     // The create and move commands resolve a NAME against this, which is the point of taking one.
     'GET /workflow': { status: 200, body: projectWorkflow() },
+    /*
+      The board reads a card verb makes on its way to a write. Method-keyed throughout, because the
+      suffix match is not enough here: `/projects/p-1/labels` and `/issues/ACME-124/labels` both end
+      in `/labels`, and an unkeyed route would answer the issue's PUT with the project's list.
+    */
+    'GET /boards': { status: 200, body: [boardSummary()] },
+    'GET /boards/bd-1': { status: 200, body: BOARD },
+    'GET /labels': { status: 200, body: [label()] },
+    'GET /members': { status: 200, body: [userRef()] },
   };
 }
 
@@ -338,5 +354,25 @@ const INVOCATIONS: Record<string, Invocation> = {
     argv: () => ['issue', 'comment', 'ACME-124', '--body', 'Reproduced on staging.'],
     path: '/issues/ACME-124/comments',
     routes: { 'POST /issues/ACME-124/comments': { status: 201, body: issueComment() } },
+  },
+  'board move': {
+    argv: () => ['board', 'move', 'ACME-124', '--column', 'In flight'],
+    path: '/cards/ACME-124/move',
+    routes: { 'POST /cards/ACME-124/move': { status: 200, body: cardMoveResult() } },
+  },
+  rank: {
+    argv: () => ['rank', 'ACME-124', '--after', 'ACME-99'],
+    path: '/issues/ACME-124/rank',
+    routes: { 'PUT /issues/ACME-124/rank': { status: 200, body: rankResult() } },
+  },
+  'label add': {
+    argv: () => ['label', 'add', '--name', 'Regression', '--color', 'label-5'],
+    path: '/labels',
+    routes: { 'POST /labels': { status: 201, body: label({ name: 'Regression', color: 'label-5' }) } },
+  },
+  'label set': {
+    argv: () => ['label', 'set', 'ACME-124', '--labels', 'Flaky'],
+    path: '/issues/ACME-124/labels',
+    routes: { 'PUT /issues/ACME-124/labels': { status: 200, body: [label()] } },
   },
 };

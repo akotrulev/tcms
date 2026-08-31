@@ -44,7 +44,12 @@ import {
 } from '../../client/src/test/contractBodies.js';
 import {
   artifact,
+  board,
+  boardSummary,
   bulkResult,
+  cardMoveResult,
+  label,
+  rankResult,
   caseDetail,
   casePage,
   caseStatus,
@@ -99,6 +104,12 @@ const CREATE_WITHOUT_A_KEY: Record<string, string> = {
     + 'edit below meets. What it costs is bounded by the endpoint being a TRUE delta: `IssueUpdate` '
     + 'says an absent key means leave it, so two callers editing one issue lose only the fields '
     + 'they both named, where the case, suite and plan arms would overwrite the whole set.',
+  'tcms_write_backlog.label-update':
+    'PATCH /labels/{labelId} declares no If-Match, and `Label` carries no `lockVersion` on the wire '
+    + 'to precondition on, so closing it is a contract change on both halves rather than a header '
+    + 'here — the same wall the issue update above meets. What it costs is bounded by the row: a '
+    + 'label is a name and a colour token, the arm sends both because `LabelInput` requires both, '
+    + 'and two people renaming one label at once lose a rename rather than a body of work.',
   'tcms_write_artifact.edit':
     'PATCH …/artifacts/{artifactId} declares no If-Match, so two callers correcting one register '
     + 'row race and the later write wins silently. It cannot simply be added: the endpoint would '
@@ -121,7 +132,7 @@ describe('write conformance — surface spec §8.3', () => {
   it('finds every arm of every write tool', () => {
     // A vacuity guard. A registry this could not see would make every assertion below pass by
     // having nothing to assert on, which reads identically to a green run.
-    expect(arms.length).toBeGreaterThanOrEqual(25);
+    expect(arms.length).toBeGreaterThanOrEqual(31);
     expect(WRITE_TOOLS.every((tool) => (tool.arms ?? []).length > 0)).toBe(true);
   });
 
@@ -265,6 +276,18 @@ const REVIEWS = { 'GET /reviews': { status: 200, body: [REVIEW] } } as const;
 const ISSUE = issue();
 /** The create and move arms resolve a NAME against this, which is the point of taking one. */
 const WORKFLOW = { 'GET /workflow': { status: 200, body: projectWorkflow() } } as const;
+
+const BOARD = board();
+/*
+  Method-keyed, and here it has to be: `/projects/p-1/labels` and `/issues/ACME-124/labels` both end
+  in `/labels`, so an unkeyed route would answer the issue's PUT with the project's list and the
+  exchange check would report the wrong body against the wrong operation.
+*/
+const BOARDS = {
+  'GET /boards': { status: 200, body: [boardSummary()] },
+  'GET /boards/bd-1': { status: 200, body: BOARD },
+} as const;
+const LABELS = { 'GET /labels': { status: 200, body: [label()] } } as const;
 
 /** The four `TestCaseInput` requires, plus the step a STRUCTURED case needs to be acceptable. */
 const PROPOSABLE = {
@@ -505,6 +528,42 @@ const INVOCATIONS: Record<string, Invocation> = {
     input: { action: 'comment', issue: 'ACME-124', body: 'Reproduced on staging.' },
     path: '/issues/ACME-124/comments',
     routes: { 'POST /issues/ACME-124/comments': { status: 201, body: issueComment() } },
+  },
+  'tcms_write_issue.move-card': {
+    tool: 'tcms_write_issue',
+    input: { action: 'move-card', issue: 'ACME-124', column: 'In flight' },
+    path: '/cards/ACME-124/move',
+    routes: { ...BOARDS, 'POST /cards/ACME-124/move': { status: 200, body: cardMoveResult() } },
+  },
+  'tcms_write_issue.label': {
+    tool: 'tcms_write_issue',
+    input: { action: 'label', issue: 'ACME-124', labels: ['Flaky'] },
+    path: '/issues/ACME-124/labels',
+    routes: { ...LABELS, 'PUT /issues/ACME-124/labels': { status: 200, body: [label()] } },
+  },
+  'tcms_write_backlog.rank': {
+    tool: 'tcms_write_backlog',
+    input: { action: 'rank', issue: 'ACME-124', after: 'ACME-99' },
+    path: '/issues/ACME-124/rank',
+    routes: { 'PUT /issues/ACME-124/rank': { status: 200, body: rankResult() } },
+  },
+  'tcms_write_backlog.label-create': {
+    tool: 'tcms_write_backlog',
+    input: { action: 'label-create', name: 'Regression', color: 'label-5' },
+    path: '/labels',
+    routes: { 'POST /labels': { status: 201, body: label({ name: 'Regression', color: 'label-5' }) } },
+  },
+  'tcms_write_backlog.label-update': {
+    tool: 'tcms_write_backlog',
+    input: { action: 'label-update', label: 'Flaky', name: 'Flaky again' },
+    path: '/labels/lb-1',
+    routes: { ...LABELS, 'PATCH /labels/lb-1': { status: 200, body: label({ name: 'Flaky again' }) } },
+  },
+  'tcms_write_backlog.label-delete': {
+    tool: 'tcms_write_backlog',
+    input: { action: 'label-delete', label: 'Flaky' },
+    path: '/labels/lb-1',
+    routes: { ...LABELS, 'DELETE /labels/lb-1': { status: 204 } },
   },
   'tcms_report.generate': {
     tool: 'tcms_report',

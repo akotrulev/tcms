@@ -17,6 +17,7 @@ import { TcmsApiError, TcmsTimeoutError } from '@tcms/client';
 import { caseDetail, casePage, caseSummary, docPage, docPageSummary } from '../../client/src/test/fixtures.js';
 import { failed } from './result.js';
 import { buildServer } from './server.js';
+import { isListed } from './tool.js';
 import { TOOLS } from './tools.js';
 import { AGENT_KEYS, agentRoutes, api, permissions, sessionWith, withApi, type Api } from './test/harness.js';
 
@@ -69,7 +70,7 @@ describe('initialize', () => {
 });
 
 describe('tools/list', () => {
-  it('serves the whole surface to a credential that holds the Agent grant', async () => {
+  it('serves everything the Agent grant reaches, and nothing it does not', async () => {
     const client = await connect(api(agentRoutes()));
     const { tools } = await client.listTools();
 
@@ -83,8 +84,17 @@ describe('tools/list', () => {
       being hypothetical when `AGENT_KEYS` became a parse of the roles spec rather than a literal —
       the failure moved from "somebody forgot to update the copy" to "the tables changed shape", and
       only an exact comparison can see either.
+
+      ~~The whole registry.~~ → **012 T5 made that false and the exact comparison is what said so.**
+      Ordering the backlog and keeping labels are `board:rank` and `board:configure`, which §A3
+      grants to Project Manager and up — so `tcms_write_backlog` is the first tool this surface has
+      that an Agent credential is correctly not shown. The comparison stays exact and its expected
+      side is now derived the same way the server derives it, which keeps the property that made it
+      worth having: a grant that quietly narrowed still moves both sides apart.
     */
-    expect(tools.map((tool) => tool.name).sort()).toEqual(TOOLS.map((tool) => tool.name).sort());
+    const listable = TOOLS.filter((tool) => isListed(tool, new Set(AGENT_KEYS)));
+    expect(listable.length).toBeLessThan(TOOLS.length);
+    expect(tools.map((tool) => tool.name).sort()).toEqual(listable.map((tool) => tool.name).sort());
   });
 
   it('hides what this credential cannot use, and says nothing about why', async () => {

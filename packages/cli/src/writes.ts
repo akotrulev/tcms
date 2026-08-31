@@ -57,6 +57,7 @@ import {
   type Command,
   type CommandContext,
 } from './context.js';
+import { boardOf, labelIds } from './reads.js';
 import { fields, show, type Output } from './output.js';
 
 type TestCaseInput = components['schemas']['TestCaseInput'];
@@ -1385,6 +1386,192 @@ const issueComment: Command = {
   },
 };
 
+/* -------------------------------------------------------------------- board ---- */
+
+/**
+ * `tcms board move ACME-124 --column "In flight"` — a card to a column, on this project's board.
+ *
+ * Which board is `boardOf`'s answer, shared with the read verbs rather than re-derived: a second
+ * copy of *which board did they mean* is a second answer, and the sentence a person reads when
+ * they have two boards has to be the same one from both verbs.
+ */
+const boardMove: Command = {
+  name: 'board move',
+  summary: 'Move a card to a column, and report a WIP breach it caused',
+  usage: 'tcms board move ACME-124 --column "In flight" [--board "Team board"]',
+  options: { column: { type: 'string' }, board: { type: 'string' } },
+  // `issue:edit`, and there is no `board:move`: dragging a card changes the issue's status and a
+  // second key for the same act would be one somebody could hold without being able to use it.
+  write: { kind: 'state', permission: 'issue:edit' },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const key = requireArg(context, 'issue');
+    const chosen = await boardOf(context, first(options['board']));
+
+    const config = await client.GET('/boards/{boardId}', {
+      params: { path: { boardId: chosen.id } },
+      tcms: request,
+    });
+    const wanted = requireOption(context, 'column');
+    const column = config.columns.find(
+      (candidate) => candidate.name.toLowerCase() === wanted.toLowerCase() || candidate.id === wanted,
+    );
+    if (!column) {
+      throw new UsageError(
+        `No column '${wanted}' on ${chosen.name}. It has: `
+          + `${config.columns.map((candidate) => candidate.name).join(', ')}.`,
+      );
+    }
+
+    const moved = await client.POST('/boards/{boardId}/cards/{key}/move', {
+      params: { path: { boardId: chosen.id, key } },
+      // The column, never a status: which of the statuses a coarse column claims the card takes is
+      // the server's to resolve (D2), and a client that picked one would need the mapping this
+      // endpoint exists to keep server-side.
+      body: { toColumnId: column.id },
+      tcms: request,
+    });
+
+    reportWrite(out, json, moved, [
+      ['Moved', `${show(moved.card.key)} — ${show(moved.card.title)}`],
+      ['Column', show(column.name)],
+      ['Status', show(moved.card.status.name)],
+    ]);
+
+    /*
+      **Printed, and the command still exits 0.** The move succeeded — a breach is a 200 carrying a
+      fact — and a non-zero exit would make a limit somebody's script fails on, which is story B3's
+      rejected behaviour in its automation spelling: a limit people route around by not using the
+      board. Written through `error` so a `--json | jq` pipeline is not poisoned by it.
+    */
+    if (moved.breach) {
+      out.error(
+        `Over the limit: ${show(column.name)} now holds ${String(moved.breach.count)} of a limit of `
+          + `${String(moved.breach.limit)}. The move was accepted.`,
+      );
+    }
+  },
+};
+
+/**
+ * `tcms rank ACME-124 --after ACME-99` — place an issue between two neighbours.
+ *
+ * **Exactly one of the two flags, refused locally rather than sent.** The endpoint answers 400 for
+ * both-or-neither, and a round trip to learn that is one a `--help` line could have saved; more to
+ * the point, the server's message names `afterKey` and `beforeKey`, which are fields of a JSON body
+ * nobody at a terminal typed. The top of the list is reachable — it is `--before` the current first
+ * key — so requiring one flag closes nothing off.
+ */
+/**
+ * Exactly one neighbour, as the body the contract takes — and the refusal, before any request.
+ *
+ * The endpoint answers 400 for both-or-neither, so nothing is closed off by insisting here; what is
+ * gained is the wording. The server's message names `afterKey` and `beforeKey`, which are fields of
+ * a JSON body a person at a terminal never composed. The top of the list is still reachable, as
+ * `--before` the current first key.
+ */
+function placementFor(
+  after: string | undefined,
+  before: string | undefined,
+): { afterKey: string } | { beforeKey: string } {
+  if (after !== undefined && before === undefined) return { afterKey: after };
+  if (before !== undefined && after === undefined) return { beforeKey: before };
+  throw new UsageError('Give exactly one of --after or --before.');
+}
+
+const rank: Command = {
+  name: 'rank',
+  summary: 'Place an issue immediately after or before another in the backlog order',
+  usage: 'tcms rank ACME-124 --after ACME-99 | --before ACME-98',
+  options: { after: { type: 'string' }, before: { type: 'string' } },
+  write: { kind: 'state', permission: 'board:rank' },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const key = requireArg(context, 'issue');
+    const after = first(options['after']);
+    const before = first(options['before']);
+
+    const placed = await client.PUT('/issues/{key}/rank', {
+      params: { path: { key } },
+      body: placementFor(after, before),
+      tcms: request,
+    });
+
+    reportWrite(out, json, placed, [
+      ['Placed', show(placed.key)],
+      [after === undefined ? 'Before' : 'After', show(after ?? before)],
+    ]);
+
+    /*
+      A **success** carrying an instruction, not a failure: the gap ran out of precision and the
+      project's ranks were respaced, so every other row's rank is now stale. Exits 0 for the same
+      reason a WIP breach does — the placement happened and it is where it was asked to be.
+    */
+    if (placed.rebalanced) {
+      out.error(
+        'The backlog was respaced to make room, so every other row\'s rank has changed. '
+          + 'Read the list again before ranking anything else against it.',
+      );
+    }
+  },
+};
+
+const labelAdd: Command = {
+  name: 'label add',
+  summary: 'Create a label',
+  usage: 'tcms label add --name Flaky --color label-3',
+  options: { name: { type: 'string' }, color: { type: 'string' } },
+  // No `Idempotency-Key`: `POST …/labels` declares none, and a duplicate name is a 409 rather than
+  // a second row, which is the property a key would have bought.
+  write: { kind: 'state', permission: 'board:configure' },
+  run: async (context) => {
+    const { client, out, json, request } = context;
+
+    const created = await client.POST('/projects/{projectId}/labels', {
+      params: { path: { projectId: await projectOf(context) } },
+      // A design-token name — `label-1` … `label-10` — never a hex value: a stored `#RRGGBB` is
+      // invisible in the other colour scheme, which is the argument the contract makes on the field.
+      body: { name: requireOption(context, 'name'), color: requireOption(context, 'color') },
+      tcms: request,
+    });
+
+    reportWrite(out, json, created, [['Created', show(created.name)], ['Colour', show(created.color)]]);
+  },
+};
+
+/**
+ * `tcms label set ACME-124 --labels Flaky,Regression` — the labels the issue should carry.
+ *
+ * **A replacement, not an addition.** Omitting a label removes it, and `--labels ''` clears them
+ * all. That is the endpoint's own shape and its reason: an add/remove pair over a multi-select lets
+ * a stale client remove a label somebody else has just added.
+ */
+const labelSet: Command = {
+  name: 'label set',
+  summary: 'Replace an issue\'s labels with exactly the ones named',
+  usage: 'tcms label set ACME-124 --labels Flaky,Regression',
+  options: { labels: { type: 'string', multiple: true } },
+  write: { kind: 'state', permission: 'issue:edit' },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const key = requireArg(context, 'issue');
+    const names = all(options['labels']).flatMap((value) => value.split(','))
+      .map((name) => name.trim())
+      .filter((name) => name !== '');
+
+    const after = await client.PUT('/issues/{key}/labels', {
+      params: { path: { key } },
+      body: { labelIds: await labelIds(context, names) },
+      tcms: request,
+    });
+
+    reportWrite(out, json, after, [
+      ['Issue', key],
+      ['Labels', after.map((one) => one.name).join(', ') || '(none)'],
+    ]);
+  },
+};
+
 export const WRITES: readonly Command[] = [
   caseEdit,
   caseProposal,
@@ -1405,4 +1592,8 @@ export const WRITES: readonly Command[] = [
   issueCreate,
   issueMove,
   issueComment,
+  boardMove,
+  rank,
+  labelAdd,
+  labelSet,
 ];

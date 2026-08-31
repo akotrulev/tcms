@@ -492,6 +492,140 @@ export function issueDocLink(
   return { id: 'idl-1', targetKind: 'DOC_BLOCK', relationship: 'VERIFIES', stale: false, ...overrides };
 }
 
+/* --------------------------------------------------------------- board (012) ---- */
+
+export function label(overrides: Partial<Schemas['Label']> = {}): Schemas['Label'] {
+  return { id: 'lb-1', name: 'Flaky', color: 'label-3', ...overrides };
+}
+
+export function boardSummary(
+  overrides: Partial<Schemas['BoardSummary']> = {},
+): Schemas['BoardSummary'] {
+  return { id: 'bd-1', name: 'Team board', columnCount: 3, swimlaneBy: 'NONE', ...overrides };
+}
+
+export function boardColumn(
+  overrides: Partial<Schemas['BoardColumn']> = {},
+): Schemas['BoardColumn'] {
+  return {
+    id: 'bc-1',
+    name: 'To Do',
+    position: 0,
+    wipLimit: null,
+    statuses: [issueStatus()],
+    defaultStatusId: 'is-1',
+    ...overrides,
+  };
+}
+
+/**
+ * A board whose three columns claim the four seeded statuses, so the middle one claims two.
+ *
+ * The doubled claim is the default rather than an override: D2's rule — a card dropped into a
+ * column claiming more than one status takes the column's default — has no exercise on a board
+ * where every column claims exactly one, and that is the board a hand-written fixture produces.
+ */
+export function board(overrides: Partial<Schemas['Board']> = {}): Schemas['Board'] {
+  return {
+    id: 'bd-1',
+    projectId: IDS.project,
+    name: 'Team board',
+    swimlaneBy: 'NONE',
+    columns: [
+      boardColumn({ id: 'bc-1', name: 'To Do', position: 0, statuses: [issueStatus()], defaultStatusId: 'is-1' }),
+      boardColumn({
+        id: 'bc-2',
+        name: 'In flight',
+        position: 1,
+        wipLimit: 2,
+        statuses: [
+          issueStatus({ id: 'is-2', name: 'In Progress', kind: 'IN_PROGRESS', position: 1 }),
+          issueStatus({ id: 'is-3', name: 'In Review', kind: 'IN_PROGRESS', position: 2 }),
+        ],
+        defaultStatusId: 'is-2',
+      }),
+      boardColumn({
+        id: 'bc-3',
+        name: 'Done',
+        position: 2,
+        statuses: [issueStatus({ id: 'is-4', name: 'Done', kind: 'DONE', position: 3 })],
+        defaultStatusId: 'is-4',
+      }),
+    ],
+    ...overrides,
+  };
+}
+
+export function boardIssueCard(
+  overrides: Partial<Schemas['BoardIssueCard']> = {},
+): Schemas['BoardIssueCard'] {
+  return {
+    key: 'ACME-124',
+    title: 'Sign-out clears the session',
+    typeName: 'Story',
+    typeLevel: 'STORY',
+    iconCode: 'story',
+    countsTowardCompletion: true,
+    columnId: 'bc-1',
+    status: issueStatus(),
+    rank: '1000',
+    labels: [],
+    allowedTransitions: [],
+    subtaskTotal: 0,
+    subtaskDone: 0,
+    ...overrides,
+  };
+}
+
+export function completion(
+  overrides: Partial<Schemas['IssueCompletion']> = {},
+): Schemas['IssueCompletion'] {
+  return { percent: 0, basis: 'COUNT', done: 0, total: 0, excludedSpikes: 0, ...overrides };
+}
+
+export function boardLane(overrides: Partial<Schemas['BoardLane']> = {}): Schemas['BoardLane'] {
+  return { key: null, label: 'All work', cards: [boardIssueCard()], completion: completion(), ...overrides };
+}
+
+export function boardContents(
+  overrides: Partial<Schemas['BoardContents']> = {},
+): Schemas['BoardContents'] {
+  return { boardId: 'bd-1', swimlaneBy: 'NONE', lanes: [boardLane()], breaches: [], ...overrides };
+}
+
+export function wipBreach(overrides: Partial<Schemas['WipBreach']> = {}): Schemas['WipBreach'] {
+  return { columnId: 'bc-2', limit: 2, count: 3, ...overrides };
+}
+
+export function cardMoveResult(
+  overrides: Partial<Schemas['CardMoveResult']> = {},
+): Schemas['CardMoveResult'] {
+  return { card: boardIssueCard({ columnId: 'bc-2' }), ...overrides };
+}
+
+export function backlogRow(
+  overrides: Partial<Schemas['BacklogRow']> = {},
+): Schemas['BacklogRow'] {
+  return {
+    key: 'ACME-124',
+    title: 'Sign-out clears the session',
+    typeName: 'Story',
+    typeLevel: 'STORY',
+    iconCode: 'story',
+    position: 1,
+    rank: '1000',
+    status: issueStatus(),
+    labels: [],
+    ...overrides,
+  };
+}
+
+export function rankResult(
+  overrides: Partial<Schemas['RankResult']> = {},
+): Schemas['RankResult'] {
+  return { key: 'ACME-124', rank: '1500', rebalanced: false, ...overrides };
+}
+
 /** A project workflow with the six seeded statuses and the five seeded types (011 D-b). */
 export function projectWorkflow(
   overrides: Partial<Schemas['ProjectWorkflow']> = {},

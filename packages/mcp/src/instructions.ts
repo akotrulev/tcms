@@ -93,6 +93,22 @@ export function renderInstructions(reach: Reach, tools: readonly ToolDefinition[
     sections.push(bytes(detailed) <= spare ? detailed : unavailableKeysOnly(hidden));
   }
 
+  /*
+    The one fact about this product a caller cannot infer from a tool description, and the one whose
+    absence produces a confident wrong answer rather than a refusal: a board looks like a container
+    and is not. A model that reads "moved on the Team board" as scoped to that board will tell a
+    user their change is local, and nothing in the response contradicts it.
+
+    Placed BEFORE the closing advice because `fit` drops from the end and the order is decreasing
+    consequence: every write tool's description repeats the grounding sentence, and nothing repeats
+    this one.
+  */
+  sections.push(
+    'A board is a LENS over the project\'s issues, not a container. It owns nothing, moving a card '
+      + 'changes the issue\'s status, and every other board over that project shows the change. '
+      + 'Deleting a board loses no work.',
+  );
+
   sections.push(
     'Ground yourself before you write: tcms_shape for the format of what you are writing, '
       + 'tcms_orient once for this project\'s own vocabulary, then read the cases or the '

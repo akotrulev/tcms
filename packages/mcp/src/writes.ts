@@ -124,6 +124,7 @@ import {
   str,
   strings,
 } from './input.js';
+import { boardIn, labelIdsIn } from './reads.js';
 import type { Session } from './session.js';
 import type { ToolDefinition } from './tool.js';
 
@@ -1262,7 +1263,7 @@ const reviewVerdict: ToolDefinition = {
  */
 const ISSUE_ARMS: readonly { permission: string; can: string }[] = [
   { permission: 'issue:create', can: 'create' },
-  { permission: 'issue:edit', can: 'update and move' },
+  { permission: 'issue:edit', can: 'update, move, move cards and label' },
   { permission: 'issue:comment', can: 'comment' },
 ];
 
@@ -1315,6 +1316,19 @@ const writeIssue: ToolDefinition = {
     // `writeConformance.test.ts`'s CREATE_WITHOUT_A_KEY with what it costs.
     { action: 'update', kind: 'edit', permission: 'issue:edit' },
     { action: 'move', kind: 'state', permission: 'issue:edit' },
+    /*
+      012 T5, and neither is a duplicate of `move`. `move` names a STATUS and reaches
+      `POST …/transitions`; `move-card` names a COLUMN and lets the server resolve which of the
+      statuses that column claims the card takes — on a coarse column claiming three, only
+      `move-card` can be spelled at all, because the caller does not know which status it means.
+      `label` replaces the whole set, matching the endpoint.
+
+      Arms rather than a third tool because both cost `issue:edit`, which this tool already gates
+      on: a `tcms_write_board` merging them with `board:rank` would be listed to a Test Engineer
+      who holds neither board key.
+    */
+    { action: 'move-card', kind: 'state', permission: 'issue:edit' },
+    { action: 'label', kind: 'state', permission: 'issue:edit' },
     // A `state`, not a `create`: `POST …/comments` declares no `Idempotency-Key`, and a create
     // kind would send a header the endpoint never reads. `review comment` is declared the same way.
     { action: 'comment', kind: 'state', permission: 'issue:comment' },
@@ -1328,8 +1342,28 @@ const writeIssue: ToolDefinition = {
     additionalProperties: false,
     required: ['action'],
     properties: {
-      action: ACTION(['create', 'update', 'move', 'comment'], 'What to do.'),
+      action: ACTION(['create', 'update', 'move', 'move-card', 'label', 'comment'], 'What to do.'),
       issue: idProperty('issue to update, move or comment on — required for those, refused for create', 'ACME-124'),
+      board: {
+        type: 'string',
+        description:
+          'For move-card: the board whose column is named, by NAME. Omit it when the project has '
+          + 'one board, which is the usual case.',
+      },
+      column: {
+        type: 'string',
+        description:
+          'For move-card: the column to drop the card into, by NAME. The SERVER picks which of '
+          + 'the statuses that column claims the card takes, which is why this is a column and '
+          + 'not a status.',
+      },
+      labels: {
+        type: 'array',
+        items: { type: 'string' },
+        description:
+          'For label: the labels the issue should have AFTERWARDS, by name — a replacement, not '
+          + 'an addition. Send an empty array to take them all off.',
+      },
       /*
         Rendered from the catalogue rather than written out, for `tcms_write_case`'s reason: two
         hand-maintained field lists on two adapters is how `automationKey` came to be on one of
@@ -1408,6 +1442,44 @@ const writeIssue: ToolDefinition = {
         body: { statusId: status.id },
         // No precondition: a transition names an absolute target state, and the legal-move set is
         // the server's to check.
+        tcms,
+      });
+    }
+
+    if (action === 'move-card') {
+      const board = await boardIn(session, str(input, 'board'));
+      const config = await session.client.GET('/boards/{boardId}', {
+        params: { path: { boardId: board.id } }, tcms,
+      });
+      const wanted = requireStr(input, 'column');
+      const column = config.columns.find(
+        (candidate) => candidate.name.toLowerCase() === wanted.toLowerCase()
+          || candidate.id === wanted,
+      );
+      if (!column) {
+        throw new InputError(
+          `No column '${wanted}' on ${board.name}. It has: `
+            + `${config.columns.map((candidate) => candidate.name).join(', ')}.`,
+        );
+      }
+
+      /*
+        A `breach` on the answer is a 200 carrying a fact, never a failure: the card landed and the
+        column is over its limit. Passed through rather than raised, for story B3's reason — a
+        limit that refused the drop is a limit people route around by not using the board.
+      */
+      return session.client.POST('/boards/{boardId}/cards/{key}/move', {
+        params: { path: { boardId: board.id, key } },
+        body: { toColumnId: column.id },
+        tcms,
+      });
+    }
+
+    if (action === 'label') {
+      const names = strings(input, 'labels') ?? [];
+      return session.client.PUT('/issues/{key}/labels', {
+        params: { path: { key } },
+        body: { labelIds: await labelIdsIn(session, names) },
         tcms,
       });
     }
@@ -1740,6 +1812,142 @@ const report: ToolDefinition = {
   },
 };
 
+/* ------------------------------------------------------------------ backlog ---- */
+
+/**
+ * The backlog order and the project's labels — surface spec §3.5.
+ *
+ * **`board:rank` and `board:configure`, `all` rather than `any`, and the merge is legal only
+ * because §A3 grants both to the same three roles.** The day one of them widens, this is
+ * re-checked rather than assumed: a merged tool whose keys diverge is listed to a caller who 403s
+ * on half of it, which is §2's failure arriving through a merge nobody revisited.
+ *
+ * The two arms that look like they belong here are not here, and that is the same rule: moving a
+ * card and labelling an issue cost `issue:edit`, held by Test Engineer and up, so they are arms of
+ * `tcms_write_issue` — where a caller holding `issue:edit` and neither board key can reach them.
+ */
+/**
+ * Exactly one neighbour, as the body the contract takes — refused here rather than sent.
+ *
+ * The endpoint answers 400 for both-or-neither, and its message names `afterKey` and `beforeKey`:
+ * fields of a body the caller never composed, since this tool takes `after` and `before`. Neither
+ * is a 400 too and stays one — an empty body is not a request to move to the top, and the top is
+ * reachable as `before` the current first row.
+ */
+function placementFor(
+  after: string | undefined,
+  before: string | undefined,
+): { afterKey: string } | { beforeKey: string } {
+  if (after !== undefined && before === undefined) return { afterKey: after };
+  if (before !== undefined && after === undefined) return { beforeKey: before };
+  throw new InputError('Give exactly one of \'after\' or \'before\'.');
+}
+
+const writeBacklog: ToolDefinition = {
+  name: 'tcms_write_backlog',
+  title: 'Order the backlog, and keep the project\'s labels',
+  description:
+    'The order the team will pick work up in, and the informal axis it is tagged along. `rank` '
+    + 'places an issue immediately after OR before another — exactly one of `after` and `before`, '
+    + 'never both and never neither, and the top of the list is `before` the current first row. '
+    + 'Give NEIGHBOURS rather than a number: two people dragging at once each compute the same '
+    + 'midpoint from a list they read seconds ago, and the neighbours do not race. A `rebalanced` '
+    + 'answer is a SUCCESS — the placement happened and the whole list was respaced to make room, '
+    + 'so read it again before ranking anything else against it. The label arms take a `color` '
+    + 'that is a design-token NAME (`label-1` … `label-10`), never a hex value: a stored colour is '
+    + 'invisible in the other colour scheme. Deleting a label takes it off every issue holding it.',
+  gate: { mode: 'all', permissions: ['board:rank', 'board:configure'] },
+  arms: [
+    // `state`, not `edit`: PUT names an absolute placement — the same neighbours twice land the
+    // issue in the same place — so there is no version to precondition on and the endpoint
+    // declares no `If-Match`.
+    { action: 'rank', kind: 'state', permission: 'board:rank' },
+    // `state`, not `create`: `POST …/labels` declares no `Idempotency-Key`, and a duplicate name
+    // is a 409 rather than a second row, which is the property a key would have bought.
+    { action: 'label-create', kind: 'state', permission: 'board:configure' },
+    { action: 'label-update', kind: 'edit', permission: 'board:configure' },
+    { action: 'label-delete', kind: 'delete', permission: 'board:configure', targets: ['label'] },
+  ],
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['action'],
+    properties: {
+      action: ACTION(
+        ['rank', 'label-create', 'label-update', 'label-delete'],
+        'What to do.',
+      ),
+      issue: idProperty('issue to place — required for rank', 'ACME-124'),
+      after: idProperty('issue to place it immediately after', 'ACME-99'),
+      before: idProperty('issue to place it immediately before', 'ACME-98'),
+      label: {
+        type: 'string',
+        description: 'The label to rename, recolour or delete, by NAME — from tcms_read_board.',
+      },
+      name: { type: 'string', description: 'The label\'s name — for label-create and label-update.' },
+      color: {
+        type: 'string',
+        description:
+          'A design-token name — `label-1` through `label-10`. Never a hex value, and never a '
+          + 'colour word: the palette owns what each token looks like in light and dark.',
+      },
+    },
+  },
+  run: async (session, input) => {
+    const projectId = session.projectId();
+    const tcms = session.request;
+    const action = requireStr(input, 'action');
+
+    if (action === 'rank') {
+      const after = str(input, 'after');
+      const before = str(input, 'before');
+      return session.client.PUT('/issues/{key}/rank', {
+        params: { path: { key: requireStr(input, 'issue') } },
+        body: placementFor(after, before),
+        tcms,
+      });
+    }
+
+    if (action === 'label-create') {
+      return session.client.POST('/projects/{projectId}/labels', {
+        params: { path: { projectId } },
+        body: { name: requireStr(input, 'name'), color: requireStr(input, 'color') },
+        tcms,
+      });
+    }
+
+    const [labelId] = await labelIdsIn(session, [requireStr(input, 'label')]);
+
+    if (action === 'label-update') {
+      // A whole-body PUT-shaped PATCH: `LabelInput` requires both fields, so an update naming only
+      // one of them has to carry the other's current value rather than clearing it.
+      const current = await session.client.GET('/projects/{projectId}/labels', {
+        params: { path: { projectId } }, tcms,
+      });
+      const existing = current.find((row) => row.id === labelId);
+
+      return session.client.PATCH('/labels/{labelId}', {
+        params: { path: { labelId: labelId ?? '' } },
+        body: {
+          name: str(input, 'name') ?? existing?.name ?? '',
+          color: str(input, 'color') ?? existing?.color ?? '',
+        },
+        tcms,
+      });
+    }
+
+    if (action !== 'label-delete') throw new InputError(`Unknown action '${action}'.`);
+
+    await session.client.DELETE('/labels/{labelId}', {
+      params: { path: { labelId: labelId ?? '' } },
+      tcms,
+    });
+    // A 204 has no body, so there is nothing verbatim to answer with. Saying what went beats an
+    // empty success a caller cannot tell from a no-op.
+    return { deleted: str(input, 'label') };
+  },
+};
+
 export const WRITE_TOOLS: readonly ToolDefinition[] = [
   writeCase,
   writeSuite,
@@ -1750,6 +1958,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   reviewComment,
   reviewVerdict,
   writeIssue,
+  writeBacklog,
   writeArtifact,
   report,
 ];

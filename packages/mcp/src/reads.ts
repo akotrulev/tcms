@@ -24,9 +24,10 @@
  * keeps the result under the 25K-token cap, which is what the budget is for, and it buys the
  * server nothing. Saying so beats implying a pagination the contract does not have.
  */
-import { READ_ENUMS, clampPageSize, resolveId } from '@tcms/client';
+import { READ_ENUMS, clampPageSize, resolveId, type components } from '@tcms/client';
 
 import { PAGING_PROPERTIES, bool, idProperty, num, requireStr, str, strings } from './input.js';
+import type { Session } from './session.js';
 import type { ToolDefinition } from './tool.js';
 
 /**
@@ -847,6 +848,321 @@ const listProposals: ToolDefinition = {
   },
 };
 
+/* -------------------------------------------------------------------- board ---- */
+
+/**
+ * The board and backlog reads — three branches, one gate, one tool (surface spec §3.5).
+ *
+ * `board:read` is held by every one of the seven roles, so the branches merge under §2 with
+ * nothing to check: there is no reachable intersection that reaches one of them and not the
+ * others. The writes are elsewhere for the opposite reason — `board:rank` and `board:configure`
+ * are Project Manager and up, and `move-card` costs `issue:edit`, so a single board tool would be
+ * listed to a caller who 403s on most of it.
+ *
+ * **Columns and lanes come back with their cards inside them**, not flattened with a `columnId` to
+ * join on: the caller is reading a board, and a join it has to perform itself is a turn spent
+ * rebuilding a shape the endpoint already had. `rank` is passed through as the string it is on the
+ * wire and is never parsed — see `RankResult.rank` in the contract for why it is not a number.
+ */
+const readBoard: ToolDefinition = {
+  name: 'tcms_read_board',
+  title: 'Read a board, the backlog, or the project\'s labels',
+  description:
+    'What the team is working on, and in what order. Omit everything to list the boards; name a '
+    + '`board` for its columns with their cards inside them; ask for `backlog` for every story and '
+    + 'task that is not done, in the order the team will pick them up; ask for `labels` for the '
+    + 'names tcms_write_issue takes. A board is a LENS over the project\'s issues — it owns '
+    + 'nothing, and two boards over one project show the same work cut a different way, so a card '
+    + 'moved on one moves on all of them. `label`, `assignee` and `epic` filter by NAME or key, '
+    + 'never by id; several of one kind mean "any of these" and different kinds are combined with '
+    + 'AND. Each card carries `allowedTransitions` and its column, which is what tcms_write_issue '
+    + 'move-card needs, and `rank`, which is a decimal STRING to sort on and never to do '
+    + 'arithmetic with.',
+  gate: { mode: 'all', permissions: ['board:read'] },
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      board: {
+        type: 'string',
+        description: 'The board to open, by NAME — omit to list the boards this project has.',
+      },
+      backlog: {
+        type: 'boolean',
+        description:
+          'Read the ranked backlog instead of a board: every STORY and TASK that is not done, in '
+          + 'rank order, with the 1-based position each row shows.',
+      },
+      labels: { type: 'boolean', description: 'Read the project\'s labels instead.' },
+      label: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Label NAMES. Any of these — an unknown one is refused with the list.',
+      },
+      assignee: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Assignee display NAMES, from the people this project may give work to.',
+      },
+      epic: idProperty('epic whose stories to show', 'ACME-3'),
+      level: {
+        type: 'string',
+        enum: ['EPIC', 'STORY', 'TASK'],
+        description: 'Where a type sits in the hierarchy. Story, Bug and Spike are all STORY.',
+      },
+      priority: {
+        type: 'array',
+        items: { type: 'string', enum: [...READ_ENUMS.priority.values] },
+        description: 'Any of these priorities.',
+      },
+      unparented: { type: 'boolean', description: 'Only issues with no epic — the "No epic" lane.' },
+      ...PAGING_PROPERTIES,
+    },
+  },
+  run: async (session, input) => {
+    const projectId = session.projectId();
+    const tcms = session.request;
+    const path = { projectId };
+
+    if (bool(input, 'labels')) {
+      return window(
+        await session.client.GET('/projects/{projectId}/labels', { params: { path }, tcms }),
+        input,
+      );
+    }
+
+    if (bool(input, 'backlog')) {
+      const rows = await session.client.GET('/projects/{projectId}/backlog', {
+        params: { path, query: await cardFilter(session, input) },
+        tcms,
+      });
+      // The list is not paginated on the wire — the same client-side window every other list here
+      // uses, bounding the model's context rather than the server's work.
+      return window(rows.map(backlogRow), input);
+    }
+
+    const boards = await session.client.GET('/projects/{projectId}/boards', {
+      params: { path }, tcms,
+    });
+
+    const wanted = str(input, 'board');
+    if (wanted === undefined) return window(boards, input);
+
+    const found = boards.find(
+      (row) => row.name.toLowerCase() === wanted.toLowerCase() || row.id === wanted,
+    );
+    if (!found) {
+      throw new InputMismatch(
+        `No board '${wanted}' in this project. It has: ${boards.map((row) => row.name).join(', ')}.`,
+      );
+    }
+
+    const boardPath = { boardId: found.id };
+    const [config, contents] = await Promise.all([
+      session.client.GET('/boards/{boardId}', { params: { path: boardPath }, tcms }),
+      session.client.GET('/boards/{boardId}/cards', {
+        params: { path: boardPath, query: await cardFilter(session, input) },
+        tcms,
+      }),
+    ]);
+
+    const columnOf = new Map(config.columns.map((column) => [column.id, column]));
+
+    return {
+      board: config.name,
+      swimlaneBy: config.swimlaneBy,
+      columns: config.columns.map((column) => ({
+        name: column.name,
+        wipLimit: column.wipLimit,
+        // The names, for the same reason every other tool here drops ids: a status id is a second
+        // handle for a row nothing on this surface takes one for. `move-card` names the COLUMN.
+        statuses: column.statuses.map(nameOf),
+        overLimit: contents.breaches.some((breach) => breach.columnId === column.id),
+      })),
+      lanes: contents.lanes.map((lane) => ({
+        lane: lane.label,
+        completion: lane.completion,
+        cards: lane.cards.map((card) => ({
+          key: card.key,
+          title: card.title,
+          type: card.typeName,
+          level: card.typeLevel,
+          column: columnOf.get(card.columnId)?.name ?? card.columnId,
+          status: card.status.name,
+          rank: card.rank,
+          priority: card.priority,
+          assignee: card.assignee?.displayName,
+          dueDate: card.dueDate,
+          overdue: card.overdue,
+          epicKey: card.epicKey,
+          labels: card.labels.map(nameOf),
+          allowedTransitions: card.allowedTransitions.map(nameOf),
+          subtasks: `${String(card.subtaskDone)}/${String(card.subtaskTotal)}`,
+        })),
+      })),
+      // Reported, never enforced (story B3): a column over its limit still accepts the drop, and
+      // the caller is told so it can say so rather than so it can refuse.
+      breaches: contents.breaches.map((breach) => ({
+        column: columnOf.get(breach.columnId)?.name ?? breach.columnId,
+        limit: breach.limit,
+        count: breach.count,
+      })),
+    };
+  },
+};
+
+/** A backlog row with its ids dropped, §6's rule — the key and the position are the handles. */
+function backlogRow(row: {
+  key: string; title: string; typeName: string; typeLevel: string; position: number; rank: string;
+  status: { name: string }; assignee?: { displayName: string } | null;
+  estimateHours?: number | null; epicKey?: string | null; labels: { name: string }[];
+}): Record<string, unknown> {
+  return {
+    position: row.position,
+    key: row.key,
+    title: row.title,
+    type: row.typeName,
+    level: row.typeLevel,
+    status: row.status.name,
+    rank: row.rank,
+    assignee: row.assignee?.displayName,
+    estimateHours: row.estimateHours,
+    epicKey: row.epicKey,
+    labels: row.labels.map(nameOf),
+  };
+}
+/**
+ * The card filter §12.2 defines, with every name resolved to the id the query takes.
+ *
+ * **Names in, ids out, and both halves are §4.4's rule.** `labelId` and `assigneeId` are UUIDs of
+ * per-project rows; a model handed a bare UUID field invents one and the server answers a 400 about
+ * an id nobody chose. So the tool takes what the board itself shows — a label's name, a person's
+ * display name — and an unknown one is refused here, naming what the project has, rather than sent
+ * as a filter that silently matches nothing and reads as an empty board.
+ *
+ * Semantics are the endpoint's and are worth copying exactly because they are learnable: **OR
+ * within a category, AND across categories.**
+ */
+async function cardFilter(session: Session, input: Record<string, unknown>): Promise<{
+  labelId?: string[];
+  assigneeId?: string[];
+  epicKey?: string;
+  level?: 'EPIC' | 'STORY' | 'TASK';
+  priority?: components['schemas']['Priority'][];
+  unparented?: boolean;
+}> {
+  const labels = strings(input, 'label') ?? [];
+  const assignees = strings(input, 'assignee') ?? [];
+  const priority = strings(input, 'priority') ?? [];
+
+  return {
+    ...(labels.length > 0 ? { labelId: await labelIdsIn(session, labels) } : {}),
+    ...(assignees.length > 0 ? { assigneeId: await memberIdsIn(session, assignees) } : {}),
+    ...optional('epicKey', str(input, 'epic')),
+    ...optional('level', str(input, 'level') as 'EPIC' | 'STORY' | 'TASK' | undefined),
+    ...(priority.length > 0
+      ? { priority: priority as components['schemas']['Priority'][] }
+      : {}),
+    ...optional('unparented', bool(input, 'unparented')),
+  };
+}
+
+/**
+ * Label names to ids, against the project's own list.
+ *
+ * Exported because `writes.ts` resolves the same way for the same reason — the label arm of
+ * `tcms_write_issue` and the three arms of `tcms_write_backlog` all name a label — and two copies
+ * of *which label did they mean* would be two refusal messages for one mistake.
+ */
+export async function labelIdsIn(
+  session: Session,
+  names: readonly string[],
+): Promise<string[]> {
+  const labels = await session.client.GET('/projects/{projectId}/labels', {
+    params: { path: { projectId: session.projectId() } },
+    tcms: session.request,
+  });
+
+  return names.map((name) => {
+    const found = labels.find(
+      (row) => row.name.toLowerCase() === name.toLowerCase() || row.id === name,
+    );
+    if (!found) {
+      throw new InputMismatch(
+        `No label '${name}' in this project. It has: `
+          + `${labels.map((row) => row.name).join(', ') || '(none yet)'}.`,
+      );
+    }
+    return found.id;
+  });
+}
+
+/**
+ * Assignee display names to ids, against the people this project may give work to.
+ *
+ * `GET …/members` rather than anything under `/users`: §3.3 puts the company directory outside this
+ * surface, and this endpoint costs `project:read` and answers exactly the set the write side
+ * validates against — so a filter built from it can never name somebody the server would refuse.
+ */
+async function memberIdsIn(session: Session, names: readonly string[]): Promise<string[]> {
+  const members = await session.client.GET('/projects/{projectId}/members', {
+    params: { path: { projectId: session.projectId() } },
+    tcms: session.request,
+  });
+
+  return names.map((name) => {
+    const found = members.find(
+      (row) => row.displayName.toLowerCase() === name.toLowerCase() || row.id === name,
+    );
+    if (!found) {
+      throw new InputMismatch(
+        `Nobody called '${name}' can be given work in this project. It has: `
+          + `${members.map((row) => row.displayName).join(', ') || '(nobody)'}.`,
+      );
+    }
+    return found.id;
+  });
+}
+
+/**
+ * The board a card verb acts on, named or defaulted.
+ *
+ * Omitting it is right for the common case — every project is seeded one board, and naming it
+ * would be an argument with one possible value — and wrong the moment a project grows a second,
+ * where defaulting silently would move a card on a board nobody was looking at. So the refusal
+ * lists what the project has and the caller names one.
+ */
+export async function boardIn(
+  session: Session,
+  wanted: string | undefined,
+): Promise<{ id: string; name: string }> {
+  const boards = await session.client.GET('/projects/{projectId}/boards', {
+    params: { path: { projectId: session.projectId() } },
+    tcms: session.request,
+  });
+
+  if (wanted !== undefined) {
+    const found = boards.find(
+      (row) => row.name.toLowerCase() === wanted.toLowerCase() || row.id === wanted,
+    );
+    if (!found) {
+      throw new InputMismatch(
+        `No board '${wanted}' in this project. It has: ${boards.map((row) => row.name).join(', ')}.`,
+      );
+    }
+    return found;
+  }
+
+  const only = boards[0];
+  if (!only || boards.length > 1) {
+    throw new InputMismatch(
+      `This project has ${String(boards.length)} boards — name one in 'board': `
+        + `${boards.map((row) => row.name).join(', ')}.`,
+    );
+  }
+  return only;
+}
+
 export const READ_TOOLS: readonly ToolDefinition[] = [
   orient,
   searchCases,
@@ -859,6 +1175,7 @@ export const READ_TOOLS: readonly ToolDefinition[] = [
   listPlans,
   openRun,
   readIssue,
+  readBoard,
   listProposals,
   triage,
 ];

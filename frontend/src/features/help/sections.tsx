@@ -687,7 +687,11 @@ tcms doc show <page>   # one documentation page, with its blocks
 tcms proposal list     # the review queue of proposed cases
 tcms proposal show <id># one proposal, with its payload and grounding
 tcms issue list        # the project's epics, stories, bugs, spikes and tasks
-tcms issue show ACME-1 # one issue, its children, comments and the moves it may make`}</Terminal>
+tcms issue show ACME-1 # one issue, its children, comments and the moves it may make
+tcms board list        # the boards over this project
+tcms board show <name> # one board — its columns, its cards, and any column over its WIP limit
+tcms backlog           # every story and task that is not done, in rank order
+tcms label list        # the project's labels`}</Terminal>
 
         <H>Writing</H>
         <Terminal>{`tcms case edit         # change a test case
@@ -698,6 +702,9 @@ tcms run create   | run status
 tcms result record     # record a verdict against one case in a run
 tcms doc create | doc edit | doc link | doc unlink
 tcms issue create | issue move | issue comment
+tcms board move ACME-1 --column "In flight"  # a card to a column; a WIP breach prints and exits 0
+tcms rank ACME-1 --after ACME-9              # exactly one of --after or --before
+tcms label add | label set
 tcms review comment    # a remark on an open review`}</Terminal>
 
         <H>Options that apply everywhere</H>
@@ -783,7 +790,7 @@ tcms review comment    # a remark on an open review`}</Terminal>
   {
     id: 'mcp',
     title: 'AI agent access (MCP)',
-    summary: 'Connecting an AI assistant, the 26 tools, and the limits that make it safe.',
+    summary: 'Connecting an AI assistant, the 28 tools, and the limits that make it safe.',
     body: (
       <>
         <P>
@@ -805,17 +812,17 @@ tcms review comment    # a remark on an open review`}</Terminal>
             {
               term: 'Reading — 12',
               detail:
-                'tcms_search_cases · tcms_open_case · tcms_list_suites · tcms_list_library · tcms_list_artifacts · tcms_doc_tree · tcms_open_doc_page · tcms_list_plans · tcms_open_run · tcms_read_issue · tcms_list_proposals · tcms_triage',
+                'tcms_search_cases · tcms_open_case · tcms_list_suites · tcms_list_library · tcms_list_artifacts · tcms_doc_tree · tcms_open_doc_page · tcms_list_plans · tcms_open_run · tcms_read_issue · tcms_read_board · tcms_list_proposals · tcms_triage',
             },
             {
               term: 'Writing — 11',
               detail:
-                'tcms_write_case · tcms_write_suite · tcms_write_doc_page · tcms_write_plan · tcms_write_run · tcms_record_result · tcms_review_comment · tcms_review_verdict · tcms_write_issue · tcms_write_artifact · tcms_report',
+                'tcms_write_case · tcms_write_suite · tcms_write_doc_page · tcms_write_plan · tcms_write_run · tcms_record_result · tcms_review_comment · tcms_review_verdict · tcms_write_issue · tcms_write_backlog · tcms_write_artifact · tcms_report',
             },
           ]}
         />
         <P>
-          The list is workflow-shaped rather than one tool per endpoint: 26 tools over roughly 88 API
+          The list is workflow-shaped rather than one tool per endpoint: 28 tools over roughly 88 API
           paths. Tool definitions cost the model context, so a mirror of the API would be a surface
           only the largest hosts could afford to load.
         </P>

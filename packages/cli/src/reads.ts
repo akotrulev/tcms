@@ -18,6 +18,7 @@ import {
   shapeOf,
   templateFor,
   usageFor,
+  type components,
 } from '@tcms/client';
 
 import {
@@ -29,6 +30,7 @@ import {
   projectOf,
   requireArg,
   type Command,
+  type CommandContext,
 } from './context.js';
 import { fields, show, showDate, table } from './output.js';
 
@@ -807,6 +809,301 @@ const issueShow: Command = {
   },
 };
 
+/* -------------------------------------------------------------------- board ---- */
+
+/**
+ * The board a `board` command acts on, named or defaulted.
+ *
+ * §6's table spells `board move ACME-124 --column "In flight"` with no board in it, and that is
+ * right for the common case: every project is seeded one board, and naming it would be a word
+ * with one possible value. It is not right for a project that has grown a second, so `--board`
+ * disambiguates and the refusal lists what the project has. Defaulting silently to the first of
+ * several would move a card on a board the caller was not looking at.
+ */
+export async function boardOf(context: CommandContext, requested: string | undefined): Promise<{
+  id: string;
+  name: string;
+}> {
+  const boards = await context.client.GET('/projects/{projectId}/boards', {
+    params: { path: { projectId: await projectOf(context) } },
+    tcms: context.request,
+  });
+
+  if (requested !== undefined) {
+    const found = boards.find(
+      (row) => row.name.toLowerCase() === requested.toLowerCase() || row.id === requested,
+    );
+    if (!found) {
+      throw new UsageError(
+        `No board '${requested}' in this project. It has: ${boards.map((row) => row.name).join(', ')}.`,
+      );
+    }
+    return found;
+  }
+
+  const only = boards[0];
+  if (!only || boards.length > 1) {
+    throw new UsageError(
+      `This project has ${String(boards.length)} boards — name one with --board: `
+        + `${boards.map((row) => row.name).join(', ')}.`,
+    );
+  }
+  return only;
+}
+
+/** The card filter §12.2 defines — OR within a category, AND across them — as query parameters. */
+async function cardFilter(
+  context: CommandContext,
+): Promise<{
+  labelId?: string[];
+  assigneeId?: string[];
+  epicKey?: string;
+  level?: 'EPIC' | 'STORY' | 'TASK';
+  priority?: components['schemas']['Priority'][];
+  unparented?: boolean;
+}> {
+  const { options } = context;
+  const labels = all(options['label']);
+  const assignees = all(options['assignee']);
+  const level = first(options['level']);
+  const epic = first(options['epic']);
+  const priorities = all(options['priority']);
+
+  return {
+    ...(labels.length > 0 ? { labelId: await labelIds(context, labels) } : {}),
+    ...(assignees.length > 0 ? { assigneeId: await assigneeIds(context, assignees) } : {}),
+    ...(epic === undefined ? {} : { epicKey: epic }),
+    ...(level === undefined ? {} : { level: level as 'EPIC' | 'STORY' | 'TASK' }),
+    ...(priorities.length > 0
+      ? { priority: priorities as components['schemas']['Priority'][] }
+      : {}),
+    ...(flag(options['unparented']) ? { unparented: true } : {}),
+  };
+}
+
+/**
+ * Label names to the ids the filter takes.
+ *
+ * Shared with `tcms label set`, which resolves the same way for the same reason: `Label.id` is a
+ * UUID and nobody at a terminal has one, so every label on this surface is spelled by name and an
+ * unknown one is refused here rather than sent as a filter that silently matches nothing.
+ */
+export async function labelIds(
+  context: CommandContext,
+  names: readonly string[],
+): Promise<string[]> {
+  const labels = await context.client.GET('/projects/{projectId}/labels', {
+    params: { path: { projectId: await projectOf(context) } },
+    tcms: context.request,
+  });
+
+  return names.map((name) => {
+    const found = labels.find(
+      (row) => row.name.toLowerCase() === name.toLowerCase() || row.id === name,
+    );
+    if (!found) {
+      throw new UsageError(
+        `No label '${name}' in this project. It has: `
+          + `${labels.map((row) => row.name).join(', ') || '(none yet)'}.`,
+      );
+    }
+    return found.id;
+  });
+}
+
+/**
+ * Assignee display names to ids, against the people this project may assign work to.
+ *
+ * `GET …/members` rather than `/users`: it costs `project:read`, it is the same predicate the
+ * write side enforces, and the company directory is out of reach of an agent credential anyway.
+ */
+async function assigneeIds(
+  context: CommandContext,
+  names: readonly string[],
+): Promise<string[]> {
+  const members = await context.client.GET('/projects/{projectId}/members', {
+    params: { path: { projectId: await projectOf(context) } },
+    tcms: context.request,
+  });
+
+  return names.map((name) => {
+    const found = members.find(
+      (row) => row.displayName.toLowerCase() === name.toLowerCase() || row.id === name,
+    );
+    if (!found) {
+      throw new UsageError(
+        `Nobody called '${name}' can be given work in this project. It has: `
+          + `${members.map((row) => row.displayName).join(', ') || '(nobody)'}.`,
+      );
+    }
+    return found.id;
+  });
+}
+
+/** The five filter flags every card-shaped read takes, declared once so the two cannot drift. */
+const FILTER_OPTIONS = {
+  label: { type: 'string', multiple: true },
+  assignee: { type: 'string', multiple: true },
+  epic: { type: 'string' },
+  level: { type: 'string' },
+  priority: { type: 'string', multiple: true },
+  unparented: { type: 'boolean' },
+} as const;
+
+const boardList: Command = {
+  name: 'board list',
+  summary: 'The boards over this project',
+  usage: 'tcms board list',
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const boards = await client.GET('/projects/{projectId}/boards', {
+      params: { path: { projectId: await projectOf(context) } },
+      tcms: request,
+    });
+
+    if (json) return out.json(boards);
+
+    table(out, boards, [
+      { header: 'NAME', value: (row) => show(row.name) },
+      { header: 'COLUMNS', value: (row) => show(row.columnCount) },
+      { header: 'SWIMLANES', value: (row) => show(row.swimlaneBy) },
+      { header: 'ID', value: (row) => show(row.id) },
+    ]);
+  },
+};
+
+/**
+ * `tcms board show "Team board"` — the cards, in lanes.
+ *
+ * Rendered as one line per card with its column and its lane as **columns of the line**, not as a
+ * nested structure under headings. The caller is answering *what is in flight*, and a shape it has
+ * to walk costs it a parse it did not need; a lane with three cards is three lines that share a
+ * value, which is what a table is for.
+ */
+const boardShow: Command = {
+  name: 'board show',
+  summary: 'One board — its columns, its cards, and any column over its WIP limit',
+  usage:
+    'tcms board show "Team board" [--label L]... [--assignee A]... [--epic ACME-3]\n'
+    + '                             [--level EPIC|STORY|TASK] [--priority P]... [--unparented]',
+  options: FILTER_OPTIONS,
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const chosen = await boardOf(context, requireArg(context, 'board'));
+    const path = { boardId: chosen.id };
+
+    const config = await client.GET('/boards/{boardId}', { params: { path }, tcms: request });
+    const contents = await client.GET('/boards/{boardId}/cards', {
+      params: { path, query: await cardFilter(context) },
+      tcms: request,
+    });
+
+    if (json) return out.json({ ...config, ...contents });
+
+    const columnName = new Map(config.columns.map((column) => [column.id, column.name]));
+
+    fields(out, [
+      ['Board', `${show(config.name)} — ${String(config.columns.length)} columns`],
+      ['Swimlanes', show(config.swimlaneBy)],
+      [
+        'Columns',
+        config.columns
+          .map((column) => `${column.name}${column.wipLimit === null ? '' : ` (WIP ${String(column.wipLimit)})`}`)
+          .join('  |  '),
+      ],
+    ]);
+
+    out.line();
+    table(
+      out,
+      contents.lanes.flatMap((lane) => lane.cards.map((card) => ({ lane, card }))),
+      [
+        { header: 'LANE', value: (row) => show(row.lane.label) },
+        { header: 'COLUMN', value: (row) => show(columnName.get(row.card.columnId) ?? row.card.columnId) },
+        { header: 'KEY', value: (row) => show(row.card.key) },
+        { header: 'TYPE', value: (row) => show(row.card.typeName) },
+        { header: 'TITLE', value: (row) => show(row.card.title) },
+        { header: 'STATUS', value: (row) => show(row.card.status.name) },
+        { header: 'ASSIGNEE', value: (row) => show(row.card.assignee?.displayName) },
+        { header: 'LABELS', value: (row) => row.card.labels.map((one) => one.name).join(', ') || '—' },
+      ],
+    );
+
+    // Reported, never enforced (story B3). A column over its limit is a fact about the board, so
+    // it prints here as well as on the move that caused it, and neither is an error.
+    if (contents.breaches.length > 0) {
+      out.line();
+      for (const breach of contents.breaches) {
+        out.line(
+          `Over the limit: ${show(columnName.get(breach.columnId) ?? breach.columnId)} holds `
+            + `${String(breach.count)} of a limit of ${String(breach.limit)}.`,
+        );
+      }
+    }
+  },
+};
+
+const backlog: Command = {
+  name: 'backlog',
+  summary: 'The project\'s backlog, in rank order',
+  usage:
+    'tcms backlog [--label L]... [--assignee A]... [--epic ACME-3] [--level STORY|TASK]\n'
+    + '             [--priority P]... [--unparented] [--page N] [--size N]',
+  options: { ...FILTER_OPTIONS, page: { type: 'string' }, size: { type: 'string' } },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const rows = await client.GET('/projects/{projectId}/backlog', {
+      params: { path: { projectId: await projectOf(context) }, query: await cardFilter(context) },
+      tcms: request,
+    });
+
+    if (json) return out.json(rows);
+
+    // A client-side window, the same as `issue list`: the endpoint answers the whole ranked list
+    // and this bounds a terminal's scrollback rather than the server's work.
+    const size = clampPageSize(number(first(options['size'])));
+    const page = Math.max(0, number(first(options['page'])) ?? 0);
+    const shown = rows.slice(page * size, page * size + size);
+
+    table(out, shown, [
+      { header: '#', value: (row) => show(row.position) },
+      { header: 'KEY', value: (row) => show(row.key) },
+      { header: 'TYPE', value: (row) => show(row.typeName) },
+      { header: 'TITLE', value: (row) => show(row.title) },
+      { header: 'STATUS', value: (row) => show(row.status.name) },
+      { header: 'ASSIGNEE', value: (row) => show(row.assignee?.displayName) },
+      { header: 'EPIC', value: (row) => show(row.epicKey) },
+      { header: 'LABELS', value: (row) => row.labels.map((one) => one.name).join(', ') || '—' },
+    ]);
+
+    out.line();
+    out.line(`${String(shown.length)} of ${String(rows.length)} — page ${String(page + 1)}`);
+  },
+};
+
+const labelList: Command = {
+  name: 'label list',
+  summary: 'The project\'s labels',
+  usage: 'tcms label list',
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const labels = await client.GET('/projects/{projectId}/labels', {
+      params: { path: { projectId: await projectOf(context) } },
+      tcms: request,
+    });
+
+    if (json) return out.json(labels);
+
+    table(out, labels, [
+      { header: 'NAME', value: (row) => show(row.name) },
+      // The design-token name, which is what `label add --color` takes. A hex value is not a
+      // colour this product stores — see `Label.color` in the contract.
+      { header: 'COLOUR', value: (row) => show(row.color) },
+      { header: 'ID', value: (row) => show(row.id) },
+    ]);
+  },
+};
+
 export const READS: readonly Command[] = [
   whoami,
   format,
@@ -824,4 +1121,8 @@ export const READS: readonly Command[] = [
   proposalShow,
   issueList,
   issueShow,
+  boardList,
+  boardShow,
+  backlog,
+  labelList,
 ];

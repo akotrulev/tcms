@@ -526,6 +526,24 @@ to join on — the model is reading a board, and a join it has to perform itself
 rebuilding the shape the endpoint already had. `rank` is passed through **as the string it is on the
 wire** and is never parsed (see `RankResult.rank`).
 
+##### Where the two name filters resolve — decided by the implementation (012 T5)
+
+The table above says `label` and `assignee` are names and does not say against what, which is the
+one thing the row could not settle: `labelId` and `assigneeId` are UUIDs on the wire and a tool that
+passed a name through would send a filter matching nothing, which a model reads as *an empty board*
+rather than as a mistake. So both are resolved before the request and an unknown one is refused with
+the list:
+
+| Filter | Resolved against | Why that endpoint |
+|---|---|---|
+| `label` | `GET /projects/{id}/labels` | The same read the tool's own `labels: true` branch serves — one list, one refusal message, shared with `tcms_write_issue label` and all three of `tcms_write_backlog`'s label arms. |
+| `assignee` | `GET /projects/{id}/members` | §3.3 puts `/users` and `/teams` outside this surface as `COMPANY` scope, and an agent token holds no `company:read`. `…/members` costs **`project:read`** and answers *exactly the set the write side validates against*, so a filter built from it can never name somebody the server would refuse. |
+
+The cost is one extra read per filtered call, paid only when the filter is given. The alternative —
+filtering client-side on the display names the cards already carry — was rejected because it would
+make a lane's `completion` roll-up disagree with the cards under it: the roll-up is the server's,
+over the unfiltered lane.
+
 #### `tcms_write_backlog` — typed input
 
 Gate: **`board:rank` + `board:configure`.** `all`, not `any`, and legal only because §A3 grants both
@@ -561,6 +579,28 @@ the caller does not know which status the column means.
 `label` **replaces the whole set**, matching the endpoint: the field is the labels the issue should
 have afterwards, not the ones to add. A model that sends one label removes the rest, and the
 description says so in those words.
+
+#### `move-card` needs a board, and the tool takes one — decided by the implementation (012 T5)
+
+`POST /boards/{boardId}/cards/{key}/move` has a board in its path and neither §3.5's table above nor
+§6's spells one, because every project is seeded exactly one and naming it would be an argument with
+a single possible value. It is not a single value once a project grows a second board, so the arm
+takes an optional `board` **name** and refuses with the list when it is omitted and there is more
+than one. Defaulting silently to the first would move a card on a board nobody was looking at — and
+because a board is a lens, the *move* would still be right and the caller's account of it wrong,
+which is the failure that reads as correct behaviour. `tcms board move --board` is the same
+decision, and `boardIn` / `boardOf` are the one place each surface answers it.
+
+#### The §8.1 gap, again, for all ten board operations
+
+§3.4's measured gap covers these too and for the same reason: `declaredPermissionsOf` matches the
+literal word **`Requires`**, and the board operations state their gates as `` `board:read`, which
+every role holds `` and *"Costs **`issue:edit`**, not a `board:move`"*. So §8.1's permission
+assertion is **skipped, not satisfied**, for every arm added here. §8.3's header half does cover
+them, because it reads `parameters` rather than prose — and it found one shortfall, recorded in
+`writeConformance.test.ts`'s `CREATE_WITHOUT_A_KEY`: `PATCH /labels/{labelId}` declares no
+`If-Match` and `Label` carries no `lockVersion` on the wire to precondition on, so two people
+renaming one label at once lose a rename.
 ---
 
 ## 4. Cross-cutting rules — all of them in the command core
@@ -670,8 +710,11 @@ needing a separate decision. A bulk generation therefore decomposes per item.
 
 ## 6. The CLI surface
 
-`tcms <noun> <verb>`, one command per operation the `Agent` role can reach — approximately ~~45~~ 53,
-against the MCP surface's ~~21~~ 28. It is wide on purpose (§1): `--help` is paged and nobody loads all of
+`tcms <noun> <verb>`, one command per operation the `Agent` role can reach — approximately ~~45~~ ~~53~~ 61,
+against the MCP surface's ~~21~~ 28. **The registry holds 43** (`COMMANDS`, measured 012 T5, eight of
+them this slice's board verbs), and the two numbers have never met: the count above is what the
+`Agent` grant *reaches*, the registry is what has been *spelled*, and §6's own struck-through
+paragraph names the families — `report` and `triage` — that are still reachable and unoffered. It is wide on purpose (§1): `--help` is paged and nobody loads all of
 it.
 
 - ~~**Nouns match the MCP tool families exactly** — `case`, `suite`, `plan`, `run`, `doc`, `review`,
@@ -731,6 +774,15 @@ Three things about that table are decisions rather than spellings:
   stale client remove a label somebody else just added, which is the same argument the endpoint makes.
 - **There is no `tcms board create`/`edit`/`delete`.** Defining columns is a screen with a
   status-claim rule (§3.5); the CLI reads the boards a project has and moves cards on them.
+- **`--board NAME` is an eighth flag, not a ninth command** (012 T5). `board show` names its board
+  as a positional and `board move` does not, because the move's board is almost always the only one
+  the project has — so it is optional, and omitting it on a project with two is refused with the
+  list rather than defaulted. See §3.5 for the argument, which is the same on both surfaces.
+- **A WIP breach prints and the command still exits 0.** `board move` writes the breach to *stderr*
+  and returns `ok`: the card is where it was asked to go, and a non-zero exit would make a limit
+  something a CI step fails on — story B3's "a limit people route around" in its automation
+  spelling. `tcms rank` does the same with a `rebalanced` answer, which is a success carrying an
+  instruction to read the list again, not an error.
 - **Read commands are phase 5, writes are phase 7**, per the plan's order.
 - **`--json` on every command**, so the CLI composes in a shell. Human-readable output is the
   default and the JSON is the generated client's response verbatim.
@@ -810,7 +862,8 @@ instance is §108.
    `{ type, text }` against a `DocBlockInput` that declares `blockType`, invisible to the other four
    because they read top-level properties only.
 6. **The shape catalogue against the SURFACE (2026-08-26).** §5 pins the catalogue to the contract
-   and asks nothing of the eleven write tools, ten of which hand-write their `inputSchema`. So
+   and asks nothing of the ~~eleven~~ twelve write tools, ~~ten~~ eleven of which hand-write their
+   `inputSchema`. So
    `tcms_shape` could tell a model one thing about a suite and `tcms_write_suite` declare another
    with nothing firing. `mcp/src/writes.test.ts` now asserts that every field the catalogue offers
    for a body-carrying arm is a property that tool accepts, and `cli/src/format.test.ts` the same
