@@ -779,7 +779,30 @@ class ContractConventionTest {
             Map.entry("BoardSummary", List.of(com.tcms.tracker.board.BoardSummaryView.class)),
             Map.entry("BoardInput", List.of(com.tcms.tracker.board.BoardInput.class)),
             Map.entry("BoardColumnInput",
-                    List.of(com.tcms.tracker.board.BoardColumnInput.class)));
+                    List.of(com.tcms.tracker.board.BoardColumnInput.class)),
+            // ---- 012 T4's cards, rank and labels block ----
+            //
+            // The same rule as T3's above, and `Label` is the entry that shows it doing work: the
+            // ENTITY is `IssueLabel` and carries company_id, created_at and created_by, none of
+            // which is on the wire. `LabelView` is what serves the schema, and pairing the entity
+            // instead is how a created_by becomes a field nobody meant to publish.
+            //
+            // BoardIssueCard is deliberately NOT `BoardCard` — that schema is work's composite card
+            // and carries four kinds, a `derived` flag and a synthetic id, none of which means
+            // anything about an issue with a real key.
+            Map.entry("BoardContents", List.of(com.tcms.tracker.board.BoardContentsView.class)),
+            Map.entry("BoardLane", List.of(com.tcms.tracker.board.BoardLaneView.class)),
+            Map.entry("WipBreach", List.of(com.tcms.tracker.board.WipBreachView.class)),
+            Map.entry("BoardIssueCard", List.of(com.tcms.tracker.board.BoardIssueCardView.class)),
+            Map.entry("CardMoveInput", List.of(com.tcms.tracker.board.CardMoveInput.class)),
+            Map.entry("CardMoveResult", List.of(com.tcms.tracker.board.CardMoveResultView.class)),
+            Map.entry("BacklogRow", List.of(com.tcms.tracker.board.BacklogRowView.class)),
+            Map.entry("RankInput", List.of(com.tcms.tracker.board.RankInput.class)),
+            Map.entry("RankResult", List.of(com.tcms.tracker.board.RankResultView.class)),
+            Map.entry("Label", List.of(com.tcms.tracker.board.LabelView.class)),
+            Map.entry("LabelInput", List.of(com.tcms.tracker.board.LabelInput.class)),
+            Map.entry("IssueLabelsInput",
+                    List.of(com.tcms.tracker.board.IssueLabelsInput.class)));
 
     /**
      * The owners this file cannot name as class literals, because they are package-private.

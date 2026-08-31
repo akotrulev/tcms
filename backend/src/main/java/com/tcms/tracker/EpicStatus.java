@@ -11,16 +11,20 @@ import java.util.List;
  * An epic that reads "In Progress" beside a completion of 100% is the disagreement D31 makes
  * unrepresentable, which is why the same {@link CountedIssue} list feeds both.
  *
+ * <p>Public since 012 T4, for {@link Completion}'s reason: a board card shows an epic's status and
+ * it has to be the same derived value {@code GET /issues/&#123;key&#125;} shows, or one screen says
+ * "In Progress" about an epic another says is done.
+ *
  * <p>Pure, and five lines. The value is in the two cases the sentence does not spell out: an epic
  * with no counted stories is {@code NOT_STARTED} rather than vacuously {@code DONE}, and a spike
  * never decides the answer — for exactly the reason it is left out of the percentage.
  */
-final class EpicStatus {
+public final class EpicStatus {
 
     private EpicStatus() {
     }
 
-    static IssueStatusKind of(List<CountedIssue> children) {
+    public static IssueStatusKind of(List<CountedIssue> children) {
         List<CountedIssue> counted = children.stream()
                 .filter(CountedIssue::countsTowardCompletion)
                 .toList();

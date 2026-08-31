@@ -39,6 +39,16 @@ public interface IssueRepository extends JpaRepository<Issue, UUID> {
      */
     Optional<Issue> findByIssueKeyAndDeletedAtIsNull(String issueKey);
 
+    /**
+     * Every live issue of one project.
+     *
+     * <p>Unordered, for {@link #findFiltered}'s reason turned around: the board and the backlog
+     * order by {@code rank, created_at, id} and then filter on values this query does not join —
+     * a label, an epic key, a type's level — so the ordering is applied over the assembled views
+     * and an ORDER BY here would be one the caller discards.
+     */
+    List<Issue> findByProjectIdAndDeletedAtIsNull(UUID projectId);
+
     /** An epic's stories, or a story's sub-tasks, in key order — which is {@code key_seq} order. */
     List<Issue> findByParentIdAndDeletedAtIsNullOrderByKeySeqAsc(UUID parentId);
 

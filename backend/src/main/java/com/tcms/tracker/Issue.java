@@ -163,6 +163,23 @@ public class Issue {
     @Column(name = "created_idempotency_key", updatable = false)
     private String createdIdempotencyKey;
 
+    /**
+     * Where this issue sits in its project's order — the fractional rank (012 D-d).
+     *
+     * <p><strong>Filled on insert by {@code V5}'s {@code issue_rank_default} trigger, never here</strong>
+     * (D-k). A new issue takes {@code max(rank) + 1024} in its project, which a column {@code DEFAULT}
+     * cannot express because it may not read another row — and assigning it on the creation path
+     * instead would be a rule that holds only for the callers who remember it. The trigger stands
+     * aside whenever the insert supplies a rank, which is the door {@code RankService} writes through.
+     *
+     * <p>{@code NUMERIC} with no precision, so a midpoint between two neighbours always exists and
+     * placing one row never rewrites another. Deliberately <strong>not unique</strong>: two inserts
+     * into one project in the same instant read the same maximum and tie, so every ordered read is
+     * {@code ORDER BY rank, created_at, id} and never {@code ORDER BY rank} alone.
+     */
+    @Column(name = "rank", nullable = false)
+    private java.math.BigDecimal rank;
+
     /** JPA only. */
     protected Issue() {
     }
@@ -362,5 +379,21 @@ public class Issue {
 
     public String getCreatedIdempotencyKey() {
         return createdIdempotencyKey;
+    }
+
+    public java.math.BigDecimal getRank() {
+        return rank;
+    }
+
+    /**
+     * Places this issue at an already-computed rank.
+     *
+     * <p>Public because {@code tracker.board.RankService} is the one caller and lives in a
+     * sub-package. It takes no actor and stamps no {@code updated_at}: reordering a backlog is not
+     * an edit to any of the issues in it, and moving thirty rows would otherwise mark thirty issues
+     * as touched by whoever dragged one.
+     */
+    public void rankAt(java.math.BigDecimal placed) {
+        this.rank = placed;
     }
 }

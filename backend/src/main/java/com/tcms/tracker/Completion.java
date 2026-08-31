@@ -5,10 +5,13 @@ import java.util.List;
 /**
  * D8 — an epic's completion, and <strong>the basis is returned beside the number, always</strong>.
  *
- * <p>Pure and static, so its nine cases cost no container. It is called from {@code IssueService}
- * and from nowhere else: D8's "one number, one place" is not a style rule — this repository has
- * shipped two contradictory percentages on one screen, and a component that computes its own is how
- * that happened.
+ * <p>Pure and static, so its nine cases cost no container. ~~It is called from {@code IssueService}
+ * and from nowhere else~~ → <strong>and from {@code tracker.board.BoardCardService} since 012 T4</strong>,
+ * which is why this record and {@link CountedIssue} are public rather than package-private. D8's
+ * "one number, one place" is not a style rule — this repository has shipped two contradictory
+ * percentages on one screen, and a component that computes its own is how that happened. A board
+ * lane's roll-up is a completion over the same kind of list, so it goes through this rather than
+ * beside it: the alternative was a second percentage, in a second module, over a filtered set.
  *
  * <h2>Why the basis is on the wire and never inferred by the client</h2>
  *
@@ -24,7 +27,7 @@ import java.util.List;
  * a mix of estimated and unestimated issues weighted by hours would silently treat the unestimated
  * ones as zero, so an epic would read <em>higher</em> the less it was planned.
  */
-record Completion(
+public record Completion(
         int percent,
         Basis basis,
         int done,
@@ -34,7 +37,7 @@ record Completion(
         int excludedSpikes) {
 
     /** What the percentage above counts. On the wire, because a client must never infer it. */
-    enum Basis {
+    public enum Basis {
 
         /** Issues. The fallback the moment one counted issue lacks an estimate. */
         COUNT,
@@ -43,7 +46,7 @@ record Completion(
         ESTIMATE
     }
 
-    static Completion of(List<CountedIssue> children) {
+    public static Completion of(List<CountedIssue> children) {
         List<CountedIssue> counted = children.stream()
                 .filter(CountedIssue::countsTowardCompletion)
                 .toList();
@@ -76,7 +79,7 @@ record Completion(
     }
 
     /** The wire shape, which names the basis as a string because the contract's enum is one. */
-    CompletionView view() {
+    public CompletionView view() {
         return new CompletionView(percent, basis.name(), done, total,
                 estimatedHoursDone, estimatedHoursTotal, excludedSpikes);
     }

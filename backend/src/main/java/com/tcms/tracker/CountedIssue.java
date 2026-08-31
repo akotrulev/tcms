@@ -14,9 +14,9 @@ package com.tcms.tracker;
  * @param estimateHours          null means "not estimated", which is what flips a whole epic's
  *     basis from {@code ESTIMATE} to {@code COUNT}
  */
-record CountedIssue(boolean countsTowardCompletion, IssueStatusKind kind, Double estimateHours) {
+public record CountedIssue(boolean countsTowardCompletion, IssueStatusKind kind, Double estimateHours) {
 
-    boolean isDone() {
+    public boolean isDone() {
         return kind == IssueStatusKind.DONE;
     }
 }
