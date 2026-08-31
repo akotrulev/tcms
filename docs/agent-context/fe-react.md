@@ -1,6 +1,6 @@
 # fe-react — orientation cache
 
-**Baseline commit:** `71777f9a` · **Last verified:** 2026-08-31 · **Verdict this run:** DELTA (the version lane held — `package.json` gained only prettier; the seams below moved because 011 T1–T4 retired the `work` module's contract out from under this stack)
+**Baseline commit:** `f6315aeb` · **Last verified:** 2026-08-31 · **Verdict this run:** DELTA (011 T6's cache was one commit old and the delta touched no code, so the version lane and every seam held; the seams below moved because 011 T7 replaced two screens and added three)
 
 Per `ep-agent-orientation-cache`: validate this against a git delta before trusting it. A changed
 `frontend/package.json`, `package-lock.json`, `tsconfig*.json` or `vite.config.ts` invalidates the
@@ -61,6 +61,11 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 | Field ↔ error wiring | `components/kit/Field.tsx` clones its child to add `aria-describedby` pointing at `${htmlFor}-message`. Callers pass nothing; do not re-add per-call-site ids |
 | Dev fault switches | `lib/devFaults.ts` behind `src/api/client.ts`; `tcmsFaults.{status,hang,expire,drift,only,tracker,issue,off}()` in the console. Both guards are a **literal** `import.meta.env.DEV` so Rollup drops the module — routing that check through an imported constant ships it. `issue('conflict')` fabricates the 409 that names the legal moves, which no ordinary session can produce because the picker only offers legal ones |
 | Issue screens | `features/tracker/` — `WorkTablePage` (`/projects/:id/work`, five views on `?view=`), `IssueNewPage` (`/work/new`), `IssueDetailPage` (**`/issues/:key`, outside the project segment**, dispatching on `type.level` to `EpicPanels`/`StoryPanels`/`TaskPanels`). `TypeIcon` derives its colour from `level` + `countsTowardCompletion`, never from the type's name |
+| Project front door | `/projects/:projectId` is **`features/projects/ProjectOverviewPage.tsx`** (011 T7). ~~`features/dashboard/DashboardPage.tsx`~~ no longer exports a page — it exports `DashboardBody` and `HealthPanel`, the repository-dashboard **regions**, which the overview mounts below its delivery half. **The file keeps its name deliberately**: `DashboardPage.tsx` is cited from `lib/statusColors.ts`, from `HealthTileOrderTest.java` in the backend suite, and from `renders/06-analytics.html` |
+| The three boards | `BoardPage` and `TeamBoardPage` mount `Board` (kanban). **`MyWorkPage` does not** — `my-work.html` is two tables over ONE `GET /board?mine=true`, split on `kind === 'ISSUE'`, plus a private notes panel (011 T7). `linkFor` lives in `features/board/cardLink.ts`, not in `BoardPage.tsx`: a file exporting a component and a function is oxlint's `react(only-export-components)`, and the gate is zero warnings |
+| Project settings | `/projects/:projectId/settings/{general,workflow,classification,review,notifications,trackers}` — six screens, all **routed for everybody** and read-only for a caller without the write key (§31). `general` holds the archive button (011 T7 moved it off the overview's header, with `ArchiveProject.test.tsx`) |
+| A DELETE with a body | **`api.delWithBody(path, body, options)`** — the one in the product, for the workflow status removal. Registered in `test/contractDoubles.ts`'s `METHODS` **and** `SENDS_A_BODY`; a body smuggled into `api.del`'s options is invisible to that seam, which reads the second argument positionally |
+| Empty states | `DataRegion`'s `EmptyState` takes `kind` / `title` / `body` / `action` and, since 011 T7, an optional lucide **`icon`**. `kit/StateBlock`'s `empty` is the other one and has a fixed description — it is not the one to reach for when the panel has to say what the missing thing IS |
 
 ## Test-harness rules the suites enforce
 
@@ -93,6 +98,15 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 - ~~**84 tests fail on a clean checkout, in 18 files, and they are T16 port residue.**~~ → **gone.
   164 test files pass on `71777f9a`**, verified on shanks. Nothing in 011 T6 repaired them
   deliberately; they were fixed in the backend lanes between 2026-08-29 and now.
+- **Three contract gaps found while building T7 and NOT fixed** — each is a field the frontend
+  wanted and the contract does not carry, so the screen names the absence instead:
+  `BoardCard.estimateHours` (so `my-work.html`'s Est column is gone), a project rename/`PATCH
+  /projects/{projectId}` (so Identity is read-only), and a project-wide latest-result-per-case count
+  (so the overview's pass rate is denominated over cases carrying a Feature and says so).
+- **`Sub-task` renders as `S`, not the `T` `V3` seeds as its `icon_code`.** `IssueTypeView` omits
+  `iconCode` deliberately — `ContractConventionTest` compares the contract's four members both ways
+  — so `TypeIcon` uses the type's initial. Not fixed: a contract change for one glyph, and the level
+  badge beside the name already answers it.
 - **Two disagreements between `tracker`'s contract prose and its code, found while building T6 and
   NOT fixed here** (both are backend):
   1. `IssueDocLink.blockExcerpt` is documented as *"what you linked, not what the block says now"*,
@@ -112,6 +126,29 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 - E2E / Playwright surfaces belong to the `qa-ui-typescript` peer; none are mapped here.
 
 ## Session log
+
+- **2026-08-31** — 011 T7, both parts, `fe` (`8bf37408`, `7bd43361`, `f6315aeb`). **The module's
+  close-out rode with this task**, which is the point of the cut: it is the session that knows what
+  landed. Six decisions worth carrying, all forced rather than chosen. **`api.delWithBody` is a new
+  client verb** — the workflow status removal is a DELETE with a body, `api.del`'s second argument is
+  `RequestOptions` at thirty call sites, and a body hidden in the options object is invisible to
+  `contractDoubles.ts`, which reads argument *position*: it would have compared a timeout budget
+  against a schema. **`linkFor` had to leave `BoardPage.tsx`** the moment a second screen wanted it —
+  exporting a function beside a component is `react(only-export-components)` and the gate is zero
+  warnings; `cardLink.ts` is where it went. **The general settings screen has no rename form**: there
+  is no `PATCH /projects/{projectId}` and `Project.key` is documented immutable, so the mockup's two
+  inputs and its Save are absent and the key caption keeps only the true half of *"existing links
+  keep working if it changes"*. **The archive button moved to that screen's Danger zone** where the
+  mockups put it, and `ArchiveProject.test.tsx` moved to `features/settings/` with it. **The release
+  panel's action is disabled with its reason** rather than linking to a route that does not exist.
+  And the **"Tests passing" tile names its denominator** — there is no project-wide
+  latest-result-per-case count on the contract, only `byLastRun`, which holds cases carrying a
+  Feature; the tile sums the same rows the figure below it draws, says so, and is *not rendered at
+  all* when nothing has run. Two test-harness facts that cost time: **a `PermissionGate` disables
+  every control while its verdict is in flight**, so a test that waits for rows and then clicks gets
+  a no-op — wait for `toBeEnabled()` and re-query the node, as `ArchiveProject.test.tsx`'s own
+  comment says; and a heading whose text depends on a read *arriving empty* must be waited for, not
+  read once, or the assertion pins the in-flight state and passes on a page that never switches.
 
 - **2026-08-31** — 011 T6, both parts, `fe` (`3bc9cec7`, `71777f9a`). **`master` was red on
   arrival** and had been since T4: `WorkItem`, `WorkItemStatus` and `WorkItemInput` were gone from

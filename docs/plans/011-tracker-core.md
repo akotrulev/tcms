@@ -4163,7 +4163,7 @@ no data for.
   `frontend/src/app/AppShell.tsx`
 - Test: one `.test.tsx` per screen, plus `MyWorkPage.test.tsx` extended
 
-- [ ] **Step 1: The workflow settings screen**
+- [x] **Step 1: The workflow settings screen**
 
 `settings-workflow.html`, ported whole. Three things in it are requirements rather than decoration:
 
@@ -4180,7 +4180,7 @@ no data for.
   refuses the last `DONE` status; the screen disables its remove control and says why rather than
   letting the person reach a 409.
 
-- [ ] **Step 2: The general settings screen**
+- [x] **Step 2: The general settings screen**
 
 `settings-general.html`, minus what M1 has no data for (D-f): **no Client select** (Mc), **no
 "Closing work" toggles** (M5), **no "Time" panel** (M6). What lands is Identity (name, key, with the
@@ -4197,7 +4197,7 @@ The panel's footer is kept verbatim, because it is the promise D12 makes to ever
 *"Tasks created before the upgrade are still called **Task**. Nothing you typed changed meaning
 underneath you."*
 
-- [ ] **Step 3: My Work — the composite, as two tables**
+- [x] **Step 3: My Work — the composite, as two tables**
 
 **`my-work.html` is not a kanban**, and the current `MyWorkPage` is. The mockup renders two tables —
 "Assigned issues" and "Test executions & reviews" — plus a "My notes" panel. **The mockup wins on
@@ -4220,7 +4220,7 @@ What must stay true:
 `BoardPage` and `TeamBoardPage` keep their column layout — they are boards and M2 rebuilds them —
 and change only in that a card's status is now `{name, kind}` and `TASK` is `ISSUE`.
 
-- [ ] **Step 4: The project overview**
+- [x] **Step 4: The project overview**
 
 `DashboardPage` becomes `ProjectOverviewPage` at `/projects/:projectId` (D27). Its existing QA
 regions are reused as the overview's quality half — that is what D27 means by *"the existing
@@ -4255,7 +4255,7 @@ instance does not have is an advertisement, not an explanation. The difference f
 panel is that a release is a thing this project will have and has none *yet*; a budget is a module
 that is not installed.
 
-- [ ] **Step 5: `solo-overview.html` is an acceptance criterion, not a screen**
+- [x] **Step 5: `solo-overview.html` is an acceptance criterion, not a screen**
 
 The same component, for a company with no clients: **no client chip in the header, no client column
 anywhere, and no "attach a client" prompt.** The mockup's own note says the Clients sidebar entry
@@ -4274,7 +4274,7 @@ staying is "the only trace". Assert it:
   });
 ```
 
-- [ ] **Step 6: The rest of the tests**
+- [x] **Step 6: The rest of the tests**
 
 ```typescript
   it('shows issues from two projects beside reviews and executions', async () => {
@@ -4301,7 +4301,7 @@ staying is "the only trace". Assert it:
   });
 ```
 
-- [ ] **Step 7: Gate and commit**
+- [x] **Step 7: Gate and commit**
 
 ```bash
 ~/bin/tcms-remote sync
@@ -4310,7 +4310,7 @@ staying is "the only trace". Assert it:
 ~/bin/tcms-remote frontend npm run test:run
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd ~/RiderProjects/tcms
@@ -4340,7 +4340,7 @@ actually landed, and the prompts of every module that depends on M1 are true aga
 - Modify: `docs/features.md`, `docs/plans/009-project-management-expansion-modules.md`,
   `frontend/src/features/help/sections.tsx`
 
-- [ ] **Step 1: Run the whole gate, on `shanks`, before writing a word of this**
+- [x] **Step 1: Run the whole gate, on `shanks`, before writing a word of this**
 
 ```bash
 ~/bin/tcms-remote sync
@@ -4357,7 +4357,7 @@ actually landed, and the prompts of every module that depends on M1 are true aga
 `BASE = 2026-06-01T08:00:00Z` against a 90-day window that expired on 2026-08-30. Do not claim them
 and do not fix them here.
 
-- [ ] **Step 2: Read the Help page — no test sweeps it**
+- [x] **Step 2: Read the Help page — no test sweeps it**
 
 `frontend/src/features/help/sections.tsx` is hand-written prose that **no gate checks**.
 `tierClaims.test.ts` catches only a claim that somebody *lacks* a permission, and M0 shipped three
@@ -4365,13 +4365,13 @@ false sentences in this file past every gate. M1 moved no grant, but it retired 
 and renamed the board's endpoint — read the file and correct anything that describes the board as
 holding tasks.
 
-- [ ] **Step 3: Rewrite `docs/features.md`'s work section**
+- [x] **Step 3: Rewrite `docs/features.md`'s work section**
 
 Struck through and superseded, never deleted — the working agreement. The board section's claim
 that a stored card is a task somebody typed becomes the claim that it is an issue, **with the old
 sentence left visible** so a reader who finds `work_item` in the git history knows where it went.
 
-- [ ] **Step 4: 009's hand-off protocol, all six steps**
+- [x] **Step 4: 009's hand-off protocol, all six steps**
 
 1. **Status table.** M1's row → `done YYYY-MM-DD @ <short sha>`.
 2. **Built and unverified.** Under 009's M1 section. The gates prove it compiles. At minimum:
@@ -4402,7 +4402,7 @@ sentence left visible** so a reader who finds `work_item` in the git history kno
    outcome, so the next reader does not re-propose the event.
 6. **Commit 009 on its own**, `docs(plan): M1 done`, staging only that file.
 
-- [ ] **Step 5: Record the three findings this module chose not to fix**
+- [x] **Step 5: Record the three findings this module chose not to fix**
 
 In 009's M1 section, so the next agent finds the answer rather than the finding:
 
@@ -4416,13 +4416,71 @@ In 009's M1 section, so the next agent finds the answer rather than the finding:
   with it, because `DashboardPage` already rendered it against endpoints that exist and D27 says
   the overview reuses those regions.
 
-- [ ] **Step 6: Say what is built and unverified, in the chat as well as the plan**
+- [x] **Step 6: Say what is built and unverified, in the chat as well as the plan**
 
 CLAUDE.md: *the gates prove it compiles, not that it works* — a no-op theme toggle, two
 contradictory percentages on one screen and a provider-ordering bug that rendered nothing but the
 error page all typechecked and linted clean. **Say "built and unverified" when that is what it is.**
 
 ---
+
+
+---
+
+#### T7 landed — 2026-08-31, `8bf37408` (Part A) · `7bd43361` · `f6315aeb` (Part B)
+
+**Gate, whole, on `shanks`:** backend `./gradlew build` — 3680 tests, 6 failed, **all six in
+`com.tcms.reporting.FlakeScoreTest`** and pre-existing (independently confirmed at `668fd608` in CI
+run 33366513189, before any T7 change, where the same six and nothing else failed). Frontend build
+clean, lint 0 warnings, 2313 tests in 167 files pass. Packages build clean, lint 0 warnings, 414
+tests pass. T7 changed no backend file.
+
+**Six things this task decided differently from the plan, each because the contract or the lint gate
+said so:**
+
+1. **`api.delWithBody` is a new verb on the client.** `DELETE /projects/{id}/workflow/statuses/{id}`
+   carries a body and `api.del`'s second argument is `RequestOptions` at some thirty call sites, so
+   the payload would have had to travel inside the options object — where `contractDoubles.ts` reads
+   the second argument *positionally* and would have compared a timeout budget against a schema. A
+   verb of its own is a verb the seam can be told about, and `SENDS_A_BODY` gains it: the one
+   destructive payload in the product is the last that should travel unchecked.
+2. **`linkFor` moved to `features/board/cardLink.ts`.** Exporting it from `BoardPage.tsx` beside a
+   component is oxlint's `react(only-export-components)` warning, and this project's lint gate is
+   zero warnings. It sits beside `cardMove.ts`, which is the same kind of module.
+3. **Identity on the general settings screen is read-only, and the mockup's Save is absent.** There
+   is no `PATCH /projects/{projectId}` on the contract, and `Project.key` is documented as
+   **immutable** — which contradicts the mockup's caption *"Existing links keep working if it
+   changes"*. The screen keeps the true half and states the immutability. A Save with no endpoint
+   behind it is the no-op this repo has shipped once.
+4. **The archive button moved from the overview's header to the general settings screen's Danger
+   zone**, where the mockups put it — and `ArchiveProject.test.tsx` moved with it, to
+   `features/settings/`. Two archive buttons would have been the alternative; a destructive action
+   beside a percentage somebody opened the page to read was the other.
+5. **The release panel's action is disabled with its reason**, not a link. The mockup's button goes
+   to `releases.html`; there is no releases route in this build, and a link to one is
+   render-then-reject with the reject left to the reader. §31's disable-don't-hide is the
+   established answer, and it still renders "the action that creates one".
+6. **The "Tests passing" tile names its denominator.** There is no project-wide
+   latest-result-per-case count on the contract, so the tile sums `RepositoryDashboard.byLastRun` —
+   which holds only cases carrying a Feature — and says so. It reads the same rows as the
+   `By last run` figure below it, so the two cannot disagree; with no rows at all it is **not
+   rendered**, rather than reading `0%`.
+
+**Two more absences worth naming**, both because the contract does not carry the field: `my-work.html`'s
+**Est** column (`BoardCard` has no `estimateHours`) and its **Hide done** toggle
+(`BoardFacts.assignedIssues` never returns a `DONE`-kind card, so the control would have nothing to
+act on). And the overview's repository figures are mounted **below** the delivery half rather than
+replaced by it — the repository dashboard was this route, and removing a screen to gain a layout is
+not a trade this task was asked to make.
+
+**`EmptyState` gained an optional `icon`** (`components/DataRegion.tsx`) — `solo-overview.html`'s
+release panel needs a glyph, and the shared layer is where that belongs rather than a second
+empty-state shape inside one panel.
+
+The close-out itself is in
+[009's M1 section](009-project-management-expansion-modules.md#m1-closed--2026-08-31--8bf37408-plan-011-tracker-coremd):
+the status row, the built-and-unverified list, the eight findings M1 chose not to fix, R4 and R5
+closed, and the prompts of M2, M4, M5 and M6 rewritten in place.
 
 ## Self-review
 
