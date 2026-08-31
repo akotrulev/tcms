@@ -5,6 +5,13 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `ep-executing-plans` to implement this plan
 > task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Do not run two tasks in
 > parallel** — one lane, decided 2026-08-30 (009, "What can run in parallel").
+>
+> **One task is one session, and every task has a paste-ready prompt** — see
+> [Prompts — one per task](#prompts--one-per-task), which sits above the task blocks. Start a task
+> from its prompt; take its code from its block. **The prompts are living text**: the agent that
+> finishes a task rewrites the prompts below it before it stops, per
+> [Task hand-off protocol](#task-hand-off-protocol), so the block you read is always the current one
+> and never the one written on 2026-08-31.
 
 **Goal:** A person works a project board with swimlanes by epic, moves a card by pointer or by
 keyboard, sees a WIP breach reported rather than enforced, ranks the backlog, configures two boards
@@ -210,6 +217,576 @@ expansion"* costs. The two `be` tasks split at **configuration vs. contents** �
 **T7**. T3 and T4 ship endpoints with no screen; T5 ships verbs that work but that no UI calls. That
 is the price of one agent switch per stack (009's "How a module's plan is cut into tasks", rule 6),
 accepted deliberately. The tree builds and the suites are green at every one of the nine boundaries.
+
+---
+
+## Prompts — one per task
+
+Each block below is what is pasted into a **fresh session** to run that task. They are written to be
+complete on their own: what to read and in what order, the traps that specific task will hit, what
+to commit, and which gate to run. Read the task block further down for the code; read the prompt for
+what a session that has never seen this repository needs before it starts.
+
+**The prompts are living text.** A task that lands something different from what this plan predicted
+**rewrites the prompts below it before it stops** — in place, with no changelog appended — under
+[Task hand-off protocol](#task-hand-off-protocol). The next session trusts its prompt and the task
+block, and re-verifies nothing else.
+
+### Task hand-off protocol
+
+What the executing agent does **after** its task's gate is green and its commit is in, before it
+stops. This is part of every task's definition of done.
+
+1. **Tick the task's steps** in its block, and put `**Landed:** <short sha>` on the task beside its
+   `Deliverable`.
+2. **Rewrite the prompts below it that are now untrue** — a renamed file, a signature that came out
+   different, a decision the task had to take, a trap it hit that the next one will hit too, an
+   endpoint whose shape moved. Edit the prompt text **in place**. If nothing changed, say so in the
+   commit message rather than touching a prompt.
+3. **Record a surprise as a decision**, not as a comment in code nobody will find: add a `D-<letter>`
+   to *Decisions this plan takes* above, and name it from the prompts that depend on it.
+4. **Add to *Built and unverified*** anything the gate proved compiles and nobody has clicked.
+5. **Commit the plan edit separately** — `docs(plan): 012 T<n> landed`, staging only this file. The
+   code commit and the plan commit are two commits, so the code commit's diff is only code.
+
+**Do not run two tasks in parallel.** One lane, decided 2026-08-30. Two agents in one tree produced
+three silent losses of committed work in this repository, with no conflict, no error, and a clean
+`git status`.
+
+---
+
+### T1 — the board contract
+
+````text
+You are working in the tcms repo, on the current branch (do not create one — check with
+`git rev-parse --abbrev-ref HEAD`). Read CLAUDE.md first.
+
+Run T1 of docs/plans/012-board-and-backlog.md — the board contract. Read the T1 task block for the
+YAML; this prompt is what you need before you start.
+
+READ, IN THIS ORDER:
+  1. docs/plans/012-board-and-backlog.md — "Decisions this plan takes" (all of D-a..D-h) and the
+     T1 block. D-a, D-e and D-h are the three the contract encodes.
+  2. docs/specs/openapi.yaml lines 8268-8800 — /board, /issues, /issues/{key}/transitions,
+     /projects/{projectId}/workflow. Every operation you add sits beside these and copies their
+     conventions.
+  3. docs/specs/2026-08-30-project-management-expansion-scope.md — D2 (one canonical status,
+     columns claim statuses), §12.2 (labels, filter semantics), §12.4 (the drag rule).
+  4. docs/specs/2026-08-30-project-management-expansion-user-stories.md — stories B2, B3, B4.
+
+TRAPS THIS TASK WILL HIT:
+  * `required` DOES NOT DESCEND. An inline nested object without its own `required` array makes
+    every one of its properties optional in both generated clients, silently. Step 5 is a python
+    script that checks this mechanically — run it, do not read for it. CLAUDE.md: reading V1 top to
+    bottom missed five join tables; scripting the comparison found them.
+  * There is NO `UnprocessableEntity` response component in this contract. A 422 is written inline
+    with `application/problem+json` + the `Problem` schema. `Conflict`, `NotFound`, `Forbidden`,
+    `Unauthorized` and `BadRequest` DO exist under `components/responses`.
+  * The completion schema is called `IssueCompletion`, not `Completion`.
+  * Do NOT put a `parameters:` block on a path item where a query parameter would be inherited by
+    an operation that must not have it (§50) — /board carries a comment saying exactly this.
+  * BOTH generated clients move in this commit: `cd frontend && npm run gen:api` and
+    `cd packages/client && npm run gen:api`. Neither file is ever hand-edited. If the diff shows a
+    schema you did not touch, the generator version moved — stop and say so.
+  * The new card schema is `BoardIssueCard`, deliberately NOT `BoardCard`. `BoardCard` is `work`'s
+    composite card with four `kind`s and a `derived` flag; every card on a project board is an issue
+    with a real key (D-a).
+  * `contractBodies.ts`'s SHARED REGION is generic contract-walking machinery, not per-endpoint
+    bodies — adding endpoints usually needs NO edit there. If you do edit it, edit BOTH copies:
+    frontend/src/api/contractBodies.ts and packages/client/src/test/contractBodies.ts are
+    byte-identical between the markers and `contractPairing.test.ts` names the first line that
+    differs.
+
+GATE (on shanks, per the standing directive — read docs/specs/shanks-runner-details.md first):
+  ~/bin/tcms-remote sync
+  ~/bin/tcms-remote packages npm run build
+  ~/bin/tcms-remote packages 'npm run test:run --workspaces'
+
+COMMIT: `git add <paths>` only, never -A. openapi.yaml, both schema files, and the MCP surface doc.
+Message in the T1 block, step 9.
+
+CLOSE per "Task hand-off protocol" in the plan: tick the steps, record the sha, and rewrite T2's
+prompt if the schema names or the endpoint shapes came out different from what T1 predicted.
+````
+
+### T2 — `V5` board schema
+
+````text
+You are working in the tcms repo, on the current branch. Read CLAUDE.md first, then run
+/data-postgresql and /data-migrations — the plugin skills are mandatory, not decorative.
+
+Run T2 of docs/plans/012-board-and-backlog.md — the V5 migration. Read the T2 task block for the
+SQL; this prompt is what you need before you start.
+
+READ, IN THIS ORDER:
+  1. docs/plans/012-board-and-backlog.md — "Two facts checked before this plan was written"
+     (the version is V5, and why), D-d (why rank is unconstrained NUMERIC), D-g, and the T2 block.
+  2. backend/src/main/resources/db/migration/V3__tracker_core.sql — ALL of it, but especially
+     lines 436-606, which is `tcms_seed_project_defaults`. You reproduce that function IN FULL.
+  3. backend/src/main/resources/db/migration/V1__initial_schema.sql — its RLS block, which is the
+     pattern the six new tables copy.
+  4. docs/specs/tenancy-invariants.md — the two silent RLS traps.
+
+TRAPS THIS TASK WILL HIT, AND THE FIRST TWO ARE SILENT:
+  * THE FILE IS V5. `ls backend/src/main/resources/db/migration/` before you write anything. The
+    009 table reserves V4 for this module and is WRONG — M1 took two versions. `out-of-order` is
+    unset in application.yml, so a V4 written now is NEVER APPLIED on any instance that ran M1, and
+    Testcontainers builds every test database from scratch so it will never show you the conflict.
+  * `CREATE OR REPLACE FUNCTION tcms_seed_project_defaults` REPLACES THE WHOLE BODY. A block you
+    omit stops being seeded for every project created from here on, with no error anywhere. There
+    are SIX existing blocks — classification_dimension, case_status, configuration, doc_space,
+    project_key_sequence, the six-status workflow — and you add a seventh. Confirm all six are
+    present before you add yours. There is NO ProjectCreatedEvent and you must not build one
+    (011 D-b).
+  * The backfill loop must `set_config('app.current_company', c::text, true)` per company. Every
+    INSERT is under FORCE ROW LEVEL SECURITY, so a loop that does not set it INSERTS NOTHING AND
+    REPORTS SUCCESS. V3's own loop at the end of the file is written this way for that reason —
+    copy its shape.
+  * FORCE, not merely ENABLE. ENABLE alone leaves the table's owner exempt, and Flyway connects as
+    `tcms_owner`.
+  * `rank NUMERIC` with NO precision. `NUMERIC(12,4)` runs out of midpoints after ~14 inserts
+    between one pair and then silently returns a rank equal to a neighbour's.
+  * Every composite index LEADS with company_id — the RLS predicate is on it and an index that
+    does not lead with it is not used by the filtered scan. `SchemaConventionTest` checks this.
+  * `SchemaConventionTest` pins the forced-RLS policy count. V4 took it 84 -> 82; six tables here
+    make it 88. Move the number AND the comment beside it.
+
+GATE (on shanks — read docs/specs/shanks-runner-details.md first):
+  ~/bin/tcms-remote sync
+  ~/bin/tcms-remote backend './gradlew build'
+  BUILD FAILED with "Could not write XML test results" and ZERO assertion failures is an fd-limit
+  problem, not a red suite. Re-run as `ulimit -n 65535; ./gradlew build`.
+
+COMMIT: `git add <paths>` only. The migration, BoardSchemaTest, SchemaConventionTest, and the ERD.
+
+CLOSE per "Task hand-off protocol". If the version you actually took is not V5, say so on the task
+AND in T3's prompt — and in the 009 correction T9 will make.
+````
+
+### T3 — board configuration
+
+````text
+You are working in the tcms repo, on the current branch. Read CLAUDE.md first, then run /be-java
+and be-java-database-code — the plugin skills are mandatory. (The orchestrator entry point is a
+COMMAND, not a skill: `Skill(be-java:be-java)` is how you invoke it; a plugin that appears missing
+is usually an install-path problem — `claude plugin list --json` and check `projectPath` against
+`pwd`, because `claude plugin list` prints every row as enabled and will not show you this.)
+
+Run T3 of docs/plans/012-board-and-backlog.md — board configuration. Read the T3 block for the code.
+
+READ, IN THIS ORDER:
+  1. docs/plans/012-board-and-backlog.md — D-a (two boards, two meanings), D-e (no new permission),
+     D-g (the auto-claim is a direct call), and the T3 block.
+  2. backend/src/main/java/com/tcms/tracker/package-info.java — the module boundary. You do NOT
+     change `allowedDependencies`. `board` is a SUB-PACKAGE of `tracker`, so nothing here crosses a
+     module boundary at all.
+  3. backend/src/main/java/com/tcms/tracker/WorkflowService.java — where `claimNewStatus` is wired
+     in, and how a project-scoped configuration service is written here.
+  4. backend/src/main/java/com/tcms/tracker/IssueStatusRepository.java — the repository pattern.
+  5. docs/specs/2026-08-30-project-management-expansion-user-stories.md — story B2.
+  6. 009-project-management-expansion-modules.md — the paragraph "A status created after the board
+     exists (review R13)".
+
+TRAPS THIS TASK WILL HIT:
+  * `@Transactional(readOnly = true)` GOES ON THE REPOSITORY INTERFACE. Spring Data gives a
+    transaction only to the inherited CRUD methods; a derived or @Query method without it runs with
+    no company set, the RLS policy sees an unset `app.current_company`, and EVERY READ RETURNS ZERO
+    ROWS — fail-closed, silent, no exception to find it by. Every repository you create carries it.
+  * "Every status claimed by exactly one column" is TWO rules and only one is a constraint. The
+    unique index on board_column_status (board_id, status_id) rejects "claimed twice". "Claimed at
+    least once" is a cross-table assertion, Postgres has no CHECK for it, and a trigger would fire
+    mid-PATCH while a board is rebuilt column by column and reject a legal intermediate state. It
+    is a SERVICE rule, and its message names the unclaimed statuses.
+  * The auto-claim is a DIRECT CALL from WorkflowService, inside the same transaction — not an
+    OutboxEvents hop. A Java event type may not cross a module boundary here at all, and outbox
+    delivery has a one-minute floor during which the project would hold a status no column claims.
+  * The same-kind fallback is the LAST column, not the first. Left-to-right is direction of travel;
+    a new DONE status filed at the start of the workflow is worse than one filed late.
+  * There is NO `board:move` permission and you must not add one (§A3 line 260). Configuration is
+    `board:configure`, which M0 already seeded. Adding a permission means editing the roles spec,
+    permission-matrix-summary.md and README.md in one commit or `matrixCopies.test.ts` reddens.
+  * A comment claiming somebody LACKS a permission §A3 grants them fails the PACKAGES job
+    (`tierClaims.test.ts`). A stale file path named in any comment fails it too (`citedFiles`).
+  * ArchUnit must be green WITHOUT editing ArchitectureRules.FOUNDATION_MODULES. If it is not,
+    tracker.board reached for a module tracker may not see — that is a defect in this task, not a
+    case for a sixth foundation module.
+
+GATE: ~/bin/tcms-remote sync && ~/bin/tcms-remote backend './gradlew build'   (fd-limit note above)
+
+COMMIT: `git add <paths>` only — the new package, WorkflowService.java, and the tests.
+
+OUT OF SCOPE, and say so rather than pretending otherwise: no screen renders any of this. Cards,
+rank and labels are T4; the board is not drawn until T7.
+
+CLOSE per "Task hand-off protocol". If BoardConfigService's method names or BoardView's shape came
+out different from the T1 contract, T4's and T6's prompts are the ones to fix.
+````
+
+### T4 — cards, rank and labels
+
+````text
+You are working in the tcms repo, on the current branch. Read CLAUDE.md first, then run /be-java,
+be-java-database-code and be-java-unit-testing.
+
+Run T4 of docs/plans/012-board-and-backlog.md — cards, rank and labels. Read the T4 block for the
+code. Write RankServiceTest FIRST and watch it fail: the rank arithmetic is the part of this task
+that can be subtly wrong rather than merely unwired.
+
+READ, IN THIS ORDER:
+  1. docs/plans/012-board-and-backlog.md — D-d (the rank), D-e (labels take no new permission),
+     and the T4 block.
+  2. backend/src/main/java/com/tcms/tracker/TransitionService.java — you DELEGATE to it. Do not
+     reimplement "may this issue go there"; two implementations of that question is how two
+     answers to it start disagreeing.
+  3. backend/src/main/java/com/tcms/tracker/board/BoardConfigService.java — T3's, for the column
+     and claim repositories you read here.
+  4. docs/specs/2026-08-30-project-management-expansion-scope.md §12.2 (filter semantics, labels)
+     and §12.4 (the drag rule — it constrains the CONTRACT you are serving).
+  5. Stories B3 and B4.
+
+TRAPS THIS TASK WILL HIT:
+  * THE WIP LIMIT IS REPORTED, NEVER ENFORCED. A move that breaches it returns 200 with the breach
+    in the body. Story B3: "the drop is accepted and the column header shows the breach". A limit
+    that refused drops is a limit people route around by not using the board, and then the board
+    stops describing the work.
+  * A column at EXACTLY its limit is not in breach. Off-by-one here puts a permanent warning on any
+    team that actually works to its limit, and a warning that is always on is one nobody reads.
+  * A card ALREADY IN A STATUS THE TARGET COLUMN CLAIMS is not a move — return 200 and change
+    nothing. Writing the column's default would silently walk In Review backwards to In Progress
+    and look like the board undid a drag.
+  * Rank is NEIGHBOUR-RELATIVE, never absolute. Two people dragging at once each computed a
+    midpoint from a list they read seconds ago; sending the number races, sending the neighbours
+    does not. Exactly one of afterKey/beforeKey, or 400.
+  * `rebalanced: true` is not a failure and is easy to get wrong in the other direction — the
+    client must DROP its optimistic order, because after a respace every other row's rank is stale.
+  * The rebalance uses `row_number() OVER (ORDER BY rank, id)` — it is ORDER-PRESERVING. A respace
+    that re-sorted would silently rearrange a backlog somebody spent an afternoon on.
+  * A cross-project neighbour is a 400, not a best effort: rank is project-wide, so a midpoint
+    against a number from another project's sequence lands the issue in an order nobody can explain.
+  * An EPIC is not a backlog row (D31 derives its status from its stories), and a backlog listing
+    both an epic and the stories under it double-counts the same work in the one view whose whole
+    job is "what is next".
+  * Labels: creating one is `board:configure`, putting one on an issue is `issue:edit` (D-e). No
+    new permission — see T3's prompt for what adding one would cost.
+  * Filter semantics are OR WITHIN a category, AND ACROSS categories. `labelId=a&labelId=b&
+    assigneeId=c` is (a or b) and c.
+
+GATE: ~/bin/tcms-remote sync && ~/bin/tcms-remote backend './gradlew build'   (fd-limit note in T2)
+
+COMMIT: `git add <paths>` only — the new classes in tracker/board and their tests.
+
+OUT OF SCOPE: no screen calls any of this. The board arrives in T7, the backlog in T8.
+
+CLOSE per "Task hand-off protocol". T5's and T6's prompts both name endpoint shapes — if any moved,
+fix them there before you stop.
+````
+
+### T5 — board verbs on the CLI and MCP
+
+````text
+You are working in the tcms repo, on the current branch. Read CLAUDE.md first, then run
+/tooling-engineer (tool-cli-builder and tool-mcp-builder are its sub-skills).
+
+Run T5 of docs/plans/012-board-and-backlog.md — the board verbs. Read the T5 block for the code.
+
+READ, IN THIS ORDER:
+  1. docs/plans/012-board-and-backlog.md — the T5 block, including the recorded deviation: the M2
+     prompt puts the verbs in the contract commit; T1 landed the SURFACE DOC and this task lands
+     the verbs, because folding them into T1 put that task at ~150k.
+  2. docs/specs/2026-08-08-mcp-tool-and-command-surface.md — T1 wrote the rows you now implement.
+     The document is the capability contract and it came first deliberately; you render it.
+  3. packages/cli/src/reads.ts and writes.ts — M1's issue verbs, and `api.delWithBody`, which
+     exists for the DELETE-with-a-body workflow endpoint and is the pattern for an unusual shape.
+  4. packages/mcp/src/reads.ts, server.ts, instructions.ts.
+  5. docs/specs/client-distribution.md — how these reach users (tarballs from /downloads, no
+     registry), which is why `npm run pack:release` is part of the gate CI runs.
+
+TRAPS THIS TASK WILL HIT:
+  * `npm run build` AT THE PACKAGES ROOT, never `--workspaces`. The latter runs them
+    ALPHABETICALLY, so `cli` typechecks against a stale `client` dist/ and the failure looks like a
+    type error in code you did not write. The root script names the order client -> cli -> mcp.
+  * `tcms board move` PRINTS the WIP breach and STILL EXITS 0. The move succeeded. A non-zero exit
+    would make a breach fail somebody's script, which is story B3's rejected behaviour in its
+    automation spelling.
+  * `tcms rank` refuses --after with --before LOCALLY, without sending a request, so the message
+    names the flags a person typed rather than a JSON field they never saw.
+  * `citedFiles.test.ts` fails if a path named in ANY comment — packages/**, frontend/src/**,
+    docs/specs/*.yaml, backend/src/** — is not on disk. A stale citation you add here reddens the
+    packages job.
+  * The MCP tool descriptions say what a tool is FOR, not what it calls. Add to instructions.ts the
+    one sentence an assistant cannot infer: a board is a LENS, so moving a card changes the issue's
+    status and every other board over that project shows the change.
+
+GATE (on shanks):
+  ~/bin/tcms-remote sync
+  ~/bin/tcms-remote packages npm run build
+  ~/bin/tcms-remote packages 'npm run lint --workspaces && npm run test:run --workspaces'
+
+COMMIT: `git add <paths>` only — packages/cli/src, packages/mcp/src, and the surface doc.
+
+CLOSE per "Task hand-off protocol". Nothing downstream depends on this task's output; if you found
+an endpoint that does not behave as T1's contract says, that is a T4 defect and T6's prompt needs
+to know before it builds a client against the same shape.
+````
+
+### T6 — the fault switch, the queries, and the move logic
+
+````text
+You are working in the tcms repo, on the current branch. Read CLAUDE.md first, then run /fe-react
+and fe-react-data-fetching. (The orchestrator is a COMMAND, not a skill — `Skill(fe-react:fe-react)`
+returns "Unknown skill" is a documented trap and does NOT mean the plugins are unregistered.)
+
+Run T6 of docs/plans/012-board-and-backlog.md — the fault switch, the queries and the move logic.
+NO SCREEN RENDERS IN THIS TASK, deliberately: the fault switch lands BEFORE the feature it proves.
+
+READ, IN THIS ORDER:
+  1. docs/plans/012-board-and-backlog.md — D-a, D-b (why columnsFor stays), D-c (the optimistic
+     split, and why it is not a contradiction), and the T6 block.
+  2. docs/specs/2026-08-30-project-management-expansion-scope.md §12.4 — verbatim binding, and the
+     reason the column move is NOT optimistic.
+  3. frontend/src/features/board/cardMove.ts — ALL of it, including the header comment. You add a
+     second entry point; you do NOT fork it and you do not change columnsFor or resolveCardMove.
+  4. frontend/src/features/board/boardKeyboard.ts — same instruction.
+  5. frontend/src/lib/devFaults.ts and frontend/src/api/client.ts — the seam in front of fetch.
+  6. frontend/src/api/queries/keys.ts and frontend/src/api/queries/board.ts.
+  7. CLAUDE.md's "Test-harness rules the suites enforce" — all four of them apply here.
+
+TRAPS THIS TASK WILL HIT:
+  * BOTH devFaults guards stay a LITERAL `import.meta.env.DEV`. Route the check through an imported
+    constant and Rollup keeps the module in the production build — the fault console ships.
+  * ONE `keys` factory, `src/api/queries/keys.ts`. NEVER add a second. While you are in it, rename
+    `keys.workItems` to `keys.compositeBoard`: it names a table that has not existed since V4, and
+    this task adds three keys with "board" in the name.
+  * The new query module is `projectBoards.ts`, NOT `boards.ts`. `board.ts` already holds the
+    COMPOSITE board's three reads — a different board, a different endpoint, a different card shape
+    (D-a). Two modules one letter apart is how a wrong import survives review. The execution
+    breakdown says `boards.ts`; it is wrong and this is the recorded correction.
+  * `useMoveCard` IS NOT OPTIMISTIC and that is §12.4 verbatim. `useRankIssue` IS, with a snapshot
+    rollback. These are different because legality of a STATUS change is on the card and checkable
+    before the drag, and legality of a RANK change is the server's neighbours and is not.
+  * NEVER build your own QueryClient in a test — only `createTestQueryClient`'s has the caches.
+  * A test whose render trips an error boundary FAILS unless it calls `renderingIntoAnErrorBoundary()`
+    / `drivingAFailedRead()` / `drivingAFailedWrite()` AND says why.
+  * Every exchange crossing a fetch double is compared against openapi.yaml. Use
+    frontend/src/test/fixtures.ts, and ANCHOR path-keyed mock arms (`/^\/boards\/[^/]+$/`) so a
+    sub-resource is not caught by a prefix — /boards/{id} and /boards/{id}/cards are exactly the
+    collision this rule exists for.
+  * `npm run build` is `tsc -b` + vite build, NOT `tsc --noEmit` — the latter has reported 0 errors
+    while the build failed with nine.
+  * A new enum member goes in lib/labels.ts as `satisfies Record<Union, string>`, so M3 adding
+    RELEASE to SwimlaneBy is a compile error until it is labelled. That is the mechanism, not an
+    inconvenience.
+
+GATE: ~/bin/tcms-remote sync && ~/bin/tcms-remote frontend 'npm run build && npm run lint && npm run test:run'
+  lint is oxlint at 0 warnings — a gate, not advisory.
+
+COMMIT: `git add <paths>` only — devFaults, keys, projectBoards + its test, cardMove + its test,
+boardKeyboard + its test, labels.ts, queries/index.ts.
+
+OUT OF SCOPE: nothing renders. `?view=board` still shows M1's placeholder panel until T7.
+
+CLOSE per "Task hand-off protocol". T7 and T8 both consume `resolveColumnMove` and `useRankIssue` —
+if either signature came out different, fix both prompts before you stop.
+````
+
+### T7 — the project board
+
+````text
+You are working in the tcms repo, on the current branch. Read CLAUDE.md first, then run /fe-react,
+fe-react-accessibility, fe-react-component-testing and fe-react-animation.
+
+Run T7 of docs/plans/012-board-and-backlog.md — the project board. This is the hardest screen in
+the whole expansion and the plan says so: swimlanes by epic, WIP breaches, keyboard parity with the
+pointer, and a `⋮ Move to…` on every card.
+
+READ, IN THIS ORDER:
+  1. docs/mockups/work-board.html — THE SOURCE OF TRUTH FOR THE SCREEN. Walk it before writing a
+     line. Open docs/mockups/index.html and see it in the flow. The mockups are static renders on
+     the app's own tokens (assets/tcms-mock.css mirrors frontend/src/index.css), so this is a
+     translation into the kit and TanStack Query, NOT a redesign.
+  2. docs/plans/012-board-and-backlog.md — D-a, D-b, D-c, D-f (the four mockup elements that are
+     deliberately NOT drawn), and the T7 block.
+  3. frontend/src/features/board/BoardPage.tsx — the COMPOSITE board. Read it for how @dnd-kit is
+     wired, where `announce` comes from, how a refusal is surfaced. DO NOT COPY IT into the new
+     file; share the decision through cardMove.ts.
+  4. frontend/src/features/tracker/WorkTablePage.tsx — especially VIEWS at line 70, whose `board`
+     entry is the placeholder you replace, and the filter useMemo at ~line 148.
+  5. frontend/src/features/board/cardMove.ts — T6's `resolveColumnMove` and `columnRefusalFor`.
+  6. Story B3, and scope §12.2 ("design the card face deliberately rather than letting it accrete").
+
+PRECEDENCE WHEN THE MOCKUP AND THE PLAN DISAGREE: on WHAT A SCREEN SHOWS — layout, copy, empty
+state, the ⋮ Move to… and ↑ ↓ paths — the mockup wins. On WHAT THE SYSTEM DOES — permissions,
+module boundaries, what is written where — the plan and the scope spec win. Record every
+disagreement in the plan; never resolve one silently.
+
+TRAPS THIS TASK WILL HIT:
+  * FOUR THINGS THE MOCKUP DRAWS THAT YOU MUST NOT (D-f): the `AI` tag and the "AI-eligible" filter
+    chip (issue.agent_eligible is M5), the `PR #482` badge (M5), and logged hours (M6). The mockup
+    draws the finished product. Drawing them now needs fields nothing writes.
+  * A column at exactly its limit is NOT in breach. `2 / 4` plain, `4 / 3 ⚠` warned, `—` for no
+    limit. Three states, and the middle one is where the off-by-one lives.
+  * EVERY card has a ⋮ Move to… — WCAG 2.2 Dragging Movements (2.5.7) and story B3's own
+    non-functional requirement. The mockup says it in prose ON the board: "Dragging is never the
+    only way", and names the second audience the criterion does not — this is also what a TOUCH
+    user gets.
+  * Illegal columns in the menu are DISABLED WITH THE REASON ON THEM, not hidden. A hidden control
+    reads as "you may not", and a workflow with no In Progress -> Done transition is configuration,
+    not a permission (§31 disable-don't-hide).
+  * A collapsed lane KEEPS ITS PERCENTAGE. The mockup states it: "Nothing is hidden from the counts
+    — only from the screen."
+  * The "No epic" lane is LAST and is NOT an error — the mockup says "a story without an epic is a
+    normal story, not an error". Do not style it as a warning.
+  * Render the completion BASIS ("by estimate" / "by count · 4 of 10"). IssueCompletion.basis is on
+    the wire deliberately; a percentage that changes meaning silently is D8's named failure, and
+    two contradictory percentages on one screen is a defect this repo has shipped before.
+  * `countsTowardCompletion: false` renders "not in %" — a Spike is on the board and out of the
+    percentage, and a card that silently did not count makes the meter unexplainable.
+  * TAILWIND UTILITIES ONLY. No `sx`, no CSS-in-JS, no second stylesheet. Preflight is on and is the
+    only baseline, so a component sets its own type scale rather than inheriting one. Anything
+    monospace goes through `Identifier`; enum labels through lib/labels.ts; the
+    loading/loaded/failed/empty/stale matrix through `DataRegion`.
+  * Chip rows WRAP and the board SCROLLS INSIDE ITSELF — the mockup, and the responsive rule: the
+    page body must never scroll horizontally.
+  * The keyboard test goes through the MENU, not through a simulated dnd-kit keyboard drag: the
+    menu is the path a real keyboard user takes, and a jsdom drag asserts @dnd-kit's behaviour
+    instead of yours.
+  * Leave the Backlog, Timeline and Calendar placeholders in VIEWS alone. Backlog is T8's; Timeline
+    and Calendar are M3's.
+
+GATE: ~/bin/tcms-remote sync && ~/bin/tcms-remote frontend 'npm run build && npm run lint && npm run test:run'
+
+COMMIT: `git add <paths>` only — the five new components, the two test files, and WorkTablePage.tsx.
+
+CLOSE per "Task hand-off protocol". T8 extracts `useWorkFilter` out of WorkTablePage and mounts
+BacklogView beside your view — if you changed how the filter is read, or renamed anything in
+ProjectBoardView that T8 imports, fix T8's prompt before you stop.
+````
+
+### T8 — the backlog and one filter
+
+````text
+You are working in the tcms repo, on the current branch. Read CLAUDE.md first, then run /fe-react,
+fe-react-routing, fe-react-ui-rules and fe-react-component-testing.
+
+Run T8 of docs/plans/012-board-and-backlog.md — the ranked backlog, and one filter across every
+view. This is the task that makes D34 true on screen.
+
+READ, IN THIS ORDER:
+  1. docs/mockups/work-backlog.html — the source of truth for the screen. Note the panel line
+     "drag the ⠿ handle, or use ↑ / ↓ — both persist", and that every row has BOTH.
+  2. docs/mockups/work-table.html and work-board.html — the tabbed Work entry all three share, and
+     the identical filter strip on each. One filter, in the URL, across every view.
+  3. docs/plans/012-board-and-backlog.md — D-f (why there are no release sections), D-c (the rank
+     drag is the one optimistic one), and the T8 block.
+  4. frontend/src/features/tracker/WorkTablePage.tsx — the filter useMemo you are extracting. Its
+     comment carries D34's reasoning; the comment MOVES WITH IT.
+  5. frontend/src/api/queries/projectBoards.ts — T6's `useRankIssue`, with the optimistic patch and
+     the snapshot rollback.
+  6. Story B4, and scope D34.
+
+TRAPS THIS TASK WILL HIT:
+  * NO RELEASE SECTIONS AND NO "MOVE TO RELEASE" (D-f). The mockup groups rows under "2.4 · target
+    18 Sep" and "Unscheduled"; `release` is M3's table and issue_fact.release_id is NULL until then,
+    so the grouping would be one section called "Unscheduled" containing everything — which looks
+    like a defect rather than an unbuilt feature. Bulk actions ship as Set epic and Assign only.
+  * The filter lives in the URL and NOWHERE ELSE. Not useState, not a store: two views reading one
+    filter cannot be a useState in either, and a store is server-state's filter living somewhere the
+    URL cannot restore from a pasted link. `useSearchParams`, as everywhere in this SPA.
+  * `view`, `sort`, `cols` and `boardId` are NOT part of the filter object. They are which view you
+    are looking at, not which work — folding them in makes a filter that changes on a tab switch,
+    which evicts every cached list on a tab switch.
+  * The ↑ ↓ arrows end in the SAME mutation as the drag. An arrow taking a different path is the
+    keyboard route quietly not getting the rollback — exactly the defect class "keyboard parity"
+    exists to prevent, arriving through the fix for it.
+  * Moving up = place BEFORE the row above; moving down = place AFTER the row below. NOT "swap
+    ranks": a swap works for adjacent rows and silently does the wrong thing the first time
+    somebody adds a multi-row move.
+  * The row's number is `position` FROM THE SERVER, derived from rank order and never stored — a
+    stored position is what the fractional rank exists to avoid.
+  * Assert the shared filter through `window.location.search` AS WELL AS the screen. "Shareable as
+    a URL" is the half a component test that only checked the chips would miss.
+  * Tables scroll inside themselves (`overflow-x: auto` on their own container); the page body never
+    scrolls horizontally.
+
+GATE: ~/bin/tcms-remote sync && ~/bin/tcms-remote frontend 'npm run build && npm run lint && npm run test:run'
+
+COMMIT: `git add <paths>` only — BacklogView, useWorkFilter, their tests, ProjectBoardView.tsx and
+WorkTablePage.tsx.
+
+CLOSE per "Task hand-off protocol". T9 is the last task and carries the module close-out — if this
+task deferred anything else to M3, add it to D-f so T9's rewrite of the M3 prompt picks it up.
+````
+
+### T9 — board settings and the close-out
+
+````text
+You are working in the tcms repo, on the current branch. Read CLAUDE.md first, then run /fe-react
+and fe-react-component-testing.
+
+Run T9 of docs/plans/012-board-and-backlog.md — board settings, and the close-out of module M2.
+THIS IS THE LAST TASK IN THE MODULE and it carries the documentation, because this session is the
+only one that knows what actually landed and what is built-but-unverified.
+
+READ, IN THIS ORDER:
+  1. docs/mockups/settings-boards.html — the source of truth. The coverage table at the bottom is
+     the screen's point, not decoration.
+  2. docs/plans/012-board-and-backlog.md — the T9 block, "Built and unverified", and every D-*
+     decision, because you are about to write them into 009's prompts.
+  3. docs/plans/009-project-management-expansion-modules.md — "Prompt hand-off protocol", and the
+     M3 and M4 prompt blocks you rewrite.
+  4. frontend/src/features/settings/ — the existing settings pages and their subnav.
+  5. docs/features.md — the board section you rewrite.
+
+TRAPS THIS TASK WILL HIT:
+  * Add ONLY the Boards entry to the settings subnav. The mockup shows Repositories (M5) and
+    Imports (M4) beside it; a nav link that leads nowhere is worse than an absent one.
+  * The coverage table renders the invariant HOLDING and, when it does not, FAILING BY STATUS NAME,
+    before the save is attempted — not as a 422 the reader has to decode. `ui-rules`: never render
+    an action the backend will always reject.
+  * The default-status control appears only on a column claiming MORE THAN ONE status. On a
+    one-status column it has exactly one legal value; the mockup shows it only on the stakeholder
+    board and says why in the team board's footer.
+  * The last board's Delete is DISABLED WITH THE REASON, matching the server's 422 rather than
+    discovering it.
+  * Delete asks, and says a board is a view — "delete a board and no issue is lost". The
+    destructive-sounding word is the one thing on this screen a person will hesitate over, and the
+    answer is on the mockup.
+  * docs/features.md: STRIKE THROUGH AND SUPERSEDE, never delete. The next reader must not think
+    the old reasoning was never considered.
+  * Say "built and unverified" where that is what it is. The gates prove it compiles, not that it
+    works — this repository has shipped a no-op theme toggle, two contradictory percentages on one
+    screen and a provider-ordering bug that rendered nothing but the error page, all green.
+
+RUN ALL THREE GATES, because this is the last task:
+  ~/bin/tcms-remote sync
+  ~/bin/tcms-remote backend './gradlew build'
+  ~/bin/tcms-remote frontend 'npm run build && npm run lint && npm run test:run'
+  ~/bin/tcms-remote packages 'npm run build && npm run lint --workspaces && npm run test:run --workspaces'
+
+THE 009 CLOSE-OUT — do every one of these, they are not optional:
+  1. Status table: M2's row to `done YYYY-MM-DD @ <short sha>`.
+  2. A `**Built and unverified:**` list under the M2 section — what the gates proved compiles and
+     nobody has clicked.
+  3. THE MIGRATION ACTUALLY TAKEN. `~~V4~~ → V5` in M2's row AND in its **db** line, struck through
+     rather than replaced. THEN CORRECT EVERY ROW BELOW IT — M1 consumed V4 as well as V3, so
+     M3 ~~V5~~→V6, M5 ~~V6~~→V7, M4 ~~V7~~→V8, Mc ~~V8~~→V9, M7 ~~V9~~→V10, M6 ~~V10~~→V11,
+     M8 ~~V11~~→V12. Add a line to "The migration versions are a reservation, not a fact" saying
+     this is the second time the column moved and the directory remains the authority.
+  4. REWRITE THE M3 PROMPT: the endpoints as they landed; that SwimlaneBy gains RELEASE and
+     lib/labels.ts makes that a compile error until labelled; that the backlog's release grouping
+     and the "Move to release" bulk action are M3's to add to BacklogView.tsx; that issue.rank is
+     project-wide, so a release-filtered backlog is a filter over ONE order and not a second one;
+     and the V it takes. AMEND THE M4 PROMPT: issue_label now exists, so the Jira importer has
+     somewhere to put labels and label-per-sprint is on offer as an import mapping. M4 depends on
+     M1, so that one is a courtesy edit — say so in the commit message.
+  5. CORRECT THE TWO FALSE CLAIMS IN THE M2 PROMPT ITSELF, in place, no changelog: the migration is
+     V5 not V4, and the derived-card refusal is already repaired and pinned by cardMove.test.ts:153
+     — it was never M2's to restore.
+  6. Commit 009 in its OWN commit, `docs(plan): M2 done`, staging only that file.
+
+THREE COMMITS, in this order: the code + features.md + the surface doc; then this plan's
+built-and-unverified list; then 009. `git add <paths>` only, never -A.
+````
 
 ---
 
