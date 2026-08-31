@@ -394,6 +394,39 @@ happened; a lane roll-up is a completion over the same kind of list, so it goes 
 implementation rather than beside it. The struck-through sentence is kept in `Completion`'s Javadoc
 with the second caller named, so the next reader sees the rule and its one exception together.
 
+### D-t — the CLI needs a board name the surface document does not spell, and three checks owned files T5's list did not
+
+Taken by T5, and it is two findings that share a cause: **the task's `Files` list was derived from
+what the feature needs, and what a slice actually touches is what the repository's own checks
+demand.**
+
+*The board argument.* §6's table spells `tcms board move ACME-124 --column "In flight"` with no
+board in it, and `POST /boards/{boardId}/cards/{key}/move` has one in its path. Right for the common
+case — every project is seeded exactly one board, and naming it would be an argument with a single
+possible value — and a dead end the moment a project grows a second. So both surfaces take an
+optional board **name** (`--board`, and `board` on the `move-card` arm) and refuse with the list when
+it is omitted and there is more than one. Defaulting silently to the first was rejected for a reason
+D-a's two-things-called-Team-board problem makes sharper: because a board is a lens, the *move* would
+still be correct and the caller's account of it wrong, which is the failure that reads as success.
+`boardOf` in `cli/src/reads.ts` and `boardIn` in `mcp/src/reads.ts` are the one place each surface
+answers it, imported by the write side rather than copied.
+
+*The three unlisted files.* `client/src/test/fixtures.ts`, because §203's exchange check compares
+every doubled body to `openapi.yaml` and the house rule is a factory per resource, not a literal per
+test. `frontend/src/features/help/sections.tsx`, because `guideCopies.test.ts` exists **in both
+packages** and pins its command list, its tool list *both ways*, and the `N tools` count beside it —
+so a registry change in `packages/` reddens the packages job through a file in `frontend/`. And
+`mcp/src/server.test.ts`, where §213's exact `tools/list` comparison asserted the whole registry:
+`tcms_write_backlog` is the first tool an `Agent` credential is correctly **not** shown, so the
+expected side is now `TOOLS.filter(isListed)` and the test additionally asserts that the two differ.
+None of the three is a stack crossing to argue about — they are one fixture module, one prose list
+and one assertion — but a plan that says *one task, one stack* should say that the checks reach
+across it, because the next `ts` task will meet the same three.
+
+*Two files the list named and the slice did not need*: `cli/src/commands.ts` and `mcp/src/server.ts`.
+Both derive everything from the registries, which is what they were arranged for, so eight commands
+and two tools arrived — with a consent prompt on the delete arm — without a line changed in either.
+
 ---
 
 ## File structure
@@ -809,8 +842,8 @@ READ, IN THIS ORDER:
      the verbs, because folding them into T1 put that task at ~150k.
   2. docs/specs/2026-08-08-mcp-tool-and-command-surface.md — T1 wrote the rows you now implement.
      The document is the capability contract and it came first deliberately; you render it.
-  3. packages/cli/src/reads.ts and writes.ts — M1's issue verbs, and `api.delWithBody`, which
-     exists for the DELETE-with-a-body workflow endpoint and is the pattern for an unusual shape.
+  3. packages/cli/src/reads.ts and writes.ts — M1's issue verbs. (`api.delWithBody` does NOT
+     exist and never did — see step 1. The client is five typed verbs over openapi-fetch.)
   4. packages/mcp/src/reads.ts, server.ts, instructions.ts.
   5. docs/specs/client-distribution.md — how these reach users (tarballs from /downloads, no
      registry), which is why `npm run pack:release` is part of the gate CI runs.
@@ -1107,6 +1140,16 @@ TRAPS THIS TASK WILL HIT:
     answer is on the mockup.
   * docs/features.md: STRIKE THROUGH AND SUPERSEDE, never delete. The next reader must not think
     the old reasoning was never considered.
+  * frontend/src/features/help/sections.tsx IS PINNED BY THE PACKAGES JOB, both ways (T5, D-t).
+    `guideCopies.test.ts` exists in `@tcms/cli` and `@tcms/mcp` and compares that file's command
+    list, its tool list in BOTH directions, and the literal `N tools` count beside it, to the two
+    registries. T5 already added the eight board commands, `tcms_read_board`, `tcms_write_backlog`
+    and the count 28 — so if you touch those blocks, a name you drop or invent reddens a job in
+    another stack, and the failure names a test in `packages/` for an edit you made in `frontend/`.
+  * The CLI and MCP halves of the board already shipped and the surface document (§3.5, §6) says
+    what they spell. `docs/features.md`'s board section should agree with it rather than re-derive
+    it — and it should say what is still true: none of those verbs has been run against an
+    instance.
   * Say "built and unverified" where that is what it is. The gates prove it compiles, not that it
     works — this repository has shipped a no-op theme toggle, two contradictory percentages on one
     screen and a provider-ordering bug that rendered nothing but the error page, all green.
@@ -3168,15 +3211,25 @@ TransitionService rather than reimplementing the workflow check."
 **Deliverable:** `tcms board list|show|move`, `tcms backlog`, `tcms rank`, `tcms label list|add|set`
 work against a running instance, the same capabilities are MCP tools, and
 `docs/specs/2026-08-08-mcp-tool-and-command-surface.md` describes what shipped.
+**Landed:** `a7be32cc`
 **Stack:** `ts`
 **Est. context:** ~110k — 4 existing package files read, ~6 created, MCP tools, tests, 2 skills
 **Depends on:** T4 (the endpoints the verbs call)
 
 **Files:**
 - Modify: `packages/cli/src/commands.ts`, `packages/cli/src/reads.ts`, `packages/cli/src/writes.ts`
-- Modify: `packages/mcp/src/reads.ts`, `packages/mcp/src/server.ts`, `packages/mcp/src/instructions.ts`
+  — **`commands.ts` was not touched.** It holds the registry and the dispatcher and derives both
+  from `READS`/`WRITES`, so eight new commands reach it without an edit, which is what that file is
+  arranged for.
+- Modify: `packages/mcp/src/reads.ts`, ~~`packages/mcp/src/server.ts`~~, `packages/mcp/src/instructions.ts`
+  — **`server.ts` was not touched either**, for the same reason: the dispatcher, the gate and the
+  consent prompt all key off `ToolDefinition` and `ToolArm.kind`, so `label-delete` got its
+  elicitation prompt with no line changed there. `server.test.ts` did change — see step 6.
 - Modify: `docs/specs/2026-08-08-mcp-tool-and-command-surface.md`
 - Test: `packages/cli/src/writes.test.ts`, `packages/mcp/src/reads.test.ts`
+- **Three files this list did not predict, each forced by a check that already existed** (D-t):
+  `packages/client/src/test/fixtures.ts`, `frontend/src/features/help/sections.tsx`,
+  `packages/mcp/src/server.test.ts`.
 
 > **A deviation from the M2 prompt, recorded rather than taken silently.** The prompt puts *"the
 > CLI/MCP verbs and the surface doc"* inside the contract commit. T1 lands the **surface doc**; the
@@ -3185,13 +3238,18 @@ work against a running instance, the same capabilities are MCP tools, and
 > omission, since "What every module carries" makes the module's verbs part of its definition of
 > done. This task closes that gap.
 
-- [ ] **Step 1: Read how M1's issue verbs are written**
+- [x] **Step 1: Read how M1's issue verbs are written**
 
-`packages/cli/src/reads.ts` and `writes.ts` — in particular `api.delWithBody`, which exists for
+`packages/cli/src/reads.ts` and `writes.ts` — ~~in particular `api.delWithBody`, which exists for
 `DELETE /projects/{projectId}/workflow/statuses/{statusId}`, and is the pattern for any verb whose
-shape is unusual. `packages/mcp/src/reads.ts` for how a read becomes a tool.
+shape is unusual.~~ → **there is no such method and there never was.** `TcmsClient` is five verbs
+over `openapi-fetch` (`client/src/client.ts`), each typed from `paths`, and a `DELETE` with a body
+is spelled by that path's generated type like any other — nothing needed a special shape here. The
+pattern the step was reaching for does exist and is `core/mutation.ts`: what a write sends is
+**declared** (`WriteKind`) rather than inferred at the call site. `packages/mcp/src/reads.ts` for
+how a read becomes a tool.
 
-- [ ] **Step 2: Add the read verbs**
+- [x] **Step 2: Add the read verbs**
 
 ```ts
 /**
@@ -3204,7 +3262,7 @@ shape is unusual. `packages/mcp/src/reads.ts` for how a read becomes a tool.
 export async function boardShow(ctx: Context, boardId: string, filter: BoardFilter) { … }
 ```
 
-- [ ] **Step 3: Add the write verbs**
+- [x] **Step 3: Add the write verbs**
 
 ```ts
 /**
@@ -3232,13 +3290,13 @@ export async function rank(ctx: Context, key: string, opts: { after?: string; be
  */
 ```
 
-- [ ] **Step 4: Register the MCP tools and write their instructions**
+- [x] **Step 4: Register the MCP tools and write their instructions**
 
 Each tool's description says what it is *for*, not what it *calls*. Add to `instructions.ts` the one
 sentence an assistant needs and cannot infer: **a board is a lens, so moving a card changes the
 issue's status and every other board over that project shows the change.**
 
-- [ ] **Step 5: Test the two that can be wrong**
+- [x] **Step 5: Test the two that can be wrong**
 
 ```ts
 it('refuses --after and --before together without sending a request', async () => {
@@ -3255,7 +3313,7 @@ it('exits 0 and prints the breach when a move goes over the WIP limit', async ()
 })
 ```
 
-- [ ] **Step 6: Run the gate on shanks and commit**
+- [x] **Step 6: Run the gate on shanks and commit**
 
 ```bash
 ~/bin/tcms-remote sync
@@ -4256,6 +4314,30 @@ rendered nothing but the error page, all of which typechecked and linted clean.
 - [ ] Whether the collapsed-lane percentage and the expanded lane's cards agree on a project with a
       Spike in it. Two contradictory percentages on one screen is a defect this repository has
       shipped before, and `countsTowardCompletion` is exactly where it would come from again.
+- [ ] **Eight CLI commands and two MCP tools that have never reached a running instance.** T5's gate
+      is the packages build, oxlint, 448 tests and `pack:release`; every one of those drives a
+      `fetch` double compared to `openapi.yaml`, which is the *contract's* shape and not a handler's
+      answer. `tcms help` lists all eight and `tcms rank` was driven by hand to prove it refuses
+      both-neighbours and neither before sending anything — the two things that are true offline.
+      What nobody has done is point `TCMS_URL` at the lab and run `tcms board show`.
+- [ ] **A WIP breach printed by `tcms board move` against a real over-limit column**, rather than
+      against a `CardMoveResult` fixture carrying one. The exit code is the thing being claimed — 0,
+      with the breach on stderr — and it is asserted, so what is unverified is that the endpoint
+      returns `breach` populated in the case the fixture invents.
+- [ ] **`rebalanced: true` reaching `tcms rank` from the server.** T4's forty-squeeze test proves the
+      service respaces; nothing has watched the CLI print the read-again sentence, because the only
+      way to reach it is to squeeze forty times against one neighbour through the API.
+- [ ] **`tcms_write_backlog` called by anything.** It is gated `board:rank` + `board:configure`, which
+      an `Agent` credential does not hold (roles spec §A3), so the surface's own test credential
+      cannot list it and no MCP client in this repository can call it. Its four arms are driven
+      directly in `writeConformance.test.ts`; a Project Manager token has never seen the tool.
+- [ ] **The `label-delete` consent prompt on a real host.** `server.ts`'s elicitation gate covers it
+      by construction — the arm declares `kind: 'delete'` and `targets: ['label']` — and no client
+      with an `elicitation` capability has been asked to confirm removing a label.
+- [ ] **The board sentence in the server instructions read by a model.** It fits the 2KB budget at
+      every credential width measured, including the empty one, and whether *"a board is a LENS"*
+      actually stops an assistant reporting a card move as board-local is not something a byte count
+      can answer.
 
 ---
 
