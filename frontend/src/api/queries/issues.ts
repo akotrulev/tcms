@@ -1,6 +1,7 @@
 /** The project's issues: the work table, one issue, its comments, its spec links, and every write. */
 import {
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
   type UseQueryResult,
@@ -11,6 +12,7 @@ import type {
   Issue,
   IssueComment,
   IssueCommentInput,
+  IssueCompletion,
   IssueDocLink,
   IssueFilters,
   IssueInput,
@@ -63,14 +65,78 @@ export function useIssues(
  * id to gate on — but there is still a gate, because a route param can be empty for a render.
  */
 export function useIssue(key: string): UseQueryResult<Issue> {
-  return useQuery({
+  return useQuery({ ...issueQueryOptions(key), enabled: key !== '' });
+}
+
+/**
+ * One issue's read, as options — shared by {@link useIssue} and {@link useEpicCompletions} so the
+ * overview's meters and the epic's own page are one cache entry rather than two.
+ */
+function issueQueryOptions(key: string) {
+  return {
     queryKey: keys.issue(key),
-    queryFn: ({ signal }) =>
+    queryFn: ({ signal }: { signal: AbortSignal }) =>
       api.get<Issue>(`/issues/${encodeURIComponent(key)}`, {
         signal,
         timeoutMs: TIMEOUTS.interactive,
       }),
-    enabled: key !== '',
+  };
+}
+
+/**
+ * How many epics the overview will fetch a completion for.
+ *
+ * `IssueSummary` carries no completion — it is epics-only and computed server-side (D8) — so the
+ * only way to a meter per epic is one `GET /issues/{key}` each. That is `useExecutionSteps`' shape
+ * and its judgement call: the number matters less than the screen **saying** when it has been
+ * reached, and a project with forty epics is a project whose overview question is not "what is
+ * each one's percentage".
+ */
+export const EPIC_COMPLETION_LIMIT = 12;
+
+export interface EpicCompletionsState {
+  data: Record<string, IssueCompletion | null> | undefined;
+  isPending: boolean;
+  isError: boolean;
+  error: unknown;
+  isFetching: boolean;
+  refetch: () => void;
+}
+
+/**
+ * The completion of each epic named, keyed by issue key — one read each, combined into one state.
+ *
+ * **Combined pessimistically**, as `useExecutionSteps` is: the reader's question is about the
+ * project, so a half-arrived answer rendered as a list of meters is a set of percentages that is
+ * incomplete and looks complete. A partial failure is a *shorter* list with nothing on screen
+ * saying so, which is the failure `DataRegion` exists to make impossible.
+ *
+ * A `null` value is an epic whose read arrived with no completion on it. That is not a zero and
+ * must never render as one: `Issue.completion` is nullable on the wire, and a meter reading 0%
+ * where the server sent nothing is D8's "percentage of nothing" one screen over.
+ */
+export function useEpicCompletions(epicKeys: readonly string[]): EpicCompletionsState {
+  const capped = epicKeys.slice(0, EPIC_COMPLETION_LIMIT);
+  return useQueries({
+    queries: capped.map((key) => issueQueryOptions(key)),
+    combine: (results): EpicCompletionsState => {
+      const failed = results.find((result) => result.isError);
+      const loaded = results.every((result) => result.data !== undefined);
+      return {
+        data: loaded
+          ? Object.fromEntries(
+              capped.map((key, index) => [key, results[index].data?.completion ?? null]),
+            )
+          : undefined,
+        // `useQueries` over an empty list answers `[]`, and `[].some()` is false — so a project
+        // with no epics is "loaded with nothing", never pending for ever.
+        isPending: results.some((result) => result.isPending),
+        isError: failed !== undefined,
+        error: failed?.error,
+        isFetching: results.some((result) => result.isFetching),
+        refetch: () => results.forEach((result) => void result.refetch()),
+      };
+    },
   });
 }
 
@@ -272,5 +338,74 @@ export function useSetIssueWatch(key: string) {
         { timeoutMs: TIMEOUTS.interactive },
       ),
     onSuccess: () => client.invalidateQueries({ queryKey: keys.issue(key) }),
+  });
+}
+
+/**
+ * Replacing the project's workflow — story B1's add, rename, reorder and re-kind, in one write.
+ *
+ * **The whole document, because reordering is a statement about the set.** A sequence of
+ * per-status writes has an intermediate state in which two statuses claim one position, and that
+ * is precisely what the settings screen's ↑ / ↓ buttons generate. The contract and
+ * `WorkflowService` both make this argument; this hook is the third place it has to hold, because
+ * a client that sent one status at a time would produce the broken intermediate the endpoint was
+ * shaped to avoid.
+ *
+ * `meta.handled` for `useTransitionIssue`'s reason: the two 409s this can answer are sentences
+ * worth reading — *"4 issues are in Blocked"* and *"Keep one status that means done"* — and the
+ * screen renders them beside the control that caused them. The global notification handler would
+ * replace both with "couldn't save".
+ *
+ * Sweeps the boards as well as the workflow: a renamed status is the name on every card, and
+ * `columnsFor` builds the board's columns from the cards it was handed.
+ */
+export function useReplaceWorkflow(projectId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (workflow: ProjectWorkflow) =>
+      api.put<ProjectWorkflow>(`/projects/${projectId}/workflow`, workflow, {
+        timeoutMs: TIMEOUTS.interactive,
+      }),
+    meta: { handled: true },
+    onSuccess: (workflow) => {
+      client.setQueryData(keys.workflow(projectId), workflow);
+      void client.invalidateQueries({ queryKey: keys.issuesRoot(projectId) });
+      void client.invalidateQueries({ queryKey: keys.issueRoot });
+      void client.invalidateQueries({ queryKey: keys.workItemRoot });
+    },
+  });
+}
+
+/**
+ * Removing one status, naming where its issues go.
+ *
+ * A DELETE with a body, which is the one in this product — the destination is a destructive
+ * decision and a query parameter makes one look like a filter (the contract's own words). It is
+ * therefore `api.delWithBody` rather than `api.del`, so `contractDoubles` compares the payload.
+ *
+ * **Not the same operation as a status dropped from {@link useReplaceWorkflow}'s document.** That
+ * PUT refuses a removal it was given no destination for, with a 409 naming the count; this is the
+ * removal that answers the question, and it moves the issues in the same transaction so no issue
+ * is ever pointing at a status that is gone.
+ */
+export function useRemoveWorkflowStatus(projectId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ statusId, reassignToStatusId }: { statusId: string; reassignToStatusId: string }) =>
+      api.delWithBody<void>(
+        `/projects/${projectId}/workflow/statuses/${statusId}`,
+        { reassignToStatusId },
+        { timeoutMs: TIMEOUTS.interactive },
+      ),
+    meta: { handled: true },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.workflow(projectId) });
+      // Every issue that held the removed status now holds another one, so the lists, the detail
+      // reads and all three boards are stale — this is the one write in the module that changes a
+      // status without a transition.
+      void client.invalidateQueries({ queryKey: keys.issuesRoot(projectId) });
+      void client.invalidateQueries({ queryKey: keys.issueRoot });
+      void client.invalidateQueries({ queryKey: keys.workItemRoot });
+    },
   });
 }

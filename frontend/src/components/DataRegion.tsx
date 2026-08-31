@@ -1,3 +1,4 @@
+import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { isAbort } from '../api/client';
@@ -257,6 +258,14 @@ export function GridSkeleton({ rows = 8 }: { rows?: number }) {
 
 export interface EmptyStateProps {
   /**
+   * A glyph above the title, for an empty state that has to explain what the missing thing IS
+   * rather than only that there is none of it — `solo-overview.html`'s release panel is the case
+   * this was added for. Optional because most empty states sit inside a titled panel that has
+   * already said what the reader is looking at, and a decorative icon on every one of them is
+   * noise; `aria-hidden` in any case, since the title is the accessible text.
+   */
+  icon?: LucideIcon;
+  /**
    * Which kind of emptiness this is. The three read differently because they need
    * different things from the user, and one generic "No data" message for all three is
    * how an empty grid becomes indistinguishable from a broken one.
@@ -286,6 +295,7 @@ export interface EmptyStateProps {
 
 export function EmptyState({
   kind = 'no-records',
+  icon: Icon,
   title,
   body,
   action,
@@ -315,6 +325,7 @@ export function EmptyState({
 
   return (
     <div data-testid={testId} className="px-6 py-12 text-center text-ink-2">
+      {Icon && <Icon aria-hidden className="mx-auto mb-3 size-[30px] text-ink-4" />}
       <h3 className="m-0 mb-1 text-[15px] font-semibold text-ink">{copy.title}</h3>
       {copy.body && <p className="mx-auto mt-0 mb-0 max-w-[46ch] text-[13px]">{copy.body}</p>}
       {(action || onClearFilters) && (

@@ -3,15 +3,21 @@ import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { PermissionKey, Project, RepositoryDashboard } from '../../api/types'
+import type { PermissionKey, Project, ProjectWorkflow } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
-import { DashboardPage } from './DashboardPage'
+import { aProjectWorkflow } from '../../test/fixtures'
+import { GeneralSettingsPage } from './GeneralSettingsPage'
 import { ProjectsPage } from '../projects/ProjectsPage'
 
 /**
  * Archiving a project, from the two screens that show the state (§159).
+ *
+ * ~~The button was in the project overview's header (`DashboardPage`).~~ → **moved in 011 T7** to
+ * `settings-general.html`'s Danger zone, where the mockups put it and where a destructive action is
+ * not sitting beside a percentage somebody opened the page to read. The three properties below are
+ * unchanged; only the screen they are asserted from moved, which is why this file moved with it.
  *
  * `archived` was a **required** field of `Project` from M0 and no file in this app outside a test
  * fixture read it, because nothing anywhere could set it — the writerless column's expensive half,
@@ -41,43 +47,31 @@ const LIVE: Project = {
 
 const RETIRED: Project = { ...LIVE, id: 'p2', key: 'OLD', name: 'Retired Platform', archived: true }
 
-const DASHBOARD: RepositoryDashboard = {
-  generatedAt: '2026-08-01T09:00:00Z',
-  lifecycle: [],
-  health: [],
-  healthComputedAt: null,
-  byFeature: [],
-  byOwner: [],
-  // 005 N3's third segmentation — by the outcome of each case's last execution. Empty
-  // here: these files are about the tiles, not the breakdown (B1).
-  byLastRun: [],
-  automationCoverage: {
-    automated: 0,
-    toBeAutomated: 0,
-    manual: 0,
-    notAutomatable: 0,
-    coveragePercent: 0,
-  },
-  recentActivity: [],
-}
+const WORKFLOW: ProjectWorkflow = aProjectWorkflow({ projectId: 'p1' })
 
 function mockReads(permissions: PermissionKey[], project: Project = LIVE, projects: Project[] = [LIVE]) {
   return vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
     if (path === '/projects') return projects
-    if (path.startsWith('/projects/p1/dashboard') || path.includes('/dashboard')) return DASHBOARD
+    // Anchored so `/projects/p1/workflow` is not caught by the project arm's prefix — the harness
+    // rule for a path-keyed mock with a sub-resource under it.
+    if (/^\/projects\/[^/]+\/workflow$/.test(path)) return WORKFLOW
     if (/^\/projects\/[^/]+$/.test(path)) return project
     throw new Error(`unmocked read: ${path}`)
   }) as never)
 }
 
-function renderDashboard() {
+function renderSettings() {
   // The route matters: this page reads `projectId` from the path, and every request it makes is
   // built from it. `TestProviders` supplies the only router in the tree.
   return render(
-    <TestProviders client={createTestQueryClient()} userId="user-1" route="/projects/p1">
+    <TestProviders
+      client={createTestQueryClient()}
+      userId="user-1"
+      route="/projects/p1/settings/general"
+    >
       <Routes>
-        <Route path="/projects/:projectId" element={<DashboardPage />} />
+        <Route path="/projects/:projectId/settings/general" element={<GeneralSettingsPage />} />
       </Routes>
     </TestProviders>,
   )
@@ -91,7 +85,7 @@ describe('Archiving a project', () => {
   it('sends the target state rather than a toggle', async () => {
     mockReads(['project:read', 'project:settings'])
     const put = vi.spyOn(api, 'put').mockResolvedValue({ ...LIVE, archived: true } as never)
-    renderDashboard()
+    renderSettings()
 
     // Enabled first: the gate disables while the permission answer is in flight, so clicking
     // before it lands asserts the fail-closed arm by accident — §66's vacuous-barrier finding.
@@ -100,8 +94,8 @@ describe('Archiving a project', () => {
     // denied branch of `PermissionGate` wraps the control in a tooltip anchor, so when the verdict
     // arrives the whole subtree is replaced and the node captured before it is detached from the
     // document — disabled for ever, in a test that would time out blaming the permission.
-    await waitFor(() => expect(screen.getByTestId('Dashboard.ArchiveButton')).toBeEnabled())
-    await userEvent.click(screen.getByTestId('Dashboard.ArchiveButton'))
+    await waitFor(() => expect(screen.getByTestId('GeneralSettings.Danger.Archive')).toBeEnabled())
+    await userEvent.click(screen.getByTestId('GeneralSettings.Danger.Archive'))
 
     await waitFor(() =>
       expect(put).toHaveBeenCalledWith('/projects/p1/archive', { archived: true }),
@@ -114,13 +108,13 @@ describe('Archiving a project', () => {
     // and never does anything.
     mockReads(['project:read', 'project:settings'], RETIRED)
     const put = vi.spyOn(api, 'put').mockResolvedValue({ ...RETIRED, archived: false } as never)
-    renderDashboard()
+    renderSettings()
 
-    expect(await screen.findByTestId('Dashboard.ArchiveButton')).toHaveTextContent('Restore project')
-    expect(await screen.findByTestId('Dashboard.Archived')).toBeInTheDocument()
+    expect(await screen.findByTestId('GeneralSettings.Danger.Archive')).toHaveTextContent('Restore project')
+    expect(await screen.findByTestId('GeneralSettings.Danger.Archived')).toBeInTheDocument()
 
-    await waitFor(() => expect(screen.getByTestId('Dashboard.ArchiveButton')).toBeEnabled())
-    await userEvent.click(screen.getByTestId('Dashboard.ArchiveButton'))
+    await waitFor(() => expect(screen.getByTestId('GeneralSettings.Danger.Archive')).toBeEnabled())
+    await userEvent.click(screen.getByTestId('GeneralSettings.Danger.Archive'))
     await waitFor(() =>
       expect(put).toHaveBeenCalledWith('/projects/p1/archive', { archived: false }),
     )
@@ -128,9 +122,9 @@ describe('Archiving a project', () => {
 
   it('disables the button, rather than hiding it, for a caller who may not archive', async () => {
     mockReads(['project:read'])
-    renderDashboard()
+    renderSettings()
 
-    await waitFor(() => expect(screen.getByTestId('Dashboard.ArchiveButton')).toBeDisabled())
+    await waitFor(() => expect(screen.getByTestId('GeneralSettings.Danger.Archive')).toBeDisabled())
   })
 
   it('marks an archived project in the picker and still lists it', async () => {

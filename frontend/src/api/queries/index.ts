@@ -262,16 +262,21 @@ export {
 export { type AuditPage, useCompanyAuditEvents, useProjectAuditEvents } from './audit';
 export { useBoard, useMyWork, usePutCardAnnotation, useTeamBoard } from './board';
 export {
+  EPIC_COMPLETION_LIMIT,
   useCreateIssue,
   useCreateIssueComment,
   useDeleteIssue,
+  useEpicCompletions,
   useIssue,
   useIssueComments,
   useIssueDocLinks,
   useIssues,
   useProjectWorkflow,
+  useRemoveWorkflowStatus,
+  useReplaceWorkflow,
   useSetIssueWatch,
   useTransitionIssue,
   useUpdateIssue,
+  type EpicCompletionsState,
   type IssueSort,
 } from './issues';

@@ -63,6 +63,7 @@ const METHODS: Record<string, string> = {
   patch: 'patch',
   put: 'put',
   del: 'delete',
+  delWithBody: 'delete',
   upload: 'post',
   postText: 'post',
   getText: 'get',
@@ -72,11 +73,13 @@ const METHODS: Record<string, string> = {
 /**
  * The verbs whose **second argument is a body**, which is not the same list as the verbs that send
  * one. `api.get(path, options)` and `api.del(path, options)` take `RequestOptions` in that position,
- * so reading it as a payload would compare a timeout budget against a schema; `api.upload` really
+ * so reading it as a payload would compare a timeout budget against a schema — which is exactly why
+ * a DELETE that carries one is `api.delWithBody`, a verb of its own, rather than a `body` hidden in
+ * `del`'s options where this seam could not reach it; `api.upload` really
  * does take a body there and it is a `FormData`, which `requestBodyOf` reports as multipart and this
  * seam therefore never walks.
  */
-const SENDS_A_BODY = new Set(['post', 'patch', 'put', 'upload', 'postForText'])
+const SENDS_A_BODY = new Set(['post', 'patch', 'put', 'delWithBody', 'upload', 'postForText'])
 
 /**
  * The verbs whose **success body is a document** rather than JSON (§255, and `postForText` since

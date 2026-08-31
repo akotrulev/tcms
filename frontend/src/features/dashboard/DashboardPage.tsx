@@ -1,4 +1,4 @@
-import { Link as RouterLink, useParams } from 'react-router-dom';
+import { Link as RouterLink } from 'react-router-dom';
 import type {
   DashboardBreakdown,
   DashboardTile,
@@ -6,15 +6,9 @@ import type {
   RepositoryDashboard,
   StatusKind,
 } from '../../api/types';
-import { useDashboard, useProject, useSetProjectArchived } from '../../api/queries';
-import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
-import { Badge } from '../../components/kit';
 import { FigurePanel } from '../../components/kit/FigurePanel';
-import { PageHeader } from '../../components/PageHeader';
-import { PermissionGate } from '../../components/PermissionGate';
-import { Button } from '../../components/ui';
-import { formatCount, formatDateTime, formatPercent, plural, pluralNoun } from '../../lib/format';
+import { formatCount, formatDateTime, formatPercent, plural } from '../../lib/format';
 import {
   automationLabels,
   healthLabels,
@@ -25,126 +19,38 @@ import {
 import { lifecycleVar, severityVar, statusVar } from '../../lib/statusColors';
 
 /**
- * Repository status dashboard (plan §6o).
+ * The repository status dashboard's **regions** (plan §6o).
  *
- * The design rule that makes this useful rather than decorative: **every tile is a link that
- * emits a filter predicate**, and predicates compose. A tile is not a number to look at, it
- * is the entrance to the working list of cases behind that number — where the user can
- * filter further and act in bulk. A dashboard whose tiles are dead ends produces a report
- * nobody can do anything with.
+ * ~~`DashboardPage`, the component mounted at `/projects/:projectId`.~~ → **superseded by 011 T7.**
+ * That route is `ProjectOverviewPage` now (D27): opening a project lands on delivery and quality
+ * together, and *"the existing DashboardPage regions are reused"* as its quality half. So the page
+ * component, its header and its archive button are gone from this file — the header is the
+ * overview's, and the archive moved to `settings-general.html`'s Danger zone, where the mockups put
+ * it. What is left is what the sentence above names: the regions, exported and mounted by the
+ * overview.
  *
- * Because the case list keeps its filters in the URL, "78 cases whose spec changed" is one
- * `<Link>` away from being a shareable, bulk-actionable destination.
+ * **The file keeps its name deliberately.** `citedFiles.test.ts` fails on a path named in a comment
+ * that is not on disk, and `DashboardPage.tsx` is cited from `lib/statusColors.ts`, from
+ * `HealthTileOrderTest.java` in the backend suite, and from the analytics render's own caption. A
+ * rename would be a five-file change that says nothing new.
  *
- * ~~Every region is a `Panel` with a title bar.~~ → **superseded (007 T15).** The regions are
- * the render's `.fig` — a figure with its own heading and a subtitle stating what the numbers
- * are of. Design language §6 is what changed the drawings underneath them, and it is computed
- * rather than judged: the activity chart is three one-series rows instead of one three-series
- * chart, because the accents that would have carried it measure 2.5 ΔE apart under
- * deuteranopia; "never run" is the empty track rather than a fill; there is no pie, donut or
- * gauge here and every bar starts at zero.
+ * The design rule that makes these regions useful rather than decorative: **every tile is a link
+ * that emits a filter predicate**, and predicates compose. A tile is not a number to look at, it is
+ * the entrance to the working list of cases behind that number — where the user can filter further
+ * and act in bulk. A dashboard whose tiles are dead ends produces a report nobody can do anything
+ * with.
+ *
+ * Because the case list keeps its filters in the URL, "78 cases whose spec changed" is one `<Link>`
+ * away from being a shareable, bulk-actionable destination.
+ *
+ * ~~Every region is a `Panel` with a title bar.~~ → **superseded (007 T15).** The regions are the
+ * render's `.fig` — a figure with its own heading and a subtitle stating what the numbers are of.
+ * Design language §6 is what changed the drawings underneath them, and it is computed rather than
+ * judged: the activity chart is three one-series rows instead of one three-series chart, because the
+ * accents that would have carried it measure 2.5 ΔE apart under deuteranopia; "never run" is the
+ * empty track rather than a fill; there is no pie, donut or gauge here and every bar starts at zero.
  */
-export function DashboardPage() {
-  const { projectId = '' } = useParams();
-  const project = useProject(projectId);
-  const dashboard = useDashboard(projectId);
-
-  return (
-    <div>
-      <PageHeader
-        testId="Dashboard.Header"
-        title={project.data?.name ?? 'Overview'}
-        documentTitle={project.data ? `Overview · ${project.data.name}` : 'Overview'}
-        meta={
-          project.data && (
-            <>
-              <Identifier variant="strong">{project.data.key}</Identifier>
-              <span className="text-[13px] text-ink-3">
-                <Identifier variant="muted">{formatCount(project.data.caseCount)}</Identifier>{' '}
-                {pluralNoun(project.data.caseCount, 'case')}
-              </span>
-              {/* Omitted rather than empty when myRole is null — see ProjectsPage for why a
-                  COMPANY-scope grant legitimately has no per-project role name. */}
-              {project.data.myRole !== null && (
-                <span className="text-[13px] text-ink-3">Your role: {project.data.myRole}</span>
-              )}
-              {/*
-                Stated on the project's own landing page as well as on the picker card, because
-                this is where somebody arrives from a bookmark — and a retired project that looks
-                identical to a live one is how work gets filed into it for another six months.
-
-                A badge, not a chip: archived is state the system owns and there is nothing behind
-                clicking it (design language §5).
-              */}
-              {project.data.archived && (
-                <Badge tone="plain" data-testid="Dashboard.Archived">
-                  Archived
-                </Badge>
-              )}
-            </>
-          )
-        }
-        subtitle={project.data?.description}
-        actions={
-          <>
-            {project.data && (
-              <ArchiveButton projectId={projectId} archived={project.data.archived} />
-            )}
-            <Button asChild variant="primary" data-testid="Dashboard.BrowseCasesButton">
-              <RouterLink to={`/projects/${projectId}/cases`}>Browse test cases</RouterLink>
-            </Button>
-          </>
-        }
-      />
-
-      <DataRegion
-        testId="Dashboard.Content"
-        state={{ ...dashboard, refetch: () => void dashboard.refetch() }}
-      >
-        {(data) => <DashboardBody data={data} projectId={projectId} />}
-      </DataRegion>
-    </div>
-  );
-}
-
-/**
- * Retire this project, or bring it back (§159).
- *
- * Here rather than on a settings screen because this page is the project's front door and the two
- * settings screens are each about one subsystem — §6g's review policy, the classification
- * vocabulary — while this is about the project as a whole. It is the same shape the docs tree uses
- * for a page's publication state: **one button whose label is the move available from the state the
- * project is in**, never two of which one is always a no-op the server would answer 200 to.
- *
- * **No confirmation dialog, deliberately.** The action destroys nothing, hides nothing and is
- * undone by the button that replaces it. A dialog here would teach people to click through dialogs
- * on a screen that also has real ones.
- *
- * Disabled rather than hidden for a caller without `project:settings` — `PermissionGate`'s whole
- * content, and the reason a Test Engineer learns the capability exists and who to ask.
- */
-function ArchiveButton({ projectId, archived }: { projectId: string; archived: boolean }) {
-  const setArchived = useSetProjectArchived(projectId);
-
-  return (
-    <PermissionGate projectId={projectId} permission="project:settings">
-      {({ allowed }) => (
-        <Button
-          variant="ghost"
-          disabled={!allowed || setArchived.isPending}
-          // The target state, not a toggle of what this render happens to hold: a stale copy then
-          // asks for the state it can already see rather than for the opposite of it.
-          onClick={() => setArchived.mutate(!archived)}
-          data-testid="Dashboard.ArchiveButton"
-        >
-          {archived ? 'Restore project' : 'Archive project'}
-        </Button>
-      )}
-    </PermissionGate>
-  );
-}
-
-function DashboardBody({ data, projectId }: { data: RepositoryDashboard; projectId: string }) {
+export function DashboardBody({ data, projectId }: { data: RepositoryDashboard; projectId: string }) {
   const casesPath = `/projects/${projectId}/cases`;
 
   return (

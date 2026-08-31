@@ -9,6 +9,7 @@ import {
   ClipboardList,
   FileText,
   Folder,
+  GitBranch,
   HelpCircle,
   History,
   Kanban,
@@ -24,6 +25,7 @@ import {
   Network,
   Package,
   Search,
+  Settings,
   Shield,
   Sparkles,
   Sun,
@@ -345,6 +347,27 @@ function projectNav(
           to this project and switching projects changes the tree — even though three of the four
           axes on that screen are the company's, which is what the page itself says.
         */
+        /*
+          011 T7's two. `General` is what the project is called, what prefixes its issues and the
+          six issue types it holds; `Workflow` is story B1's statuses, their kinds and the legal
+          moves. Both are ungated in the rail, like Classification and Review: the reads cost
+          project visibility alone and each page renders read-only for a caller who cannot write,
+          so hiding the entry would leave a reader with no way to find out what the statuses in
+          their project even mean.
+
+          `General` sits first because it is the settings screen a person looks for by that name,
+          and it is where `settings-general.html` puts the Danger zone.
+        */
+        {
+          label: 'General',
+          to: `${p}/settings/general`,
+          icon: <Settings className="size-4" />,
+        },
+        {
+          label: 'Workflow',
+          to: `${p}/settings/workflow`,
+          icon: <GitBranch className="size-4" />,
+        },
         {
           label: 'Classification',
           to: `${p}/settings/classification`,

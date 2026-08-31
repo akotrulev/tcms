@@ -62,8 +62,10 @@ const CaseHistoryPage = lazy(() =>
 const SuiteHistoryPage = lazy(() =>
   import('../features/history/SuiteHistoryPage').then((m) => ({ default: m.SuiteHistoryPage })),
 );
-const DashboardPage = lazy(() =>
-  import('../features/dashboard/DashboardPage').then((m) => ({ default: m.DashboardPage })),
+const ProjectOverviewPage = lazy(() =>
+  import('../features/projects/ProjectOverviewPage').then((m) => ({
+    default: m.ProjectOverviewPage,
+  })),
 );
 const PlanListPage = lazy(() =>
   import('../features/plans/PlanListPage').then((m) => ({ default: m.PlanListPage })),
@@ -148,6 +150,16 @@ const TrackerConnectionsPage = lazy(() =>
 const ClassificationSettingsPage = lazy(() =>
   import('../features/settings/ClassificationSettingsPage').then((m) => ({
     default: m.ClassificationSettingsPage,
+  })),
+);
+const GeneralSettingsPage = lazy(() =>
+  import('../features/settings/GeneralSettingsPage').then((m) => ({
+    default: m.GeneralSettingsPage,
+  })),
+);
+const WorkflowSettingsPage = lazy(() =>
+  import('../features/settings/WorkflowSettingsPage').then((m) => ({
+    default: m.WorkflowSettingsPage,
   })),
 );
 const ReviewSettingsPage = lazy(() =>
@@ -442,7 +454,7 @@ function AppRoutes() {
             path="/projects/:projectId"
             element={
               <Suspense fallback={<RouteFallback />}>
-                <DashboardPage />
+                <ProjectOverviewPage />
               </Suspense>
             }
           />
@@ -664,6 +676,34 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <ClassificationSettingsPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            011 T7's two tracker settings screens. `general` is the project's identity and its issue
+            types; `workflow` is story B1's statuses, their kinds and the legal moves between them.
+
+            **Routed for everybody**, like Review beside them and for the same reason: both reads are
+            gated on project visibility alone — every screen that renders a status picker needs the
+            workflow document — and each page disables its controls for a caller without
+            `issue:workflow` or `project:settings`. A route guarded by a permission would be the
+            client deciding an authorization question the server already answers, and it would make
+            one pasted link behave differently for two people with no explanation shown to either.
+          */}
+          <Route
+            path="/projects/:projectId/settings/general"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <GeneralSettingsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/projects/:projectId/settings/workflow"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <WorkflowSettingsPage />
               </Suspense>
             }
           />

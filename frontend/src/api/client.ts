@@ -338,6 +338,21 @@ export const api = {
     request<T>(path, { method: 'PUT', body: JSON.stringify(body ?? {}) }, options),
   del: <T>(path: string, options?: RequestOptions) => request<T>(path, { method: 'DELETE' }, options),
   /**
+   * A DELETE whose **body names where the deleted thing's dependents go** — today only
+   * `DELETE /projects/{projectId}/workflow/statuses/{statusId}`, which carries the status the
+   * removed one's issues move to.
+   *
+   * Separate from `del` rather than a `body` added to its options, and both halves of that matter.
+   * `del`'s second argument is `RequestOptions` at some thirty call sites, so a body there would
+   * have to be smuggled inside the options object — where `contractDoubles.ts` cannot see it,
+   * because that seam reads the second argument positionally and would compare a timeout budget
+   * against a schema. A verb of its own is a verb the seam can be told about, which is why
+   * `SENDS_A_BODY` gains it: the one destructive payload in the product is the last one that
+   * should travel unchecked.
+   */
+  delWithBody: <T>(path: string, body: unknown, options?: RequestOptions) =>
+    request<T>(path, { method: 'DELETE', body: JSON.stringify(body ?? {}) }, options),
+  /**
    * A POST whose **request** is a document and whose response is ordinary JSON — today only
    * `POST .../cases/parse-gherkin`, which takes a pasted scenario as `text/plain`.
    *

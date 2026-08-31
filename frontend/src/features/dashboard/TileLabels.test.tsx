@@ -7,10 +7,15 @@ import { healthLabels, lifecycleLabels } from '../../lib/labels'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
-import { DashboardPage } from './DashboardPage'
+import { anIssueSummary, aProjectWorkflow } from '../../test/fixtures'
+import { ProjectOverviewPage } from '../projects/ProjectOverviewPage'
 
 /**
  * The dashboard names things the way the rest of the app does (§180).
+ *
+ * ~~Rendered through `DashboardPage`.~~ → **011 T7 moved that route to `ProjectOverviewPage`**,
+ * which mounts the same regions as its quality half (D27). The assertions are unchanged: they are
+ * about the words on a tile, and the tile is the same component reached through a different page.
  *
  * Every tile and every bar segment on this page used to render **words the server sent**, and six
  * of the ten health signals disagreed with `lib/labels.ts`: the tile *"Outdated — spec changed"*
@@ -77,6 +82,10 @@ function renderDashboard(dashboard: RepositoryDashboard = DASHBOARD) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(['project:read'])
     if (path.includes('/dashboard')) return dashboard
+    // The overview's delivery half. Anchored arms, and the issue list answers one epic-less row so
+    // the page renders its tables rather than three empty states — this file is about the tiles.
+    if (path.startsWith('/issues?')) return path.includes('level=EPIC') ? [] : [anIssueSummary()]
+    if (/^\/projects\/[^/]+\/workflow$/.test(path)) return aProjectWorkflow({ projectId: 'p1' })
     if (/^\/projects\/[^/]+$/.test(path)) return PROJECT
     throw new Error(`unmocked read: ${path}`)
   }) as never)
@@ -84,7 +93,7 @@ function renderDashboard(dashboard: RepositoryDashboard = DASHBOARD) {
   return render(
     <TestProviders client={createTestQueryClient()} userId="user-1" route="/projects/p1">
       <Routes>
-        <Route path="/projects/:projectId" element={<DashboardPage />} />
+        <Route path="/projects/:projectId" element={<ProjectOverviewPage />} />
       </Routes>
     </TestProviders>,
   )
