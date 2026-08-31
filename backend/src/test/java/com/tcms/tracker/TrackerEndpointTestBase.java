@@ -37,7 +37,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * types and the moves between them. Seeding those by hand in a test would be a second definition of
  * a project's workflow, and the one that drifts is whichever the migration does not.
  */
-abstract class TrackerEndpointTestBase extends IntegrationTestBase {
+public abstract class TrackerEndpointTestBase extends IntegrationTestBase {
 
     @Autowired
     protected MockMvc mvc;

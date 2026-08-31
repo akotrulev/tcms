@@ -766,7 +766,20 @@ class ContractConventionTest {
             // derived_item_annotation had no door at all until D11 said it mattered more, not less.
             Map.entry("BoardCard", List.of(com.tcms.work.BoardCardView.class)),
             Map.entry("CardAnnotation", List.of(com.tcms.work.CardAnnotationView.class)),
-            Map.entry("CardAnnotationInput", List.of(com.tcms.work.CardAnnotationInput.class)));
+            Map.entry("CardAnnotationInput", List.of(com.tcms.work.CardAnnotationInput.class)),
+            // ---- 012 T3's board-configuration block ----
+            //
+            // `Board` and `BoardColumn` are served by VIEW RECORDS and never by the entities of the
+            // same name, which is the rule the header states: the wire shape and the row are
+            // different things, and pairing a schema to an entity is how a column becomes a field
+            // nobody meant to publish. `board.lock_version` is the instance — it is on the row and
+            // it is not on the wire.
+            Map.entry("Board", List.of(com.tcms.tracker.board.BoardView.class)),
+            Map.entry("BoardColumn", List.of(com.tcms.tracker.board.BoardColumnView.class)),
+            Map.entry("BoardSummary", List.of(com.tcms.tracker.board.BoardSummaryView.class)),
+            Map.entry("BoardInput", List.of(com.tcms.tracker.board.BoardInput.class)),
+            Map.entry("BoardColumnInput",
+                    List.of(com.tcms.tracker.board.BoardColumnInput.class)));
 
     /**
      * The owners this file cannot name as class literals, because they are package-private.

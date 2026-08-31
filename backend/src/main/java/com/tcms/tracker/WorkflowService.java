@@ -6,6 +6,7 @@ import com.tcms.project.ProjectService;
 import com.tcms.tenancy.AuditEvent;
 import com.tcms.tenancy.AuditEventRepository;
 import com.tcms.tenancy.CompanyContext;
+import com.tcms.tracker.board.BoardConfigService;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -57,6 +58,7 @@ public class WorkflowService {
     private final IssueTransitionRepository transitions;
     private final IssueRepository issues;
     private final AuditEventRepository auditEvents;
+    private final BoardConfigService boards;
     private final Clock clock;
 
     public WorkflowService(
@@ -66,6 +68,7 @@ public class WorkflowService {
             IssueTransitionRepository transitions,
             IssueRepository issues,
             AuditEventRepository auditEvents,
+            BoardConfigService boards,
             Clock clock) {
 
         this.projects = projects;
@@ -74,6 +77,7 @@ public class WorkflowService {
         this.transitions = transitions;
         this.issues = issues;
         this.auditEvents = auditEvents;
+        this.boards = boards;
         this.clock = clock;
     }
 
@@ -171,18 +175,30 @@ public class WorkflowService {
 
         UUID companyId = CompanyContext.require();
         List<IssueStatus> live = new ArrayList<>();
+        List<IssueStatus> arrived = new ArrayList<>();
         int position = 0;
         for (IssueStatusView status : submitted.statuses()) {
             IssueStatus existing = status.id() == null ? null : stored.get(status.id());
             if (existing == null) {
-                live.add(statuses.save(IssueStatus.create(
+                IssueStatus created = statuses.save(IssueStatus.create(
                         UUID.randomUUID(), companyId, project.getId(),
-                        status.name().strip(), status.kind(), position)));
+                        status.name().strip(), status.kind(), position));
+                live.add(created);
+                arrived.add(created);
             } else {
                 existing.redefine(status.name().strip(), status.kind(), position);
                 live.add(statuses.save(existing));
             }
             position++;
+        }
+
+        // R13, and before the removals below rather than after: a status arriving has no database
+        // event to hang off, so every board claims it here — inside this transaction deliberately,
+        // see BoardConfigService#claimNewStatus. The flush is because board_column_status.status_id
+        // is a foreign key and Hibernate orders its inserts by entity type, not by call order.
+        if (!arrived.isEmpty()) {
+            statuses.flush();
+            arrived.forEach(created -> boards.claimNewStatus(project.getId(), created));
         }
 
         // Transitions before statuses: issue_transition's foreign keys point AT issue_status, so a

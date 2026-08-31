@@ -193,7 +193,12 @@ class ContractEnumTest {
             // Nested in the entity that holds it, like ReviewVerdict above; the contract's name
             // carries the owner because a bare `Status` schema would say nothing about whose.
             Map.entry("NotificationDeliveryStatus",
-                    List.of("com.tcms.integration.NotificationDelivery$Status")));
+                    List.of("com.tcms.integration.NotificationDelivery$Status")),
+            // 012 T3. RELEASE is absent from both sides and that is the same decision twice: an
+            // axis whose column is NULL for every row groups every card into one lane called
+            // "None", which reads as a broken board rather than as an unbuilt feature. M3 adds the
+            // member to the contract and this rule is what fails until the enum follows it.
+            Map.entry("SwimlaneBy", List.of("com.tcms.tracker.board.SwimlaneBy")));
 
     /**
      * The contract enums with no server type at all, and what checks each instead.
