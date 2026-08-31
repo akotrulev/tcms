@@ -12,8 +12,10 @@ import java.util.UUID;
  * case — so a merged record would be half-null in both directions and would let a caller read
  * whichever field happened to be populated without noticing which end it was standing at.
  *
- * @param sourceKey   the case or suite key, {@code TC-42}. Resolved through {@link CatalogueFacts},
- *                    because the rows live in {@code repository}, which this module may not import.
+ * @param sourceKey   the case, suite or issue key — {@code TC-42}, {@code TS-3}, {@code ACME-124}.
+ *                    Resolved through {@link CatalogueFacts}, because the rows live in
+ *                    {@code repository} and {@code tracker}, neither of which this module may
+ *                    import.
  * @param sourceTitle resolved from the same read. Never null: a link whose source has been deleted
  *                    is not served at all, since the read joins rather than looks up — a link to a
  *                    row nobody can name renders as a blank bullet with a checkbox.

@@ -737,6 +737,12 @@ class ContractConventionTest {
             // `IssueStatusRef`, `IssueCompletion`) and this codebase names a record for what it is.
             Map.entry("Issue", List.of(com.tcms.tracker.IssueView.class)),
             Map.entry("IssueSummary", List.of(com.tcms.tracker.IssueSummaryView.class)),
+            // T4's three. `IssueComment` is served by `CommentView` and NOT by the entity of the
+            // same name — the wire shape and the row are different things here, and pairing a
+            // schema to an entity is how a column becomes a field nobody meant to publish.
+            Map.entry("IssueComment", List.of(com.tcms.tracker.CommentView.class)),
+            Map.entry("IssueCommentInput", List.of(com.tcms.tracker.IssueCommentInput.class)),
+            Map.entry("IssueDocLink", List.of(com.tcms.tracker.IssueDocLinkView.class)),
             Map.entry("IssueTypeRef", List.of(com.tcms.tracker.IssueTypeView.class)),
             Map.entry("IssueStatusRef", List.of(com.tcms.tracker.IssueStatusView.class)),
             Map.entry("IssueCompletion", List.of(com.tcms.tracker.CompletionView.class)),
@@ -1311,6 +1317,11 @@ class ContractConventionTest {
                     List.of(com.tcms.tracker.IssueUpdate.CriterionUpdate.class)),
             Map.entry("ProjectWorkflow.transitions[]",
                     List.of(com.tcms.tracker.WorkflowView.TransitionView.class)),
+            // 011 T4. A one-field body, and it is inline rather than a named schema because there
+            // is nothing else in the product it could be shared with: it says which of the star's
+            // two states the caller wants.
+            Map.entry("PUT /issues/{key}/watchers (request)",
+                    List.of(com.tcms.tracker.IssueWatchInput.class)),
             Map.entry("GranteeList.grantees[]", List.of(com.tcms.identity.GranteeView.class)),
             Map.entry("PlanStatistics.byConfiguration[]",
                     List.of(com.tcms.execution.PlanStatisticsView.ConfigurationCountsView.class)),

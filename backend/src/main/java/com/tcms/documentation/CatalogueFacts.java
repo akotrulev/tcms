@@ -10,14 +10,22 @@ import java.util.UUID;
 import org.springframework.stereotype.Component;
 
 /**
- * <strong>The one place in this module that names a {@code repository} table.</strong>
+ * <strong>The one place in this module that names a {@code repository} or {@code tracker}
+ * table.</strong>
+ *
+ * <p>~~The one place in this module that names a {@code repository} table.~~ <strong>→ widened by
+ * 011 T4</strong>, which gave {@link LinkSourceType} its {@code ISSUE} member: a statement can now
+ * be linked from an epic, and {@code issue} is a third foreign table this file names. The pattern is
+ * unchanged and that is the point — the arm went where the other two are rather than into a second
+ * class, so the count of files a reviewer opens to find this module's crossings stayed at two.
  *
  * <p>{@link PlanFacts}' sibling, and the second file here to hold an id into another module and read
  * it through native SQL. The split is by what is read rather than by who reads it: that one names
  * {@code test_plan} ({@code execution}), this one names {@code test_case} and {@code suite}
- * ({@code repository}). Merging them into one {@code Facts} class would make the header sentence
- * "the one place this module names a foreign table" true of a file whose name promises nothing, and
- * the point of the pattern is that a reader can tell what crosses where by looking at the file list.
+ * ({@code repository}) and {@code issue} ({@code tracker}). Merging them into one {@code Facts}
+ * class would make the header sentence "the one place this module names a foreign table" true of a
+ * file whose name promises nothing, and the point of the pattern is that a reader can tell what
+ * crosses where by looking at the file list.
  *
  * <h2>What it answers, and what it must never be asked</h2>
  *
@@ -39,6 +47,28 @@ import org.springframework.stereotype.Component;
  */
 @Component
 class CatalogueFacts {
+
+    /**
+     * The {@code ISSUE} arm (011 M1), and the two things about it that are not the other two arms'.
+     *
+     * <p><strong>The display key it carries back is {@code issue_key}</strong> — {@code ACME-124},
+     * which is what a person types and what the link dialog offers. It reaches the wire as
+     * {@code BlockLink.sourceKey}, so the source is named the way it is named everywhere else in the
+     * product, while {@code doc_link.source_id} stays a UUID like every other source rather than the
+     * one row addressed by a string.
+     *
+     * <p><strong>{@code deleted_at IS NULL} matters here in a way it does not for a case.</strong>
+     * An issue is soft-deleted (scope §3's mitigation for {@code tracker} not being a foundation
+     * module), so without this predicate a link could be made to something that is gone from every
+     * screen — and, on the read side, rendered as a bullet naming work nobody can open.
+     */
+    private static final String ISSUES = """
+            SELECT i.id, i.issue_key, i.title
+              FROM issue i
+             WHERE i.project_id = :projectId
+               AND i.id IN (:ids)
+               AND i.deleted_at IS NULL
+            """;
 
     private final EntityManager entities;
 
@@ -73,9 +103,10 @@ class CatalogueFacts {
             return Map.of();
         }
 
-        // Two statements rather than one union: the columns differ (a suite's display name is
-        // `name`, a case's is `title`) and the tables are unrelated. A union would have to alias
-        // them into agreement, which reads as though the two were one thing.
+        // Three statements rather than one union: the columns differ (a suite's display name is
+        // `name`, a case's is `title`, an issue's key is `issue_key`) and the tables are unrelated.
+        // A union would have to alias them into agreement, which reads as though the three were one
+        // thing.
         String sql = switch (type) {
             case TEST_CASE -> """
                     SELECT id, key, title FROM test_case
@@ -89,6 +120,7 @@ class CatalogueFacts {
                        AND id IN (:ids)
                        AND deleted_at IS NULL
                     """;
+            case ISSUE -> ISSUES;
         };
 
         List<?> rows = entities.createNativeQuery(sql)

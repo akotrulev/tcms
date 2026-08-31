@@ -14510,7 +14510,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            sourceType: "TEST_CASE" | "SUITE";
+            sourceType: "TEST_CASE" | "SUITE" | "ISSUE";
             /** Format: uuid */
             sourceId: string;
             /** @example TC-42 */
@@ -14521,12 +14521,17 @@ export interface components {
         };
         BlockLinkInput: {
             /** @enum {string} */
-            sourceType: "TEST_CASE" | "SUITE";
+            sourceType: "TEST_CASE" | "SUITE" | "ISSUE";
             /**
              * Format: uuid
-             * @description A case or suite **of this project**. One belonging to a sibling project is a `404`, not a
-             *     `400`: the row is reachable within the company, so a distinguishing error would answer
-             *     "that case exists, elsewhere" to somebody who cannot see it.
+             * @description A case, suite or issue **of this project**. One belonging to a sibling project is a
+             *     `404`, not a `400`: the row is reachable within the company, so a distinguishing error
+             *     would answer "that case exists, elsewhere" to somebody who cannot see it.
+             *
+             *     **An issue is named here by its id, not by its key**, like every other source — the
+             *     picker shows `ACME-124` and sends the UUID behind it, and `sourceKey` carries the key
+             *     back on the response. One shape for three sources beats a second field that is only
+             *     legal for one of them.
              */
             sourceId: string;
             /**

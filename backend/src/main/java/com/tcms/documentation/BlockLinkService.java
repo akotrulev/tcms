@@ -145,7 +145,7 @@ public class BlockLinkService {
         }
     }
 
-    /** Links a case or suite to a block. */
+    /** Links a case, a suite or an issue to a block. */
     @Transactional
     public Outcome link(
             UUID userId, UUID projectId, UUID pageId, UUID blockId, BlockLinkInput input) {
@@ -156,10 +156,11 @@ public class BlockLinkService {
 
             LinkSourceType sourceType = parseSourceType(input.sourceType());
             if (sourceType == null) {
-                errors.put("sourceType", List.of("Choose what is linking: TEST_CASE or SUITE."));
+                errors.put("sourceType",
+                        List.of("Choose what is linking: TEST_CASE, SUITE or ISSUE."));
             }
             if (input.sourceId() == null) {
-                errors.put("sourceId", List.of("Choose a test case or suite."));
+                errors.put("sourceId", List.of("Choose a test case, a suite or an issue."));
             }
             LinkRelationship relationship = input.relationship() == null
                     ? LinkRelationship.VERIFIES

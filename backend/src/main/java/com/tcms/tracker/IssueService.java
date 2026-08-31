@@ -70,6 +70,7 @@ public class IssueService {
     private final IssueStatusRepository statuses;
     private final IssueTransitionRepository transitions;
     private final TrackerPeople people;
+    private final WatcherService watchers;
     private final ProjectKeys keys;
     private final AuditEventRepository auditEvents;
     private final Outbox outbox;
@@ -82,6 +83,7 @@ public class IssueService {
             IssueStatusRepository statuses,
             IssueTransitionRepository transitions,
             TrackerPeople people,
+            WatcherService watchers,
             ProjectKeys keys,
             AuditEventRepository auditEvents,
             Outbox outbox,
@@ -93,6 +95,7 @@ public class IssueService {
         this.statuses = statuses;
         this.transitions = transitions;
         this.people = people;
+        this.watchers = watchers;
         this.keys = keys;
         this.auditEvents = auditEvents;
         this.outbox = outbox;
@@ -505,10 +508,7 @@ public class IssueService {
                         .map(child -> summaryOf(child, project, typesById, statusesById, refs,
                                 issue, epic, today))
                         .toList(),
-                // T4 builds issue_watcher and the PUT that fills it. An empty list is what this
-                // module can truthfully say today; the field is on the wire so the screen's shape
-                // does not change when the rows arrive.
-                List.of(),
+                watchers.watchersOf(issue.getId()),
                 allowedTransitions(issue, type, statusesById),
                 issue.getCreatedAt(),
                 issue.getUpdatedAt(),

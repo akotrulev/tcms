@@ -870,6 +870,37 @@ class ArchitectureRulesTest {
                             + "project's bindings to resolve bindingId at read time — there is no "
                             + "binding id on either side of the mirror (004 D18) — and that match "
                             + "runs in documentation, against its copy"),
+            // 011 T4's seven, and they are CaseDocLink's three generalised rather than a new
+            // argument. `issue_doc_link` mirrors `doc_link` FIELD FOR FIELD, which is the property
+            // that lets tracker render an epic's linked specification without ever joining a
+            // documentation table on a request path — and the contract's IssueDocLink renders a
+            // page, an excerpt and an external URL, so the git coordinates and the three
+            // EXTERNAL_ISSUE columns are copied and never read back on this side. The readers are
+            // one table over, in documentation's own DocLink, where the same columns DO have
+            // getters. Dropping them here would make the mirror stop mirroring, which is the
+            // property that keeps the boundary intact — so, as with CaseDocLink, this is the rare
+            // case where the reader arriving would be the defect.
+            Map.entry("IssueDocLink.externalRepo",
+                    "011 M1's mirror, and the six below are one decision — CaseDocLink's, one "
+                            + "table over. See the block comment above this entry"),
+            Map.entry("IssueDocLink.externalLineStart",
+                    "externalRepo's decision"),
+            Map.entry("IssueDocLink.externalLineEnd",
+                    "externalRepo's decision"),
+            Map.entry("IssueDocLink.externalCommitSha",
+                    "externalRepo's decision. Unlike CaseDocLink, where the six EXTERNAL_GIT "
+                            + "columns DO have readers, an issue's panel renders the URL and not "
+                            + "the pinned range — so the sha is mirrored for the day it does"),
+            Map.entry("IssueDocLink.externalProvider",
+                    "externalRepo's decision, and CaseDocLink.externalProvider's word for word: "
+                            + "the degraded chip is rendered from documentation's copy"),
+            Map.entry("IssueDocLink.externalIssueId",
+                    "externalRepo's decision. The one a reader would most plausibly reach for, and "
+                            + "the chip that would read it is one table over"),
+            Map.entry("IssueDocLink.externalHost",
+                    "externalRepo's decision. The host is matched against the project's bindings "
+                            + "in documentation, against its copy, and there is no binding id on "
+                            + "either side of either mirror (004 D18)"),
             Map.entry("TrackerIssueCreation.completedAt",
                     "written by succeeded() and failed(), read by nobody, on a table whose header "
                             + "argues it is diagnostic and not recovery. Recovery reads `status`: "
@@ -1057,7 +1088,10 @@ class ArchitectureRulesTest {
      *
      * <p><del>Fourteen</del> <del>thirteen since §157</del> <del>twelve since §158</del> <del>eleven since §159</del>
      * <del>ten since §160</del> <del>eight since §178</del> <del>seven since §181</del>
-     * <del>six since §182</del> <strong>NINE since §188</strong> — and the first time this count has
+     * <del>six since §182</del> <del>nine since §188</del> <strong>TEN since 011 T4</strong>,
+     * whose arrival is the cheap kind this map's own text describes: {@code IssueComment.editedAt}
+     * is on the wire and null in every row, because editing a comment is a feature and not a
+     * wiring fix — and the first time this count has
      * gone <em>up</em>, which is what a corpus narrowing looks like from inside a map that had only
      * ever emptied. The three arrivals are one column on three tables ({@code change_comment} on
      * {@code doc_page_version}, {@code suite_version} and {@code test_plan_version}), and only one
@@ -1147,6 +1181,15 @@ class ArchitectureRulesTest {
             Map.entry("ReportDefinition.sharedWithTeamId",
                     "writerless AND readerless, scheduleCron's shape and the same factory's "
                             + "decision: sharing a saved report with a team is not built"),
+            // 011 T4. Mapped because the contract's IssueComment carries `editedAt` and a client
+            // that renders "edited" needs somewhere to read it from; editing a comment is not
+            // built, so the value is null on every row. Readerless it is NOT — the view sends it —
+            // which is the cheap half of the pair: a column nobody fills is a column nobody is
+            // misled by, and what it costs is one nullable field that is always null.
+            Map.entry("IssueComment.editedAt",
+                    "written by nothing because editing a comment is not built. It is on the wire "
+                            + "so the thread's shape does not change on the day it is, and the "
+                            + "decision is stated at the field"),
             Map.entry("CompanyMembership.avatarUrl",
                     "V1's column for a picture nothing uploads. Already stated on the contract "
                             + "side — api.UserRef's javadoc calls it \"null for everyone today\" — "

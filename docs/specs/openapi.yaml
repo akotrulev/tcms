@@ -14425,7 +14425,9 @@ components:
         # DEFECT and DOC_PAGE are legal in the column and are not offered here: neither has a writer,
         # and enumerating a value nothing can produce makes a client branch on a case it will never
         # see. The column's CHECK stays wider than this enum on purpose.
-        sourceType: { type: string, enum: [TEST_CASE, SUITE] }
+        # ISSUE arrives with 011 M1 (T4) and it is the first source that is not a `repository` row.
+        # It needed no migration: V2 widened doc_link's CHECK one module ahead of its first writer.
+        sourceType: { type: string, enum: [TEST_CASE, SUITE, ISSUE] }
         sourceId: { type: string, format: uuid }
         sourceKey: { type: string, example: TC-42 }
         sourceTitle: { type: string }
@@ -14435,14 +14437,19 @@ components:
       type: object
       required: [sourceType, sourceId]
       properties:
-        sourceType: { type: string, enum: [TEST_CASE, SUITE] }
+        sourceType: { type: string, enum: [TEST_CASE, SUITE, ISSUE] }
         sourceId:
           type: string
           format: uuid
           description: |
-            A case or suite **of this project**. One belonging to a sibling project is a `404`, not a
-            `400`: the row is reachable within the company, so a distinguishing error would answer
-            "that case exists, elsewhere" to somebody who cannot see it.
+            A case, suite or issue **of this project**. One belonging to a sibling project is a
+            `404`, not a `400`: the row is reachable within the company, so a distinguishing error
+            would answer "that case exists, elsewhere" to somebody who cannot see it.
+
+            **An issue is named here by its id, not by its key**, like every other source — the
+            picker shows `ACME-124` and sends the UUID behind it, and `sourceKey` carries the key
+            back on the response. One shape for three sources beats a second field that is only
+            legal for one of them.
         relationship:
           type: string
           enum: [VERIFIES, DERIVED_FROM, REFERENCES]
