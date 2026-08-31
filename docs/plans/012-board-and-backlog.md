@@ -520,6 +520,69 @@ taken it. The lesson for the next agent, since `git add <paths>` alone was not e
 `git log` immediately before an `--amend`, and prefer `git commit -- <paths>` over the index whenever
 another session might be live.**
 
+### D-z — the swimlane board's droppable cannot be a column, and six mockup disagreements
+
+Taken by T7, and the first half is a correction to this plan's own trap note.
+
+**The trap note says *"the droppable id you register per column is `column.id`"*, and on a board with
+swimlanes it cannot be.** A drop target is a **(lane, column) cell**: with a full-width lane header
+between the bands, a column is not one rectangle, it is one per lane, and `@dnd-kit` ids are unique.
+So the id carries both halves — `` `${columnId}|${laneId}` `` — and `ProjectBoardView` parses the
+column back out before calling `resolveColumnMove`, in the same file that spells the scheme. The note
+is right about the *argument*: `resolveColumnMove` still gets a column id and never a name.
+
+**Both keyboard axes come out of that one flat set of cells**, which is what let `laneOrder` be
+satisfied without a second registration: `columnOrder` is the first **expanded** lane's cells (a
+column's x is the same in every lane, and `stepToAdjacentColumn` reads only `left` and `width`), and
+`laneOrder` is the first column's cell down the expanded lanes (which is the y `stepToAdjacentLane`
+reads). A collapsed lane registers no cell, so it is not a stop on either axis — stepping into a band
+a card cannot land in is a dead end, and `measured()` skipping unmeasured bands is what makes that
+free rather than special-cased.
+
+Then the mockup, where 009's precedence rule puts the screen in charge and each of these is a case
+where the screen as drawn cannot be built from what exists:
+
+| Mockup draws | T7 ships | Why |
+|---|---|---|
+| A full `.col-head` row **inside every lane** | column headers **once**, above the lanes | The mockup only ever draws one expanded lane, so it never shows two. Repeating the header repeats one project-wide `breaches` entry per lane, and puts a WIP numerator beside a *lane's* card count, which is not the quantity a WIP limit is about. Under `swimlaneBy=NONE` the result is the mockup exactly. |
+| Coloured label chips | plain chips | `Label.color` is a token name (`label-1` … `label-10`) and **those ten tokens are not declared in `index.css`.** Inventing a hue is the one thing the contract's own comment forbids; the palette is T9's, with the screen that creates labels. |
+| `Configure boards` as a link | disabled, with its reason | `settings-boards.html` is T9's route and does not exist. §31, and the release panel's precedent. |
+| The whole card as an `<a>`, with the `⋮` **inside** it | title is the link, card is an `<article>`, drag is a **handle** | An `<a>` containing a `<button>` is invalid HTML and unreachable in that order, and a whole-card draggable turns every press of the link or the menu into the start of a drag. Both are the composite board's existing resolutions of the same two conflicts. |
+| `TC-311 failed`, `4 cases pass`, `waiting on provider` | none of the three | **A fifth and sixth row for D-f.** `BoardIssueCard` carries no test result and no blocked reason, so each would be a sentence with nothing behind it. |
+| A priority on the card face | absent | Not in B3's face (*"key, type, title, labels, assignee, due date, estimate, sub-tasks"*) and not in the mockup either — the field exists on the payload, and §12.2's instruction is to design the face deliberately rather than let it accrete. |
+
+**A collapsed lane does not survive a reload, and Step 6's comment claimed it would.** `board_swimlane`
+is in `V5` and carries exactly this per-viewer state, and **no endpoint on the contract reaches it** —
+there is no `collapsed` field on `Board`, `BoardContents` or `BoardInput` and no operation of its own.
+So collapse is component state, the roll-up is on screen either way, and persisting it is a contract
+change rather than a screen decision. T9 is where that call belongs if it is taken.
+
+**D-r's open question, answered: the epic's own card is suppressed from the catch-all lane when its
+lane header is already on screen** — and the condition is presence of the **lane**, not the axis
+alone. An epic with no stories has no lane, so suppressing unconditionally would delete it from the
+board; a board that silently omits a kind of work is worse than one showing an unmovable card, which
+is the contract's own argument for putting the epic on the wire at all.
+
+**Two corrections to Step 8's pseudo-code, both found by running it.** `toBeDisabled()` does **not**
+work on a Radix menu item: it is a `div` with `role="menuitem"`, `jest-dom` reads the `disabled`
+*attribute* on form elements only, and the assertion would pass on an item that was never disabled —
+`aria-disabled` is what to read, as `PermissionGate.test.tsx` already does. And the "Moved" text the
+keyboard test waits for never appears: it is an **announcement**, and `TestProviders` mounts no
+announcer, so `useAnnounce` is a no-op — the assertion is on the POST.
+
+**Empty is a state only under a filter**, found by three of T7's own tests asking for a column header
+on a board with no cards. A board with no cards and no filter still has to draw its columns: that is
+the board's shape, it is what a freshly configured one looks like, and replacing it with a sentence
+hides what the reader came to see. A board emptied **by** a filter is the opposite case and does need
+the region, because the reader has to get back off it.
+
+**And `PermissionGate` remounts the control it gates.** The denied branch renders inside a
+`<span role="none">` anchor and the anchor is dropped when the verdict lands, so a node captured
+before the answer is a detached element that stays disabled forever. `ArchiveProject.test.tsx` carries
+the same warning; it cost five minutes again here. **Re-query inside the `waitFor`.**
+
+---
+
 ---
 
 ## File structure
@@ -1187,8 +1250,14 @@ READ, IN THIS ORDER:
      the identical filter strip on each. One filter, in the URL, across every view.
   3. docs/plans/012-board-and-backlog.md — D-f (why there are no release sections), D-c (the rank
      drag is the one optimistic one), and the T8 block.
-  4. frontend/src/features/tracker/WorkTablePage.tsx — the filter useMemo you are extracting. Its
-     comment carries D34's reasoning; the comment MOVES WITH IT.
+  4. frontend/src/features/tracker/WorkTablePage.tsx — one of the TWO filter useMemos you are
+     extracting. Its comment carries D34's reasoning; the comment MOVES WITH IT.
+  4b. frontend/src/features/board/ProjectBoardView.tsx — **the second one, landed by T7, and it is
+     already the `BoardFilters` half of the mapping you are writing.** It reads `labelId[]`,
+     `assigneeId[]`, `epicKey`, `level`, `priority[]` and `unparented` out of the same URL, offers
+     pickers for label/assignee/priority and a **chip with no picker** for the three that arrive from
+     the Table view, and its `clearFilters` keeps `view` and `board` and drops everything else. Two
+     useMemos over one URL is exactly the drift `useWorkFilter` removes; neither is wrong today.
   5. frontend/src/api/queries/projectBoards.ts — T6's `useRankIssue`, with the optimistic patch and
      the snapshot rollback, plus the exported `reorder` it patches with and `useBacklog`.
   6. Story B4, and scope D34.
@@ -1219,9 +1288,31 @@ TRAPS THIS TASK WILL HIT:
   * The filter lives in the URL and NOWHERE ELSE. Not useState, not a store: two views reading one
     filter cannot be a useState in either, and a store is server-state's filter living somewhere the
     URL cannot restore from a pasted link. `useSearchParams`, as everywhere in this SPA.
-  * `view`, `sort`, `cols` and `boardId` are NOT part of the filter object. They are which view you
+  * `view`, `sort`, `cols` and `board` are NOT part of the filter object. They are which view you
     are looking at, not which work — folding them in makes a filter that changes on a tab switch,
-    which evicts every cached list on a tab switch.
+    which evicts every cached list on a tab switch. **`board` is a real parameter now** (T7's picker
+    writes `?board=<id>`), and `clearFilters` must PRESERVE it as well as `view`: clearing a filter
+    set on the stakeholder board and landing on the engineering one is a surprise, and re-picking it
+    is a second step nobody asked for. `ProjectBoardView`'s own `clearFilters` already does this and
+    is the behaviour to keep, not to re-derive.
+  * **THE TWO PICKER SETS ARE NOT THE SAME AND MUST NOT BE MERGED INTO ONE STRIP.** The table offers
+    Level and Status; the board offers Label, Assignee and Priority. `useWorkFilter` unifies how the
+    URL is *read*, not what each view *offers* — a status picker on the board is D-v's incoherent
+    case (it would empty the columns the board is drawn from) and a label picker on the table is
+    D-f's (the table has no label column in M1). What every view does share is a **chip for every
+    applied filter**, including ones its own strip cannot apply, so a reader who narrowed elsewhere
+    can get back off an empty screen.
+  * **`ProjectBoardView` takes one prop, `projectId: string`, and exports nothing else.** T7 kept the
+    board's own controls — the board picker, the grouping select, the keyboard note — inside it, so
+    mounting `BacklogView` beside it is a third arm in `WorkTablePage`'s view switch and no change to
+    the board's signature. If `useWorkFilter` changes that signature, this line is the one to rewrite.
+  * **A backlog row's `⋮` is NOT `MoveToMenu`.** That component moves a card between board *columns*
+    and takes `ServerColumn[]`; a backlog row's menu is about rank and epic. Write the backlog's own
+    rather than widening one whose every sentence is about a workflow transition.
+  * **Empty is a state only under a filter** (D-z), and the backlog wants the same rule: a project
+    with no unranked work still shows the list's chrome, while a list emptied *by* a filter needs
+    `no-filter-match` and the way back off it. Three of T7's tests found the inverse by asking for a
+    column header on an empty board.
   * The ↑ ↓ arrows end in the SAME mutation as the drag. An arrow taking a different path is the
     keyboard route quietly not getting the rollback — exactly the defect class "keyboard parity"
     exists to prevent, arriving through the fix for it.
@@ -1238,7 +1329,9 @@ TRAPS THIS TASK WILL HIT:
 GATE: ~/bin/tcms-remote sync && ~/bin/tcms-remote frontend 'npm run build && npm run lint && npm run test:run'
 
 COMMIT: `git add <paths>` only — BacklogView, useWorkFilter, their tests, ProjectBoardView.tsx and
-WorkTablePage.tsx.
+WorkTablePage.tsx. Expect `ProjectBoardView.test.tsx` and `WorkTablePage.test.tsx` in that list too:
+both mock the same URL the hook will read, and T7's board test asserts on
+`ProjectBoard.Filters.Applied.<key>` chip ids that `useWorkFilter` must keep producing.
 
 CLOSE per "Task hand-off protocol". T9 is the last task and carries the module close-out — if this
 task deferred anything else to M3, add it to D-f so T9's rewrite of the M3 prompt picks it up.
@@ -2976,7 +3069,7 @@ public class BoardConfigController {
 }
 ```
 
-- [ ] **Step 9: Run the gate on shanks and commit**
+- [x] **Step 9: Run the gate on shanks and commit**
 
 ```bash
 ~/bin/tcms-remote sync
@@ -3838,6 +3931,7 @@ keeps columnsFor for the composite board — extended, not forked."
 **Deliverable:** `/projects/:projectId/work?view=board` renders `work-board.html` — swimlanes by
 epic with a collapsible roll-up, the dense card face, a WIP breach in the column header, and a
 `⋮ Move to…` on every card — and the whole board is operable from the keyboard alone.
+**Landed:** `98d547ad`
 **Stack:** `fe`
 **Est. context:** ~145k — `BoardPage.tsx` (38 kB) and `WorkTablePage.tsx` read as patterns, 5
 components created, 2 test files, 3 skills. **One deliverable, one stack, green at the boundary —
@@ -3848,10 +3942,16 @@ large because the screen is, not because two things were merged.**
 - Create: `frontend/src/features/board/ProjectBoardView.tsx`, `Swimlane.tsx`, `BoardCardFace.tsx`,
   `ColumnHeader.tsx`, `MoveToMenu.tsx`
 - Modify: `frontend/src/features/tracker/WorkTablePage.tsx` (the `board` entry in `VIEWS`)
+- Modify, **and neither was on this list** — D-t's finding again, that what a slice touches is what
+  the repository's own checks own rather than what the feature needs:
+  `frontend/src/features/tracker/TypeIcon.tsx` (its `type` prop widened to the three fields it
+  actually reads, because `BoardIssueCard` carries no type **id** and the alternative was a
+  synthesised one) and `frontend/src/features/tracker/WorkTablePage.test.tsx` (whose board assertion
+  was that the `M2` panel linked out to the composite board — a subject this task deleted)
 - Test: `frontend/src/features/board/ProjectBoardView.test.tsx`,
   `frontend/src/features/board/MoveToMenu.test.tsx`
 
-- [ ] **Step 1: Read the two patterns, and the mockup**
+- [x] **Step 1: Read the two patterns, and the mockup**
 
 - `docs/mockups/work-board.html` — **the source of truth for the screen.** Every card has a
   `⋮ Move to…`; chip rows wrap; the board scrolls inside itself; the collapsed lane keeps its
@@ -3863,14 +3963,14 @@ large because the screen is, not because two things were merged.**
 - `frontend/src/features/tracker/WorkTablePage.tsx:70` — `VIEWS`, whose `board` entry is the
   placeholder this task replaces.
 
-- [ ] **Step 2: Replace the `VIEWS` placeholder**
+- [x] **Step 2: Replace the `VIEWS` placeholder**
 
 `VIEWS[0]` currently carries `module: 'M2'` and a sentence about the board arriving with the
 delivery module. Change it to `{ id: 'board', label: 'Board', module: null, body: '', existing: null }`
 and render `<ProjectBoardView />` for it. **Leave the other three placeholders alone** — Timeline and
 Calendar are M3's, and Backlog is T8's.
 
-- [ ] **Step 3: Write `ColumnHeader`, and get the breach right**
+- [x] **Step 3: Write `ColumnHeader`, and get the breach right**
 
 ```tsx
 /**
@@ -3908,7 +4008,7 @@ export function ColumnHeader({ column, count, breach }: Props) {
 }
 ```
 
-- [ ] **Step 4: Write `MoveToMenu` — the affordance WCAG 2.2 requires**
+- [x] **Step 4: Write `MoveToMenu` — the affordance WCAG 2.2 requires**
 
 ```tsx
 /**
@@ -3957,7 +4057,7 @@ export function MoveToMenu({ card, columns, onMove }: Props) {
 **Both affordances end in `resolveColumnMove`**, which is why a refusal reads identically however it
 was attempted — the reason that function is a module and not a handler.
 
-- [ ] **Step 5: Write `BoardCardFace`**
+- [x] **Step 5: Write `BoardCardFace`**
 
 The mockup's card face, and §12.2's *"design the card face deliberately rather than letting it
 accrete"*: type icon · key · `⋮` / title / labels · due date · sub-task badge · estimate · avatar.
@@ -3980,7 +4080,7 @@ label comes from `lib/labels.ts`; the due-date classes are `due-soon` / `due-ove
 card's own `overdue` — computed server-side at read time, never stored, because a stored flag needs a
 job to flip it and is wrong for a day at a time.
 
-- [ ] **Step 6: Write `Swimlane`**
+- [x] **Step 6: Write `Swimlane`**
 
 ```tsx
 /**
@@ -4004,7 +4104,7 @@ The lane header carries the completion meter and its **basis** — `by estimate`
 10` — because `IssueCompletion.basis` is on the wire deliberately and a percentage that changes
 meaning silently is D8's named failure.
 
-- [ ] **Step 7: Write `ProjectBoardView`**
+- [x] **Step 7: Write `ProjectBoardView`**
 
 Owns the board picker, the grouping control, the `@dnd-kit` context, and the `DataRegion`
 loading/loaded/failed/empty/stale matrix. Filter comes from the URL (T8 extracts the shared hook;
@@ -4029,7 +4129,7 @@ here it is read the way `WorkTablePage` already reads it).
   }
 ```
 
-- [ ] **Step 8: Write the tests**
+- [x] **Step 8: Write the tests**
 
 ```tsx
 it('shows a WIP breach in the header and leaves the card in the column', async () => {
@@ -4444,14 +4544,47 @@ rendered nothing but the error page, all of which typechecked and linted clean.
       suite compares a handler's status codes to the declared set, so this is invisible to the gates
       and is a contract gap for whoever next owns `openapi.yaml`, beside D-q's stale `afterKey`
       sentence.
-- [ ] **An epic card rendered.** D-r puts an epic on the board with a derived status and no legal
+- [x] **An epic card rendered.** D-r puts an epic on the board with a derived status and no legal
       moves, and in the catch-all lane under `swimlaneBy=EPIC`. Whether that reads as sensible on
-      `work-board.html` beside the epic's own lane header is a question only T7 can answer.
+      `work-board.html` beside the epic's own lane header is a question only T7 can answer. →
+      **answered, and the answer is that it does not** (D-z): the epic's card is suppressed from the
+      catch-all lane when its own lane header is on screen, because the header already carries the
+      epic **and** a roll-up over its children, and the card would carry a derived status beside it.
+      An epic with **no** lane of its own keeps its card, so nothing disappears. Two unit tests, one
+      per arm; nobody has looked at either on a screen.
 - [ ] A WIP limit actually breached by dragging a fourth card, rather than by `tcmsFaults.wip()`.
 - [ ] A rank drag interrupted by a real concurrent edit, rather than by `tcmsFaults.rank('conflict')`.
 - [ ] The whole board operated with **no pointer at all** — tab to a card, `⋮`, move, and back —
       which is the criterion, and which a component test asserting the menu's `disabled` attribute
-      does not establish.
+      does not establish. → **half of it is now asserted and the half that matters is not.** T7's
+      keyboard test tabs from the card's drag handle to the `⋮`, opens the menu with `Enter`, walks
+      with `ArrowDown` — which is also the assertion that Radix skips the disabled entries, since a
+      focus landing on the card's own column would fail it — and commits with `Enter`, and the POST
+      carries the right column id. What no test establishes is the **journey**: whether a person can
+      find the handle, whether the focus ring is visible on the paper surface at 1280, and whether the
+      lane-collapse toggles and the filter pickers sit in a tab order anybody would call sensible.
+- [ ] **The board rendered at all.** T7's gate is 18 + 8 component tests, `npm run build` and oxlint;
+      none of them is a browser. The three-column-header-plus-lane-grids layout in particular is two
+      CSS grids on one `--board-columns` template, aligned only because the columns are a fixed
+      272px — a claim jsdom applies no stylesheet to and cannot check.
+- [ ] **A drag, of any kind, on this board.** `resolveColumnMove` has twenty-seven unit assertions and
+      the menu path is driven end to end, but no test lifts a card: the cell droppable ids, the
+      `pointerWithin` collision on a nested-free flat cell set, and the `DragOverlay` copy are all
+      unexercised. The keyboard **drag** (as opposed to the menu) is the same gap one layer up — D-z's
+      `columnOrder`/`laneOrder` derivation is reasoned from `boardKeyboard.ts`'s own rect tests and
+      has never been fed real `droppableRects`.
+- [ ] **A board with two expanded lanes.** Every swimlane test collapses one or renders one, so the
+      shape D-z's column-header decision was taken *for* has not been looked at. The same goes for a
+      board whose columns overflow: `overflow-x-auto` is on the right element and nothing has scrolled
+      it.
+- [ ] **The grouping picker changing a real board.** It sends a full `BoardInput` with every column's
+      id carried back, asserted against a mock; what nobody has seen is the round trip — whether the
+      server keeps the six columns, and whether the board relayouts (D-h's whole concern) when its
+      configuration key is invalidated with its cards' key untouched.
+- [ ] **A label chip with no colour, next to the ten tokens that do not exist.** D-z: `Label.color` is
+      `label-1` … `label-10` and `index.css` declares none of them, so chips are plain. Whether a
+      board whose labels are §12.2's *"primary scanning device"* still scans without them is a
+      judgement nobody has made in front of one, and the palette is T9's to add.
 - [ ] A status added on `settings-workflow` and then seen on `settings-boards` in its auto-claimed
       column, on **both** boards.
 - [x] A rebalance actually triggered — 40+ squeezes against one neighbour — and the order seen to be
