@@ -429,6 +429,99 @@ and two tools arrived — with a consent prompt on the delete arm — without a 
 
 ---
 
+### D-u — the board's cards get a key root of their own, because D-h's shape cannot express D-h's reason
+
+Taken by T6, and it is the plan's own step 2 corrected by the argument that step's comment makes.
+
+The plan spelled the cards `['boards', id, 'cards', filters]`, under the configuration key. TanStack
+matches an invalidation **by prefix**, and that shape then cannot deliver either half of what D-h
+asks for:
+
+| What D-h wants | What `['boards', id, 'cards', …]` does |
+|---|---|
+| editing a board's columns must not evict its cards, "or the layout would flicker" | `invalidateQueries(['boards', id])` evicts the cards too, on every column edit |
+| a move on one board must refresh the *other* board over the same project | reaching every board's cards needs `['boards']`, which evicts every board's **configuration** as well |
+
+So configuration stays at `['boards', id]` and the cards move to `['board-cards', id, filters]`, with
+`keys.boardCardsRoot = ['board-cards']` as the prefix a move targets. Two roots give both properties;
+one root gives neither, and the failure has no error and no empty screen — it is a board that
+relayouts under the reader's hand, and an order half a minute stale on the board they switched to
+(`staleTime` is 30 s).
+
+### D-v — the board's filter is its own type, not the table's, and not one widened to cover both
+
+Taken by T6. `BoardFilters` is a new interface in `api/types.ts` beside `IssueFilters`, and the two
+differ **in both directions** — which is why widening one was refused rather than deferred:
+
+| | `IssueFilters` (the table) | `BoardFilters` (board + backlog) |
+|---|---|---|
+| has | `statusId[]`, `parentKey` | `labelId[]`, `priority[]` |
+| lacks | `labelId`, `priority` | `statusId`, `parentKey` |
+
+A single interface would let a screen send a parameter its endpoint answers 400 for, and a status
+filter over a *board* is the incoherent one on its face: it would empty the columns the board is
+drawn from. **T8 owns the reconciliation** — `useWorkFilter` has to read one URL and hand each view
+the subset its endpoint declares, which is a mapping and not a cast.
+
+### D-w — the WIP breach reaches the reader twice, from two different facts
+
+Taken by T6. The plan's pseudo-code raised it as `notify.warning(...)`, and there is no `notify` in
+this repository — the transient surface is `notifications/toast.ts`'s module function. That is a
+spelling. The decision underneath it is that there are **two** surfaces and they carry two different
+sentences, because they answer two different questions:
+
+| Surface | Source | Says |
+|---|---|---|
+| a **warning toast**, raised by `useMoveCard` | `CardMoveResult.breach` | *your drop* put this column over — the moment, and it is a `warning` on a 200, never an error |
+| the **column header**, rendered by T7 | `BoardContents.breaches` | this column *is* over, counted over the whole project and not shrinking under a filter |
+
+The toast is in the mutation rather than in the screen deliberately: it is the only place the move's
+own result exists, `toast()` needs no provider, and T7 therefore cannot forget it. It does **not name
+the column** — `WipBreach` carries `columnId`, `limit` and `count` and no name, and looking one up
+from a cache the same handler has just invalidated is a name that can disagree with the board.
+
+`tcmsFaults.wip()` proves the first and not the second, and that is a property of the seam rather
+than a gap: it sits in front of `fetch` and can only *replace* a response, so faulting the cards read
+would mean fabricating a whole board rather than adding a breach to the real one. Its
+`CardMoveResult.card` is a placeholder for the same reason — the seam never sees the request body, so
+there is no target column to answer about. Nothing reads it.
+
+### D-x — `serverColumnsOf` exists because this is the one mapping TypeScript cannot check
+
+Taken by T6, and it is the one place the task added a function the plan did not ask for.
+
+`ServerColumn.statusIds` is `readonly string[]`. An `IssueStatusRef`'s **name** is a string too. So
+`statusIds: column.statuses.map((s) => s.name)` typechecks, lints at zero warnings, and then makes
+`resolveColumnMove` refuse every legal drop on every board — because no column's status ids are its
+status names. There is no error, no empty region and no failed request; there is a board on which
+nothing can be dragged, which reads as a broken `@dnd-kit` wiring and is a one-word mistake three
+files away.
+
+Everywhere else in this slice the types carry the claim. Here they cannot, so an assertion does:
+`serverColumnsOf` is the one mapping from `BoardColumnConfig[]` to `ServerColumn[]`, in `cardMove.ts`
+beside the decision it feeds, with a test that says `not.toContain(PROGRESS.name)` out loud. It also
+holds the `wipLimit ?? null` that keeps *no limit* and *zero* apart, which a `||` collapses.
+
+### D-y — T5 and T6 overlapped in one working tree, and the recovery is worth writing down
+
+Not a design decision. **Two sessions committed into this checkout inside the same minute**, which
+CLAUDE.md's *"Running work in parallel — don't"* exists to prevent, and the damage was exactly the
+shape that section predicts: silent.
+
+T6's code commit landed as `99133dbc`. T5 then committed `a7be32cc` and its plan edit `8505a6bd` on
+top. T6's follow-up `git commit --amend` — written against a `git log` that had been true when it was
+read — amended **T5's plan commit**, folding two frontend files into `docs(plan): 012 T5 landed`.
+Nothing failed, nothing conflicted, and `git status` was clean throughout.
+
+Recovered with `git reset --soft 8505a6bd`, which restored T5's commit byte-for-byte and left T6's
+two files staged, then committed by **pathspec** (`git commit -- <paths>`) rather than from the index
+— because by then the other session had staged a file of its own, and committing the index would have
+taken it. The lesson for the next agent, since `git add <paths>` alone was not enough: **re-read
+`git log` immediately before an `--amend`, and prefer `git commit -- <paths>` over the index whenever
+another session might be live.**
+
+---
+
 ## File structure
 
 **New backend — `backend/src/main/java/com/tcms/tracker/board/`** (one package, no module):
@@ -989,7 +1082,11 @@ READ, IN THIS ORDER:
      file; share the decision through cardMove.ts.
   4. frontend/src/features/tracker/WorkTablePage.tsx — especially VIEWS at line 70, whose `board`
      entry is the placeholder you replace, and the filter useMemo at ~line 148.
-  5. frontend/src/features/board/cardMove.ts — T6's `resolveColumnMove` and `columnRefusalFor`.
+  5. frontend/src/features/board/cardMove.ts — T6's `resolveColumnMove`, `columnRefusalFor` and
+     `serverColumnsOf`, all at the FOOT of the file; everything above them is the composite board's
+     and is untouched.
+  8. frontend/src/api/queries/projectBoards.ts — the fourteen hooks, and the module header's account
+     of why one mutation is optimistic and the other is not.
   6. Story B3, and scope §12.2 ("design the card face deliberately rather than letting it accrete").
   7. D-r — an EPIC arrives as a card, with a derived status and an EMPTY `allowedTransitions`. Its
      lane under `swimlaneBy=EPIC` is the catch-all "No epic" one, because it has no epic above it.
@@ -1003,6 +1100,35 @@ module boundaries, what is written where — the plan and the scope spec win. Re
 disagreement in the plan; never resolve one silently.
 
 TRAPS THIS TASK WILL HIT:
+  * THE SIGNATURES T6 LANDED, and three came out different from this plan's pseudo-code:
+      - `resolveColumnMove(card: BoardIssueCard | null, over, columns: readonly ServerColumn[])`
+        takes `over` as a COLUMN ID, not a name — a project board's columns are rows with real ids
+        and two of them may legitimately share a name. So the droppable id you register per column
+        is `column.id`.
+      - `ServerColumn` is NOT the contract's `BoardColumnConfig`. Map with **`serverColumnsOf(board.columns)`**
+        and do not hand-write the map: `statusIds` is `readonly string[]` and a status NAME is a
+        string too, so the wrong half typechecks and then refuses every legal drop with no error
+        anywhere (D-x). That is the whole reason the function exists.
+      - `useMoveCard(boardId, projectId)` takes TWO arguments — it invalidates project-scoped keys as
+        well as `keys.boardCardsRoot`, and a `CardMoveResult` carries no project id to recover one
+        from. It is NOT optimistic; `meta.handled` is set, so the screen owns the refusal copy.
+      - `useBoardCards(boardId, filters: BoardFilters)` and `useBoardConfig(boardId)` are two reads
+        with two keys (D-h/D-u). `BoardFilters` is in `api/types.ts` and is NOT `IssueFilters` — see
+        D-v before you wire the filter strip.
+      - `boardKeyboardCoordinates(columnOrder, laneOrder)` — `laneOrder` is a list of DROPPABLE IDS
+        for the lane bands, top to bottom, so a swimlane board must register a droppable per band or
+        up/down silently keeps the 25px nudge (an empty `laneOrder` IS the one-lane case).
+      - `swimlaneByLabels` is in `lib/labels.ts`; the ten new fixtures are `aBoardIssueCard`,
+        `boardContents`, `aBoardLane`, `aBoardConfig`, `aBoardSummary`, `aBacklogRow`, `aRankResult`,
+        `aCardMoveResult`, `anIssueLabel` and `aCompletion`.
+  * THE BREACH REACHES THE READER TWICE AND YOU OWN THE SECOND HALF (D-w). `useMoveCard` already
+    raises a warning toast from `CardMoveResult.breach` — do not raise a second one. What is missing
+    is the COLUMN HEADER, fed from `BoardContents.breaches`, which is counted over the project and
+    does not shrink under a filter. Render it as sent.
+  * A CARD WITH AN EMPTY `allowedTransitions` GETS NO MOVE AFFORDANCE AT ALL — not a disabled menu of
+    every column. `columnRefusalFor` answers with one fact about the epic and deliberately does not
+    name the target, so a menu would repeat one sentence per column. `immobileReason` is the
+    composite board's equivalent and names derived sources; it is the WRONG one here.
   * FOUR THINGS THE MOCKUP DRAWS THAT YOU MUST NOT (D-f): the `AI` tag and the "AI-eligible" filter
     chip (issue.agent_eligible is M5), the `PR #482` badge (M5), and logged hours (M6). The mockup
     draws the finished product. Drawing them now needs fields nothing writes.
@@ -1064,7 +1190,7 @@ READ, IN THIS ORDER:
   4. frontend/src/features/tracker/WorkTablePage.tsx — the filter useMemo you are extracting. Its
      comment carries D34's reasoning; the comment MOVES WITH IT.
   5. frontend/src/api/queries/projectBoards.ts — T6's `useRankIssue`, with the optimistic patch and
-     the snapshot rollback.
+     the snapshot rollback, plus the exported `reorder` it patches with and `useBacklog`.
   6. Story B4, and scope D34.
   7. D-q and D-r — the backlog EXCLUDES epics (so the rows you rank are stories and tasks only, and
      `position` is 1-based over what came back), and a rank write sends EXACTLY ONE of
@@ -1076,6 +1202,20 @@ TRAPS THIS TASK WILL HIT:
     18 Sep" and "Unscheduled"; `release` is M3's table and issue_fact.release_id is NULL until then,
     so the grouping would be one section called "Unscheduled" containing everything — which looks
     like a defect rather than an unbuilt feature. Bulk actions ship as Set epic and Assign only.
+  * `useRankIssue(projectId).mutate` TAKES A `RankPlacement`, which is a UNION:
+    `{ key, afterKey }` OR `{ key, beforeKey }` — never both, never neither, and the union is what
+    makes the two payloads the server answers 400 for unconstructible (D-q). `reorder(rows, placement)`
+    is exported beside it and is the same function the optimistic patch uses, so the ↑ ↓ arrows and
+    the drag cannot disagree about where a row lands.
+  * THE ROLLBACK AND THE PATCH TARGET `keys.backlogRoot(projectId)`, every filter's list at once — so
+    a drag on a filtered list already reorders the unfiltered one, and already rolls both back. Do
+    not add a second, filter-scoped patch beside it.
+  * `BoardFilters` IS NOT `IssueFilters` AND THE RECONCILIATION IS YOURS (D-v). One URL, three
+    endpoints, and the parameter sets differ in BOTH directions: the table takes `statusId[]` and
+    `parentKey`, the board and backlog take `labelId[]` and `priority[]`. `useWorkFilter` reads the
+    URL once and hands each view the subset ITS endpoint declares — a mapping, not a cast. Sending a
+    board a `statusId` is a 400, and it is also incoherent on its face: a status filter would empty
+    the columns the board is drawn from.
   * The filter lives in the URL and NOWHERE ELSE. Not useState, not a store: two views reading one
     filter cannot be a useState in either, and a store is server-state's filter living somewhere the
     URL cannot restore from a pasted link. `useSearchParams`, as everywhere in this SPA.
@@ -3340,12 +3480,20 @@ becomes swimlane-aware — **both extended, neither forked** — and all of it i
 **Stack:** `fe`
 **Est. context:** ~110k — 6 existing files read, 1 created, 4 modified, 3 test files, 2 skills
 **Depends on:** T4
+**Landed:** `99133dbc` + `6bf9885a`
 
-**Files:**
+**Files** — three the list did not name, and each was demanded by a check rather than by the feature
+(D-t's finding, met again):
 - Create: `frontend/src/api/queries/projectBoards.ts`
 - Modify: `frontend/src/lib/devFaults.ts`, `frontend/src/api/queries/keys.ts`,
   `frontend/src/api/queries/index.ts`, `frontend/src/features/board/cardMove.ts`,
   `frontend/src/features/board/boardKeyboard.ts`, `frontend/src/lib/labels.ts`
+- Also modified: **`frontend/src/api/types.ts`** (the eleven M2 aliases and `BoardFilters` — `keys.ts`
+  needs the filter type and a type-only import from `projectBoards.ts` would be a cycle),
+  **`frontend/src/test/fixtures.ts`** (ten factories: §203's exchange check compares every doubled
+  body to `openapi.yaml`, and the house rule is a factory per resource), and
+  **`frontend/src/api/queries/board.ts`** (one line for the `keys.workItems` rename, plus the header
+  sentence that promised the name would not move)
 - Test: `frontend/src/features/board/cardMove.test.ts` (extend),
   `frontend/src/features/board/boardKeyboard.test.ts` (extend),
   `frontend/src/api/queries/projectBoards.test.tsx` (new)
@@ -3354,7 +3502,7 @@ becomes swimlane-aware — **both extended, neither forked** — and all of it i
 > M2 prompt repeats it. A resilience behaviour you cannot trigger is one you have not tested, and
 > neither a rank conflict nor a WIP breach can be produced by using the app normally.
 
-- [ ] **Step 1: Extend `devFaults.ts`**
+- [x] **Step 1: Extend `devFaults.ts`**
 
 ```ts
 /** Which fabricated failure the rank endpoint answers with. */
@@ -3391,7 +3539,7 @@ Add to `FaultState`: `rank: RankFault | null` and `wip: boolean`. Add the two ar
 **Both guards stay a literal `import.meta.env.DEV`.** Route the check through an imported constant
 and Rollup keeps the module in the production build.
 
-- [ ] **Step 2: Add the keys, to the one factory**
+- [x] **Step 2: Add the keys, to the one factory**
 
 In `keys.ts` — **never a second factory**:
 
@@ -3420,7 +3568,7 @@ In `keys.ts` — **never a second factory**:
 While here, rename `keys.workItems` to `keys.compositeBoard` — it names a table that has not existed
 since `V4`, and this module is about to add three keys with "board" in the name.
 
-- [ ] **Step 3: Write `projectBoards.ts`, with the one optimistic mutation in the module**
+- [x] **Step 3: Write `projectBoards.ts`, with the one optimistic mutation in the module**
 
 ```ts
 /**
@@ -3492,7 +3640,7 @@ export function useRankIssue(projectId: string) {
 
 Every call carries the per-endpoint-class timeout budget the module already threads through.
 
-- [ ] **Step 4: Extend `cardMove.ts` — a second entry point, not a second file**
+- [x] **Step 4: Extend `cardMove.ts` — a second entry point, not a second file**
 
 ```ts
 /**
@@ -3572,7 +3720,7 @@ export function columnRefusalFor(card: BoardIssueCard, target: ServerColumn): st
 }
 ```
 
-- [ ] **Step 5: Extend `boardKeyboard.ts` for swimlanes**
+- [x] **Step 5: Extend `boardKeyboard.ts` for swimlanes**
 
 ```ts
 /**
@@ -3596,7 +3744,7 @@ export function boardKeyboardCoordinates(
 The existing single-argument callers keep working — `laneOrder` defaults to empty, and an empty lane
 list is the "one lane" case.
 
-- [ ] **Step 6: Extend the two test files**
+- [x] **Step 6: Extend the two test files**
 
 ```ts
 describe('resolveColumnMove', () => {
@@ -3636,7 +3784,7 @@ describe('resolveColumnMove', () => {
 Add to `boardKeyboard.test.ts` a case proving up/down crosses a lane with lanes present, and keeps
 the 25px nudge with none.
 
-- [ ] **Step 7: Write the query test — the rollback is the point**
+- [x] **Step 7: Write the query test — the rollback is the point**
 
 Use `createTestQueryClient`. **Never build your own `QueryClient`** — only that one has the caches.
 A test whose render trips an error boundary fails unless it calls `drivingAFailedWrite()` and says
@@ -4338,6 +4486,35 @@ rendered nothing but the error page, all of which typechecked and linted clean.
       every credential width measured, including the empty one, and whether *"a board is a LENS"*
       actually stops an assistant reporting a card move as board-local is not something a byte count
       can answer.
+
+- [ ] **`tcmsFaults.rank('conflict')`, `rank('rebalance')` and `wip()` have never been switched on in
+      a browser.** T6's gate drives all three *behaviours* through `projectBoards.test.tsx` — the
+      snap-back, the dropped patch, the warning — but it drives them by mocking `api.put`/`api.post`,
+      not by arming the console switch. So what is proven is the handlers; what is unproven is that
+      `verdictFor`'s two new arms fire on the paths they anchor on (`PUT /issues/{key}/rank` and
+      `POST /boards/{id}/cards/{key}/move`), against a real backend, with the fault console installed.
+      The anchored regexes are the part to look at first: an unanchored `startsWith('/issues')` would
+      have faulted the detail read, which is the mistake the existing arms document.
+- [ ] **`resolveColumnMove` reached by an actual drag.** Twenty-seven unit assertions cover the
+      decision, and `cardMove.ts`'s own header says why that is the right place for it — but nothing
+      has passed it an `over` from `@dnd-kit`, and the value it receives is a `UniqueIdentifier` the
+      board's own droppable registration decides. A board that registers its droppables on the
+      column NAME rather than its id gets `{ outcome: 'NONE' }` on every drop: no error, no request,
+      a board where drag silently does nothing. T7 owns it.
+- [ ] **Up/down crossing a swimlane.** `stepToAdjacentLane` is asserted on rects, symmetrically with
+      the column step and over deliberately unequal lane heights. What no test can establish is that
+      T7 registers a droppable per lane band and passes those ids as `laneOrder` — without that the
+      getter falls through to `@dnd-kit`'s 25px nudge, which is the state the plan calls *"technically
+      keyboard accessible and not usable"* and which looks identical to a board with one lane.
+- [ ] **The WIP warning's sentence read by a person.** It says *"That column now holds 4 of a 3
+      limit. The move went through — a WIP limit is reported, not enforced."* and deliberately does
+      not name the column (D-w). Whether "that column" is unambiguous a beat after a drop, on a board
+      with eight lanes and the toast bottom-right, is a judgement nobody has made against a screen.
+- [ ] **Every hook in `projectBoards.ts` except two.** `useMoveCard` and `useRankIssue` are driven;
+      the twelve reads and label/board writes are one-liners whose keys, budgets and paths typecheck
+      against the contract and have no caller until T7, T8 and T9. `useUpdateBoard` is the one with a
+      behaviour worth doubting — it invalidates `keys.board(board.id)` from the RESPONSE's id rather
+      than the argument, which is right and is untested.
 
 ---
 
