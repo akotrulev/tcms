@@ -141,6 +141,20 @@ Story **B3's** swimlane list is *epic, assignee, label, release, priority*. **M2
 `release` is added by M3, which is one entry in a `Record<Union, …>` and a compile error until it is
 labelled — the mechanism `lib/labels.ts` exists for.
 
+**T8 added a fifth and sixth row, and both are M3's** (012 T8):
+
+| Mockup shows | M2 ships | Why |
+|---|---|---|
+| The backlog's **`Est` `12h`** and **`Release: 2.4`** chip in the filter strip | the estimate, **not** the release chip | `BacklogRow.estimateHours` is on the wire and is drawn; there is no `releaseId` filter on `GET /projects/{id}/backlog` and no `release` on the row, so the chip would filter nothing. Story B4's second criterion — *"filter the backlog to a release, and see only that release's issues"* — is M3's with the section grouping. |
+| The backlog's **`AI` tag** on `ACME-126` | not drawn | `issue.agent_eligible` is D30/M5, as on the card. |
+
+**And a Spike is not drawn as a Spike in the backlog.** `BacklogRow` carries `typeName`, `typeLevel`
+and `iconCode` and **no `countsTowardCompletion`**, which is the only field that separates a Spike
+from a Story (`TypeIcon`'s own header says so) — so a backlog row's glyph is the level's green `S`
+where the board's is the amber `?`. T8 widened `TypeIcon`'s prop to make the absence *say* absent
+rather than default to false; adding the field to `BacklogRow` is a contract change and belongs to
+whoever next owns the contract, not to a screen.
+
 ### D-g — The auto-claim is a direct call, not an event
 
 *"A status created after the board exists"* (009 review R13): `WorkflowService` and
@@ -580,6 +594,80 @@ the region, because the reader has to get back off it.
 `<span role="none">` anchor and the anchor is dropped when the verdict lands, so a node captured
 before the answer is a detached element that stays disabled forever. `ArchiveProject.test.tsx` carries
 the same warning; it cost five minutes again here. **Re-query inside the `waitFor`.**
+
+### D-aa — `useWorkFilter` returns an object, hands out two subsets, and owns the chips as well as the read
+
+Taken by T8, and it is three departures from the shape this plan predicted, each forced by something
+the prompt itself named.
+
+**The signature is an object, not the `[WorkFilters, mutate]` tuple.** Three views need five things
+from the hook — the filters, `setParam`, `appendOnce`, `dropOne` and `clearFilters` — and a
+five-tuple's positional meaning is carried by nothing. `appendOnce` and `dropOne` are not
+conveniences: a repeated query parameter has no `set`, so appending a value already present sends it
+twice and removing one means rewriting the whole family, and both were already spelled identically in
+`ProjectBoardView`.
+
+**`WorkFilters` has two members rather than being one shape**, which is D-v arriving at the place
+that has to act on it: `filters.issue` is what `GET /issues` declares and `filters.board` is what
+`/boards/{id}/cards` and `/projects/{id}/backlog` declare. The hook's tests are mostly assertions of
+**absence** — that `filters.board` has no `statusId`, that `filters.issue` has no `labelId` — because
+that is the only way this hook can be wrong.
+
+**The applied chips moved into it too**, as `useBoardFilterChips`. The board and the backlog read the
+same six parameters and therefore need the same six chips, and the drift `useWorkFilter` was written
+to remove would have grown straight back as two chip lists — the first thing to drift between them
+being *which* filters get a chip at all. It is a hook rather than a function because two of the six
+labels are names it has to look up (`useLabels`, `useProjectMembers`); both are already in the cache
+under the same keys the screens use, so it costs no request.
+
+**The consequence for the table is a defect this task fixed rather than introduced.** Applying the
+rule *a chip for every filter this endpoint applies, whether or not this strip can apply it* to
+`IssueFilters` found `epicKey` and `parentKey` with neither chip nor picker — so a reader who
+narrowed to one epic on the Board and switched to Table was looking at a narrowed table with nothing
+on screen saying so. `labelId` and `priority` deliberately get **no** chip on the Table: `GET /issues`
+does not take them, so a chip there would claim a filter the list is not under.
+
+### D-ab — the backlog's `↑ ↓` needs no `KeyboardSensor`, its bulk bar needs an endpoint that does not exist, and its gate cannot be a `PermissionGate`
+
+Taken by T8. Three things the task had to decide, none of which the prompt could have known.
+
+**There is no `KeyboardSensor` on the backlog and the absence is the design.** The board needed a
+custom coordinate getter because a column change had no other keyboard shape until `⋮ Move to…`; a
+list has two labelled buttons per row, and this plan's own Step 4 says the arrows *"are not a
+fallback: they are the better keyboard path"*. Both affordances build a `RankPlacement` through one
+expression — `toIndex < fromIndex ? beforeKey : afterKey` over the row at `toIndex` — so a drag onto
+a row and an arrow press cannot land in different places, which is the whole of the step's argument.
+
+**`Set epic` and `Assign` are N `PATCH`es, because the contract has no bulk operation over issues.**
+`POST /cases/bulk` and `.../executions/bulk` exist and this is not one of them, so
+`useBulkUpdateIssues` runs `Promise.allSettled` and returns `{ applied, failed }` — never rejecting,
+because a mixed outcome is the ordinary one and `ui-rules` §5 is explicit that a blanket success toast
+over a partial failure is the worse half of the defect. The bar names the rows that failed and
+**keeps them selected**, which is what makes "try again" mean the ones that did not. A real batch
+endpoint is the better answer at a hundred rows and is `be` work nobody has asked for.
+
+**`Set epic` is refused over a `TASK`-level row before the request.** The contract's depth rule
+answers 400 for *"a parent more than one level above the child"*, so a Task's parent is a Story and
+setting an epic on one is a guaranteed rejection. `typeLevel` is on every backlog row, so the client
+knows — and `ui-rules`' rule is that an action the backend will always refuse in this state is
+disabled with its reason, not rendered and rejected.
+
+**And the rank gate is `useCan`, not `PermissionGate`.** The gate's denied branch wraps its child in
+a tooltip-triggering `<span role="none">`, which is right around one control and wrong around an
+`<ol>`: a span containing a list is invalid HTML, and the tooltip would open over every row. So the
+verdict comes down as two props and each disabled control carries the reason on its own `title` —
+which is what the gate would have produced per control anyway. **`ProjectBoardView` has the same
+shape one file over**, wrapping `lanes.map(...)` in a `PermissionGate`, and it was left alone: it is
+not this task's defect and the fix is a separate, scoped change.
+
+**Two test shapes that would have passed against no implementation at all.** `onSettled` invalidates
+on **both** paths, so the read double answers with the order it always had and a naive optimistic
+test asserts the fixture rather than the patch — the first cut of *"reorders before the server
+answers"* failed for exactly that reason. Both halves are now held open by hand: the `PUT` stays
+pending while the reordered list is asserted, and in the rollback test the **refetch** stays pending
+too, which leaves the snapshot restore as the only thing that could have moved the row back. And
+`PATCH /issues/{key}` answers with the whole `Issue` — a double returning `{}` is eleven contract
+violations, which is `contractDoubles.ts` doing its job.
 
 ---
 
@@ -4198,6 +4286,7 @@ breach is reported in the column header and the drop still lands."
 **Deliverable:** `?view=backlog` renders `work-backlog.html` as one ranked list where every row has
 an `↑ ↓` pair and a drag handle, both persisting; and a filter set on Board is still applied after
 switching to Table or Backlog, and is shareable as a URL.
+**Landed:** `8dc709e3`
 **Stack:** `fe`
 **Est. context:** ~120k — `WorkTablePage.tsx` read and modified, 2 components created, 1 hook, 3
 test files, 3 skills
@@ -4207,8 +4296,16 @@ test files, 3 skills
 - Create: `frontend/src/features/board/BacklogView.tsx`, `frontend/src/features/board/useWorkFilter.ts`
 - Modify: `frontend/src/features/tracker/WorkTablePage.tsx`,
   `frontend/src/features/board/ProjectBoardView.tsx`
+  — **and three the list did not predict** (D-ab): `frontend/src/api/queries/issues.ts` +
+  `frontend/src/api/queries/index.ts` (`useBulkUpdateIssues`, because there is no bulk endpoint over
+  issues) and `frontend/src/features/tracker/TypeIcon.tsx` (`countsTowardCompletion` widened to
+  optional, because `BacklogRow` does not carry it)
 - Test: `frontend/src/features/board/BacklogView.test.tsx`,
-  `frontend/src/features/board/useWorkFilter.test.tsx`
+  `frontend/src/features/board/useWorkFilter.test.tsx`,
+  `frontend/src/features/tracker/WorkTablePage.test.tsx`.
+  **`ProjectBoardView.test.tsx` needed no edit**, which is the result worth having: its
+  `ProjectBoard.Filters.Applied.<key>` chip ids and its `/boards/b1/cards?labelId=…` path assertion
+  both survived the extraction unchanged
 
 - [ ] **Step 1: Extract `useWorkFilter` from `WorkTablePage`**
 
@@ -4356,7 +4453,10 @@ document and 009's status table are closed out.
 **Files:**
 - Create: `frontend/src/features/settings/BoardSettingsPage.tsx`,
   `frontend/src/features/settings/ColumnEditor.tsx`
-- Modify: `frontend/src/app/router.tsx`, `frontend/src/features/settings/` (the settings subnav)
+- Modify: `frontend/src/app/router.tsx`, `frontend/src/features/settings/` (the settings subnav),
+  and **`frontend/src/features/board/ProjectBoardView.tsx`** — its `Configure boards` button is
+  disabled with *"arrives with the board settings screen"* on it, and this is the task that makes
+  the sentence false. Turn it into a `RouterLink` to the route Step 1 registers.
 - Test: `frontend/src/features/settings/BoardSettingsPage.test.tsx`
 - Docs: `docs/features.md`, `docs/specs/2026-08-08-mcp-tool-and-command-surface.md`,
   `docs/plans/009-project-management-expansion-modules.md`, `docs/plans/012-board-and-backlog.md`
@@ -4365,6 +4465,26 @@ document and 009's status table are closed out.
 
 `settings-boards.html`'s subnav is `General · Workflow · **Boards** · Repositories · Imports`.
 Repositories is M5's and Imports is M4's — **add only Boards**, at the mockup's position.
+
+**Then enable the two controls that have been naming this screen as their reason.**
+`ProjectBoardView`'s `Configure boards` button is `disabled` with a `title` saying the settings
+screen has not arrived; once the route exists that sentence is false and the button is a link. Grep
+for the string rather than trusting this line — §31's disable-with-a-reason pattern is used in
+several places and only this one is about T9.
+
+- [ ] **Step 1b: Declare `label-1` … `label-10` in `index.css`, or decide not to**
+
+`Label.color` is a design-token name and **none of those ten tokens is declared**, so every label
+chip in the product is plain — on the board's card face (D-z) and, since T8, on every backlog row.
+Both screens carry a comment saying the palette is this task's, because this is the task that builds
+the screen where a label's colour is *chosen*: picking a hue on a screen that cannot show you the
+hue is the reason it was deferred rather than guessed.
+
+It is a **stylesheet** decision, so it lands in `index.css` under `@theme inline` beside the other
+tokens and is checked by `app/tokenSystem.test.ts` like everything else there. If the answer is that
+the product does not want coloured labels, say so in `docs/features.md` and delete `Label.color`'s
+promise from the two comments — an undeclared token that three files apologise for is worse than a
+decided absence.
 
 - [ ] **Step 2: Write `ColumnEditor`**
 
@@ -4454,6 +4574,14 @@ D-a's table saying which is which.
    that a compile error until labelled; that the backlog's release grouping and the "Move to release"
    bulk action are M3's to add to `BacklogView.tsx`; that `issue.rank` exists and is project-wide, so
    a release-filtered backlog is a filter over one order and not a second one; and the `V` it takes.
+   **Four more from T8, all in D-f's extended table:** a `releaseId` filter has to be added to
+   `GET /projects/{id}/backlog` before B4's second criterion can be met at all — the chip has nowhere
+   to write today; the release grouping goes **inside** `BacklogView`'s `DataRegion` and above the
+   `<ol>`, not as a second component, because the rank is one project-wide order and two sections are
+   two slices of it; `Move to release` joins `Set epic` and `Assign` in `BulkBar` and gets
+   `useBulkUpdateIssues`' per-item report for free; and **the bulk write is N `PATCH`es** (D-ab), so
+   if M3 wants a hundred-row release move it needs a batch endpoint, which is `be` work to plan
+   rather than discover.
    **M4's prompt is also rewritten** — `issue_label` now exists, so the Jira importer has somewhere
    to put labels, and label-per-sprint is on offer as an import mapping. M4's `Depends on` is M1, so
    this is a courtesy edit; say so in the commit message.
@@ -4647,7 +4775,44 @@ rendered nothing but the error page, all of which typechecked and linted clean.
       the twelve reads and label/board writes are one-liners whose keys, budgets and paths typecheck
       against the contract and have no caller until T7, T8 and T9. `useUpdateBoard` is the one with a
       behaviour worth doubting — it invalidates `keys.board(board.id)` from the RESPONSE's id rather
-      than the argument, which is right and is untested.
+      than the argument, which is right and is untested. → **`useBacklog` and `useRankIssue` now have
+      a caller** (T8) and `reorder`'s renumbering is asserted through the screen. The four label hooks
+      and the three board writes are still callerless; `useCreateLabel`, `useUpdateLabel`,
+      `useDeleteLabel`, `useCreateBoard` and `useDeleteBoard` are **T9's**, and if T9 does not use
+      one of them that is a hook to delete rather than to leave.
+
+- [ ] **Nothing in T8's screen has been seen in a browser either.** 17 + 15 + 9 component tests,
+      `npm run build`, oxlint at zero and 2435 tests green across 172 files; none of them is a
+      renderer. Specifically unverified:
+      - **A drag on the backlog, of any kind.** Every ranking assertion goes through the `↑ ↓`
+        buttons. `onDragEnd` maps `active.id`/`over.id` to two list indices and hands them to the
+        same `place` the arrows call — which is the design (D-ab) and is why the arrows prove the
+        *placement*; what they cannot prove is that `pointerWithin` over a stack of full-width rows
+        picks the row the reader thinks they are on, or that the row is both a droppable and a
+        draggable under the same id without `@dnd-kit` objecting. This is T7's identical gap, one
+        screen over, and it is now the **second** screen whose drag has never run.
+      - **The optimistic patch against a real server.** Both the reorder and the snap-back are
+        asserted with the `PUT` — and, for the rollback, the refetch — held pending by hand, because
+        `onSettled` invalidates on both paths and the read double answers with the order it always
+        had (D-ab). Against a real backend the refetch returns the *new* order, which is a different
+        sequence of states and the one a person actually sees.
+      - **`rebalanced: true` reaching this screen.** `useRankIssue` drops the patch and invalidates;
+        no test on the backlog drives that arm, and `tcmsFaults.rank('rebalance')` has still never
+        been armed in a browser.
+      - **The bulk bar against a real `PATCH /issues/{key}`.** Both the all-succeed and the
+        one-fails paths are asserted against a double. What nobody has seen is the depth rule
+        actually refusing — `Set epic` is disabled over a `TASK` row *before* the request, so the
+        400 the contract describes has never been provoked, which means the client-side gate and the
+        server's rule have never been compared.
+      - **The row at 1280 and below.** The row is a single `flex-wrap` line carrying a checkbox, a
+        handle, a number, a type glyph, a key, a title, N label chips, a status badge, an estimate,
+        an assignee and two buttons. jsdom applies no stylesheet, so nothing has established that it
+        does not wrap into an unreadable stack the moment a row has three labels — and the
+        responsive rule is that the page body never scrolls horizontally, which a wrapping row
+        satisfies by looking bad rather than by looking right.
+      - **A Spike in the backlog.** It renders as a green `S`, not the board's amber `?`, because
+        `BacklogRow` carries no `countsTowardCompletion` (D-f). Two screens now draw the same type
+        two ways, and whether that reads as a bug is a judgement nobody has made in front of both.
 
 ---
 
