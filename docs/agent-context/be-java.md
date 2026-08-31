@@ -1,6 +1,6 @@
 # be-java — orientation cache
 
-Baseline: commit after B1 (`3ba1555f`), refreshed 2026-08-28 during build batch B2.
+Baseline: 011 T4 (`937df5d4`), refreshed 2026-08-31.
 Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
 
 ## Version lane
@@ -15,9 +15,11 @@ Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
 - Spring Modulith monolith, modules are packages under `com.tcms`; foundation modules `api ·
   tenancy · identity · project · storage`, everything else crosses via `CompanyScopedEvent`.
   `project` imports only `api` + `tenancy`.
-- Flyway `backend/src/main/resources/db/migration` holds **one file**, `V1__initial_schema.sql`:
-  V2–V75 were absorbed into it 2026-08-29 and deleted. ~~head `V71` (B2), `V72–V74` reserved~~ →
-  superseded; the next number is **`V2`**. V1 only ever runs on an empty database.
+- Flyway `backend/src/main/resources/db/migration` holds **four files** — `V1__initial_schema.sql`
+  (V2–V75 were absorbed into it 2026-08-29 and deleted; it only ever runs on an empty database),
+  `V2__pm_foundation.sql`, `V3__tracker_core.sql`, `V4__retire_work_item.sql`. ~~head `V71` (B2)~~
+  ~~the next number is `V2`~~ → the next number is **`V5`**. `out-of-order` is unset, so a lower
+  number arriving after a higher one is silently not applied — `ls` the directory before writing.
 
 ## Seams to reuse
 - `ProjectService.readVisible / readGranted / writeGranted` → `GateResult` (Unreachable/Denied/Allowed).
@@ -51,6 +53,18 @@ Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
   those batches pair them.
 
 ## Session log
+- 2026-08-31 011 T4: `be`, two commits. **Part A** — `documentation.LinkSourceType` gains `ISSUE`
+  (no migration: `V2` widened `doc_link`'s CHECK ahead of it) and `CatalogueFacts` a third foreign
+  table; `tracker` gains `issue_doc_link` as a projection rebuilt whole per company by
+  `IssueDocLinkFacts` + `DocLinkProjection` on the **existing** `documentation.links_changed` event
+  (second claimant, beside `repository.HealthRecomputeOnLinksChanged`), plus comments, watchers and
+  `/issues/{key}/{comments,watchers,doc-links}`. **Part B** — `work_item` retires: `BoardFacts`
+  gains `assignedIssues` + `legalMoves` (crossings 5 and 6, first into `tracker`), `BoardService`'s
+  `ISSUE` generator replaces `TASK`, every card's status is `CardStatus(name, kind)`,
+  `WorkItemController` → `BoardController` at `GET /board`, nine classes deleted, `V4` drops the two
+  tables and re-issues four `COMMENT ON`s, policy count 84 → 82. New: `AnnotationController` over
+  `derived_item_annotation`. `ItemAssignedEvent` moved to `tracker` with its producer.
+  Gate on shanks: 3680 tests, 6 failures — `FlakeScoreTest`'s six, pre-existing since before T1.
 - 2026-08-30 011 T1: contract-only. `/work-items` (+ its POST/PATCH) removed; `GET /board`,
   `PUT /board/annotations/{sourceType}/{sourceId}`, `/issues*` and `/projects/{id}/workflow*`
   added under a new `tracker` tag. `WorkItem`/`WorkItemStatus`/`WorkItemInput`/
