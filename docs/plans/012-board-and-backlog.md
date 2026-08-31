@@ -283,6 +283,12 @@ green — `SwimlaneBy` was the only enum in the set and T3's server type closed 
 remain name T4's nine operations and T4's twelve schemas and nothing else; both lists are copied
 into T4's prompt, so a name outside them is a regression rather than a leftover.
 
+**Measured after T4** (`031a40fa`, shanks, 3726 tests): **six failures, and they are the six.** Both
+contract suites are green — the nine operations have handlers and the twelve schemas have pairings —
+so what is left is `FlakeScoreTest` alone, which was red on `master` in the 2026-08-31 nightly before
+T1 and belongs to no task in this plan. **This row is now the answer to the whole of D-m**: every
+task below inherits a six-failure baseline, and a seventh is that task's own.
+
 ### D-n — T3's five names came out different from the plan's pseudo-code, and the house pattern is why
 
 Taken by T3, and recorded here because T4 and T6 both bind to these.
@@ -331,6 +337,62 @@ with **zero columns**, silently, because the guard sees the board row still ther
 nothing in that class looks at a board. It is why `BoardConfigService.claimNewStatus` skips a board
 with no columns rather than indexing into an empty list. The fix in the two T3 fixtures that need it
 is one line and an ordering: `DELETE FROM board` first, then the statuses, then the seed.
+
+### D-q — "neither neighbour" is a 400, and the contract disagrees with itself about it
+
+Taken by T4, and it is the one place this task did not do what a document told it to, because two
+halves of the same document told it two different things.
+
+| Where | What it says |
+|---|---|
+| `openapi.yaml`, the `400` arm of `PUT /issues/{key}/rank` | "Both neighbours given, **neither given**, or a neighbour in another project… a cross-field rule no `required` array can spell, **which is why RankInput's is empty**" |
+| `openapi.yaml`, `RankInput.afterKey`'s description | "Null with `beforeKey` absent means **'to the top'**" |
+
+The 400 comment wins, and the tie-breaker is its own last clause: the *reason* `RankInput.required`
+is empty is that "exactly one of these" cannot be expressed there. If neither-given were a legal
+request, the empty array would need no explanation at all — so that sentence is only true under the
+exactly-one reading. The `afterKey` sentence is a leftover from a draft in which the top was not
+otherwise reachable; **it is**, as `beforeKey: <the current first row>`, which is what
+`placingBeforeTheFirstRowPutsItAtTheTop` proves.
+
+The asymmetry of being wrong settles the rest. Answer "to the top" when 400 was meant, and a `PUT`
+with an empty body silently moves somebody's issue; answer 400 when "to the top" was meant, and a
+client re-sends with `beforeKey` and loses nothing. A silent write is the worse error.
+
+**The contract text is NOT changed here** and that is the stack rule rather than reluctance: a
+description edit regenerates `frontend/src/api/schema.d.ts` and `packages/client/src/schema.ts`,
+which is `ts` work in a `be` task. **The `afterKey` sentence is a known-stale line for whoever next
+owns the contract**, and T5's and T6's prompts below now name the behaviour rather than the sentence.
+
+### D-r — an Epic IS a card on the board and is NOT a row in the backlog
+
+Taken by T4, and the two halves look inconsistent until the third column of this table:
+
+| | Epic present? | Why |
+|---|---|---|
+| `GET /boards/{boardId}/cards` | **yes** | `BoardIssueCard.allowedTransitions` says in as many words *"Empty for an Epic (D31)"*. That sentence has no meaning unless an epic reaches the wire as a card, and a board that silently omits a kind of work is worse than one that shows an unmovable card |
+| `GET /projects/{projectId}/backlog` | **no** | D31 derives an epic's status from its stories, so it has nothing to be ranked *against*, and a list carrying both an epic and the stories under it double-counts the same work in the one view whose whole job is "what is next" |
+
+An epic's card carries the **derived** status (D31), spelled with the project's own first status at
+that kind — not its stored `status_id`, which nobody sets and which would let the board read "In
+Progress" about an epic whose detail page says it is done. Under `swimlaneBy=EPIC` an epic has no
+epic above it, so its card lands in the **"No epic" lane**. T7 renders the epic as a *lane header*
+with a roll-up; whether it also draws the epic's own card in the catch-all lane is that task's call,
+and the payload supports either.
+
+### D-s — the lane roll-up goes through `Completion`, so three tracker types widened to public
+
+Taken by T4. `Completion`, `CountedIssue` and `EpicStatus` were package-private in `com.tcms.tracker`
+and `Completion`'s header said in as many words that it is called *"from `IssueService` and from
+nowhere else"*. `BoardCardService` is in `com.tcms.tracker.board`, so a lane's `completion` and an
+epic card's derived status had two options: widen those three, or recompute both in the board
+package.
+
+Widening wins on D8's and D31's own argument. D8 exists because this repository shipped **two
+contradictory percentages on one screen**, and a component that computes its own is exactly how that
+happened; a lane roll-up is a completion over the same kind of list, so it goes *through* the one
+implementation rather than beside it. The struck-through sentence is kept in `Completion`'s Javadoc
+with the second caller named, so the next reader sees the rule and its one exception together.
 
 ---
 
@@ -761,7 +823,14 @@ TRAPS THIS TASK WILL HIT:
     would make a breach fail somebody's script, which is story B3's rejected behaviour in its
     automation spelling.
   * `tcms rank` refuses --after with --before LOCALLY, without sending a request, so the message
-    names the flags a person typed rather than a JSON field they never saw.
+    names the flags a person typed rather than a JSON field they never saw. **It refuses NEITHER
+    flag the same way** (D-q): T4 landed "neither neighbour" as a 400, because the contract's own
+    400 arm says so and the "means to the top" sentence on `RankInput.afterKey` is stale draft text.
+    The top IS reachable — `--before <the current first key>` — so require exactly one flag.
+  * THE T4 ENDPOINTS BEHAVE AS T1's CONTRACT SAYS, with that one exception. Nine operations at the
+    nine declared paths, the declared bodies, and `color` throughout. `RankResult.rebalanced: true`
+    is a SUCCESS carrying an instruction to refetch, not an error — print it and exit 0, for the
+    same reason a WIP breach exits 0.
   * `citedFiles.test.ts` fails if a path named in ANY comment — packages/**, frontend/src/**,
     docs/specs/*.yaml, backend/src/** — is not on disk. A stale citation you add here reddens the
     packages job.
@@ -826,6 +895,20 @@ TRAPS THIS TASK WILL HIT:
   * `useMoveCard` IS NOT OPTIMISTIC and that is §12.4 verbatim. `useRankIssue` IS, with a snapshot
     rollback. These are different because legality of a STATUS change is on the card and checkable
     before the drag, and legality of a RANK change is the server's neighbours and is not.
+  * `useRankIssue` SENDS EXACTLY ONE OF afterKey/beforeKey (D-q). T4 landed "neither" as a 400 —
+    an empty body is not a request to move to the top, and the top is `beforeKey: <first row's key>`.
+    The `RankInput.afterKey` description in openapi.yaml still says otherwise and is stale; do not
+    build against that sentence, and do not edit the contract here either (that regenerates both
+    schema copies and is its own task).
+  * `rebalanced: true` MUST DROP THE OPTIMISTIC ORDER, not roll it back. The placement succeeded and
+    every OTHER row's rank is now stale, so the handler invalidates the list rather than treating it
+    as a failure. Getting this backwards is easy in both directions.
+  * A BOARD CARD'S `status` FOR AN EPIC IS THE DERIVED ONE and its `allowedTransitions` is `[]`
+    (D-r) — so the move affordance must be absent rather than disabled-and-empty for those cards.
+    An epic appears on the board and NOT in the backlog; that asymmetry is deliberate.
+  * BREACHES ARE COUNTED OVER THE PROJECT, NOT THE FILTERED VIEW. `BoardContents.breaches` does not
+    shrink when a filter is applied, so a column header shows the same breach whatever is on screen —
+    do not recompute it client-side from the cards you were sent.
   * NEVER build your own QueryClient in a test — only `createTestQueryClient`'s has the caches.
   * A test whose render trips an error boundary FAILS unless it calls `renderingIntoAnErrorBoundary()`
     / `drivingAFailedRead()` / `drivingAFailedWrite()` AND says why.
@@ -875,6 +958,11 @@ READ, IN THIS ORDER:
      entry is the placeholder you replace, and the filter useMemo at ~line 148.
   5. frontend/src/features/board/cardMove.ts — T6's `resolveColumnMove` and `columnRefusalFor`.
   6. Story B3, and scope §12.2 ("design the card face deliberately rather than letting it accrete").
+  7. D-r — an EPIC arrives as a card, with a derived status and an EMPTY `allowedTransitions`. Its
+     lane under `swimlaneBy=EPIC` is the catch-all "No epic" one, because it has no epic above it.
+     You render the epic as a LANE HEADER with the roll-up; whether you also draw its own card in
+     the catch-all lane is this task's call and the payload supports either. `BoardContents.breaches`
+     is counted over the whole project and does NOT shrink under a filter — render it as sent.
 
 PRECEDENCE WHEN THE MOCKUP AND THE PLAN DISAGREE: on WHAT A SCREEN SHOWS — layout, copy, empty
 state, the ⋮ Move to… and ↑ ↓ paths — the mockup wins. On WHAT THE SYSTEM DOES — permissions,
@@ -945,6 +1033,10 @@ READ, IN THIS ORDER:
   5. frontend/src/api/queries/projectBoards.ts — T6's `useRankIssue`, with the optimistic patch and
      the snapshot rollback.
   6. Story B4, and scope D34.
+  7. D-q and D-r — the backlog EXCLUDES epics (so the rows you rank are stories and tasks only, and
+     `position` is 1-based over what came back), and a rank write sends EXACTLY ONE of
+     afterKey/beforeKey. Dragging to the top is `beforeKey: <the first row's key>`, never an empty
+     body; `rebalanced: true` means refetch, not rollback.
 
 TRAPS THIS TASK WILL HIT:
   * NO RELEASE SECTIONS AND NO "MOVE TO RELEASE" (D-f). The mockup groups rows under "2.4 · target
@@ -2734,6 +2826,7 @@ are T4; the board is not rendered until T7.
 `POST /boards/{boardId}/cards/{key}/move` resolves the column's default status and answers 200 with
 the breach; `PUT /issues/{key}/rank` places an issue between two neighbours and rebalances when
 precision runs out; `GET /projects/{projectId}/backlog` and the four label endpoints are served.
+**Landed:** `031a40fa`
 **Stack:** `be`
 **Est. context:** ~130k — 14 files created, 4 read as patterns, 3 test files, 2 skills
 **Depends on:** T3 (`board_column` is what a card is grouped into)
@@ -2749,7 +2842,7 @@ precision runs out; `GET /projects/{projectId}/backlog` and the four label endpo
 - Test: `backend/src/test/java/com/tcms/tracker/board/RankServiceTest.java`,
   `BoardCardServiceTest.java`, `BoardMoveServiceTest.java`
 
-- [ ] **Step 1: Write the rank test first — it is the part that can be subtly wrong**
+- [x] **Step 1: Write the rank test first — it is the part that can be subtly wrong**
 
 ```java
 package com.tcms.tracker.board;
@@ -2815,14 +2908,14 @@ class RankServiceTest extends AbstractIntegrationTest {
 }
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 ```bash
 cd backend && ./gradlew test --tests 'com.tcms.tracker.board.RankServiceTest'
 ```
 Expected: FAIL — `RankService` does not exist.
 
-- [ ] **Step 3: Write `RankService`**
+- [x] **Step 3: Write `RankService`**
 
 ```java
 package com.tcms.tracker.board;
@@ -2906,7 +2999,7 @@ public class RankService {
 }
 ```
 
-- [ ] **Step 4: Write `BoardCardService` — lanes, and the breach**
+- [x] **Step 4: Write `BoardCardService` — lanes, and the breach**
 
 ```java
     /**
@@ -2931,7 +3024,7 @@ public class RankService {
      */
 ```
 
-- [ ] **Step 5: Write `BoardMoveService`**
+- [x] **Step 5: Write `BoardMoveService`**
 
 ```java
     /**
@@ -2972,7 +3065,7 @@ public class RankService {
     }
 ```
 
-- [ ] **Step 6: Write the move tests**
+- [x] **Step 6: Write the move tests**
 
 ```java
 class BoardMoveServiceTest extends AbstractIntegrationTest {
@@ -3034,7 +3127,7 @@ class BoardMoveServiceTest extends AbstractIntegrationTest {
 }
 ```
 
-- [ ] **Step 7: Write the label and backlog services and controllers**
+- [x] **Step 7: Write the label and backlog services and controllers**
 
 `LabelService` — CRUD gated on **`board:configure`**, and `putIssueLabels` gated on **`issue:edit`**
 (D-e). `BacklogController` serves `GET /projects/{projectId}/backlog`: STORY and TASK level, not
@@ -3050,7 +3143,7 @@ class BoardMoveServiceTest extends AbstractIntegrationTest {
      */
 ```
 
-- [ ] **Step 8: Run the gate on shanks and commit**
+- [x] **Step 8: Run the gate on shanks and commit**
 
 ```bash
 ~/bin/tcms-remote sync
@@ -3507,7 +3600,7 @@ it('drops the optimistic order rather than keeping it when the server rebalanced
 })
 ```
 
-- [ ] **Step 8: Run the gate on shanks and commit**
+- [x] **Step 8: Run the gate on shanks and commit**
 
 ```bash
 ~/bin/tcms-remote sync
@@ -4104,7 +4197,12 @@ rendered nothing but the error page, all of which typechecked and linted clean.
       cards, the rank and the labels is T4. → **five of the ten are answered.** T3's
       `BoardConfigEndpointTest` drives all five configuration operations through MockMvc and gets
       the declared statuses back, 422 included and as `application/problem+json`. The other five are
-      still this bullet.
+      still this bullet. → **all ten now have a handler, and five of them have never been driven
+      over HTTP.** T4's three test classes call the four services **in process**, which proves the
+      arithmetic, the lanes, the breach and the claim rules — and proves nothing about the routing,
+      the query-string binding or the status codes on the way out. `ContractParameterBindingTest`
+      does establish that every declared parameter reaches a handler and that no handler binds one
+      the contract never declared, which is a narrower claim than "the endpoint answers".
 - [ ] **A board created, renamed or re-columned by a person.** T3 proves the five operations answer
       and that a rotation keeps every column's id through the position-parking pass (D-o), but
       `settings-boards.html` is T9 — nobody has submitted one of these bodies from a form, and the
@@ -4129,7 +4227,20 @@ rendered nothing but the error page, all of which typechecked and linted clean.
       one-status-per-column board, which is the easy half of D-l.
 - [ ] A card dragged on the seeded per-status board, then the same project's coarse board opened and
       the card found in the matching column. This is the module's headline criterion and a passing
-      `BoardMoveServiceTest` is not the same as having seen it.
+      `BoardMoveServiceTest` is not the same as having seen it — the test asserts it at the service,
+      which is the layer where it cannot fail, because there is one status and two mappings of it.
+- [ ] **A label created, put on an issue, and seen as a chip.** `LabelService` round-trips through
+      `BoardCardServiceTest`, and the four endpoints have handlers; nothing has sent a `LabelInput`
+      over the wire, and the 409 on a duplicate name has been reasoned about rather than seen.
+- [ ] **A label whose name is blank or over 32 characters.** It answers **400** with
+      `Problem.validation`, which is the house shape for a field error and is **not declared on any
+      of the four label operations** — the contract lists only 401/403/404/409 there. Nothing in the
+      suite compares a handler's status codes to the declared set, so this is invisible to the gates
+      and is a contract gap for whoever next owns `openapi.yaml`, beside D-q's stale `afterKey`
+      sentence.
+- [ ] **An epic card rendered.** D-r puts an epic on the board with a derived status and no legal
+      moves, and in the catch-all lane under `swimlaneBy=EPIC`. Whether that reads as sensible on
+      `work-board.html` beside the epic's own lane header is a question only T7 can answer.
 - [ ] A WIP limit actually breached by dragging a fourth card, rather than by `tcmsFaults.wip()`.
 - [ ] A rank drag interrupted by a real concurrent edit, rather than by `tcmsFaults.rank('conflict')`.
 - [ ] The whole board operated with **no pointer at all** — tab to a card, `⋮`, move, and back —
@@ -4137,8 +4248,11 @@ rendered nothing but the error page, all of which typechecked and linted clean.
       does not establish.
 - [ ] A status added on `settings-workflow` and then seen on `settings-boards` in its auto-claimed
       column, on **both** boards.
-- [ ] A rebalance actually triggered — 40+ squeezes against one neighbour — and the client's order
-      seen to be correct after it.
+- [x] A rebalance actually triggered — 40+ squeezes against one neighbour — and the order seen to be
+      correct after it. **Done at the service in T4**: `RankServiceTest`'s forty-squeeze method
+      crosses a respace partway through and asserts the exact final key order plus no duplicate rank
+      anywhere in the project. **The client's** order after a respace is
+      still unverified and is T6's `rebalanced: true` handler.
 - [ ] Whether the collapsed-lane percentage and the expanded lane's cards agree on a project with a
       Spike in it. Two contradictory percentages on one screen is a defect this repository has
       shipped before, and `countsTowardCompletion` is exactly where it would come from again.
