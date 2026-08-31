@@ -1,6 +1,6 @@
 # fe-react — orientation cache
 
-**Baseline commit:** `ac848172` · **Last verified:** 2026-08-31 · **Verdict this run:** DELTA (the delta since `f6315aeb` was 012 T1–T5 — backend, contract and both generated schema copies — so the version lane and every frontend seam held; the seams below moved because 012 T6 added the project board's data layer)
+**Baseline commit:** `fc173ba8` · **Last verified:** 2026-08-31 · **Verdict this run:** TRUST (the only delta since `ac848172` was this file; nothing in `frontend/` or the contract had moved, so nothing needed re-deriving. The seams below moved because 012 T7 built the project board's screen)
 
 Per `ep-agent-orientation-cache`: validate this against a git delta before trusting it. A changed
 `frontend/package.json`, `package-lock.json`, `tsconfig*.json` or `vite.config.ts` invalidates the
@@ -63,11 +63,18 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 | Errors | `lib/describeError.ts` is the one place an error becomes user-facing copy (owns `isTransient()`); `app/queryClient.ts` is the one place a failure raises a notification; `components/ErrorBoundaries.tsx` has the root/route/region tiers |
 | Data states | `components/DataRegion.tsx` — loading/loaded/failed/empty/stale |
 | Display logic | **Shared layer, never the page**: `lib/labels.ts` (each `satisfies Record<Union, string>`, so a new enum member is a compile error until labeled), `lib/format.ts`, `lib/results.ts`, `lib/permissions.ts`, `components/Identifier` for anything monospace |
+| `TypeIcon` takes THREE fields, not `IssueTypeRef` | `Pick<IssueTypeRef, 'name' \| 'level' \| 'countsTowardCompletion'>` since 012 T7 — `BoardIssueCard` carries `typeName`/`typeLevel`/`countsTowardCompletion` and **no type id**, and a synthesised one would be a value the component has never read. A widening; every existing caller passes the full ref. `iconCode` is on the board's card and deliberately unused, so the board and the table draw the same glyph |
+| `label-1` … `label-10` DO NOT EXIST | `Label.color` is a design-token name and `index.css` declares none of them, so **board label chips are plain** (D-z). Adding the palette is a stylesheet decision that belongs with the screen that creates labels — T9's |
 | `data-testid` | ~1470 (676 literal + 794 composed), `Domain.Thing` PascalCase, per-file `TestIdPrefix` const. `ClassificationPicker.tsx:150` documents `Classification.Value.<id>` as a **locator contract QA page objects key on** — do not rename it here |
 | Field ↔ error wiring | `components/kit/Field.tsx` clones its child to add `aria-describedby` pointing at `${htmlFor}-message`. Callers pass nothing; do not re-add per-call-site ids |
 | Dev fault switches | `lib/devFaults.ts` behind `src/api/client.ts`; `tcmsFaults.{status,hang,expire,drift,only,tracker,issue,rank,wip,off}()` in the console. Both guards are a **literal** `import.meta.env.DEV` so Rollup drops the module — routing that check through an imported constant ships it. `issue('conflict')` fabricates the 409 that names the legal moves (and since 012 T6 answers the board's move endpoint too, which its own comment had always promised); `rank('conflict')` is the 409 that proves the rank rollback, `rank('rebalance')` the 200 that must **drop** the patch, and `wip()` the breach on a move that still lands. Every arm's path test is **anchored** — an unanchored `startsWith('/issues')` would fault the detail read |
 | Issue screens | `features/tracker/` — `WorkTablePage` (`/projects/:id/work`, five views on `?view=`), `IssueNewPage` (`/work/new`), `IssueDetailPage` (**`/issues/:key`, outside the project segment**, dispatching on `type.level` to `EpicPanels`/`StoryPanels`/`TaskPanels`). `TypeIcon` derives its colour from `level` + `countsTowardCompletion`, never from the type's name |
 | Project front door | `/projects/:projectId` is **`features/projects/ProjectOverviewPage.tsx`** (011 T7). ~~`features/dashboard/DashboardPage.tsx`~~ no longer exports a page — it exports `DashboardBody` and `HealthPanel`, the repository-dashboard **regions**, which the overview mounts below its delivery half. **The file keeps its name deliberately**: `DashboardPage.tsx` is cited from `lib/statusColors.ts`, from `HealthTileOrderTest.java` in the backend suite, and from `renders/06-analytics.html` |
+| The project board's screen | **`features/board/ProjectBoardView.tsx`** (012 T7) — five files beside the composite board's, not a directory of their own, because `cardMove.ts` and `boardKeyboard.ts` are shared: `ProjectBoardView` (picker · grouping · `DndContext` · three nested `DataRegion`s) · `Swimlane` (+ a private `LaneCell`) · `BoardCardFace` · `ColumnHeader` · `MoveToMenu`. Mounted as the `board` arm of `WorkTablePage`'s view switch, **not routed**: `?view=board` under `/projects/:id/work` |
+| The droppable is a CELL, and this is where the plan was wrong | `` `${columnId}\|${laneId}` ``, spelled ONLY in `ProjectBoardView` (`cellId` / `columnIdOf`). A column has one rect per lane once a full-width lane header sits between the bands, so it cannot be one droppable — the plan's *"register `column.id`"* holds only for a one-lane board (012 D-z). **Both keyboard axes come out of that one flat cell set**: `columnOrder` = the first EXPANDED lane's cells (x is the same in every lane), `laneOrder` = the first column's cell down the expanded lanes (y). A collapsed lane registers nothing and is a stop on neither |
+| Column headers are drawn ONCE | Above the lanes, not inside each — two CSS grids on one `--board-columns` template, aligned only because the columns are a fixed **272px**. Repeating them per lane would repeat one project-wide `breaches` entry per lane and put a WIP numerator beside a *lane's* card count (D-z) |
+| The WIP cell's two numerators | `ColumnHeader`: no limit → `—`; **breach** → `breach.count / breach.limit ⚠` **as sent** (project-wide, does not shrink under a filter); **under** → cards-drawn `/ limit`, because `breaches` lists only the columns that are over and there is no project-wide count on the wire for the rest. Each state carries a `title` saying which it is. **No `>` in the file** — the comparison is the server's |
+| Empty is a state only under a FILTER | Board and (per T8's prompt) backlog: a board with no cards and no filter still draws its columns, because that is the board's shape and what a freshly configured one looks like. Only a board emptied *by* a filter gets `no-filter-match`, which is the way back off it. Three of T7's own tests found the inverse |
 | The three boards | `BoardPage` and `TeamBoardPage` mount `Board` (kanban). **`MyWorkPage` does not** — `my-work.html` is two tables over ONE `GET /board?mine=true`, split on `kind === 'ISSUE'`, plus a private notes panel (011 T7). `linkFor` lives in `features/board/cardLink.ts`, not in `BoardPage.tsx`: a file exporting a component and a function is oxlint's `react(only-export-components)`, and the gate is zero warnings |
 | Project settings | `/projects/:projectId/settings/{general,workflow,classification,review,notifications,trackers}` — six screens, all **routed for everybody** and read-only for a caller without the write key (§31). `general` holds the archive button (011 T7 moved it off the overview's header, with `ArchiveProject.test.tsx`) |
 | A DELETE with a body | **`api.delWithBody(path, body, options)`** — the one in the product, for the workflow status removal. Registered in `test/contractDoubles.ts`'s `METHODS` **and** `SENDS_A_BODY`; a body smuggled into `api.del`'s options is invisible to that seam, which reads the second argument positionally |
@@ -81,6 +88,16 @@ CLAUDE.md. Targeted tests may run locally for debugging.
   collision. **`drivingAFailedWrite()` / `drivingAFailedRead()` / `renderingIntoAnErrorBoundary()`
   take NO arguments** — the reason goes in a comment beside the call, not in a parameter.
 - **Never build your own `QueryClient` in a test** — only `createTestQueryClient`'s has the caches.
+- **`toBeDisabled()` does NOT work on a Radix menu item.** It is a `div` with `role="menuitem"`, and
+  `jest-dom` reads the `disabled` *attribute* on form elements only — the assertion passes on an item
+  that was never disabled. Read `aria-disabled`, as `PermissionGate.test.tsx` and
+  `MoveToMenu.test.tsx` both do.
+- **`PermissionGate` REMOUNTS the control it gates.** Its denied branch renders inside a
+  `<span role="none">` anchor and drops the anchor when the verdict lands, so a node captured before
+  the answer is a detached element that stays `disabled` forever. **Re-query inside the `waitFor`** —
+  `ArchiveProject.test.tsx` says so and it cost time again in 012 T7.
+- **`TestProviders` mounts no announcer**, so `useAnnounce` is a no-op and an `announce(...)` string
+  never reaches the DOM. A test for a keyboard move asserts the **request**, not the announcement.
 - A test whose render trips an error boundary **fails** unless it calls
   `renderingIntoAnErrorBoundary()` / `drivingAFailedRead()` / `drivingAFailedWrite()` and says why.
 - **Cited files** — `packages/client/src/test/citedFiles.test.ts` fails if a path named in a comment
@@ -132,6 +149,21 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 - The renders were opened at 1680px only. No claim holds at 1280px, against a real API, or with a
   fifty-step case (design-language §0, §9.1).
 - E2E / Playwright surfaces belong to the `qa-ui-typescript` peer; none are mapped here.
+- **Nothing about 012 T7's screen has been seen in a browser.** 18 + 8 component tests, `npm run
+  build` and oxlint at zero; none of them is a renderer. Specifically unverified: the two-grid /
+  fixed-272px column alignment (jsdom applies no stylesheet), **any drag at all** (the cell droppable
+  ids, `pointerWithin` over a flat cell set, the `DragOverlay` copy, and the `columnOrder`/`laneOrder`
+  derivation fed real `droppableRects`), a board with **two expanded lanes** — which is the shape
+  D-z's column-header decision was taken for — a board whose columns overflow, and the grouping
+  picker's full-`BoardInput` round trip against a real server.
+- **A collapsed lane does not survive a reload, and the table for it exists.** `board_swimlane` is in
+  `V5` and carries exactly this per-viewer state; **no endpoint on the contract reaches it** (no
+  `collapsed` field on `Board`/`BoardContents`/`BoardInput`, no operation of its own), so collapse is
+  component state. Persisting it is a contract change, not a screen decision.
+- **Two more fields the mockup draws and the payload does not carry**, beyond D-f's four: the
+  `TC-311 failed` / `4 cases pass` result badge and the `waiting on provider` blocked reason. Neither
+  is on `BoardIssueCard`. Priority **is**, and is deliberately not drawn — B3's card face does not
+  list it and §12.2 says design the face rather than let it accrete.
 - **012 T6 left twelve of `projectBoards.ts`'s fourteen hooks with no caller** — the reads and the
   label/board writes typecheck against the contract and are unexercised until T7–T9. `useUpdateBoard`
   is the one whose behaviour is worth doubting: it invalidates `keys.board(board.id)` from the
@@ -141,6 +173,27 @@ CLAUDE.md. Targeted tests may run locally for debugging.
   against a real backend.
 
 ## Session log
+
+- **2026-08-31** — 012 T7, `fe` (`98d547ad`; plan `fc173ba8`). The project board: swimlanes by epic,
+  the WIP breach in the column header, and a `⋮ Move to…` on every card. Five things worth carrying.
+  **The plan's own trap note was wrong about the droppable and the reason is geometric**: it says
+  register `column.id`, and once a full-width lane header sits between the bands a column has one
+  rect per lane, so the droppable is a **(lane, column) cell** and the screen parses the column back
+  out before calling `resolveColumnMove`. That turned out to be the good outcome — **both keyboard
+  axes then come out of the one flat cell set**, `columnOrder` from the first expanded lane and
+  `laneOrder` from the first column down the lanes, with no second registration for geometry and
+  collapsed lanes dropping off both axes for free. **The column header had to move above the lanes**,
+  which is the one structural disagreement with a mockup that never draws two expanded lanes:
+  `breaches` is counted over the project, so a per-lane header states one breach N times and puts a
+  WIP numerator beside a quantity a WIP limit is not about. **Three of this task's own tests found a
+  design defect the reasoning had already flagged and settled the wrong way** — `isEmpty` over "no
+  cards anywhere" hid the board's columns on an empty board, which is exactly what a freshly
+  configured one looks like; empty is now a state only under a filter. And two harness costs that are
+  both already written down somewhere in this repo and were paid again: `toBeDisabled()` is a no-op on
+  a Radix menu item (read `aria-disabled`), and `PermissionGate` **remounts** the control it gates, so
+  a node held across the verdict stays disabled forever. Two files beyond the task's list, per D-t:
+  `TypeIcon`'s prop widened to the three fields it reads, and `WorkTablePage.test.tsx`'s board
+  assertion, whose subject this task deleted.
 
 - **2026-08-31** — 012 T6, `fe` (`99133dbc`, `6bf9885a`; plan `ac848172`). The fault switch, the
   project board's data layer and the move decision — **no screen**, deliberately, because the switch
