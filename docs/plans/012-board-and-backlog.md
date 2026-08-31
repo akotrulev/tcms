@@ -200,6 +200,84 @@ merge and do — and that merge is re-checked, not assumed, the day either widen
 is a screen with a status-claim rule the server enforces in a 422 naming which status was claimed
 twice; an agent composing that array blind spends its turns on the refusal.
 
+### D-k — `issue.rank` is filled by a trigger, not by a `DEFAULT` and not by a service
+
+Taken by T2, and it is what lets the column be `NOT NULL` **two tasks before `RankService` exists**.
+`Issue` is not remapped by T2 (that would be `be` work in a `data` task), so every insert Hibernate
+makes omits `rank` — and with no default that is a constraint violation on every issue created
+anywhere in the suite.
+
+D-d says a new issue takes `max(rank) + 1024`. A column `DEFAULT` cannot express it, because it may
+not read another row. The two alternatives were both worse:
+
+| | Why not |
+|---|---|
+| A constant default (`0`, `1024`) | every new issue ties with every other, so a backlog ordered by `rank` is ordered by nothing — while still reading as ranked |
+| Assign it in `IssueService` only | a rule that holds for the callers who remember. This schema already made the opposite choice twice, for the issue-key counter and the seeded workflow, and for the same reason |
+
+So `tcms_issue_rank_default()` is a `BEFORE INSERT` trigger on `issue`. **Ties are possible and
+accepted:** two inserts into one project in the same instant read the same maximum, `created_at`
+breaks it, and nothing claims `rank` is unique. Taking a project-wide lock on every issue insert to
+avoid one would cost more than it buys.
+
+**T4 must not re-implement this.** `RankService.place` sets an explicit rank and the trigger stands
+aside whenever one is supplied; what the trigger owns is the *creation* path, which `RankService`
+never touches.
+
+### D-l — the board follows the workflow, and the repair is in the database
+
+Taken by T2, **found by the gate rather than by reading**: thirty-eight tests across
+`WorkflowEndpointTest` and `ProjectCreateEndpointTest` went red on the first run, all with
+`board_column_default_status_id_fkey`. `WorkflowService` hard-deletes an `issue_status` row when a
+status is dropped from the workflow PUT, and the seeded board holds a column defaulting to it — so
+with a plain `RESTRICT` a **board** refuses a **workflow** edit.
+
+That is backwards. D2 puts the canonical status on the issue and leaves a board *mapping* statuses
+onto columns, so the workflow is upstream and every board rearranges itself around a status leaving.
+`tcms_board_follows_status_removal()` is a `BEFORE DELETE` trigger on `issue_status` that repoints a
+column at the earliest status it **still** claims, and deletes the column only when the departing
+status was the last thing it claimed — which for the seeded one-status-per-column board is every
+time.
+
+Two things this decision is *not*:
+
+- **Not a contradiction of the plan's refusal of a trigger.** That refusal is about
+  *validation* — a trigger asserting "every status is claimed" would fire mid-transaction while a
+  board is rebuilt column by column and reject the legal intermediate state of a `PATCH`. This is
+  *repair*, on a table a board `PATCH` does not write, so it cannot see that state at all.
+- **Not `ON DELETE CASCADE`, which was the one-line alternative and is silently wrong.** A folded
+  stakeholder column claiming In Progress, In Review and Blocked would **vanish** when In Progress
+  was retired, taking two live statuses off the board with it and leaving them claimed by nothing.
+  `BoardSchemaTest` pins both halves.
+
+**T3 must not add a second repair in Java.** `claimNewStatus` (D-g) is still a direct call and still
+T3's, because a status *arriving* has no database event to hang off; a status *leaving* does, and one
+rule with two homes is how the two disagree.
+
+### D-m — the backend suite cannot be green until T4, and nine failures are not the current task's
+
+Recorded so no session below reads somebody else's red as its own. After T2, `./gradlew build`
+reports **9 failures and no more**:
+
+| Count | Class | Whose | Green again when |
+|---|---|---|---|
+| 3 | `ContractConventionTest`, `ContractEnumTest`, `ContractParameterBindingTest` | **T1's** | **T4** — the last of the fourteen handlers lands |
+| 6 | `FlakeScoreTest` | **nobody in 012** | unknown — already red on `master` in the 2026-08-31 nightly, before T1 |
+
+T1's gate was the packages build and the contract *suites*, which are a `packages` job. It never ran
+the backend suite, and the backend has three checks that read `openapi.yaml` and compare it to the
+server: fourteen operations are declared and no handler serves them, seventeen object schemas are
+paired with no record, and one enum (`SwimlaneBy`) names no server type. **`ContractParameterBindingTest`
+has deliberately no ignore list** — its own message says an operation that is "not built yet" is
+exactly the finding — so the only repair is to implement the handlers, which is T3's and T4's whole
+job. *Built and unverified* already says T1 describes a server nobody has run; this is the measured
+form of it.
+
+**A task below T2 verifies its own gate by the failure set shrinking, not by it being empty.** T3
+should see the three contract failures narrow as its five board-configuration operations gain
+handlers; T4 should see them reach zero. Six `FlakeScoreTest` failures survive all of it and belong
+to another lane.
+
 ---
 
 ## File structure
@@ -421,9 +499,15 @@ is usually an install-path problem — `claude plugin list --json` and check `pr
 
 Run T3 of docs/plans/012-board-and-backlog.md — board configuration. Read the T3 block for the code.
 
+T2 LANDED `V5__tracker_board.sql`, NOT `V4`. The six tables exist, forced-RLS, with the default board
+seeded per project. Two things came out of T2 that this task must not re-do — read D-k and D-l before
+you write anything.
+
 READ, IN THIS ORDER:
   1. docs/plans/012-board-and-backlog.md — D-a (two boards, two meanings), D-e (no new permission),
-     D-g (the auto-claim is a direct call), and the T3 block.
+     D-g (the auto-claim is a direct call), D-k, D-l, D-m, and the T3 block.
+  1b. backend/src/main/resources/db/migration/V5__tracker_board.sql — the tables you map. Section 1b
+     is the trigger that already repairs a board when a status is deleted.
   2. backend/src/main/java/com/tcms/tracker/package-info.java — the module boundary. You do NOT
      change `allowedDependencies`. `board` is a SUB-PACKAGE of `tracker`, so nothing here crosses a
      module boundary at all.
@@ -435,6 +519,26 @@ READ, IN THIS ORDER:
      exists (review R13)".
 
 TRAPS THIS TASK WILL HIT:
+  * THE BACKEND SUITE IS NOT GREEN WHEN YOU START, AND NINE FAILURES ARE NOT YOURS (D-m). Three
+    contract tests (ContractConventionTest, ContractEnumTest, ContractParameterBindingTest) are red
+    because T1 landed fourteen operations, seventeen object schemas and the SwimlaneBy enum that no
+    handler, no record and no server type serves yet — ContractParameterBindingTest has DELIBERATELY
+    no ignore list, so the only repair is to implement them, which is your five operations plus T4's
+    nine. Six FlakeScoreTest failures were already red on master in the 2026-08-31 nightly and belong
+    to nobody in this plan. VERIFY YOUR GATE BY THE FAILURE SET SHRINKING, not by it being empty:
+    yours is green when nothing but those nine remains and the contract three name only T4's
+    operations.
+  * THE STATUS-REMOVAL REPAIR ALREADY EXISTS, IN THE DATABASE (D-l). V5's
+    `board_follows_status_removal` trigger repoints a column at the earliest status it still claims
+    and deletes the column only when the departing status was the last thing it claimed. DO NOT add
+    a second repair in BoardConfigService — one rule with two homes is how the two disagree. What is
+    still yours is `claimNewStatus` for a status ARRIVING (D-g), which has no database event to hang
+    off.
+  * `board_column.position` and `issue_status.position` are plain lower-case columns written quoted
+    in the DDL. Map them with `@Column(name = "position")`, exactly as IssueStatus.java already does.
+  * `Issue` GAINS NOTHING IN THIS TASK. `issue.rank` is NOT NULL and filled by the
+    `issue_rank_default` trigger (D-k), so an insert that omits it still works; mapping the field is
+    T4's, with RankService.
   * `@Transactional(readOnly = true)` GOES ON THE REPOSITORY INTERFACE. Spring Data gives a
     transaction only to the inherited CRUD methods; a derived or @Query method without it runs with
     no company set, the RLS policy sees an unset `app.current_company`, and EVERY READ RETURNS ZERO
@@ -458,7 +562,9 @@ TRAPS THIS TASK WILL HIT:
     tracker.board reached for a module tracker may not see — that is a defect in this task, not a
     case for a sixth foundation module.
 
-GATE: ~/bin/tcms-remote sync && ~/bin/tcms-remote backend './gradlew build'   (fd-limit note above)
+GATE: ~/bin/tcms-remote sync && ~/bin/tcms-remote backend 'ulimit -n 65535; ./gradlew build'
+      Nine pre-existing failures, and no more — see the D-m trap above. `BUILD FAILED` with
+      "Could not write XML test results" and zero assertion failures is the fd limit, not a red suite.
 
 COMMIT: `git add <paths>` only — the new package, WorkflowService.java, and the tests.
 
@@ -481,7 +587,8 @@ that can be subtly wrong rather than merely unwired.
 
 READ, IN THIS ORDER:
   1. docs/plans/012-board-and-backlog.md — D-d (the rank), D-e (labels take no new permission),
-     and the T4 block.
+     D-k (the rank DEFAULT is a trigger, and why RankService must not re-implement it), D-m (nine
+     failures that are not yours, and how many of them YOU are expected to clear), and the T4 block.
   2. backend/src/main/java/com/tcms/tracker/TransitionService.java — you DELEGATE to it. Do not
      reimplement "may this issue go there"; two implementations of that question is how two
      answers to it start disagreeing.
@@ -492,6 +599,21 @@ READ, IN THIS ORDER:
   5. Stories B3 and B4.
 
 TRAPS THIS TASK WILL HIT:
+  * YOU ARE THE TASK THAT CLEARS THE CONTRACT SUITES (D-m). ContractParameterBindingTest,
+    ContractConventionTest and ContractEnumTest have been red since T1 because the contract declares
+    fourteen operations, seventeen object schemas and the SwimlaneBy enum ahead of any server. T3
+    served five of the operations; the other nine are yours, and so are the records the seventeen
+    schemas pair with. YOUR GATE IS GREEN WHEN ONLY THE SIX FlakeScoreTest FAILURES REMAIN — those
+    were red on master in the 2026-08-31 nightly and belong to no task in this plan. If a contract
+    test still names one of your nine, that is your finding, not a pre-existing one.
+  * `issue.rank` IS ALREADY NOT NULL AND ALREADY FILLED ON INSERT, by V5's `issue_rank_default`
+    trigger (D-k). It stands aside whenever an insert supplies a rank, so RankService.place just
+    writes one — do NOT add a creation-path default in IssueService, and do NOT assume a new issue
+    has no rank. The column is `NUMERIC` with no precision and is deliberately NOT unique: two
+    concurrent creations in one project can tie, and `created_at` breaks it, so every ordered read
+    is `ORDER BY rank, created_at, id` and never `ORDER BY rank` alone.
+  * THE LABEL COLOUR COLUMN AND WIRE PROPERTY ARE BOTH `color` (D-i). There is no `color_token`
+    anywhere; JPA needs no @Column override.
   * THE WIP LIMIT IS REPORTED, NEVER ENFORCED. A move that breaches it returns 200 with the breach
     in the body. Story B3: "the drop is accepted and the column header shows the breach". A limit
     that refused drops is a limit people route around by not using the board, and then the board
@@ -518,7 +640,8 @@ TRAPS THIS TASK WILL HIT:
   * Filter semantics are OR WITHIN a category, AND ACROSS categories. `labelId=a&labelId=b&
     assigneeId=c` is (a or b) and c.
 
-GATE: ~/bin/tcms-remote sync && ~/bin/tcms-remote backend './gradlew build'   (fd-limit note in T2)
+GATE: ~/bin/tcms-remote sync && ~/bin/tcms-remote backend 'ulimit -n 65535; ./gradlew build'
+      Green here means SIX failures — FlakeScoreTest only. (fd-limit note in T2.)
 
 COMMIT: `git add <paths>` only — the new classes in tracker/board and their tests.
 
@@ -816,7 +939,7 @@ TRAPS THIS TASK WILL HIT:
 
 RUN ALL THREE GATES, because this is the last task:
   ~/bin/tcms-remote sync
-  ~/bin/tcms-remote backend './gradlew build'
+  ~/bin/tcms-remote backend 'ulimit -n 65535; ./gradlew build'
   ~/bin/tcms-remote frontend 'npm run build && npm run lint && npm run test:run'
   ~/bin/tcms-remote packages 'npm run build && npm run lint --workspaces && npm run test:run --workspaces'
 
@@ -839,7 +962,16 @@ THE 009 CLOSE-OUT — do every one of these, they are not optional:
   5. CORRECT THE TWO FALSE CLAIMS IN THE M2 PROMPT ITSELF, in place, no changelog: the migration is
      V5 not V4, and the derived-card refusal is already repaired and pinned by cardMove.test.ts:153
      — it was never M2's to restore.
-  6. Commit 009 in its OWN commit, `docs(plan): M2 done`, staging only that file.
+  6. CARRY D-k AND D-l INTO 009's M2 SECTION, because both are schema facts a later module will
+     meet and neither is in 009 today: `issue.rank` is filled by the `issue_rank_default` trigger
+     rather than by a service or a column default, and `board_follows_status_removal` is what keeps
+     a board from vetoing a workflow edit. M3 adds a release and M4 imports labels; both touch
+     tables these two triggers sit on.
+  7. SIX `FlakeScoreTest` FAILURES ARE NOT M2's. They were red on master in the 2026-08-31 nightly,
+     before T1. Say so in the M2 built-and-unverified list rather than letting the next module's
+     first gate read them as inherited breakage — and do NOT report M2 as leaving a green backend
+     suite if they are still there.
+  8. Commit 009 in its OWN commit, `docs(plan): M2 done`, staging only that file.
 
 THREE COMMITS, in this order: the code + features.md + the surface doc; then this plan's
 built-and-unverified list; then 009. `git add <paths>` only, never -A.
@@ -1610,6 +1742,7 @@ Both generated clients move in this commit."
 `board_column_status`, `board_swimlane`, `issue_label` and `issue_label_assignment` are created with
 forced RLS; `issue.rank` exists and every existing issue holds one; `tcms_seed_project_defaults`
 gives every project a six-column default board; `SchemaConventionTest` is green.
+**Landed:** `94b3e5ae`
 **Stack:** `data`
 **Est. context:** ~95k — 1 migration created (~400 lines), 1 schema test created, `V3`'s 170-line
 seed function read in full and reproduced, `SchemaConventionTest` read, the ERD modified, 2 skills
@@ -1618,10 +1751,11 @@ seed function read in full and reproduced, `SchemaConventionTest` read, the ERD 
 **Files:**
 - Create: `backend/src/main/resources/db/migration/V5__tracker_board.sql`
 - Create: `backend/src/test/java/com/tcms/tracker/board/BoardSchemaTest.java`
-- Modify: `backend/src/test/java/com/tcms/schema/SchemaConventionTest.java` (the forced-RLS policy count)
+- Modify: `backend/src/test/java/com/tcms/tenancy/SchemaConventionTest.java` (the forced-RLS policy
+  count) — **`tenancy`, not `schema`**, which is where this plan first looked
 - Modify: `docs/specs/2026-07-30-tcms-erd.md`
 
-- [ ] **Step 1: Confirm the version, from the directory rather than from any table**
+- [x] **Step 1: Confirm the version, from the directory rather than from any table**
 
 ```bash
 ls backend/src/main/resources/db/migration/
@@ -1633,7 +1767,7 @@ two versions. `out-of-order` is unset in `application.yml`, so a `V5`-numbered f
 that will ever run on an instance that has M1. **If this listing shows a `V5` already**, somebody
 else took it; take the next free one and say so in the hand-off.
 
-- [ ] **Step 2: Write the tables**
+- [x] **Step 2: Write the tables**
 
 ```sql
 -- =============================================================================
@@ -1790,15 +1924,52 @@ CREATE INDEX ix_issue_label_assignment_label ON issue_label_assignment (company_
 -- creation order, looking ranked when nobody ranked it.
 ALTER TABLE issue ADD COLUMN rank NUMERIC;
 
-UPDATE issue i
-SET rank = ranked.seq * 1024
-FROM (
-    SELECT id, row_number() OVER (PARTITION BY project_id ORDER BY created_at, id) AS seq
-    FROM issue
-) ranked
-WHERE i.id = ranked.id;
+-- THE BACKFILL IS A LOOP OVER COMPANY, and the bare UPDATE this plan first wrote
+-- is the trap V3's own header names one table over. `issue` has carried FORCE ROW
+-- LEVEL SECURITY since V3 and Flyway connects as tcms_owner, which holds no
+-- BYPASSRLS — so a single UPDATE with app.current_company unset matches ZERO ROWS
+-- and reports success. It would not even fail loudly afterwards on a database
+-- whose `issue` table is empty, which every Testcontainers run is: the SET NOT
+-- NULL below would pass and the defect would first appear on the one instance
+-- that has data.
+DO $$
+DECLARE
+    c UUID;
+BEGIN
+    FOR c IN SELECT id FROM company LOOP
+        PERFORM set_config('app.current_company', c::text, true);
+        UPDATE issue i
+           SET rank = ranked.seq * 1024
+          FROM (
+            SELECT id, row_number() OVER (PARTITION BY project_id ORDER BY created_at, id) AS seq
+              FROM issue
+          ) ranked
+         WHERE i.id = ranked.id AND i.rank IS NULL;
+    END LOOP;
+    PERFORM set_config('app.current_company', '', true);
+END $$;
 
 ALTER TABLE issue ALTER COLUMN rank SET NOT NULL;
+
+-- AND THE TRIGGER THAT MAKES `NOT NULL` SURVIVABLE TWO TASKS BEFORE RankService
+-- (D-k). T2 does not remap `Issue`, so every insert Hibernate makes omits `rank`;
+-- a column DEFAULT cannot read another row, and a constant one would make every
+-- new issue tie with every other. Ties under concurrency are accepted and
+-- created_at breaks them — nothing here claims rank is unique.
+CREATE FUNCTION tcms_issue_rank_default() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.rank IS NULL THEN
+        SELECT coalesce(max(i.rank), 0) + 1024 INTO NEW.rank
+          FROM issue i
+         WHERE i.company_id = NEW.company_id AND i.project_id = NEW.project_id;
+    END IF;
+    RETURN NEW;
+END $$;
+
+CREATE TRIGGER issue_rank_default
+    BEFORE INSERT ON issue
+    FOR EACH ROW EXECUTE FUNCTION tcms_issue_rank_default();
 
 -- Leading company_id, as every composite index in this schema does — the RLS
 -- predicate is on it and an index that does not lead with it is not used by the
@@ -1806,10 +1977,19 @@ ALTER TABLE issue ALTER COLUMN rank SET NOT NULL;
 CREATE INDEX ix_issue_rank ON issue (company_id, project_id, rank);
 ```
 
-- [ ] **Step 3: Add the RLS block**
+- [x] **Step 3: Add the RLS block**
 
 Every one of the six tables is company-owned, so every one takes the full treatment. `V1`'s block is
-the pattern; copy its exact shape.
+the pattern; copy its exact shape — **and it is not the shape this plan first wrote.**
+`SchemaConventionTest.everyPolicyHasTheExactIsolationPredicate` pins all four of these, so a policy
+retyped from memory reddens the suite rather than silently diverging:
+
+| This plan first wrote | What the schema requires |
+|---|---|
+| `CREATE POLICY %1$I_company` | the policy is named **`company_isolation`**, on every table |
+| `current_setting('app.current_company', true)::uuid` | **`nullif(…, '')::uuid`** — both spellings of "no company", never-set and reset-to-`''` on a recycled pooled connection, must collapse to NULL |
+| an explicit `WITH CHECK` | **none.** A policy with `USING` and no `WITH CHECK` reuses `USING` as the insert check, so the read boundary *is* the write boundary and there is no second clause for somebody to relax later. The test fails on any policy that has one |
+| `GRANT … TO tcms_app` | **no grant.** `deploy/postgres/initdb/10-tcms-roles.sql` sets `ALTER DEFAULT PRIVILEGES FOR ROLE tcms_owner`, so a table Flyway creates is granted before it exists. No migration in this repository issues a `GRANT` |
 
 ```sql
 -- -----------------------------------------------------------------------------
@@ -1820,38 +2000,47 @@ the pattern; copy its exact shape.
 -- FORCE is what makes the policy apply to a table's OWNER too, and tcms_owner is
 -- what Flyway connects as. Without it a migration or an owner-run query reads
 -- every company's rows, which is the trap docs/specs/tenancy-invariants.md names.
-
 DO $$
-DECLARE t TEXT;
+DECLARE
+    t         TEXT;
+    protected TEXT[] := ARRAY[
+        'board', 'board_column', 'board_column_status', 'board_swimlane',
+        'issue_label', 'issue_label_assignment'
+    ];
 BEGIN
-    FOREACH t IN ARRAY ARRAY['board','board_column','board_column_status',
-                             'board_swimlane','issue_label','issue_label_assignment']
-    LOOP
+    FOREACH t IN ARRAY protected LOOP
+        IF NOT EXISTS (SELECT 1 FROM information_schema.tables
+                        WHERE table_schema = current_schema() AND table_name = t) THEN
+            RAISE EXCEPTION 'the RLS list names a table that does not exist: %', t;
+        END IF;
         EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
         EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
-        EXECUTE format($p$
-            CREATE POLICY %1$I_company ON %1$I
-                USING (company_id = current_setting('app.current_company', true)::uuid)
-                WITH CHECK (company_id = current_setting('app.current_company', true)::uuid)
-        $p$, t);
-        EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO tcms_app', t);
+        EXECUTE format(
+            'CREATE POLICY company_isolation ON %I USING '
+            '(company_id = nullif(current_setting(''app.current_company'', true), '''')::uuid)', t);
     END LOOP;
+
+    IF array_length(protected, 1) <> 6 THEN
+        RAISE EXCEPTION 'expected 6 new company-isolated tables, found %',
+            array_length(protected, 1);
+    END IF;
 END $$;
 ```
 
-- [ ] **Step 4: Reproduce `tcms_seed_project_defaults` IN FULL and add the board block**
+- [x] **Step 4: Reproduce `tcms_seed_project_defaults` IN FULL and add the board block**
 
 **This is the step the plan exists to make impossible to get wrong.** There is no
 `ProjectCreatedEvent` and you must not build one (011 D-b). A per-project default is seeded here, and
 `CREATE OR REPLACE FUNCTION` **replaces the whole body** — a block you leave out silently stops being
 seeded for every project created from this migration onward, with no error anywhere.
 
-- [ ] Open `backend/src/main/resources/db/migration/V3__tracker_core.sql` and read lines **436–606**.
-- [ ] Copy the function **verbatim** into `V5`, from `CREATE OR REPLACE FUNCTION` to `END $$;`.
-- [ ] Confirm all six existing blocks are present before adding a seventh:
+- [x] Open `backend/src/main/resources/db/migration/V3__tracker_core.sql` and read lines **436–606**.
+- [x] Copy the function **verbatim** into `V5`, from `CREATE OR REPLACE FUNCTION` to `END $$;`.
+- [x] Confirm all six existing blocks are present before adding a seventh — there are **eight**
+      `INSERT` blocks, not six, because the workflow is three of them:
       `classification_dimension` · `case_status` · `configuration` · `doc_space` ·
       `project_key_sequence` · the six-status default workflow.
-- [ ] Append the new block **inside** the function, before its `END`:
+- [x] Append the new block **inside** the function, before its `END`:
 
 ```sql
     -- V5. The project's default board (story B2, D2).
@@ -1867,23 +2056,28 @@ seeded for every project created from this migration onward, with no error anywh
     -- into three columns, and which three is a decision about who is looking —
     -- exactly the "inventing the client's structure" mistake that keeps a Default
     -- *suite* out of this function. settings-boards.html is where it is made.
-    v_board_id := gen_random_uuid();
-    INSERT INTO board (id, company_id, project_id, name, swimlane_by)
-    VALUES (v_board_id, p_company_id, p_project_id, 'Team board', 'EPIC');
+    -- Guarded by NOT EXISTS like every block above it, and that is what lets the
+    -- backfill in step 5 CALL this function rather than restate its inserts.
+    IF NOT EXISTS (SELECT 1 FROM board
+                    WHERE company_id = p_company_id AND project_id = p_project_id) THEN
+        v_board_id := gen_random_uuid();
+        INSERT INTO board (id, company_id, project_id, name, swimlane_by)
+        VALUES (v_board_id, p_company_id, p_project_id, 'Team board', 'EPIC');
 
-    FOR v_status IN
-        SELECT id, name, position FROM issue_status
-        WHERE company_id = p_company_id AND project_id = p_project_id
-        ORDER BY position
-    LOOP
-        v_column_id := gen_random_uuid();
-        INSERT INTO board_column (id, company_id, board_id, name, position,
-                                  wip_limit, default_status_id)
-        VALUES (v_column_id, p_company_id, v_board_id, v_status.name, v_status.position,
-                NULL, v_status.id);
-        INSERT INTO board_column_status (company_id, board_id, column_id, status_id)
-        VALUES (p_company_id, v_board_id, v_column_id, v_status.id);
-    END LOOP;
+        FOR v_status IN
+            SELECT id, name, "position" FROM issue_status
+            WHERE company_id = p_company_id AND project_id = p_project_id
+            ORDER BY "position"
+        LOOP
+            v_column_id := gen_random_uuid();
+            INSERT INTO board_column (id, company_id, board_id, name, "position",
+                                      wip_limit, default_status_id)
+            VALUES (v_column_id, p_company_id, v_board_id, v_status.name, v_status."position",
+                    NULL, v_status.id);
+            INSERT INTO board_column_status (company_id, board_id, column_id, status_id)
+            VALUES (p_company_id, v_board_id, v_column_id, v_status.id);
+        END LOOP;
+    END IF;
 ```
 
 Add to the function's `DECLARE`:
@@ -1893,10 +2087,13 @@ Add to the function's `DECLARE`:
     v_status    RECORD;
 ```
 
-- [ ] **Step 5: Backfill a board for every project that already exists**
+- [x] **Step 5: Backfill a board for every project that already exists**
 
 The function seeds new projects. Existing ones need one too, and `V3` ends with exactly this shape
-of loop — copy it.
+of loop — copy it. **Call the function; do not restate its inserts.** That is what the `NOT EXISTS`
+guard in step 4 buys, it is the rule `V3`'s own backfill states ("one definition of what a seeded
+project contains"), and a second copy of the board block is a second thing to keep in step with the
+first.
 
 ```sql
 -- -----------------------------------------------------------------------------
@@ -1904,49 +2101,76 @@ of loop — copy it.
 -- -----------------------------------------------------------------------------
 --
 -- set_config with is_local = true, and the company set per iteration: the seed
--- function asserts the company context (tcms_assert_company_context) and every
--- INSERT is under FORCE RLS, so a loop that did not set it would insert nothing
--- and report success. That failure is silent and is the one V3's own loop is
--- written this way to avoid.
-
+-- function asserts the company context and every INSERT it makes is under FORCE
+-- ROW LEVEL SECURITY, so a loop that did not set it would read zero projects,
+-- insert nothing, and report success. `company` is on the ERD §0.1 exception list
+-- and carries no policy, so it can be walked.
 DO $$
-DECLARE c UUID; p UUID; v_board_id UUID; v_column_id UUID; v_status RECORD;
+DECLARE
+    c UUID;
+    p UUID;
 BEGIN
     FOR c IN SELECT id FROM company LOOP
         PERFORM set_config('app.current_company', c::text, true);
         FOR p IN SELECT id FROM project WHERE company_id = c LOOP
-            IF EXISTS (SELECT 1 FROM board WHERE company_id = c AND project_id = p) THEN
-                CONTINUE;
-            END IF;
-            v_board_id := gen_random_uuid();
-            INSERT INTO board (id, company_id, project_id, name, swimlane_by)
-            VALUES (v_board_id, c, p, 'Team board', 'EPIC');
-            FOR v_status IN
-                SELECT id, name, position FROM issue_status
-                WHERE company_id = c AND project_id = p ORDER BY position
-            LOOP
-                v_column_id := gen_random_uuid();
-                INSERT INTO board_column (id, company_id, board_id, name, position,
-                                          wip_limit, default_status_id)
-                VALUES (v_column_id, c, v_board_id, v_status.name, v_status.position,
-                        NULL, v_status.id);
-                INSERT INTO board_column_status (company_id, board_id, column_id, status_id)
-                VALUES (c, v_board_id, v_column_id, v_status.id);
-            END LOOP;
+            PERFORM tcms_seed_project_defaults(c, p);
         END LOOP;
     END LOOP;
     PERFORM set_config('app.current_company', '', true);
 END $$;
 ```
 
-- [ ] **Step 6: Write the schema test**
+- [x] **Step 5b: The board follows the workflow — the trigger the gate demanded (D-l)**
+
+Not in this plan as written, and it is what thirty-eight red tests were about on the first run.
+`WorkflowService` hard-deletes an `issue_status` row, and `board_column.default_status_id`'s plain
+`RESTRICT` lets the board refuse it. Read D-l for why the repair is a trigger and why
+`ON DELETE CASCADE` is the silently-wrong one-liner.
+
+```sql
+CREATE FUNCTION tcms_board_follows_status_removal() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+BEGIN
+    -- `status_id <> OLD.id` matters: this is a BEFORE trigger, so the cascade that
+    -- removes the departing status's own claim rows has not run yet.
+    UPDATE board_column c
+       SET default_status_id = (
+            SELECT s.id
+              FROM board_column_status bcs
+              JOIN issue_status s ON s.id = bcs.status_id
+             WHERE bcs.column_id = c.id AND bcs.status_id <> OLD.id
+             ORDER BY s."position"
+             LIMIT 1)
+     WHERE c.default_status_id = OLD.id
+       AND EXISTS (SELECT 1 FROM board_column_status bcs
+                    WHERE bcs.column_id = c.id AND bcs.status_id <> OLD.id);
+
+    DELETE FROM board_column c WHERE c.default_status_id = OLD.id;
+
+    RETURN OLD;
+END $$;
+
+CREATE TRIGGER board_follows_status_removal
+    BEFORE DELETE ON issue_status
+    FOR EACH ROW EXECUTE FUNCTION tcms_board_follows_status_removal();
+```
+
+- [x] **Step 6: Write the schema test**
+
+**The base class is `com.tcms.IntegrationTestBase`, not `AbstractIntegrationTest`**, and it exposes
+`superuserConnection()` / `appConnection(companyId)` rather than a `jdbc` field — read
+`ProjectKeySequenceSchemaTest`, which is this class's nearest relative. **Read as the superuser:**
+all six tables force RLS and `tcms_owner` holds no `BYPASSRLS`, so a count of zero from that role
+means the policy is working rather than that the migration seeded nothing. Fixtures come from
+`CompanyProvisioningService.provision(ProvisionCompanyRequest.withFirstProject(...))`, which is the
+one path that both makes a project and calls the seed function.
 
 ```java
 package com.tcms.tracker.board;
 
 // A TEST, not a careful reading. CLAUDE.md: reading V1 top to bottom missed five
 // join tables without company_id; scripting the comparison found them.
-class BoardSchemaTest extends AbstractIntegrationTest {
+class BoardSchemaTest extends IntegrationTestBase {
 
     @Test
     void aSecondColumnCannotClaimAStatusTheFirstAlreadyHolds() {
@@ -1994,12 +2218,13 @@ class BoardSchemaTest extends AbstractIntegrationTest {
 }
 ```
 
-- [ ] **Step 7: Move the forced-RLS policy count**
+- [x] **Step 7: Move the forced-RLS policy count**
 
-`SchemaConventionTest` pins the number. `V4` took it from 84 to 82; six tables here make it **88**.
-Find the constant, change it, and update the comment beside it to name `V5`.
+`SchemaConventionTest` pins the number — in **`backend/src/test/java/com/tcms/tenancy/`**, not
+`com/tcms/schema/`. `V4` took it from 84 to 82; six tables here make it **88**. Find the constant,
+change it, and update the comment beside it to name `V5`.
 
-- [ ] **Step 8: Run the backend gate on shanks**
+- [x] **Step 8: Run the backend gate on shanks**
 
 ```bash
 ~/bin/tcms-remote sync
@@ -2010,7 +2235,7 @@ Read `docs/specs/shanks-runner-details.md` first. **`BUILD FAILED` with `Could n
 results` and zero assertion failures is an fd limit, not a red suite** — re-run as
 `ulimit -n 65535; ./gradlew build`.
 
-- [ ] **Step 9: Update the ERD and commit**
+- [x] **Step 9: Update the ERD and commit**
 
 Add the six tables to `docs/specs/2026-07-30-tcms-erd.md` and record `issue.rank` in its
 `issue` section, with D-d's reasoning for `NUMERIC`.
@@ -3796,7 +4021,17 @@ rendered nothing but the error page, all of which typechecked and linted clean.
       cards, the rank and the labels is T4.
 - [ ] `V5` applied to an instance that **already holds issues** — the property Testcontainers
       structurally cannot show, because it always builds from empty, and the one the `rank` backfill
-      and the `NOT NULL` that follows it carry the most risk on.
+      and the `NOT NULL` that follows it carry the most risk on. T2 exercised the loop by hand
+      against a throwaway Postgres 17 with `V1`–`V5` applied and four issues whose `rank` had been
+      cleared: it numbered them `1024, 2048, 3072, 4096` in `created_at` order under `tcms_owner`
+      with the GUC set per company. **That is not the same as the lab instance's own data**, and the
+      backfill is the one statement in `V5` that cannot be re-run if it is wrong.
+- [ ] The seeded board **seen on a screen**. `BoardSchemaTest` proves six columns each claiming one
+      status exist in the database; nothing has rendered them, and nothing will until T7.
+- [ ] A status retired through `PUT /projects/{id}/workflow` on a project whose board has a **folded**
+      column. `BoardSchemaTest` builds that shape by hand and drives the delete straight at
+      `issue_status`; the endpoint path has only been exercised against the seeded
+      one-status-per-column board, which is the easy half of D-l.
 - [ ] A card dragged on the seeded per-status board, then the same project's coarse board opened and
       the card found in the matching column. This is the module's headline criterion and a passing
       `BoardMoveServiceTest` is not the same as having seen it.
