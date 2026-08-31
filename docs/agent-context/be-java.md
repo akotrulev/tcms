@@ -1,6 +1,6 @@
 # be-java — orientation cache
 
-Baseline: 012 T3 (`7c9883b9`), refreshed 2026-08-31.
+Baseline: 012 T4 (`9df190e1`), refreshed 2026-08-31.
 Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
 
 ## Version lane
@@ -42,8 +42,27 @@ Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
   transaction — a Java event may not cross a module boundary and the outbox has a one-minute floor.
 - A board `PATCH` parks its columns at negative positions and flushes before renumbering:
   `uq_board_column_position` is not deferrable and Hibernate orders its own updates.
+- `tracker.board` (012 T4) — four more services, same sealed-`Outcome`-inside-`GateResult` shape.
+  `RankService.place(userId, key, RankInput)` owns the fractional rank and **only the move path**:
+  the creation path is V5's `issue_rank_default` trigger and must not be re-implemented (D-k).
+  `BoardCardService.contents/backlog` assemble every card face through one inner `Facts` object;
+  `BoardMoveService` **delegates** the transition to `TransitionService` rather than re-checking the
+  workflow. `LabelService` is `board:configure` for the label and `issue:edit` for putting one on an
+  issue — no new permission (D-e).
+- **A service reading an entity BEFORE its gate gets a DETACHED one.** `projects.writeGranted` opens
+  the transaction, so a repository read outside it commits and detaches — `TransitionService` copes
+  by re-`save`ing, and `RankService` re-reads inside the gate because `EntityManager.refresh` refuses
+  a detached entity. Cost T4 one round trip to find.
+- Raw SQL in this codebase is `EntityManager.createNativeQuery` — **there is no `JdbcTemplate`
+  anywhere**, and the 012 plan's pseudo-code that uses one predates the check.
+- `BigDecimal.divide(TWO)` with no scale argument is **exact** (halving always terminates in base
+  ten) and never rounds into a collision. The rank's growth bound is `scale() > 12`, checked on the
+  `stripTrailingZeros()`ed value so a whole number reads as scale ≤ 0.
+- `project.PeopleDirectory` is the display-name seam reachable from a `tracker` sub-package;
+  `tracker.TrackerPeople` is package-private and is not.
 
 ## Conventions observed
+- A schema pairs with a **view record**, never an entity — `Label` → `LabelView`, not `IssueLabel`.
 - Records for views/requests, sealed `Outcome` interfaces per service, exhaustive switches in
   controllers. Decisions and their reasons live in Javadoc; superseded reasoning is struck through
   and kept. Every `Problem.errors` value is a sentence.
@@ -54,7 +73,8 @@ Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
 - Almost everything is `@SpringBootTest` + Testcontainers (`IntegrationTestBase`); pure unit tests
   exist for arithmetic seams (`TokenRateLimiterTest`, `SignInLockoutTest`'s first two methods).
   Fixture UUIDs use a per-class prefix; check `grep` before claiming one. Taken by 012 T3: `b4`,
-  `b5`, `b6`.
+  `b5`, `b6`. **The whole `b0`–`be` space is now taken**; 012 T4 took `bf1`/`bf2`/`bf3` under `bf`,
+  which was the last free two-nibble prefix in `b`.
 - `TrackerEndpointTestBase` is **public** since 012 T3 — company / user / membership / project
   grant / `tcms_seed_project_defaults`, reusable from `com.tcms.tracker.board`. Any class needing
   `mvc` also needs `@AutoConfigureMockMvc`, including one that only autowires the base.
@@ -71,12 +91,27 @@ Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
 ## Known unknowns
 - Whether `SignInThrottle` keyed on `getRemoteAddr()` behaves behind the lab ingress (prod sets
   `forward-headers-strategy: framework`).
-- `ContractConventionTest.everyObjectSchemaIsPairedOrExempt` is red for B3/B4's schemas until
-  those batches pair them. → after 012 T3 it is red for **T4's twelve** and
-  `ContractParameterBindingTest` for **T4's nine operations**; `ContractEnumTest` is green.
-  The measured gate is **8 failures**, those two plus six pre-existing `FlakeScoreTest`.
+- ~~`ContractConventionTest` red for T4's twelve schemas and `ContractParameterBindingTest` for its
+  nine operations~~ → **both green after 012 T4.** The measured gate is now **6 failures, all
+  `FlakeScoreTest`**, red on `master` since before 012 T1 and owned by no task in that plan. A
+  seventh failure is yours.
+- Nothing compares a handler's status codes to the ones `openapi.yaml` declares. T4's label
+  endpoints answer 400 on a blank name, which the contract does not list — invisible to every gate.
 
 ## Session log
+- 2026-08-31 012 T4: `be`, two commits. `com.tcms.tracker.board` gains four services
+  (`RankService`, `BoardCardService`, `BoardMoveService`, `LabelService`), four controllers, two
+  label entities + repositories and eleven view/input records — the nine T4 operations and the
+  twelve T4 schemas. `Issue` gains a mapped `rank` and a `rankAt` mutator that stamps no
+  `updated_at` (reordering a backlog is not an edit to the issues in it). `Completion`,
+  `CountedIssue` and `EpicStatus` widened to **public** so a lane roll-up and an epic's board status
+  go through D8's and D31's one implementation rather than a second one (D-s). Three decisions
+  recorded: **D-q** — `openapi.yaml` contradicts itself on "neither neighbour", the 400 arm wins,
+  the `afterKey` "means to the top" sentence is stale and was NOT edited because that regenerates
+  both schema copies and is `ts` work; **D-r** — an Epic is a board card (derived status, empty
+  `allowedTransitions`) and not a backlog row; **D-s** — the widening above. Gate on shanks:
+  **3726 tests, 6 failures — `FlakeScoreTest` only**, so both contract suites cleared as planned.
+  **No screen renders any of it**; the board is T7 and the backlog T8.
 - 2026-08-31 012 T3: `be`, two commits. `com.tcms.tracker.board` — a **sub-package**, not a module,
   so `allowedDependencies` and `FOUNDATION_MODULES` are untouched and ArchUnit is green. Three
   entities (`Board`, `BoardColumn`, `BoardColumnStatus` + its `@IdClass`), three repositories, five
