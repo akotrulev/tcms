@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
 import { useIssues, useProject, useProjectMembers, useProjectWorkflow } from '../../api/queries';
-import type { IssueFilters, IssueSummary } from '../../api/types';
+import type { IssueSummary } from '../../api/types';
 import type { IssueSort } from '../../api/queries';
 import { DataRegion, GridSkeleton } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
@@ -31,7 +31,9 @@ import { cn } from '../../lib/cn';
 import { formatCount, plural } from '../../lib/format';
 import { issueLevels } from '../../lib/labels';
 import { NativeSelect } from '../../components/ui/native-select';
+import { BacklogView } from '../board/BacklogView';
 import { ProjectBoardView } from '../board/ProjectBoardView';
+import { useWorkFilter } from '../board/useWorkFilter';
 import { StatusBadge } from './StatusBadge';
 import { TypeIcon } from './TypeIcon';
 
@@ -44,10 +46,16 @@ import { TypeIcon } from './TypeIcon';
  * entries, and the filter is shared across them — which is why it lives in the URL rather than in
  * component state. ~~**Four of the five are not built in M1**~~ → **three, since 012 T7 landed the
  * board** (`features/board/ProjectBoardView.tsx`, which is the *project* board and not
- * `BoardPage.tsx`'s composite one). Backlog arrives in T8; Timeline and Calendar are M3's, and each
- * still renders a panel naming the module it arrives in rather than vanishing: a tab that disappears
- * and reappears between releases teaches that the product is unstable, while one that says *when*
- * teaches the roadmap.
+ * `BoardPage.tsx`'s composite one). ~~Backlog arrives in T8~~ → **it landed there**
+ * (`features/board/BacklogView.tsx`); Timeline and Calendar are M3's, and each still renders a panel
+ * naming the module it arrives in rather than vanishing: a tab that disappears and reappears between
+ * releases teaches that the product is unstable, while one that says *when* teaches the roadmap.
+ *
+ * <h2>The filter is `useWorkFilter`'s, and this page is no longer the only reader (012 T8)</h2>
+ *
+ * Three views now read one URL. The hook is the only reader and the only writer; this page takes
+ * `filters.issue`, the board and the backlog take `filters.board`, and the two are a **mapping**
+ * rather than a cast — they differ in both directions (D-v).
  *
  * **The board's panel named the previous board as still reachable and no longer does**, because the
  * absence that sentence covered is gone: `/projects/:id/board` still exists and still works, and it
@@ -76,14 +84,7 @@ const TEST_ID = 'WorkTable';
  */
 const VIEWS = [
   { id: 'board', label: 'Board', module: null, body: '', existing: null },
-  {
-    id: 'backlog',
-    label: 'Backlog',
-    module: 'M2',
-    body: 'Ranking the unscheduled work — drag, and a keyboard path beside it — arrives with the '
-      + 'delivery module.',
-    existing: null,
-  },
+  { id: 'backlog', label: 'Backlog', module: null, body: '', existing: null },
   { id: 'table', label: 'Table', module: null, body: '', existing: null },
   {
     id: 'timeline',
@@ -127,17 +128,18 @@ const ALL_COLUMNS = COLUMNS.map((column) => column.id);
 
 export function WorkTablePage() {
   const { projectId = '' } = useParams();
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
 
   const project = useProject(projectId);
   const workflow = useProjectWorkflow(projectId);
   /*
-    Gated on the filter strip being on screen at all: the two not-yet views must not fire a request
-    whose only use is a chip they do not render.
+    Gated on this strip being on screen at all: Timeline and Calendar must not fire a request whose
+    only use is a chip they do not render.
 
-    ~~The table view is the only one that reads it.~~ → the board reads it too since 012 T7, and asks
-    for it itself rather than through a prop: the query key is the same, so TanStack serves one
-    request to both and the gate here stays about *this* strip.
+    ~~The table view is the only one that reads it.~~ → the board reads it too since 012 T7 and the
+    backlog since T8, and each asks for it itself rather than through a prop: the query key is the
+    same, so TanStack serves one request to whichever of them is mounted and the gate here stays
+    about *this* strip.
   */
   const members = useProjectMembers(
     projectId,
@@ -148,25 +150,16 @@ export function WorkTablePage() {
   const sort = (params.get('sort') ?? 'key') as IssueSort;
 
   /*
-    The filter, read out of the URL on every render rather than mirrored into state.
-
-    D34's shared filter is the reason: two views reading one filter cannot be a `useState` in
-    either of them, and a store would be server-state's filter living somewhere the URL cannot
-    restore from a pasted link.
+    ~~The filter, read out of the URL on every render rather than mirrored into state.~~ → **the
+    same read, now in `useWorkFilter`** (012 T8). The reasoning is unchanged and moved with it:
+    D34's shared filter means two views reading one filter cannot be a `useState` in either of
+    them, and a store would be server-state's filter living somewhere the URL cannot restore from a
+    pasted link. What changed is that there are now three readers, and `filters.issue` is the subset
+    THIS endpoint declares — `IssueFilters`, which differs from the board's `BoardFilters` in both
+    directions (D-v).
   */
-  const filters = useMemo<IssueFilters>(() => {
-    const level = params.get('level');
-    const epicKey = params.get('epicKey');
-    const statusId = params.getAll('statusId');
-    const assigneeId = params.getAll('assigneeId');
-    return {
-      level: level === 'EPIC' || level === 'STORY' || level === 'TASK' ? level : undefined,
-      epicKey: epicKey || undefined,
-      statusId: statusId.length > 0 ? statusId : undefined,
-      assigneeId: assigneeId.length > 0 ? assigneeId : undefined,
-      unparented: params.get('unparented') === 'true' ? true : undefined,
-    };
-  }, [params]);
+  const { filters: work, setParam, clearFilters } = useWorkFilter();
+  const filters = work.issue;
 
   const visible = useMemo<ColumnId[]>(() => {
     const requested = params.get('cols');
@@ -179,12 +172,6 @@ export function WorkTablePage() {
   }, [params]);
 
   const issues = useIssues(projectId, filters, sort);
-
-  const setParam = (mutate: (next: URLSearchParams) => void) => {
-    const next = new URLSearchParams(params);
-    mutate(next);
-    setParams(next, { replace: true });
-  };
 
   const applied: AppliedFilter[] = [
     ...(filters.level
@@ -216,6 +203,31 @@ export function WorkTablePage() {
           for (const value of kept) next.append('assigneeId', value);
         }),
     })),
+    /*
+      `epicKey` and `parentKey` get a chip and no picker, and that asymmetry is D34's (012 T8).
+      `GET /issues` takes both, so a reader who narrowed to one epic on the Board and switched here
+      is looking at a narrowed table — and until this chip existed, at one with nothing on screen
+      saying so. What they do not need is a second place to *apply* them: an epic is picked by
+      opening it, and a parent by opening the story.
+    */
+    ...(filters.epicKey
+      ? [
+          {
+            key: `epic:${filters.epicKey}`,
+            label: `Epic · ${filters.epicKey}`,
+            onRemove: () => setParam((next) => next.delete('epicKey')),
+          },
+        ]
+      : []),
+    ...(filters.parentKey
+      ? [
+          {
+            key: `parent:${filters.parentKey}`,
+            label: `Parent · ${filters.parentKey}`,
+            onRemove: () => setParam((next) => next.delete('parentKey')),
+          },
+        ]
+      : []),
     ...(filters.unparented
       ? [
           {
@@ -317,6 +329,8 @@ export function WorkTablePage() {
       */}
       {current.id === 'board' ? (
         <ProjectBoardView projectId={projectId} />
+      ) : current.id === 'backlog' ? (
+        <BacklogView projectId={projectId} />
       ) : current.module !== null ? (
         <section data-testid={`${TEST_ID}.NotYet.${current.id}`}>
           <Banner tone="steel">
@@ -344,7 +358,7 @@ export function WorkTablePage() {
           <FilterStrip
             data-testid={`${TEST_ID}.Filters`}
             applied={applied}
-            onClear={applied.length > 0 ? () => setParams(new URLSearchParams({ view: 'table' }), { replace: true }) : undefined}
+            onClear={applied.length > 0 ? clearFilters : undefined}
             pickers={
               <>
                 <NativeSelect
@@ -430,11 +444,7 @@ export function WorkTablePage() {
             skeleton={<GridSkeleton rows={6} />}
             empty={
               applied.length > 0
-                ? {
-                    kind: 'no-filter-match',
-                    onClearFilters: () =>
-                      setParams(new URLSearchParams({ view: 'table' }), { replace: true }),
-                  }
+                ? { kind: 'no-filter-match', onClearFilters: clearFilters }
                 : {
                     kind: 'no-records',
                     title: 'No issues yet',

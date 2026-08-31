@@ -26,7 +26,9 @@ import { WorkTablePage } from './WorkTablePage'
  *    the same picture, and only one of them is recoverable.
  * 2. **An empty project must offer the action that resolves it.** The mockups' own rule.
  * 3. **The filter survives a view switch** (D34) — a URL assertion, not a component one, because
- *    the filter lives in the query string precisely so that it can.
+ *    the filter lives in the query string precisely so that it can. Since 012 T8 that crosses two
+ *    parameter *sets*: a `labelId` set on the Board reaches the Table's address untouched even
+ *    though `GET /issues` has no such parameter (D-v).
  * 4. **Columns M1 has no data for are ABSENT from the picker** (D-f). A greyed Release column
  *    would teach that this issue has no release; the product cannot hold one at all.
  */
@@ -86,6 +88,8 @@ function mockReads(issues = [anIssueSummary({ key: 'ACME-118', title: 'Guest che
     */
     if (/^\/projects\/[^/]+\/boards$/.test(path)) return [aBoardSummary({ id: 'b1' })]
     if (/^\/projects\/[^/]+\/labels$/.test(path)) return []
+    // The backlog view's own read (012 T8). Anchored for the same reason as the pair above.
+    if (/^\/projects\/[^/]+\/backlog/.test(path)) return []
     if (/^\/boards\/[^/]+$/.test(path)) return aBoardConfig({ id: 'b1' })
     if (/^\/boards\/[^/]+\/cards/.test(path)) return boardContents()
     if (/^\/projects\/[^/]+$/.test(path)) return aProject({ id: 'p1', name: 'Acme Storefront' })
@@ -185,6 +189,54 @@ describe('The view switcher (D34)', () => {
 
     const panel = await screen.findByTestId('WorkTable.NotYet.timeline')
     expect(panel).toHaveTextContent('M3')
+    expect(screen.queryByTestId('WorkTable.Table')).toBeNull()
+  })
+
+  it('carries a filter set on the Board to the Table, in the URL and on the screen', async () => {
+    /*
+      D34's whole point and the M2 done-criterion — asserted through the address **as well as** the
+      screen, because "shareable as a URL" is the half a test that only checked the chips would
+      miss. `labelId` is the board's parameter and the Table has no picker for it; `assigneeId` is
+      one both endpoints declare, so the Table both applies it and chips it.
+
+      The address is the router's rather than `window.location`'s: `TestProviders` mounts a
+      `MemoryRouter`, which never writes the browser's location, so `location.search` is the URL
+      under test.
+    */
+    mockReads()
+    renderPage('/projects/p1/work?view=board&labelId=lab-1&assigneeId=u1')
+
+    expect(await screen.findByTestId('ProjectBoard.View')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByTestId('WorkTable.View.table'))
+
+    await waitFor(() => expect(screen.getByTestId('WorkTable.Table')).toBeInTheDocument())
+    const address = screen.getByTestId('Address').textContent ?? ''
+    expect(address).toContain('labelId=lab-1')
+    expect(address).toContain('assigneeId=u1')
+    expect(screen.getByTestId('WorkTable.Filters.Applied.assignee:u1')).toBeInTheDocument()
+  })
+
+  it('chips an epic filter the Board set, which the table applies and cannot pick', async () => {
+    // `GET /issues` takes `epicKey`, so this table IS narrowed — and until T8 nothing on screen
+    // said so. A filter with no chip is one somebody stares at a short list over.
+    mockReads()
+    renderPage('/projects/p1/work?epicKey=ACME-1')
+
+    expect(await screen.findByTestId('WorkTable.Filters.Applied.epic:ACME-1')).toHaveTextContent(
+      'Epic · ACME-1',
+    )
+  })
+
+  it('renders the backlog itself now, rather than a panel deferring it', async () => {
+    // ~~"Backlog arrives in M2"~~ → it did, in 012 T8. Asserted through the backlog's own root
+    // rather than its content: this test is about the switcher's wiring, and the backlog's
+    // behaviour has a file of its own.
+    mockReads()
+    renderPage('/projects/p1/work?view=backlog')
+
+    expect(await screen.findByTestId('Backlog.View')).toBeInTheDocument()
+    expect(screen.queryByTestId('WorkTable.NotYet.backlog')).toBeNull()
     expect(screen.queryByTestId('WorkTable.Table')).toBeNull()
   })
 

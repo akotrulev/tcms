@@ -47,19 +47,25 @@ export function TypeIcon({
   ...rest
 }: {
   /**
-   * The three fields the glyph and the tone are derived from — **not the whole `IssueTypeRef`**.
+   * The fields the glyph and the tone are derived from — **not the whole `IssueTypeRef`**.
    *
    * Widened in 012 T7, when the project board's card arrived: `BoardIssueCard` carries `typeName`,
    * `typeLevel` and `countsTowardCompletion` and **no type id**, so a caller there had two choices —
    * synthesise an id this component has never read, or say in the type which fields it actually
    * needs. The second is the one a reader can check. Every existing caller passes a full
    * `IssueTypeRef` and is unaffected, because this is a widening.
+   *
+   * Widened again in 012 T8: **`countsTowardCompletion` is optional, and absent is not false.**
+   * `BacklogRow` does not carry the field at all, so a backlog row cannot say whether its type is a
+   * Spike — and defaulting the absence to `false` would draw every one of them amber with a `?`.
+   * Absent means the payload does not answer, so the glyph falls back to the level's own tone,
+   * which is the honest reading and the reason the test below is `=== false` rather than `!`.
    */
-  type: Pick<IssueTypeRef, 'name' | 'level' | 'countsTowardCompletion'>;
+  type: Pick<IssueTypeRef, 'name' | 'level'> & { countsTowardCompletion?: boolean };
   className?: string;
   'data-testid'?: string;
 }) {
-  const spike = type.level === 'STORY' && !type.countsTowardCompletion;
+  const spike = type.level === 'STORY' && type.countsTowardCompletion === false;
   const background = spike ? 'var(--color-warning)' : LEVEL_TONE[type.level];
 
   return (

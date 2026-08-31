@@ -286,6 +286,7 @@ export {
 } from './projectBoards';
 export {
   EPIC_COMPLETION_LIMIT,
+  useBulkUpdateIssues,
   useCreateIssue,
   useCreateIssueComment,
   useDeleteIssue,
@@ -300,6 +301,7 @@ export {
   useSetIssueWatch,
   useTransitionIssue,
   useUpdateIssue,
+  type BulkIssueResult,
   type EpicCompletionsState,
   type IssueSort,
 } from './issues';

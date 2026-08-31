@@ -22,26 +22,21 @@ import {
   useProjectMembers,
   useUpdateBoard,
 } from '../../api/queries';
-import type {
-  BoardConfig,
-  BoardFilters,
-  BoardIssueCard,
-  Priority,
-  SwimlaneBy,
-} from '../../api/types';
+import type { BoardConfig, BoardIssueCard, Priority, SwimlaneBy } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
 import { PermissionGate } from '../../components/PermissionGate';
-import { Banner, FilterStrip, type AppliedFilter } from '../../components/kit';
+import { Banner, FilterStrip } from '../../components/kit';
 import { Button } from '../../components/ui';
 import { NativeSelect } from '../../components/ui/native-select';
 import { cn } from '../../lib/cn';
-import { issueLevels, priorityLabels, swimlaneByLabels } from '../../lib/labels';
+import { priorityLabels, swimlaneByLabels } from '../../lib/labels';
 import { plural } from '../../lib/format';
 import { BoardCardFace } from './BoardCardFace';
 import { ColumnHeader } from './ColumnHeader';
 import { Swimlane } from './Swimlane';
 import { boardKeyboardCoordinates } from './boardKeyboard';
 import { resolveColumnMove, serverColumnsOf } from './cardMove';
+import { useBoardFilterChips, useWorkFilter } from './useWorkFilter';
 
 /**
  * `work-board.html` — the **project** board, inside the Work switcher (012 M2, story B3).
@@ -124,7 +119,7 @@ function columnIdOf(over: string | number | null | undefined): string | null {
 }
 
 export function ProjectBoardView({ projectId }: { projectId: string }) {
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
   const announce = useAnnounce();
 
   const boards = useBoards(projectId);
@@ -132,28 +127,15 @@ export function ProjectBoardView({ projectId }: { projectId: string }) {
   const config = useBoardConfig(boardId);
 
   /*
-    The filter, read out of the URL on every render rather than mirrored into state — D34's shared
-    filter, the way `WorkTablePage` already reads it. **`BoardFilters`, not `IssueFilters`** (D-v):
-    the two differ in both directions, and a `statusId` over a board would empty the columns the
-    board is drawn from. T8 extracts the shared hook and owns the mapping between them.
+    ~~The filter, read out of the URL on every render.~~ → **the same read, now in `useWorkFilter`**
+    (012 T8), because three views need it and two `useMemo`s over one URL is the drift D34 exists to
+    prevent. `filters.board` is the subset THIS endpoint declares — `BoardFilters`, not
+    `IssueFilters` (D-v): the two differ in both directions, and a `statusId` over a board would
+    empty the columns the board is drawn from.
   */
-  const filters = useMemo<BoardFilters>(() => {
-    const level = params.get('level');
-    const epicKey = params.get('epicKey');
-    const labelId = params.getAll('labelId');
-    const assigneeId = params.getAll('assigneeId');
-    const priority = params.getAll('priority').filter(isPriority);
-    return {
-      labelId: labelId.length > 0 ? labelId : undefined,
-      assigneeId: assigneeId.length > 0 ? assigneeId : undefined,
-      epicKey: epicKey || undefined,
-      level: level === 'EPIC' || level === 'STORY' || level === 'TASK' ? level : undefined,
-      priority: priority.length > 0 ? priority : undefined,
-      unparented: params.get('unparented') === 'true' ? true : undefined,
-    };
-  }, [params]);
+  const { filters, setParam, appendOnce, dropOne, clearFilters } = useWorkFilter();
 
-  const cards = useBoardCards(boardId, filters);
+  const cards = useBoardCards(boardId, filters.board);
   const labels = useLabels(projectId);
   const members = useProjectMembers(projectId, true);
   const move = useMoveCard(boardId, projectId);
@@ -267,87 +249,18 @@ export function ProjectBoardView({ projectId }: { projectId: string }) {
     }
   };
 
-  const setParam = (mutate: (next: URLSearchParams) => void) => {
-    const next = new URLSearchParams(params);
-    mutate(next);
-    setParams(next, { replace: true });
-  };
-
-  const appendOnce = (name: string, value: string) =>
-    setParam((next) => {
-      if (value && !next.getAll(name).includes(value)) next.append(name, value);
-    });
-
-  const dropOne = (name: string, value: string) =>
-    setParam((next) => {
-      const kept = next.getAll(name).filter((held) => held !== value);
-      next.delete(name);
-      for (const held of kept) next.append(name, held);
-    });
-
-  const applied: AppliedFilter[] = [
-    ...(filters.labelId ?? []).map((id) => ({
-      key: `label:${id}`,
-      label: `Label · ${labels.data?.find((label) => label.id === id)?.name ?? id}`,
-      onRemove: () => dropOne('labelId', id),
-    })),
-    ...(filters.assigneeId ?? []).map((id) => ({
-      key: `assignee:${id}`,
-      label: `Assignee · ${members.data?.find((member) => member.id === id)?.displayName ?? id}`,
-      onRemove: () => dropOne('assigneeId', id),
-    })),
-    ...(filters.priority ?? []).map((value) => ({
-      key: `priority:${value}`,
-      label: `Priority · ${priorityLabels[value]}`,
-      onRemove: () => dropOne('priority', value),
-    })),
-    /*
-      `level`, `epicKey` and `unparented` get a chip but no picker. They are D34's other half: a
-      reader who narrowed the Table to one epic and switched to Board must be able to see and remove
-      that here, and a filter with no chip is one somebody stares at an empty board over. What they
-      do not need is a second place to *apply* them — B3's board asks for label, assignee and
-      priority, and §12.2's rule is that the strip's height is bounded by the reader's own choices.
-    */
-    ...(filters.level
-      ? [
-          {
-            key: `level:${filters.level}`,
-            label: `Level · ${issueLevels[filters.level]}`,
-            onRemove: () => setParam((next) => next.delete('level')),
-          },
-        ]
-      : []),
-    ...(filters.epicKey
-      ? [
-          {
-            key: `epic:${filters.epicKey}`,
-            label: `Epic · ${filters.epicKey}`,
-            onRemove: () => setParam((next) => next.delete('epicKey')),
-          },
-        ]
-      : []),
-    ...(filters.unparented
-      ? [
-          {
-            key: 'unparented',
-            label: 'No epic',
-            onRemove: () => setParam((next) => next.delete('unparented')),
-          },
-        ]
-      : []),
-  ];
-
   /*
-    Clearing keeps the view and the chosen board and drops everything else. The board is not a
-    filter: clearing a filter set on the stakeholder board and landing on the engineering one is a
-    surprise, and re-picking it is a second step nobody asked for.
+    ~~Six chip builders spelled here.~~ → `useBoardFilterChips`, shared with the backlog, which reads
+    the same six parameters because it calls the same endpoint's filter. `level`, `epicKey` and
+    `unparented` still get a chip and no picker, and that is D34's other half: a reader who narrowed
+    the Table to one epic and switched to Board must be able to see and remove it here. What they do
+    not need is a second place to *apply* it — B3's board asks for label, assignee and priority, and
+    §12.2's rule is that the strip's height is bounded by the reader's own choices.
+
+    Clearing keeps the view and the chosen board, which the hook owns now: the board is not a filter,
+    and clearing one set on the stakeholder board and landing on the engineering one is a surprise.
   */
-  const clearFilters = () => {
-    const next = new URLSearchParams({ view: 'board' });
-    const chosen = params.get('board');
-    if (chosen) next.set('board', chosen);
-    setParams(next, { replace: true });
-  };
+  const applied = useBoardFilterChips(projectId, filters.board, { setParam, dropOne });
 
   return (
     <div data-testid={`${TEST_ID}.View`}>
@@ -776,8 +689,4 @@ function boardInputOf(board: BoardConfig) {
       defaultStatusId: column.defaultStatusId,
     })),
   };
-}
-
-function isPriority(value: string): value is Priority {
-  return value === 'CRITICAL' || value === 'HIGH' || value === 'MEDIUM' || value === 'LOW';
 }

@@ -8,6 +8,7 @@ import {
 } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { TIMEOUTS, api, newIntentKey, qs } from '../client';
+import { describeError } from '../../lib/describeError';
 import type {
   Issue,
   IssueComment,
@@ -296,6 +297,70 @@ export function useDeleteIssue(projectId: string) {
       void client.invalidateQueries({ queryKey: keys.issuesRoot(projectId) });
       void client.invalidateQueries({ queryKey: keys.issueRoot });
       void client.invalidateQueries({ queryKey: keys.workItemRoot });
+    },
+  });
+}
+
+/** What a bulk edit did, per item — never a blanket verdict over a mixed outcome. */
+export interface BulkIssueResult {
+  applied: string[];
+  failed: { key: string; reason: string }[];
+}
+
+/**
+ * One field, applied to a selection — the backlog's `Set epic` and `Assign` (012 T8, story B4).
+ *
+ * ## There is no bulk endpoint for issues, so this is N calls and says so
+ *
+ * `POST /cases/bulk` and `.../executions/bulk` exist and this deliberately does not pretend to be
+ * one: the contract has no batch operation over issues, so a selection of five is five `PATCH`es.
+ * Adding the endpoint is `be` work and would be the better answer at a hundred rows; at the size a
+ * backlog selection actually reaches, the cost of the round trips is smaller than the cost of a
+ * contract change nobody has asked for.
+ *
+ * ## It never rejects, because a mixed outcome is the ordinary one
+ *
+ * `Promise.allSettled`, and the result carries both halves. A blanket success toast over a partial
+ * failure is the worse half of that defect — the reader believes all five went through — and a
+ * blanket failure hiding the three that worked is the other half. The caller names the ones that
+ * failed, keeps them selected, and lets the reader try again; nothing here raises a notification,
+ * which is why there is no `meta.handled` to set.
+ */
+export function useBulkUpdateIssues(projectId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      keys: issueKeys,
+      input,
+    }: {
+      keys: readonly string[];
+      input: IssueUpdate;
+    }): Promise<BulkIssueResult> => {
+      const settled = await Promise.allSettled(
+        issueKeys.map((key) =>
+          api.patch<Issue>(`/issues/${encodeURIComponent(key)}`, input, {
+            timeoutMs: TIMEOUTS.interactive,
+          }),
+        ),
+      );
+      const applied: string[] = [];
+      const failed: { key: string; reason: string }[] = [];
+      settled.forEach((outcome, index) => {
+        const key = issueKeys[index];
+        if (outcome.status === 'fulfilled') applied.push(key);
+        else failed.push({ key, reason: describeError(outcome.reason).title });
+      });
+      return { applied, failed };
+    },
+    onSuccess: (result) => {
+      if (result.applied.length === 0) return;
+      void client.invalidateQueries({ queryKey: keys.issuesRoot(projectId) });
+      void client.invalidateQueries({ queryKey: keys.issueRoot });
+      void client.invalidateQueries({ queryKey: keys.workItemRoot });
+      // The epic is a swimlane and the assignee is on the card face, so both of the two fields this
+      // can set are drawn on the board and in the backlog — neither of which is under `issuesRoot`.
+      void client.invalidateQueries({ queryKey: keys.backlogRoot(projectId) });
+      void client.invalidateQueries({ queryKey: keys.boardCardsRoot });
     },
   });
 }
