@@ -157,6 +157,49 @@ two cache lifetimes: a board's columns change when somebody edits them, its card
 transition anywhere in the project. One combined read would re-fetch the column layout on every
 card move and make the layout flicker.
 
+### D-i — Two names came out different from the plan's, and a check found each
+
+Taken by T1. Both are recorded here rather than as a comment in the contract, because the prompts
+below depend on them and a reader of the YAML alone would not know either was ever in question.
+
+| Plan said | Landed | Found by |
+|---|---|---|
+| `operationId: getBoard` on `GET /boards/{boardId}` | **`getBoardConfig`** | reading the neighbouring contract — `GET /board`, `work`'s composite board, has held `getBoard` since M1 |
+| `Label.colorToken` / `LabelInput.colorToken` | **`Label.color` / `LabelInput.color`** | `responseCredentials.test.ts`, red on the first run of the gate |
+
+The second is the one worth keeping. `responseCredentials.test.ts` reddens on any **response**
+property whose name contains `secret`, `password`, `passphrase`, `credential`, `privatekey`,
+`apikey` or **`token`**, and its exemption list is a list of *disclosure decisions* — the session
+itself, a one-time plaintext, four end-anchored characters of a webhook URL. A design token is not
+one of those, so exempting it would have put a non-credential in a list whose header says every
+entry is a decision about disclosure, and taught the next reader that the list is where you go to
+make the suite green. This contract already spells a credential three ways on the `token` needle;
+a fourth meaning of the word is exactly the ambiguity that check exists to keep out.
+
+**The database column follows the wire**, so T2 writes `issue_label.color`, not `color_token` — the
+argument the old name was carrying ("a token name, never a hex value") lives in the column comment,
+where it always did, and is not weakened by losing the word.
+
+### D-j — §2's rule splits the ten operations three ways on the agent surface
+
+Taken by T1, writing §3.5 of the surface document. The permission table decides this and it does not
+land where the plan's step 8 implied one tool would:
+
+| Operations | Gate | Roles (§A3) | Lands as |
+|---|---|---|---|
+| the five reads | `board:read` | all seven | **`tcms_read_board`** — new tool 27 |
+| `moveBoardCard`, `putIssueLabels` | `issue:edit` | Test Engineer and up | **two new arms of `tcms_write_issue`** |
+| `rankIssue`, the three label writes | `board:rank` / `board:configure` | **Project Manager and up** | **`tcms_write_backlog`** — new tool 28 |
+
+A single write tool is illegal under §2: `Agent ∩ Test Engineer` is a reachable intersection holding
+`issue:edit` and neither of the other two, so it would be listed to a caller who 403s on two thirds
+of it. `board:rank` and `board:configure` are granted to the same three roles, so those two may
+merge and do — and that merge is re-checked, not assumed, the day either widens.
+
+**`createBoard`, `updateBoard` and `deleteBoard` reach neither surface.** Defining a board's columns
+is a screen with a status-claim rule the server enforces in a 422 naming which status was claimed
+twice; an agent composing that array blind spends its turns on the refusal.
+
 ---
 
 ## File structure
@@ -350,6 +393,10 @@ TRAPS THIS TASK WILL HIT, AND THE FIRST TWO ARE SILENT:
     does not lead with it is not used by the filtered scan. `SchemaConventionTest` checks this.
   * `SchemaConventionTest` pins the forced-RLS policy count. V4 took it 84 -> 82; six tables here
     make it 88. Move the number AND the comment beside it.
+  * THE LABEL COLOUR COLUMN IS `color`, NOT `color_token` (D-i). T1 renamed the wire property
+    because `responseCredentials.test.ts` reddens on any response property containing `token`; the
+    column follows the wire so JPA needs no @Column override and nobody has to remember which of
+    the two spellings a given layer uses. The T2 block's SQL below is already corrected.
 
 GATE (on shanks — read docs/specs/shanks-runner-details.md first):
   ~/bin/tcms-remote sync
@@ -516,6 +563,16 @@ TRAPS THIS TASK WILL HIT:
   * The MCP tool descriptions say what a tool is FOR, not what it calls. Add to instructions.ts the
     one sentence an assistant cannot infer: a board is a LENS, so moving a card changes the issue's
     status and every other board over that project shows the change.
+  * THE SHAPE IS ALREADY DECIDED AND IT IS NOT ONE TOOL (D-j, and §3.5 of the surface doc, which
+    T1 wrote). §2's rule splits the ten operations three ways: `tcms_read_board` (tool 27,
+    `board:read`), `tcms_write_backlog` (tool 28, `board:rank` + `board:configure`), and TWO NEW
+    ARMS on the existing `tcms_write_issue` — `move-card` and `label`, both `issue:edit`. Merging
+    the write side into one tool is illegal: `Agent ∩ Test Engineer` holds `issue:edit` and neither
+    of the other two, so the tool would be LISTED to a caller who 403s on two thirds of it.
+  * THERE IS NO `tcms board create|edit|delete` ON EITHER SURFACE, deliberately (D-j). The eight
+    CLI commands are exactly the ones §6's table names; do not add a ninth.
+  * The label colour flag is `--color label-3` and the wire property is `color` (D-i). If you find
+    `colorToken` anywhere, it is stale text this task should delete.
 
 GATE (on shanks):
   ~/bin/tcms-remote sync
@@ -796,6 +853,7 @@ built-and-unverified list; then 009. `git add <paths>` only, never -A.
 `required` array including on inline nested objects; `frontend/src/api/schema.d.ts` and
 `packages/client/src/schema.ts` are regenerated from it in the same commit; `contractPairing.test.ts`
 and `packages/client` tests are green.
+**Landed:** `eb10bc07` — with two names changed from the YAML below, both recorded as **D-i**.
 **Stack:** `ts`
 **Est. context:** ~95k — 1 large spec file modified (17k lines, ~600 added), 2 generated files, 2
 contract-body copies checked, 1 surface doc, 3 spec sections cited, 2 skills
@@ -809,7 +867,7 @@ contract-body copies checked, 1 surface doc, 3 spec sections cited, 2 skills
   usually needs **no** edit here; `contractPairing.test.ts` is the gate either way)
 - Modify: `docs/specs/2026-08-08-mcp-tool-and-command-surface.md`
 
-- [ ] **Step 1: Read the neighbouring contract before adding to it**
+- [x] **Step 1: Read the neighbouring contract before adding to it**
 
 Read `docs/specs/openapi.yaml` lines **8268–8800** — `/board`, `/board/annotations/…`, `/issues`,
 `/issues/{key}`, `/issues/{key}/transitions`, `/projects/{projectId}/workflow`. Every new operation
@@ -817,7 +875,7 @@ below sits in the `tracker` tag beside these and copies their conventions: a `de
 *why*, a 404 that does not distinguish absent-from-forbidden, and no `parameters` block on the path
 item where a query parameter would be inherited by operations that must not have it (§50).
 
-- [ ] **Step 2: Add the six board-configuration schemas**
+- [x] **Step 2: Add the six board-configuration schemas**
 
 Append to `components.schemas`. **Every one carries `required`, and so does every inline object** —
 `required` does not descend, and without it every generated property is optional.
@@ -906,7 +964,7 @@ Append to `components.schemas`. **Every one carries `required`, and so does ever
         defaultStatusId: { type: string, format: uuid }
 ```
 
-- [ ] **Step 3: Add the card, move, backlog, rank and label schemas**
+- [x] **Step 3: Add the card, move, backlog, rank and label schemas**
 
 ```yaml
     BoardContents:
@@ -1072,11 +1130,11 @@ Append to `components.schemas`. **Every one carries `required`, and so does ever
 
     Label:
       type: object
-      required: [id, name, colorToken]
+      required: [id, name, color]
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
-        colorToken:
+        color:
           type: string
           description: |
             A design-token name (`label-1` … `label-10`), not a hex value. Status and label colour
@@ -1085,10 +1143,10 @@ Append to `components.schemas`. **Every one carries `required`, and so does ever
 
     LabelInput:
       type: object
-      required: [name, colorToken]
+      required: [name, color]
       properties:
         name: { type: string, minLength: 1, maxLength: 32 }
-        colorToken: { type: string }
+        color: { type: string }
 
     IssueLabelsInput:
       type: object
@@ -1099,7 +1157,7 @@ Append to `components.schemas`. **Every one carries `required`, and so does ever
           items: { type: string, format: uuid }
 ```
 
-- [ ] **Step 4: Add the ten operations**
+- [x] **Step 4: Add the ten operations**
 
 Placed after `/projects/{projectId}/workflow/statuses/{statusId}`, in the `tracker` tag.
 
@@ -1161,8 +1219,9 @@ Placed after `/projects/{projectId}/workflow/statuses/{statusId}`, in the `track
     get:
       tags: [tracker]
       summary: A board's columns and swimlane setting
-      operationId: getBoard
+      operationId: getBoardConfig
       description: |
+        `getBoardConfig`, NOT `getBoard` — `GET /board` already owns that operationId (D-i).
         Configuration only — the cards are `GET /boards/{boardId}/cards` (D-h). Two reads because
         they have two lifetimes: columns change when somebody edits them, cards on every transition
         in the project, and one combined read would relayout the board on every card move.
@@ -1472,7 +1531,7 @@ Placed after `/projects/{projectId}/workflow/statuses/{statusId}`, in the `track
         '404': { $ref: '#/components/responses/NotFound' }
 ```
 
-- [ ] **Step 5: Verify every `required` array is present, by script rather than by reading**
+- [x] **Step 5: Verify every `required` array is present, by script rather than by reading**
 
 CLAUDE.md: *"A schema-wide or catalogue-wide invariant needs a computed check, not a careful
 reading."* Reading V1 top to bottom missed five join tables; scripting it found them.
@@ -1503,7 +1562,7 @@ Expected: `every object schema has required`. Any line printed is an inline obje
 fix it and re-run. Pre-existing offenders outside the schemas this task added are **not** this
 task's to fix; note them and move on.
 
-- [ ] **Step 6: Regenerate both clients**
+- [x] **Step 6: Regenerate both clients**
 
 ```bash
 cd frontend && npm run gen:api
@@ -1513,7 +1572,7 @@ cd ../packages/client && npm run gen:api
 Both files are generated — **do not hand-edit either**. If `git diff` shows a change to a schema
 this task did not touch, the generator version moved; stop and say so rather than committing it.
 
-- [ ] **Step 7: Run the packages gate on shanks**
+- [x] **Step 7: Run the packages gate on shanks**
 
 ```bash
 ~/bin/tcms-remote sync
@@ -1524,14 +1583,14 @@ Expected: green, `contractPairing.test.ts` included. `citedFiles.test.ts` fails 
 comment is not on disk — this task names `frontend/src/lib/devFaults.ts` and
 `frontend/src/api/contractBodies.ts`, both of which exist.
 
-- [ ] **Step 8: Add the board verbs to the surface document**
+- [x] **Step 8: Add the board verbs to the surface document**
 
 In `docs/specs/2026-08-08-mcp-tool-and-command-surface.md`, beside M1's issue verbs, add the rows
 T5 will implement: `board list`, `board show`, `board move`, `backlog`, `rank`, `label list`,
 `label add`, `label set`. **The document is written before the code** deliberately — it is the
 capability contract, and T5 renders it.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add docs/specs/openapi.yaml frontend/src/api/schema.d.ts packages/client/src/schema.ts \
@@ -1687,7 +1746,7 @@ CREATE TABLE board_swimlane (
 -- vocabulary; a label is the informal, fast-moving axis, which is why it is
 -- project-scoped, needs no dimension, and is deleted without a migration plan.
 --
--- color_token is a TOKEN NAME, never a hex value. Status and label colour is
+-- color holds a DESIGN-TOKEN NAME, never a hex value. Status and label colour is
 -- data the palette owns (§6u) — a stored #RRGGBB is invisible in the other
 -- colour scheme, and this codebase swaps the whole palette on [data-color-scheme].
 
@@ -1696,7 +1755,7 @@ CREATE TABLE issue_label (
     company_id  UUID        NOT NULL REFERENCES company(id),
     project_id  UUID        NOT NULL REFERENCES project(id) ON DELETE CASCADE,
     name        TEXT        NOT NULL,
-    color_token TEXT        NOT NULL,
+    color      TEXT        NOT NULL,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     created_by  UUID
 );
@@ -3729,6 +3788,12 @@ claim that any of it is true** — the gates prove it compiles, and this reposit
 no-op theme toggle, two contradictory percentages on one screen and a provider-ordering bug that
 rendered nothing but the error page, all of which typechecked and linted clean.
 
+- [ ] **The ten operations describe a server nobody has run.** T1's gate is the packages build and
+      the contract suites; they prove the document parses, that both clients generate from it, that
+      every object schema carries `required`, that no operationId is duplicated and that no response
+      property is credential-shaped. **Not one of them establishes that a handler could serve any of
+      these shapes** — the first task that finds out is T3, and the first that finds out about the
+      cards, the rank and the labels is T4.
 - [ ] `V5` applied to an instance that **already holds issues** — the property Testcontainers
       structurally cannot show, because it always builds from empty, and the one the `rank` backfill
       and the `NOT NULL` that follows it carry the most risk on.
