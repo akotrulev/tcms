@@ -10414,6 +10414,272 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/boards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * The project's boards
+         * @description Every board over this project, in name order. `board:read`, which every role holds — a board
+         *     is a lens over work the caller can already see, so there is nothing here a project grant
+         *     does not already imply.
+         */
+        get: operations["listBoards"];
+        put?: never;
+        /**
+         * Create a board
+         * @description `board:configure`. **Every status the project has must be claimed by exactly one column**
+         *     (story B2) — the request is refused with 422 when a status is claimed twice or left
+         *     unclaimed, naming which. Postgres has no cross-table CHECK, so this is a unique index on
+         *     `board_column_status (board_id, status_id)` for the "twice" half plus this rule for the
+         *     "not at all" half.
+         */
+        post: operations["createBoard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/boards/{boardId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                boardId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * A board's columns and swimlane setting
+         * @description Configuration only — the cards are `GET /boards/{boardId}/cards`. Two reads because they
+         *     have two lifetimes: columns change when somebody edits them, cards on every transition in
+         *     the project, and one combined read would relayout the board on every card move.
+         *
+         *     **`getBoardConfig`, not `getBoard`** — `GET /board`, `work`'s composite board, already owns
+         *     that operationId, and a duplicate is a generated client that cannot name one of them.
+         */
+        get: operations["getBoardConfig"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a board
+         * @description `board:configure`. **No issue is lost** (story B2) — a board is a view and owned nothing.
+         *     Refused with 422 when it is the project's last board: a project with no board cannot render
+         *     `?view=board` at all, and an empty board picker is a dead end rather than a state.
+         */
+        delete: operations["deleteBoard"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename a board, or redefine its columns
+         * @description `board:configure`. The `columns` array is a **replacement**, not a patch: a column with an
+         *     `id` is kept and updated, one without is created, and one whose id is absent from the array
+         *     is deleted. Position is the array index. Same 422 as create — every status claimed exactly
+         *     once, and issues in a deleted column are **not** touched, because a column never owned them.
+         */
+        patch: operations["updateBoard"];
+        trace?: never;
+    };
+    "/boards/{boardId}/cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                boardId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * The cards on a board, in lanes
+         * @description The filter is D34's, and it is the **same query parameters the Table view sends** — one
+         *     filter, five views, held in the URL. Semantics are Trello's and are worth copying exactly
+         *     because they are learnable: **OR within a category, AND across categories** (§12.2). So
+         *     `labelId=a&labelId=b&assigneeId=c` is *(a or b) and c*.
+         */
+        get: operations["getBoardCards"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/boards/{boardId}/cards/{key}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                boardId: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move a card to a column
+         * @description Costs **`issue:edit`, not a `board:move`** — §A3 is explicit that dragging a card changes
+         *     the issue's status and that a second key for the same act is a permission somebody could
+         *     hold without being able to use it.
+         *
+         *     This is not `POST /issues/{key}/transitions` with extra steps. It does two things that one
+         *     cannot: it resolves the **column's default status** (D2 — a stakeholder board's "In flight"
+         *     claims three statuses and a drop into it must mean one of them), and it reports the WIP
+         *     breach the move may have caused. A client doing this itself would have to know the column
+         *     mapping to pick a status, which is the coupling the endpoint exists to remove.
+         *
+         *     A move the workflow forbids is **409**, and its body names the legal targets — the same
+         *     shape `/issues/{key}/transitions` answers with. In an ordinary session it is unreachable,
+         *     because the picker only offers legal moves; the dev fault switch is how it is exercised.
+         */
+        post: operations["moveBoardCard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/backlog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * The project's backlog, in rank order
+         * @description Every issue at **STORY or TASK level** that is not `DONE`, in rank order — an Epic is not a
+         *     backlog row (its status is derived from its stories, D31) and a done issue is not "what's
+         *     next". Takes the same filter as `GET /boards/{boardId}/cards`.
+         *
+         *     **Not grouped by release in M2.** `work-backlog.html` shows a "2.4 · target 18 Sep" section
+         *     and an "Unscheduled" one; `release` is M3's table, so this returns one list and M3 adds the
+         *     grouping.
+         */
+        get: operations["getBacklog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/issues/{key}/rank": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Place an issue between two neighbours
+         * @description `board:rank`. **The order persists for everyone** (story B4) — this is not a per-viewer sort.
+         *
+         *     `PUT` rather than `PATCH` because it is idempotent in the sense that matters: sending the
+         *     same neighbours twice lands the issue in the same place, whatever its rank was before.
+         */
+        put: operations["rankIssue"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/labels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * The project's labels
+         * @description Labels are the **informal, fast-moving** axis and are deliberately not a classification
+         *     dimension — cases have `classification_dimension` and `case_tag` for taxonomy (§12.2).
+         */
+        get: operations["listLabels"];
+        put?: never;
+        /**
+         * Create a label
+         * @description **`board:configure`** — creating a label is project configuration, beside columns and WIP
+         *     limits, which is what that key's own description already says. There is no `label:*` in the
+         *     catalogue and this module does not add one.
+         */
+        post: operations["createLabel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/labels/{labelId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                labelId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a label
+         * @description `board:configure`. Removes it from every issue holding it — an informal axis whose deletion
+         *     needed a migration plan would not be informal. No confirmation state on the wire; the SPA
+         *     asks, and says how many issues carry it.
+         */
+        delete: operations["deleteLabel"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename or recolour a label
+         * @description `board:configure` — label upkeep is project configuration, not a key of its own.
+         */
+        patch: operations["updateLabel"];
+        trace?: never;
+    };
+    "/issues/{key}/labels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace an issue's labels
+         * @description **`issue:edit`** — putting a label on an issue edits the issue. A replacement rather than
+         *     add/remove pairs: the SPA's control is a multi-select whose state is the whole set, and two
+         *     endpoints for it would let a stale client remove a label somebody else had just added.
+         */
+        put: operations["putIssueLabels"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -16124,6 +16390,231 @@ export interface components {
             reassignToStatusId: string;
         };
         /**
+         * @description A row in the board picker. `columnCount` rather than the columns themselves — the picker
+         *     renders "4 columns" and nothing else, and shipping the layout here would make switching
+         *     boards a second read of something already fetched.
+         */
+        BoardSummary: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            columnCount: number;
+            swimlaneBy: components["schemas"]["SwimlaneBy"];
+        };
+        /**
+         * @description Story B3's grouping axis. `RELEASE` is **absent until M3** — a member whose data does not
+         *     exist would be a grouping that silently yields one lane called "None", which reads as a
+         *     broken board rather than an unbuilt feature. Adding it later is one entry in a
+         *     `Record<Union, string>` and a compile error until it is labelled.
+         * @enum {string}
+         */
+        SwimlaneBy: "NONE" | "EPIC" | "ASSIGNEE" | "LABEL" | "PRIORITY";
+        /**
+         * @description A board is a **lens, not a container** (scope §12.1): a grouping and a mapping from the
+         *     project's statuses onto columns. It owns no issue, which is why deleting one loses no work.
+         */
+        Board: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: string;
+            name: string;
+            swimlaneBy: components["schemas"]["SwimlaneBy"];
+            /** @description In `position` order, left to right, and the order means direction of travel. */
+            columns: components["schemas"]["BoardColumn"][];
+        };
+        BoardColumn: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            position: number;
+            /** @description Null is "no limit", which is not the same as zero. */
+            wipLimit?: number | null;
+            /**
+             * @description Every status this column claims, in workflow order. **Never empty** — a column claiming
+             *     nothing is a column no card can ever be in, and the service refuses to create one.
+             */
+            statuses: components["schemas"]["IssueStatusRef"][];
+            /**
+             * Format: uuid
+             * @description D2: a card dropped into a column claiming more than one status takes **this** one.
+             *     Always one of `statuses[].id`, enforced server-side.
+             */
+            defaultStatusId: string;
+        };
+        BoardInput: {
+            name: string;
+            swimlaneBy: components["schemas"]["SwimlaneBy"];
+            columns: components["schemas"]["BoardColumnInput"][];
+        };
+        BoardColumnInput: {
+            /**
+             * Format: uuid
+             * @description Present to edit an existing column, absent to create one. Position is the array index,
+             *     so reordering columns is reordering this array.
+             */
+            id?: string | null;
+            name: string;
+            wipLimit?: number | null;
+            statusIds: string[];
+            /** Format: uuid */
+            defaultStatusId: string;
+        };
+        BoardContents: {
+            /** Format: uuid */
+            boardId: string;
+            swimlaneBy: components["schemas"]["SwimlaneBy"];
+            /**
+             * @description One entry when `swimlaneBy` is `NONE`, whose `key` is null. The "no epic" lane is a
+             *     real lane with a null `key` and is **last**, because a story without an epic is a
+             *     normal story rather than an error (work-board.html says so on the screen).
+             */
+            lanes: components["schemas"]["BoardLane"][];
+            /**
+             * @description The columns over their WIP limit **right now**, across every lane. Reported, never
+             *     enforced — story B3: "the drop is accepted and the column header shows the breach".
+             *     An empty array is the normal case.
+             */
+            breaches: components["schemas"]["WipBreach"][];
+        };
+        BoardLane: {
+            /** @description The epic key, assignee id, label id or priority — null for the catch-all lane. */
+            key: string | null;
+            label: string;
+            cards: components["schemas"]["BoardIssueCard"][];
+            /**
+             * @description The lane's roll-up, so collapsing it to one card keeps its percentage (B3). Reuses M1's
+             *     `IssueCompletion` — done over the counted total, with its **basis on the wire** (D8), so
+             *     a lane header can say "by estimate" or "by count" as work-board.html does.
+             */
+            completion: components["schemas"]["IssueCompletion"];
+        };
+        WipBreach: {
+            /** Format: uuid */
+            columnId: string;
+            limit: number;
+            count: number;
+        };
+        /**
+         * @description **Not `BoardCard`.** That schema is `work`'s composite card and carries four `kind`s, a
+         *     `derived` flag and a synthetic id. Every card here is an issue with a real key, so the
+         *     fields that exist only to describe a derived card would be constant and misleading.
+         */
+        BoardIssueCard: {
+            /** @description The issue key — `ACME-124`. */
+            key: string;
+            title: string;
+            typeName: string;
+            typeLevel: components["schemas"]["IssueLevel"];
+            iconCode: string;
+            /** @description False for a Spike, which the card face marks "not in %". */
+            countsTowardCompletion: boolean;
+            /** Format: uuid */
+            columnId: string;
+            status: components["schemas"]["IssueStatusRef"];
+            /** @description Decimal, as a string — see `RankResult.rank`. */
+            rank: string;
+            priority?: components["schemas"]["Priority"];
+            assignee?: components["schemas"]["UserRef"] | null;
+            /** Format: date */
+            dueDate?: string | null;
+            overdue?: boolean;
+            /** Format: double */
+            estimateHours?: number | null;
+            epicKey?: string | null;
+            labels: components["schemas"]["Label"][];
+            /**
+             * @description §12.4, verbatim and load-bearing: the legal set must be known **client-side before the
+             *     drag starts**, so a forbidden drop is refused at the drag with the reason rather than
+             *     accepted and reverted. Empty for an Epic (D31).
+             */
+            allowedTransitions: components["schemas"]["IssueStatusRef"][];
+            subtaskTotal: number;
+            /** @description The card face reads "3/5 sub-tasks". */
+            subtaskDone: number;
+        };
+        CardMoveInput: {
+            /** Format: uuid */
+            toColumnId: string;
+        };
+        CardMoveResult: {
+            card: components["schemas"]["BoardIssueCard"];
+            /**
+             * @description Present when the move put the target column over its limit. **The move still happened**
+             *     — this is a 200 carrying a fact, never a 4xx. A limit that refused drops would be a
+             *     limit people route around by not using the board.
+             */
+            breach?: components["schemas"]["WipBreach"];
+        };
+        BacklogRow: {
+            key: string;
+            title: string;
+            typeName: string;
+            typeLevel: components["schemas"]["IssueLevel"];
+            iconCode: string;
+            /** @description The 1-based number the row shows. Derived from rank order, never stored. */
+            position: number;
+            rank: string;
+            status: components["schemas"]["IssueStatusRef"];
+            assignee?: components["schemas"]["UserRef"] | null;
+            /** Format: double */
+            estimateHours?: number | null;
+            epicKey?: string | null;
+            labels: components["schemas"]["Label"][];
+        };
+        /**
+         * @description **Neighbour-relative, never an absolute rank.** Two people dragging at once each compute a
+         *     midpoint from a list they read seconds ago; sending the number races, sending the
+         *     neighbours does not. Exactly one of the two is required — both, or neither, is a 400, and
+         *     that is a cross-field rule no `required` array can spell, which is why this one is empty.
+         */
+        RankInput: {
+            /** @description Place immediately after this issue. Null with `beforeKey` absent means "to the top". */
+            afterKey?: string | null;
+            /** @description Place immediately before this issue. */
+            beforeKey?: string | null;
+        };
+        RankResult: {
+            key: string;
+            /**
+             * @description A decimal **as a string**, not a `number`. `NUMERIC` is arbitrary precision and IEEE-754
+             *     doubles are not: JSON.parse would silently round a rank the server distinguishes, and
+             *     two cards would collide after a few hundred midpoint inserts. The client sorts on it and
+             *     never does arithmetic with it.
+             */
+            rank: string;
+            /**
+             * @description True when the gap ran out of precision and the project's ranks were respaced. The
+             *     client refetches the list rather than trusting its own order.
+             */
+            rebalanced: boolean;
+        };
+        Label: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /**
+             * @description A design-token name (`label-1` … `label-10`), not a hex value. Status and label colour
+             *     is data the palette owns, and a stored `#RRGGBB` is invisible in the other colour scheme
+             *     — the same argument §6u already makes for status colours.
+             *
+             *     **`color`, and it was `colorToken` for about an hour.** `responseCredentials.test.ts`
+             *     reddens on any response property whose name contains `token`, and it was right to:
+             *     this contract already spells a credential three ways on that needle, and a fourth
+             *     meaning of the word — a *design* token — is the ambiguity that check exists to keep
+             *     out. Exempting it would have put a non-credential in a list whose header says every
+             *     entry is a decision about disclosure.
+             */
+            color: string;
+        };
+        LabelInput: {
+            name: string;
+            color: string;
+        };
+        IssueLabelsInput: {
+            labelIds: string[];
+        };
+        /**
          * @description Where one project sends its notices — **without its credential, and there is deliberately
          *     no property that could carry one.**
          *
@@ -20514,6 +21005,434 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+        };
+    };
+    listBoards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Boards. Never empty — every project is seeded one. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BoardSummary"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createBoard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BoardInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Board"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description A status is claimed twice, or left unclaimed, and the body names which. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getBoardConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                boardId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The board */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Board"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteBoard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                boardId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description It is the project's last board. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    updateBoard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                boardId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BoardInput"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Board"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description A status is claimed twice, or left unclaimed, and the body names which. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getBoardCards: {
+        parameters: {
+            query?: {
+                labelId?: string[];
+                assigneeId?: string[];
+                epicKey?: string;
+                level?: components["schemas"]["IssueLevel"];
+                priority?: components["schemas"]["Priority"][];
+                /** @description Only issues with no epic — the "No epic" lane, asked for on its own. */
+                unparented?: boolean;
+            };
+            header?: never;
+            path: {
+                boardId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cards */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BoardContents"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    moveBoardCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                boardId: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardMoveInput"];
+            };
+        };
+        responses: {
+            /**
+             * @description Moved. A `breach` here means the column is over its limit **and the card is in it** —
+             *     story B3's "the drop is accepted and the column header shows the breach".
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardMoveResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The workflow forbids this move, or the issue is an Epic. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getBacklog: {
+        parameters: {
+            query?: {
+                labelId?: string[];
+                assigneeId?: string[];
+                epicKey?: string;
+                level?: components["schemas"]["IssueLevel"];
+                priority?: components["schemas"]["Priority"][];
+                unparented?: boolean;
+            };
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rows in rank order. An empty array is a project with nothing left to do. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BacklogRow"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    rankIssue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RankInput"];
+            };
+        };
+        responses: {
+            /** @description Placed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RankResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listLabels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Labels, in name order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Label"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createLabel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LabelInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Label"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deleteLabel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                labelId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateLabel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                labelId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LabelInput"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Label"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    putIssueLabels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueLabelsInput"];
+            };
+        };
+        responses: {
+            /** @description The issue's labels after the write */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Label"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
 }

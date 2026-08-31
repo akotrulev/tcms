@@ -156,7 +156,7 @@ The count below is the **outcome** of this rule, not a target.
 
 ---
 
-## 3. The MCP surface — ~~21~~ 26 tools
+## 3. The MCP surface — ~~21~~ ~~26~~ 28 tools
 
 Namespaced `tcms_*`. `projectId` and `companyId` **do not appear in any schema** (§4.1).
 
@@ -181,13 +181,15 @@ Namespaced `tcms_*`. `projectId` and `companyId` **do not appear in any schema**
 | 17 | `tcms_write_run` | `run:create` ~~alone~~ + `run:close` (§212) | `POST …/runs`, `POST …/runs/{runId}/clone`, `PUT …/runs/{runId}/status` | **Buildable** |
 | 18 | `tcms_record_result` | `run:execute` + `result:submit` + `evidence:attach` | `PATCH …/executions/{executionId}`, `POST …/evidence` | **Buildable** |
 | 19 | `tcms_triage` | `case:read` + `report:view` | dashboard, quarantine state, `GET …/ingestions`, `…/automation-mappings` | **Buildable** |
-| 20 | `tcms_write_issue` ~~`tcms_write_work_item`~~ | **any of** `issue:create` / `issue:edit` / `issue:comment` | `POST /issues`, `PATCH /issues/{key}`, `POST …/transitions`, `POST …/comments` | 011 T5 — see §3.4 |
+| 20 | `tcms_write_issue` ~~`tcms_write_work_item`~~ | **any of** `issue:create` / `issue:edit` / `issue:comment` | `POST /issues`, `PATCH /issues/{key}`, `POST …/transitions`, `POST …/comments`, **`POST /boards/{id}/cards/{key}/move`, `PUT /issues/{key}/labels`** (012 T5 — §3.5) | 011 T5 — see §3.4 |
 | 21 | `tcms_report` | `report:view` + `report:export` | `POST …/reports/generate`, poll, download | **Buildable** |
 | 22 | `tcms_list_artifacts` | `case:read` | `GET …/artifacts` | Audit C10 |
 | 23 | `tcms_write_artifact` | `artifact:edit` + `artifact:delete` | `POST`/`PATCH`/`DELETE …/artifacts` | Audit C10 |
 | 24 | `tcms_shape` | **none** | **nothing — it reads no endpoint** | §253 |
 | 25 | `tcms_list_proposals` | `case:read` | `GET …/ai-proposals`, `…/{proposalId}` | Shipped; this row was missing |
 | 26 | `tcms_read_issue` | `issue:read` | `GET /issues`, `GET /issues/{key}`, `…/comments`, `…/doc-links` | 011 T5 — see §3.4 |
+| 27 | `tcms_read_board` | `board:read` | `GET /projects/{id}/boards`, `GET /boards/{id}`, `…/cards`, `GET /projects/{id}/backlog`, `…/labels` | 012 T5 — see §3.5 |
+| 28 | `tcms_write_backlog` | `board:rank` + `board:configure` | `PUT /issues/{key}/rank`, `POST /projects/{id}/labels`, `PATCH`/`DELETE /labels/{id}` | 012 T5 — see §3.5 |
 
 Eighteen are buildable against today's contract; two need §4.2's contract addition first; one has a
 blocked arm (§5).
@@ -480,6 +482,85 @@ write arms. The header half (§8.3) does cover them, because it reads `parameter
 Closing it is a contract-prose change plus a regeneration of both schema copies; it is recorded here
 rather than left as a silent no-op, which is the failure that check's own vacuity guard exists to name.
 
+### 3.5 The board verbs (012 T5) — and why they are two tools and two new arms, not one
+
+The board contract (012 T1) adds ten operations. §2's rule decides how they land here, and it does
+not put them where they look like they belong:
+
+| Operation | Gate | Roles holding it (§A3) |
+|---|---|---|
+| `listBoards` · `getBoardConfig` · `getBoardCards` · `getBacklog` · `listLabels` | `board:read` | **all seven** |
+| `moveBoardCard` · `putIssueLabels` | `issue:edit` | Test Engineer and up |
+| `rankIssue` | `board:rank` | **Project Manager and up** |
+| `createLabel` · `updateLabel` · `deleteLabel` | `board:configure` | **Project Manager and up** |
+
+So a single `tcms_write_board` is illegal: `Agent ∩ Test Engineer` is a reachable intersection that
+holds `issue:edit` and neither of the other two, and a merged tool would be listed to a caller who
+403s on two thirds of it — §2's failure, arriving through exactly the merge that rule exists to
+refuse. `board:rank` and `board:configure` are granted to the *same* three roles, so those two may
+merge and do.
+
+**`createBoard`, `updateBoard` and `deleteBoard` are on neither surface.** Defining a board's
+columns is a screen with a status-claim rule the server enforces in a 422 naming which status was
+claimed twice; an agent composing that array blind would spend its turns on the refusal. The board a
+project has is what these verbs read, and §2's budget is better spent elsewhere.
+
+#### `tcms_read_board` — typed input
+
+Gate: `board:read`. **Three branches, not three tools**, all read-only, all the same gate.
+
+| Field | Type | Notes |
+|---|---|---|
+| `board` | string — a board **name** | omit for the board list; §3.4's rule, one noun over |
+| `backlog` | boolean | read the ranked backlog instead of a board's cards |
+| `labels` | boolean | read the project's labels instead |
+| `label` · `assignee` | string[] — **names** | OR within, AND across (scope §12.2) |
+| `epic` | string — a key | |
+| `level` | `EPIC` / `STORY` / `TASK` | |
+| `priority` | `Priority`[] | |
+| `unparented` | boolean | issues with no epic |
+| `page` · `size` | integer | §4.6's window |
+
+**Columns and lanes come back with their cards inside them**, not as a flat list with a `columnId`
+to join on — the model is reading a board, and a join it has to perform itself is a turn spent
+rebuilding the shape the endpoint already had. `rank` is passed through **as the string it is on the
+wire** and is never parsed (see `RankResult.rank`).
+
+#### `tcms_write_backlog` — typed input
+
+Gate: **`board:rank` + `board:configure`.** `all`, not `any`, and legal only because §A3 grants both
+to the same three roles; the day one of them widens, this merge is re-checked rather than assumed.
+
+| Field | Type | Arms | Notes |
+|---|---|---|---|
+| `action` | `rank` / `label-create` / `label-update` / `label-delete` | all | required |
+| `issue` | string — a key | rank | required for that arm |
+| `after` · `before` | string — a key | rank | **exactly one**, never both — the endpoint answers 400 for both-or-neither, and the tool refuses it before the call |
+| `label` | string — a **name** | label-update · label-delete | resolved against `tcms_read_board`'s label list |
+| `name` | string | label-create · label-update | |
+| `color` | string — a token name, `label-3` | label-create · label-update | a token, never a hex value; a stored `#RRGGBB` is invisible in the other colour scheme |
+
+`rank` answers `RankResult`, and **`rebalanced: true` means the model's own copy of the order is
+stale** — the read is made again rather than trusted, which is the same instruction the SPA follows.
+
+#### The two arms `tcms_write_issue` gains
+
+Both are `issue:edit`, which that tool already gates on, so they are arms rather than a third tool.
+
+| Arm | Kind | Permission | Writes to |
+|---|---|---|---|
+| `move-card` | `state` | `issue:edit` | `POST /boards/{boardId}/cards/{key}/move` |
+| `label` | `state` | `issue:edit` | `PUT /issues/{key}/labels` |
+
+**`move-card` is not a duplicate of `move`.** `move` names a status and reaches
+`POST …/transitions`; `move-card` names a **column** and lets the server resolve which of the
+statuses that column claims the card takes (D2). On a board whose column claims one status they
+agree; on a stakeholder board's three-status column only `move-card` can be spelled at all, because
+the caller does not know which status the column means.
+
+`label` **replaces the whole set**, matching the endpoint: the field is the labels the issue should
+have afterwards, not the ones to add. A model that sends one label removes the rest, and the
+description says so in those words.
 ---
 
 ## 4. Cross-cutting rules — all of them in the command core
@@ -589,8 +670,8 @@ needing a separate decision. A bulk generation therefore decomposes per item.
 
 ## 6. The CLI surface
 
-`tcms <noun> <verb>`, one command per operation the `Agent` role can reach — approximately 45,
-against the MCP surface's 21. It is wide on purpose (§1): `--help` is paged and nobody loads all of
+`tcms <noun> <verb>`, one command per operation the `Agent` role can reach — approximately ~~45~~ 53,
+against the MCP surface's ~~21~~ 28. It is wide on purpose (§1): `--help` is paged and nobody loads all of
 it.
 
 - ~~**Nouns match the MCP tool families exactly** — `case`, `suite`, `plan`, `run`, `doc`, `review`,
@@ -623,6 +704,33 @@ rendered from the catalogue by `optionSpecFor`, so a field added there cannot be
 `format.test.ts` is what asserts it. There is **no `tcms issue edit`**: the three issue writes here are
 the ones a person or a CI step actually reaches for, and the field-by-field update stays on the MCP
 side, where it is composed from a read the model has already made.
+
+**The eight board commands** (012 T5; §3.5 carries the typed inputs and the reasons). `board` is the
+third noun the CLI gains, and unlike `work-item` it arrives delivered rather than promised:
+
+| Command | Kind | Permission | Reaches |
+|---|---|---|---|
+| `tcms board list` | read | `board:read` | `GET /projects/{projectId}/boards` |
+| `tcms board show "Team board"` | read | `board:read` | `GET /boards/{boardId}` + `…/cards` |
+| `tcms board move ACME-124 --column "In flight"` | `state` | `issue:edit` | `POST /boards/{boardId}/cards/{key}/move` |
+| `tcms backlog [--label L] [--assignee A] [--epic K] [--level L] [--unparented]` | read | `board:read` | `GET /projects/{projectId}/backlog` |
+| `tcms rank ACME-124 --after ACME-99` · `--before ACME-98` | `state` | `board:rank` | `PUT /issues/{key}/rank` |
+| `tcms label list` | read | `board:read` | `GET /projects/{projectId}/labels` |
+| `tcms label add --name Flaky --color label-3` | `create` | `board:configure` | `POST /projects/{projectId}/labels` |
+| `tcms label set ACME-124 --labels Flaky,Regression` | `state` | `issue:edit` | `PUT /issues/{key}/labels` |
+
+Three things about that table are decisions rather than spellings:
+
+- **`--column`, `--label` and `--labels` take NAMES**, for §3.4's reason and more sharply here:
+  nobody has a `board_column` UUID to paste. An unknown one is refused by listing what the board has.
+- **`--after` and `--before` are mutually exclusive and one is required.** The endpoint answers 400
+  for both-or-neither; the CLI refuses it before the call, because a terminal round-trip to learn
+  that is a round-trip a `--help` line could have saved.
+- **`label set` replaces the whole set.** `--labels` is what the issue should carry afterwards, and
+  omitting one removes it. There is no `label unset`: an add/remove pair over a multi-select lets a
+  stale client remove a label somebody else just added, which is the same argument the endpoint makes.
+- **There is no `tcms board create`/`edit`/`delete`.** Defining columns is a screen with a
+  status-claim rule (§3.5); the CLI reads the boards a project has and moves cards on them.
 - **Read commands are phase 5, writes are phase 7**, per the plan's order.
 - **`--json` on every command**, so the CLI composes in a shell. Human-readable output is the
   default and the JSON is the generated client's response verbatim.
