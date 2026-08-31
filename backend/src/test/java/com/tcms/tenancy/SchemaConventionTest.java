@@ -342,7 +342,19 @@ class SchemaConventionTest extends IntegrationTestBase {
                 // work_item cannot boot a context that still declares the entity — so the drop
                 // travelled with the deletion, which is the expand-contract ordering the migration
                 // discipline asks for anyway.
-                .isEqualTo(82);
+                //
+                // 88 since V5 (plan 012, module M2) — board, board_column, board_column_status,
+                // board_swimlane, issue_label and issue_label_assignment. All six are company-owned
+                // and none is an exception, INCLUDING board_swimlane, whose rows are one person's
+                // view state rather than the client's content: company_id is what stops Acme's
+                // collapsed lanes being readable from Globex, and the PER-PERSON half is the
+                // service layer's, exactly as tracker_identity above splits the same way.
+                //
+                // V5 is NOT the V4 the 009 status table reserves. M1 took two versions — V3 created
+                // `issue`, V4 dropped `work_item` — and `out-of-order` is unset, so a V4 written for
+                // M2 would never run on an instance that has M1 while Testcontainers, which builds
+                // every database from empty, would show nothing wrong.
+                .isEqualTo(88);
     }
 
     @Test
