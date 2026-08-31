@@ -1,18 +1,16 @@
 package com.tcms.work;
 
 import com.tcms.api.UserRef;
-import com.tcms.project.GateResult;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectService;
 import com.tcms.project.TeamDirectory;
 import com.tcms.tenancy.CompanyContext;
-import com.tcms.tenancy.Outbox;
-import com.tcms.tenancy.OutboxEvents;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -24,7 +22,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * The board: stored tasks and derived cards, assembled into one list (plan §6l).
+ * The board: issues and derived cards, assembled into one list (plan §6l).
+ *
+ * <p>~~stored tasks and derived cards~~ → the stored half is an {@code issue} in
+ * {@code com.tcms.tracker} since 009 module M1, read through {@link BoardFacts#assignedIssues}. The
+ * rule the module is built around is unchanged and is why the replacement was possible at all:
+ * exactly one kind of card is a row.
  *
  * <h2>Where the derived-item invariant actually lives</h2>
  *
@@ -36,13 +39,16 @@ import org.springframework.transaction.annotation.Transactional;
  *       stored and never cached. An unrecorded execution is {@code IN_PROGRESS} because somebody is
  *       expected to run it; a flagged case is {@code TODO} because nobody has started. There is no
  *       code path that writes either.</li>
- *   <li><strong>A derived card's id is synthetic</strong> and cannot collide with a task's, because
- *       it is prefixed. {@link #PREFIX_EXECUTION}, {@link #PREFIX_CASE}, {@link #PREFIX_REVIEW}
- *       and {@link #PREFIX_QUARANTINE} are also what {@link #move} uses to <em>recognise</em> a derived id and refuse it — the
- *       refusal is driven by the same constant that produced the id, so the two cannot drift
- *       apart.</li>
- *   <li><strong>{@code allowedTransitions} is a property of the card, not of the column</strong>
- *       ({@link #transitionsFor}).</li>
+ *   <li><strong>A derived card's id is synthetic</strong> and cannot collide with an issue's,
+ *       because it is prefixed — and an issue's id on this board is its <em>key</em>, which cannot
+ *       hold a colon. ~~{@link #PREFIX_EXECUTION} … are also what {@code move} uses to recognise a
+ *       derived id and refuse it.~~ <strong>→ that refusal moved</strong>: {@code PATCH
+ *       /work-items/{id}} is gone (D-a) and moving a card is {@code POST /issues/{key}/transitions},
+ *       which answers 404 for a synthetic id because it is not an issue key. Recorded as a
+ *       regression — the old 409 named the action that does work, and M2's board restores it.</li>
+ *   <li><strong>{@code allowedTransitions} is a property of the card, not of the column.</strong>
+ *       For an {@code ISSUE} card it is the project's own workflow ({@link BoardFacts#legalMoves});
+ *       for a derived one it is empty, per generator, with the reason at each.</li>
  * </ol>
  */
 @Service
@@ -84,32 +90,58 @@ public class BoardService {
      */
     private static final String PREFIX_QUARANTINE = "quarantine:";
 
-    /** {@code CaseCreateService}'s cap, for its reason: the header is attacker-controlled. */
-    private static final int MAX_IDEMPOTENCY_KEY = 200;
+    /**
+     * The card kinds, ordered as the board sorts within one priority.
+     *
+     * <p>{@code ISSUE} is the row-backed one and is deliberately not special-cased anywhere below:
+     * what separates it from the other four is that its status comes from a row, and every other
+     * property of a card is assembled the same way for all five.
+     */
+    private static final String KIND_ISSUE = "ISSUE";
+
+    /**
+     * Priority, ranked rather than compared.
+     *
+     * <p>{@code work.Priority} retired with {@code work_item}, so the value is a String carried from
+     * {@code tracker} ({@link BoardCardView}), and a String comparison would sort
+     * {@code CRITICAL, HIGH, LOW, MEDIUM} — putting the least urgent card above the middle one on
+     * every board in the product, silently, with the sort still looking stable. The order is the
+     * contract's {@code Priority} enum, which is the same order the retired enum declared.
+     */
+    private static final List<String> PRIORITY_ORDER =
+            List.of("CRITICAL", "HIGH", "MEDIUM", "LOW");
+
+    /**
+     * What a derived card's priority is, and it is the same answer it has always been.
+     *
+     * <p>The four derived generators carry no priority of their own — an execution, a health signal,
+     * a review request and a quarantine each have one urgency, which is "this is outstanding" — so
+     * they sit in the middle of the sort rather than above or below every issue. Spelled as the
+     * literal the retired {@code work.Priority.MEDIUM} produced on the wire, because that is what it
+     * has always been and a derived card's position in the sort is not a thing to change quietly.
+     */
+    private static final String DEFAULT_PRIORITY = "MEDIUM";
 
     private final ProjectService projects;
-    private final WorkItemRepository tasks;
     private final BoardFacts facts;
     private final BoardPeople people;
     private final TeamDirectory teams;
-    private final Outbox outbox;
+    private final CardAnnotationRepository annotations;
     private final Clock clock;
 
     BoardService(
             ProjectService projects,
-            WorkItemRepository tasks,
             BoardFacts facts,
             BoardPeople people,
             TeamDirectory teams,
-            Outbox outbox,
+            CardAnnotationRepository annotations,
             Clock clock) {
 
         this.projects = projects;
-        this.tasks = tasks;
         this.facts = facts;
         this.people = people;
         this.teams = teams;
-        this.outbox = outbox;
+        this.annotations = annotations;
         this.clock = clock;
     }
 
@@ -125,9 +157,9 @@ public class BoardService {
      * project named.
      */
     @Transactional(readOnly = true)
-    public Optional<List<WorkItemView>> board(UUID userId, UUID projectId, boolean mine) {
-        return projects.readVisible(
-                userId, projectId, project -> present(assemble(List.of(project)), userId, mine));
+    public Optional<List<BoardCardView>> board(UUID userId, UUID projectId, boolean mine) {
+        return projects.readVisible(userId, projectId,
+                project -> present(assemble(List.of(project), userId), userId, mine));
     }
 
     /**
@@ -160,9 +192,9 @@ public class BoardService {
      * one does not.
      */
     @Transactional(readOnly = true)
-    public List<WorkItemView> personalBoard(UUID userId) {
+    public List<BoardCardView> personalBoard(UUID userId) {
         return projects.readAllVisible(
-                userId, visible -> present(assemble(visible), userId, true));
+                userId, visible -> present(assemble(visible, userId), userId, true));
     }
 
     /**
@@ -220,7 +252,7 @@ public class BoardService {
      * cannot open is a lead unable to look at their own reports' work.
      */
     @Transactional(readOnly = true)
-    public Optional<List<WorkItemView>> teamBoard(UUID userId, UUID teamId, UUID projectId) {
+    public Optional<List<BoardCardView>> teamBoard(UUID userId, UUID teamId, UUID projectId) {
         if (teams.find(CompanyContext.require(), teamId).isEmpty()) {
             return Optional.empty();
         }
@@ -228,10 +260,10 @@ public class BoardService {
 
         if (projectId == null) {
             return Optional.of(projects.readAllVisible(
-                    userId, visible -> forAssignees(visible, members)));
+                    userId, visible -> forAssignees(visible, userId, members)));
         }
         return projects.readVisible(
-                userId, projectId, project -> forAssignees(List.of(project), members));
+                userId, projectId, project -> forAssignees(List.of(project), userId, members));
     }
 
     /**
@@ -241,11 +273,13 @@ public class BoardService {
      * the time this runs the project gate has already been applied, so an empty team can shortcut
      * without the shortcut being able to swallow a 404.
      */
-    private List<WorkItemView> forAssignees(List<Project> visible, Set<UUID> assignees) {
+    private List<BoardCardView> forAssignees(
+            List<Project> visible, UUID userId, Set<UUID> assignees) {
+
         if (assignees.isEmpty()) {
             return List.of();
         }
-        return present(assemble(visible), assignees);
+        return present(assemble(visible, userId), assignees);
     }
 
     /**
@@ -263,167 +297,60 @@ public class BoardService {
      * above is unchanged by the generalisation — the filter is still applied after assembly, and the
      * team board inherits both the reuse and the cost {@link #personalBoard} records.
      */
-    private static List<WorkItemView> present(List<WorkItemView> cards, UUID userId, boolean mine) {
+    private static List<BoardCardView> present(
+            List<BoardCardView> cards, UUID userId, boolean mine) {
+
         if (!mine) {
             return sorted(cards);
         }
         return present(cards, Set.of(userId));
     }
 
-    private static List<WorkItemView> present(List<WorkItemView> cards, Set<UUID> assignees) {
+    private static List<BoardCardView> present(List<BoardCardView> cards, Set<UUID> assignees) {
         return sorted(cards.stream()
                 .filter(card -> card.assignee() != null && assignees.contains(card.assignee().id()))
                 .toList());
     }
 
     /**
-     * Creates a task.
+     * Writes the caller's own note, personal due date and flag on a card (D11, story B5).
      *
-     * <p>Gated on {@code workitem:manage} at project scope. The permission is checked against the
-     * project named <em>in the body</em>, which is the only project this request mentions — there is
-     * no path segment to gate on, so {@link ProjectService#writeGranted} is handed the body's id and
-     * answers {@code Unreachable} for a project the caller cannot see. That collapses "no such
-     * project", "another company's project" and "a project you hold no grant on" into one 404,
-     * which is the same answer every project-scoped path gives.
+     * <p><strong>Keyed on the CALLER and on nobody else.</strong> Two people reading one card get
+     * different values here, and that is the feature rather than a caching bug.
      *
-     * @param idempotencyKey the request's {@code Idempotency-Key} header, or null when absent
-     *                       (V17). Honoured from the first day the header is <em>declared</em>,
-     *                       which is §53's whole reason for leaving it undeclared until the column
-     *                       existed — see {@code openapi.yaml} on this operation.
+     * <p><strong>No permission beyond seeing the card, and no project gate at all.</strong>
+     * Annotating something is not editing it — which is the whole reason this is a separate table
+     * from the row — and a note nobody else can read is not a claim about the work. RLS bounds the
+     * write to the caller's company and the primary key bounds it to the caller, so the two things
+     * a gate here would protect are already protected by something that cannot be forgotten.
+     *
+     * <p>The merge is a PATCH's, on a PUT: an absent key is <em>leave it</em>, which the contract
+     * says and which {@link com.tcms.api.PatchBody} is what makes expressible — without it Jackson
+     * gives an absent field and an explicit null the same value, and every flag edit would silently
+     * empty the note.
      */
     @Transactional
-    public GateResult<CreateOutcome> create(
-            UUID userId, WorkItemWriteRequest request, String idempotencyKey) {
+    public CardAnnotationView annotate(
+            UUID userId,
+            String sourceType,
+            UUID sourceId,
+            CardAnnotationInput request,
+            com.tcms.api.PatchBody patch) {
 
-        UUID projectId = request.projectId();
-        if (projectId == null) {
-            // Before the gate, and deliberately not a 404: there is no project to be unable to
-            // see. A missing projectId is a malformed request, and answering 404 would tell a
-            // caller who forgot a field that something does not exist.
-            return new GateResult.Allowed<>(new CreateOutcome.Invalid(
-                    Map.of("projectId", List.of("Choose a project for this task."))));
-        }
+        CardAnnotationId id = new CardAnnotationId(userId, sourceType, sourceId);
+        CardAnnotation annotation = annotations.findById(id).orElseGet(() ->
+                CardAnnotation.forCard(CompanyContext.require(), userId, sourceType, sourceId));
 
-        return projects.writeGranted(userId, projectId, "workitem:manage", project -> {
-            // The replay is answered INSIDE the gate and BEFORE validation, and both halves are
-            // deliberate. Inside, because a caller who cannot reach the project must get the same
-            // 404 they would get for a first attempt — recognising their key would confirm that
-            // something exists there. Before, because a retry of a create that succeeded must
-            // answer with the task it made even if the payload has since drifted: the client is
-            // asking "did my intent land", and a 400 would send it to fix fields on a card that
-            // already exists. PlanCreateService and CaseCreateService order it the same way.
-            if (idempotencyKey != null) {
-                if (idempotencyKey.length() > MAX_IDEMPOTENCY_KEY) {
-                    return new CreateOutcome.Invalid(Map.of("Idempotency-Key",
-                            List.of("Send a key of at most " + MAX_IDEMPOTENCY_KEY
-                                    + " characters.")));
-                }
-                Optional<WorkItem> already =
-                        tasks.findByIdempotencyKey(project.getId(), idempotencyKey);
-                if (already.isPresent()) {
-                    return new CreateOutcome.Replayed(viewOf(already.get(), project));
-                }
-            }
+        annotation.apply(
+                patch.has("note") ? request.note() : annotation.getNote(),
+                patch.has("personalDueDate")
+                        ? request.personalDueDate() : annotation.getPersonalDueDate(),
+                patch.has("flagged") && request.flagged() != null
+                        ? request.flagged() : annotation.isFlagged());
 
-            WorkItemEdit.Outcome outcome =
-                    WorkItemEdit.validateCreate(request, assignableUsers(project, request));
-
-            return switch (outcome) {
-                case WorkItemEdit.Outcome.Invalid invalid ->
-                        new CreateOutcome.Invalid(invalid.errors());
-                case WorkItemEdit.Outcome.Valid valid -> {
-                    WorkItem created = tasks.save(WorkItem.create(
-                            project.getId(), valid.edit(), userId, idempotencyKey, clock.instant()));
-                    announceAssignment(created);
-                    yield new CreateOutcome.Created(viewOf(created, project));
-                }
-            };
-        });
+        return CardAnnotationView.of(annotations.save(annotation));
     }
 
-    /**
-     * Records that this task went to somebody, for whoever is subscribed to hear about it.
-     *
-     * <p><strong>Inside the create transaction, which is the whole pattern.</strong> The task and
-     * the notice of it commit together or neither does; {@code Outbox#record} throws when it is
-     * called outside one rather than trusting this comment.
-     *
-     * <p><strong>Nothing at all for an unassigned task</strong>, which is most of them. The event
-     * is "assigned to somebody" and not "a task was created", so a card that goes onto the board
-     * for whoever picks it up records no occurrence — an event whose payload named no assignee
-     * would be one every consumer had to filter, and one of them would forget.
-     *
-     * <p>Not coalesced. Fifty tasks assigned in a planning session are fifty notices, because each
-     * names a different person and a coalesced event could name only one of them truthfully.
-     */
-    private void announceAssignment(WorkItem created) {
-        if (created.getAssigneeId() == null) {
-            return;
-        }
-        outbox.record(
-                ItemAssignedEvent.AGGREGATE,
-                created.getId(),
-                OutboxEvents.ITEM_ASSIGNED,
-                new ItemAssignedEvent(
-                        UUID.randomUUID(),
-                        created.getId(),
-                        created.getTitle(),
-                        created.getProjectId(),
-                        created.getAssigneeId()));
-    }
-
-    /**
-     * Moves a card to another column.
-     *
-     * <h2>The three refusals, and why each has the status code it does</h2>
-     *
-     * <ul>
-     *   <li><strong>A derived id → {@link MoveOutcome.NotStored}, rendered 409.</strong> Not 404:
-     *       the card exists, the caller is looking at it, and answering "gone" would invite a reload
-     *       that brings it straight back. What is impossible is storing a status for it, which is a
-     *       statement about the request rather than about the resource's existence.</li>
-     *   <li><strong>An unknown or invisible id → {@code Unreachable}, rendered 404.</strong></li>
-     *   <li><strong>A column outside {@code allowedTransitions} → {@link MoveOutcome.NotAllowed},
-     *       rendered 409.</strong> Today a stored task may move anywhere, so this is unreachable
-     *       from the SPA — it is here because {@code allowedTransitions} is the client's copy of a
-     *       server rule, and a rule enforced only on the client is not enforced.</li>
-     * </ul>
-     */
-    @Transactional
-    public GateResult<MoveOutcome> move(UUID userId, String cardId, WorkItemStatus target) {
-        if (isDerived(cardId)) {
-            // Answered BEFORE any lookup: a derived id names no row, so a repository call would
-            // return empty and the natural rendering of that is the 404 this deliberately is not.
-            return new GateResult.Allowed<>(new MoveOutcome.NotStored());
-        }
-
-        UUID id;
-        try {
-            id = UUID.fromString(cardId);
-        } catch (IllegalArgumentException malformed) {
-            // A card id that is neither a derived id nor a UUID names nothing. 404 rather than 400:
-            // it is the same answer an unknown UUID gets, and distinguishing them tells a caller
-            // which ids are well-formed, which is the probe §6t's 404-over-403 rule closes.
-            return new GateResult.Unreachable<>();
-        }
-
-        Optional<WorkItem> found = tasks.findLiveById(id);
-        if (found.isEmpty()) {
-            return new GateResult.Unreachable<>();
-        }
-        WorkItem task = found.get();
-
-        // The gate is the TASK's project, not one the request supplied — there is no project in
-        // this path. A caller who may see the card but holds no workitem:manage on its project gets
-        // Denied (403); one who cannot see the project at all gets Unreachable (404).
-        return projects.writeGranted(userId, task.getProjectId(), "workitem:manage", project -> {
-            if (!transitionsFor(task).contains(target)) {
-                return new MoveOutcome.NotAllowed(task.getStatus(), target);
-            }
-            task.moveTo(target, userId, clock.instant());
-            return new MoveOutcome.Moved(viewOf(task, project));
-        });
-    }
 
     // =====================================================================
     // Assembly
@@ -438,7 +365,7 @@ public class BoardService {
      * {@code projectId} rather than from a request parameter, which is what the four sources have
      * carried since §53 and what only now has a second reader.
      */
-    private List<WorkItemView> assemble(List<Project> visible) {
+    private List<BoardCardView> assemble(List<Project> visible, UUID userId) {
         if (visible.isEmpty()) {
             // Before any query, because an empty collection bound into `IN ()` is a syntax error
             // rather than a predicate matching nothing (BoardFacts' header). A company member with
@@ -449,18 +376,18 @@ public class BoardService {
                 .collect(Collectors.toMap(Project::getId, project -> project));
         Set<UUID> projectIds = byId.keySet();
 
-        List<WorkItem> stored = tasks.findLiveInProjects(projectIds);
+        List<BoardFacts.AssignedIssue> issues = facts.assignedIssues(projectIds);
         List<BoardFacts.AssignedExecution> executions = facts.assignedExecutions(projectIds);
         List<BoardFacts.FlaggedCase> flagged = facts.casesNeedingAttention(projectIds);
         List<BoardFacts.PendingReview> reviews = facts.pendingReviews(projectIds);
         List<BoardFacts.QuarantinedCase> quarantined = facts.quarantinedCases(projectIds);
 
-        // One resolution for the whole board, across all four sources — see BoardPeople on why
+        // One resolution for the whole board, across all five sources — see BoardPeople on why
         // this is not done per card. A review contributes TWO ids, the reviewer and whoever asked
         // them, and both go in the same batch: the second is only used for a sentence on the card,
         // and a second round trip to render it would double a two-query resolution.
         Set<UUID> peopleIds = new HashSet<>();
-        stored.forEach(task -> addIfPresent(peopleIds, task.getAssigneeId()));
+        issues.forEach(issue -> addIfPresent(peopleIds, issue.assigneeId()));
         executions.forEach(execution -> addIfPresent(peopleIds, execution.assigneeId()));
         flagged.forEach(flag -> addIfPresent(peopleIds, flag.ownerId()));
         reviews.forEach(review -> {
@@ -474,23 +401,84 @@ public class BoardService {
         Map<UUID, UserRef> resolved =
                 people.resolve(CompanyContext.require(), peopleIds);
 
-        List<WorkItemView> cards = new ArrayList<>();
-        for (WorkItem task : stored) {
-            cards.add(viewOf(task, byId.get(task.getProjectId()), resolved));
+        Map<UUID, List<BoardStatusRef>> moves = movesByStatus(projectIds);
+        Map<String, CardAnnotationView> notes = notesOf(userId);
+
+        List<BoardCardView> cards = new ArrayList<>();
+        for (BoardFacts.AssignedIssue issue : issues) {
+            cards.add(cardFor(issue, byId.get(issue.projectId()), resolved, moves, notes));
         }
         for (BoardFacts.AssignedExecution execution : executions) {
-            cards.add(cardFor(execution, byId.get(execution.projectId()), resolved));
+            cards.add(cardFor(execution, byId.get(execution.projectId()), resolved, notes));
         }
         for (BoardFacts.FlaggedCase flag : flagged) {
-            cards.add(cardFor(flag, byId.get(flag.projectId()), resolved));
+            cards.add(cardFor(flag, byId.get(flag.projectId()), resolved, notes));
         }
         for (BoardFacts.PendingReview review : reviews) {
-            cards.add(cardFor(review, byId.get(review.projectId()), resolved));
+            cards.add(cardFor(review, byId.get(review.projectId()), resolved, notes));
         }
         for (BoardFacts.QuarantinedCase flake : quarantined) {
-            cards.add(cardFor(flake, byId.get(flake.projectId()), resolved));
+            cards.add(cardFor(flake, byId.get(flake.projectId()), resolved, notes));
         }
         return cards;
+    }
+
+    /**
+     * The workflow, keyed by the status a card is standing in.
+     *
+     * <p>One statement for the whole board rather than one per card — {@link BoardFacts#legalMoves}
+     * carries the argument. A status with no row here has no legal move out of it, which is a real
+     * state: {@code issue_transition} is an allow-list, so a status added to a workflow reaches
+     * nothing until somebody says where it goes.
+     */
+    private Map<UUID, List<BoardStatusRef>> movesByStatus(Set<UUID> projectIds) {
+        Map<UUID, List<BoardStatusRef>> byStatus = new HashMap<>();
+        for (BoardFacts.LegalMove move : facts.legalMoves(projectIds)) {
+            byStatus.computeIfAbsent(move.fromStatusId(), status -> new ArrayList<>())
+                    .add(new BoardStatusRef(
+                            move.toStatusId(), move.toName(), move.toKind(), move.toPosition()));
+        }
+        return byStatus;
+    }
+
+    /**
+     * The caller's own annotations, keyed by the {@code (sourceType, sourceId)} a card carries.
+     *
+     * <p>Every one of them, not only the ones on this board: the set is bounded by how many notes
+     * one person has written, and narrowing it would mean binding a list of every card's id into an
+     * {@code IN} — with the empty-collection hazard on the ordinary path, since most people have
+     * annotated nothing.
+     */
+    private Map<String, CardAnnotationView> notesOf(UUID userId) {
+        Map<String, CardAnnotationView> notes = new HashMap<>();
+        for (CardAnnotation annotation : annotations.findByUserId(userId)) {
+            notes.put(annotationKey(annotation.getSourceType(), annotation.getSourceId()),
+                    CardAnnotationView.of(annotation));
+        }
+        return notes;
+    }
+
+    /**
+     * An annotation's key is the card's <strong>kind</strong> and its source id, not its
+     * {@code sourceType}.
+     *
+     * <p>{@code sourceType} says what the card OPENS, and two cards can open the same thing: a case
+     * that is both flagged by the health computation and quarantined produces two cards, both
+     * {@code sourceType = CASE} with the same case id. Keyed that way, a note written on one would
+     * appear on the other — the same collision the synthetic ids avoid one field over, and the
+     * reason {@link #PREFIX_QUARANTINE} is not {@link #PREFIX_CASE}.
+     *
+     * <p>{@code ISSUE} is the kind and is also what {@code V3} relabelled its migrated {@code 'TASK'}
+     * rows to, so a note written on a task before the upgrade lands on the issue it became.
+     *
+     * <p><strong>The one collision this does not resolve is two reviewers of one artifact</strong> —
+     * a review card's identity is the pair {@code (review, reviewer)} and this key has room for one
+     * id. Accepted rather than solved: the annotation is private to the caller, so what two
+     * reviewers share is a note each wrote for themselves on the same case, and widening the table's
+     * primary key is a migration for a case §6l does not describe.
+     */
+    private static String annotationKey(String kind, UUID sourceId) {
+        return kind + ":" + sourceId;
     }
 
     /**
@@ -501,13 +489,25 @@ public class BoardService {
      * overdue card under thirty routine ones. The id tiebreaker is what stops cards reshuffling on
      * every refetch, which reads as the page flickering rather than as an unstable sort.
      */
-    private static List<WorkItemView> sorted(List<WorkItemView> cards) {
+    private static List<BoardCardView> sorted(List<BoardCardView> cards) {
         return cards.stream()
                 .sorted(Comparator
-                        .comparing(WorkItemView::overdue).reversed()
-                        .thenComparing(WorkItemView::priority)
-                        .thenComparing(WorkItemView::id))
+                        .comparing(BoardCardView::overdue).reversed()
+                        .thenComparingInt(BoardService::rank)
+                        .thenComparing(BoardCardView::id))
                 .toList();
+    }
+
+    /**
+     * Priority as a number, because it is a String on the card — see {@link #PRIORITY_ORDER}.
+     *
+     * <p>An unknown value sorts last rather than throwing. The column has a CHECK behind it, so the
+     * only way to reach that arm is a value added in a migration and not here — and a card in the
+     * wrong place is a better failure than a board that will not render.
+     */
+    private static int rank(BoardCardView card) {
+        int at = card.priority() == null ? -1 : PRIORITY_ORDER.indexOf(card.priority());
+        return at < 0 ? PRIORITY_ORDER.size() : at;
     }
 
     /**
@@ -525,12 +525,13 @@ public class BoardService {
      * completed</em>, and until that navigation exists, offering a move that silently does nothing
      * is worse than offering none. The SPA disables every move button and says why (§31).
      */
-    private WorkItemView cardFor(
+    private BoardCardView cardFor(
             BoardFacts.AssignedExecution execution,
             Project project,
-            Map<UUID, UserRef> resolved) {
+            Map<UUID, UserRef> resolved,
+            Map<String, CardAnnotationView> notes) {
 
-        return new WorkItemView(
+        return new BoardCardView(
                 PREFIX_EXECUTION + execution.executionId(),
                 true,
                 "EXECUTION",
@@ -538,14 +539,15 @@ public class BoardService {
                 "EXECUTION",
                 execution.caseTitle(),
                 "Execute in " + execution.runName(),
-                WorkItemStatus.IN_PROGRESS,
-                Priority.MEDIUM,
+                CardStatus.inProgress(),
+                DEFAULT_PRIORITY,
                 null,
                 false,
                 execution.assigneeId() == null ? null : resolved.get(execution.assigneeId()),
                 project.getId(),
                 project.getKey(),
                 execution.caseKey(),
+                notes.get(annotationKey("EXECUTION", execution.executionId())),
                 List.of());
     }
 
@@ -561,12 +563,13 @@ public class BoardService {
      * <p>The title names the signal rather than reading "needs attention", because a card whose
      * reason is hidden behind a click is one that gets ignored in bulk.
      */
-    private WorkItemView cardFor(
+    private BoardCardView cardFor(
             BoardFacts.FlaggedCase flagged,
             Project project,
-            Map<UUID, UserRef> resolved) {
+            Map<UUID, UserRef> resolved,
+            Map<String, CardAnnotationView> notes) {
 
-        return new WorkItemView(
+        return new BoardCardView(
                 PREFIX_CASE + flagged.caseId(),
                 true,
                 "CASE",
@@ -574,14 +577,15 @@ public class BoardService {
                 "CASE_MAINTENANCE",
                 flagged.caseTitle(),
                 describe(flagged.signals()),
-                WorkItemStatus.TODO,
-                Priority.MEDIUM,
+                CardStatus.toDo(),
+                DEFAULT_PRIORITY,
                 null,
                 false,
                 flagged.ownerId() == null ? null : resolved.get(flagged.ownerId()),
                 project.getId(),
                 project.getKey(),
                 flagged.caseKey(),
+                notes.get(annotationKey("CASE_MAINTENANCE", flagged.caseId())),
                 List.of());
     }
 
@@ -616,14 +620,15 @@ public class BoardService {
      * real gate and an {@code If-Match} behind it (§76), so offering it as a drag would be a second,
      * unguarded door to the sign-off — exactly what the participation endpoint refuses to be.
      */
-    private WorkItemView cardFor(
+    private BoardCardView cardFor(
             BoardFacts.PendingReview review,
             Project project,
-            Map<UUID, UserRef> resolved) {
+            Map<UUID, UserRef> resolved,
+            Map<String, CardAnnotationView> notes) {
 
         UserRef asker = review.requestedBy() == null ? null : resolved.get(review.requestedBy());
 
-        return new WorkItemView(
+        return new BoardCardView(
                 PREFIX_REVIEW + review.reviewId() + ":" + review.reviewerId(),
                 true,
                 review.subjectType(),
@@ -636,14 +641,15 @@ public class BoardService {
                         // one would attribute the ask to somebody.
                         ? "Review requested"
                         : "Review requested by " + asker.displayName(),
-                WorkItemStatus.TODO,
-                Priority.MEDIUM,
+                CardStatus.toDo(),
+                DEFAULT_PRIORITY,
                 null,
                 false,
                 resolved.get(review.reviewerId()),
                 project.getId(),
                 project.getKey(),
                 review.subjectKey(),
+                notes.get(annotationKey("REVIEW", review.subjectId())),
                 List.of());
     }
 
@@ -677,15 +683,16 @@ public class BoardService {
      * references instance-level {@code app_user}, so an offboarded account leaves a live quarantine
      * with nobody to name, and naming somebody would attribute the decision.
      */
-    private WorkItemView cardFor(
+    private BoardCardView cardFor(
             BoardFacts.QuarantinedCase flake,
             Project project,
-            Map<UUID, UserRef> resolved) {
+            Map<UUID, UserRef> resolved,
+            Map<String, CardAnnotationView> notes) {
 
         UserRef decider =
                 flake.quarantinedBy() == null ? null : resolved.get(flake.quarantinedBy());
 
-        return new WorkItemView(
+        return new BoardCardView(
                 PREFIX_QUARANTINE + flake.caseId(),
                 true,
                 // CASE, like the maintenance card: sourceType is what the card OPENS (the review
@@ -697,14 +704,15 @@ public class BoardService {
                 decider == null
                         ? "Quarantined — " + flake.reason()
                         : "Quarantined by " + decider.displayName() + " — " + flake.reason(),
-                WorkItemStatus.TODO,
-                Priority.MEDIUM,
+                CardStatus.toDo(),
+                DEFAULT_PRIORITY,
                 null,
                 false,
                 flake.ownerId() == null ? null : resolved.get(flake.ownerId()),
                 project.getId(),
                 project.getKey(),
                 flake.caseKey(),
+                notes.get(annotationKey("QUARANTINE", flake.caseId())),
                 List.of());
     }
 
@@ -722,135 +730,81 @@ public class BoardService {
         return String.join(", ", signals);
     }
 
-    private WorkItemView viewOf(WorkItem task, Project project) {
-        return viewOf(task, project,
-                people.resolve(CompanyContext.require(),
-                        task.getAssigneeId() == null ? Set.of() : Set.of(task.getAssigneeId())));
-    }
+    /**
+     * A card for an issue — <strong>the row-backed one, and the only one</strong>.
+     *
+     * <h2>The id is the KEY, not the UUID</h2>
+     *
+     * <p>{@code ACME-124} is what a person types into a commit message, what every screen shows and
+     * what {@code /issues/{key}} takes, so a board card whose id was the row's UUID would be the one
+     * identifier in the product that could not be pasted anywhere. It cannot collide with a derived
+     * id either: a key holds no colon.
+     *
+     * <h2>{@code allowedTransitions} come from the project's workflow</h2>
+     *
+     * <p>~~Every column except the one it is in.~~ <strong>→ superseded by 009 module M1.</strong>
+     * {@code WorkItem.moveTo}'s comment said no transition was refused <em>"and that is the model
+     * rather than an omission"</em>; that model is over. {@code issue_transition} is an allow-list
+     * per project, which is what makes {@code settings-workflow.html}'s "Allowed moves" panel mean
+     * anything — and what makes a board that offers a move the endpoint would then refuse
+     * impossible rather than merely unlikely.
+     *
+     * <p><strong>Empty for an Epic</strong> (D31): an epic's status is derived from its stories and
+     * is not editable, so there is no legal move out of it for anybody. {@code IssueView} answers
+     * the same empty list and {@code TransitionService} refuses the move, so the three are one
+     * decision expressed three times rather than three rules that could drift.
+     */
+    private BoardCardView cardFor(
+            BoardFacts.AssignedIssue issue,
+            Project project,
+            Map<UUID, UserRef> resolved,
+            Map<UUID, List<BoardStatusRef>> moves,
+            Map<String, CardAnnotationView> notes) {
 
-    private WorkItemView viewOf(WorkItem task, Project project, Map<UUID, UserRef> resolved) {
-        return new WorkItemView(
-                task.getId().toString(),
+        boolean epic = "EPIC".equals(issue.typeLevel());
+
+        return new BoardCardView(
+                issue.issueKey(),
                 false,
-                null,
-                null,
-                "TASK",
-                task.getTitle(),
-                task.getDescription(),
-                task.getStatus(),
-                task.getPriority(),
-                task.getDueDate(),
-                isOverdue(task),
-                task.getAssigneeId() == null ? null : resolved.get(task.getAssigneeId()),
+                KIND_ISSUE,
+                issue.issueId(),
+                KIND_ISSUE,
+                issue.title(),
+                issue.description(),
+                new CardStatus(issue.statusName(), issue.statusKind()),
+                issue.priority(),
+                issue.dueDate(),
+                isOverdue(issue),
+                issue.assigneeId() == null ? null : resolved.get(issue.assigneeId()),
                 project.getId(),
                 project.getKey(),
                 null,
-                transitionsFor(task));
+                notes.get(annotationKey(KIND_ISSUE, issue.issueId())),
+                epic ? List.of() : moves.getOrDefault(issue.statusId(), List.of()));
     }
 
     /**
-     * Overdue means a due date strictly before today, and a card in {@code DONE} is never overdue.
+     * Overdue means a due date strictly before today.
      *
-     * <p>The second half is the one worth stating: without it, finishing a late task leaves the card
-     * flagged red forever, so the Done column fills with alarms about work that is complete and the
-     * flag stops meaning anything anywhere on the board.
+     * <p>A card in a {@code DONE}-kind status is never overdue, and here that needs no clause of its
+     * own: {@link BoardFacts#assignedIssues} does not return one, for §6l's "card leaves" rule. The
+     * check the retired {@code work_item} version needed — <em>a task in DONE is never overdue</em> —
+     * was guarding against a Done column that filled with red alarms about finished work, and the
+     * generator now prevents that one table earlier.
      *
      * <p>UTC, matching the column's {@code DATE} and every other date on the wire. A board read at
      * 23:00 in a westward zone can therefore flag something as due tomorrow that the reader would
      * call today — accepted, because the alternative is a per-user timezone the product does not
      * collect, and §6l's deadlines are days the whole team agreed on rather than personal ones.
      */
-    private boolean isOverdue(WorkItem task) {
-        if (task.getDueDate() == null || task.getStatus() == WorkItemStatus.DONE) {
-            return false;
-        }
-        return task.getDueDate().isBefore(LocalDate.now(clock.withZone(ZoneOffset.UTC)));
-    }
-
-    /**
-     * Where a stored task may go: every column except the one it is in.
-     *
-     * <p>A task's status is its own — that is what makes it a task rather than a projection — so
-     * there is no workflow to enforce and inventing one ("you may not go from To do straight to
-     * Done") would be a rule nobody asked for on the screen people use to correct mistakes.
-     * Excluding the current column keeps the SPA from rendering a move button that does nothing.
-     */
-    private static List<WorkItemStatus> transitionsFor(WorkItem task) {
-        List<WorkItemStatus> allowed = new ArrayList<>();
-        for (WorkItemStatus status : WorkItemStatus.values()) {
-            if (status != task.getStatus()) {
-                allowed.add(status);
-            }
-        }
-        return allowed;
-    }
-
-    /**
-     * Who may be assigned: active members of this company holding a grant on this project.
-     *
-     * <p>Both halves are necessary and {@code WorkItemEdit}'s header explains what each one alone
-     * lets through. Since §54 neither half is expressed here — the predicate lives in
-     * {@code identity.ProjectMembershipService} and is the same one
-     * {@code GET /projects/{id}/members} filters the picker with, so this validator cannot refuse
-     * somebody the SPA was just shown. {@code BoardPeople.isAssignableTo} carries the account of
-     * why that had to stop being two ANDed calls at this line.
-     *
-     * <p>The set is computed only when the request names an assignee, because the common case is an
-     * unassigned task (§6l's unclaimed pool) and this is a membership scan.
-     */
-    private Set<UUID> assignableUsers(Project project, WorkItemWriteRequest request) {
-        UUID assigneeId = request.assigneeId();
-        if (assigneeId == null) {
-            return Set.of();
-        }
-        return people.isAssignableTo(assigneeId, project.getId())
-                ? Set.of(assigneeId)
-                : Set.of();
-    }
-
-    private static boolean isDerived(String cardId) {
-        return cardId.startsWith(PREFIX_EXECUTION)
-                || cardId.startsWith(PREFIX_CASE)
-                || cardId.startsWith(PREFIX_REVIEW)
-                || cardId.startsWith(PREFIX_QUARANTINE);
+    private boolean isOverdue(BoardFacts.AssignedIssue issue) {
+        return issue.dueDate() != null
+                && issue.dueDate().isBefore(LocalDate.now(clock.withZone(ZoneOffset.UTC)));
     }
 
     private static void addIfPresent(Set<UUID> ids, UUID id) {
         if (id != null) {
             ids.add(id);
-        }
-    }
-
-    /** Sealed so the controller's mapping is exhaustive, like {@code GateResult}. */
-    public sealed interface CreateOutcome {
-
-        record Invalid(Map<String, List<String>> errors) implements CreateOutcome {
-        }
-
-        record Created(WorkItemView view) implements CreateOutcome {
-        }
-
-        /**
-         * A retry of a create that already succeeded. 200, so "I made this" stays distinguishable
-         * from "this already existed" — the distinction {@code PlanCreateService.Outcome.Replayed}
-         * draws, and the reason neither carries a {@code Location}.
-         */
-        record Replayed(WorkItemView view) implements CreateOutcome {
-        }
-    }
-
-    /** Likewise for a move. */
-    public sealed interface MoveOutcome {
-
-        /** The id names a derived card, which has no stored status. Rendered 409. */
-        record NotStored() implements MoveOutcome {
-        }
-
-        /** The target column is not in this card's allowed transitions. Rendered 409. */
-        record NotAllowed(WorkItemStatus from, WorkItemStatus to) implements MoveOutcome {
-        }
-
-        record Moved(WorkItemView view) implements MoveOutcome {
         }
     }
 }

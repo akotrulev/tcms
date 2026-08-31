@@ -3583,6 +3583,56 @@ derived_item_annotation survives with its rows, and now has an endpoint of its o
 D11's private note on a card you do not own is what makes a mixed board usable."
 ```
 
+#### As landed — six places T4 differs from the text above
+
+1. **The `ISSUE` arm of `CatalogueFacts` resolves by id, not by key.** The snippet in Part A Step 2
+   said *"resolved by KEY … the id is carried back so `doc_link.source_id` stays a UUID like every
+   other source"*, and the two halves of that sentence cannot both hold: a key coming in means
+   `BlockLinkInput` needs a second field that is legal for exactly one of three source types, and
+   `CatalogueFacts.resolve` is keyed by id because that is what renders an existing link. The arm
+   went into `resolve`'s switch — where the exhaustive switch made it a compile error the moment
+   `LinkSourceType` gained the member — and returns `issue_key` as the display key, so the source is
+   still named `ACME-124` everywhere a person reads it. **`openapi.yaml` gained `ISSUE` on
+   `BlockLink.sourceType` and `BlockLinkInput.sourceType`**, which Part A's file list did not
+   anticipate and the endpoint's own description at `/issues/{key}/doc-links` already promised; both
+   generated clients were regenerated.
+
+2. **`work.Priority` was deleted rather than moved to `com.tcms.api`.** T3 landed
+   `tracker.Priority` and wrote the expectation into `ContractEnumTest` — *"the count goes back to
+   two when T4 retires `work`"* — so moving it would have left `api` holding a domain vocabulary for
+   a single consumer while `repository` and `tracker` kept their own: three owners, not one. The
+   board carries priority as a String, read through `BoardFacts`, and `BoardService` ranks it
+   against an ordered list rather than comparing the text (which would sort `LOW` above `MEDIUM` on
+   every board in the product, silently).
+
+3. **`work.ItemAssignedEvent` moved to `tracker.IssueAssignedEvent`, and `IssueService` records it.**
+   Its only producer was `BoardService.create`, which is gone with `POST /work-items` — and deleting
+   the producer would have left `work.item_assigned` declared on `NotificationEventType`,
+   subscribable in the channel picker, and fired by nothing. The event *name* did not move: renaming
+   it is a contract change plus a migration over every `notification_subscription` row that names
+   it, for a string an administrator reads once. `ItemAssignedPayloadTest` moved with the producer.
+   There are two call sites now, not one — an issue can be reassigned, which a `work_item` could
+   not.
+
+4. **`DemoWorkspaceSeeder.seedBoard` seeds issues through `IssueService` and `TransitionService`.**
+   It was the last production caller of `BoardService.create`. It now moves each card through the
+   project's real workflow, so the demo data exercises the allow-list rather than a five-member
+   enum.
+
+5. **`IssueService` gained the `MAX_IDEMPOTENCY_KEY` cap it never had — a defect T4 surfaced rather
+   than caused.** `POST /issues` has declared the parameter since T1 and stored whatever arrived;
+   nothing noticed, because `IdempotencyKeyCapTest` pins a *count* and the count was right while
+   `work.BoardService` still declared one. Retiring that declaration made the count ten, which is
+   the check catching an uncapped, indexed, attacker-controlled header by the population moving.
+
+6. **`V4` re-issues four `COMMENT ON` statements.** `issue.id`, `issue.deleted_at`,
+   `issue_link` and `report_job.created_idempotency_key` each named the dropped table, and
+   `SchemaCommentTest` reads every comment in the database and asks whether the snake_case tokens in
+   it are objects the schema still declares. `V1` and `V3` are applied, so their text cannot be
+   edited — Flyway checksums it — and re-issuing the comment from a later migration is the one edit
+   available. The predecessor is spelled `work-item` rather than in snake_case there, because a
+   snake_case token in a comment *is* the claim that rule checks.
+
 ---
 
 ### T5 — `ts` · Issue verbs on the CLI and MCP
@@ -4338,7 +4388,7 @@ sentence left visible** so a reader who finds `work_item` in the git history kno
 4. **Rewrite the dependent prompts** — every module whose *Depends on* names M1: **M2, M4, M5** and
    **M6**. Each needs, as it actually landed: the endpoint paths (`/issues`, `/issues/{key}`,
    `/board` — **not `/work-items`**), the package name (`com.tcms.tracker`), the outbox event name
-   (`tracker.issue_changed`), `issue_fact`'s column list, and the two decisions downstream modules
+   (`tracker.issues_changed` — plural, as `OutboxEvents.ISSUES_CHANGED` spells it), `issue_fact`'s column list, and the two decisions downstream modules
    must honour:
    - **There is no `ProjectCreatedEvent`** (D-b). A module adding a per-project default seeds it in
      `tcms_seed_project_defaults` and reproduces the function in full.

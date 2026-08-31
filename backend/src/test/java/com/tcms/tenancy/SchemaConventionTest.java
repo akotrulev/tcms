@@ -334,10 +334,15 @@ class SchemaConventionTest extends IntegrationTestBase {
                 // it reads or writes, so the policy is satisfied on both sides. V2's backfill had
                 // no per-row company context to set, which is why it ordered the other way.
                 //
-                // work_item and work_item_link are still counted here and go in V4, with the nine
-                // com.tcms.work classes that map them — a database without work_item cannot boot a
-                // context that still declares the entity, so the drop travels with the deletion.
-                .isEqualTo(84);
+                // 82 since V4 (plan 011, module M1, T4) — work_item and work_item_link are gone,
+                // with the nine com.tcms.work classes that mapped them. The count going DOWN is
+                // this rule's least common movement and the one worth reading twice: it says two
+                // tables left, not that two policies were forgotten. V3 copied every row into
+                // `issue` and could not drop the tables itself, because a database without
+                // work_item cannot boot a context that still declares the entity — so the drop
+                // travelled with the deletion, which is the expand-contract ordering the migration
+                // discipline asks for anyway.
+                .isEqualTo(82);
     }
 
     @Test

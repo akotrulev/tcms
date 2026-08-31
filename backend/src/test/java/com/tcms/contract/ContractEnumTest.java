@@ -99,13 +99,21 @@ class ContractEnumTest {
             Map.entry("EditAfterApproval", List.of("com.tcms.project.EditAfterApproval")),
             Map.entry("LifecycleStatus", List.of("com.tcms.repository.LifecycleStatus")),
             Map.entry("AutomationStatus", List.of("com.tcms.repository.AutomationStatus")),
-            // THREE owners since 011 M1, and the third is the same modulith property as the first
-            // two: `tracker` may not import `work` or `repository`, so the contract's one schema is
-            // served by three enums that have to stay identical to it and to each other. The count
-            // goes back to two when T4 retires `work`.
+            // ~~THREE owners since 011 M1~~ → TWO since T4, which is the count this comment
+            // predicted: `work.Priority` retired with `work_item`, and the board carries the value
+            // as a String because it is `tracker`'s vocabulary read through BoardFacts. The two that
+            // remain are the same modulith property — `tracker` may not import `repository`, so the
+            // contract's one schema is served by two enums that have to stay identical to it and to
+            // each other.
+            //
+            // The plan said to MOVE work.Priority to com.tcms.api rather than delete it, and that
+            // was written before T3 landed tracker.Priority. Moving it would have left api holding
+            // a domain vocabulary for a single consumer while the other two enums stayed where they
+            // were — three owners, not one — so the collapse that argument actually wants is
+            // repository and tracker both reading one api type, which is a refactor of its own and
+            // not this task's.
             Map.entry("Priority",
-                    List.of("com.tcms.repository.Priority", "com.tcms.work.Priority",
-                            "com.tcms.tracker.Priority")),
+                    List.of("com.tcms.repository.Priority", "com.tcms.tracker.Priority")),
             // 011 M1. The depth rule is expressed in LEVELS and never in type names (scope §4), so
             // this closed set is what a fourth story-level type is a ROW against rather than a code
             // change — which is only true while the wire and IssueEdit agree about its members.

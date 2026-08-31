@@ -1,6 +1,7 @@
 package com.tcms.work;
 
 import jakarta.persistence.EntityManager;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
@@ -8,19 +9,26 @@ import java.util.UUID;
 import org.springframework.stereotype.Component;
 
 /**
- * <strong>The one place in this module that names an {@code execution} or {@code repository}
- * table.</strong>
+ * <strong>The one place in this module that names an {@code execution}, {@code repository} or
+ * {@code tracker} table.</strong>
  *
  * <p>Third instance of a pattern this codebase now has a name for: {@code execution.CaseFacts} reads
  * {@code repository}, {@code repository.ExecutionFacts} reads {@code execution}, and this reads
- * both. ArchUnit permits a cross-module dependency only toward {@code tenancy}, {@code identity} and
+ * both — <strong>and, since 011 M1, {@code tracker}</strong>, which is the crossing that carries the
+ * board's only row-backed card.
+ *
+ * <p>ArchUnit permits a cross-module dependency only toward {@code tenancy}, {@code identity} and
  * {@code project} (plan §3), so a module that needs rows from a sibling holds ids into them and
  * reads them through exactly one file — a shared row is not a shared class, and what §3 forbids is
  * two modules becoming deployable only together.
  *
- * <p>Four facts live on the other side, one per implemented generator:
+ * <p>Five facts live on the other side, one per implemented generator:
  *
  * <ol>
+ *   <li><strong>Which issues are assigned, and where they stand</strong> — {@link #assignedIssues},
+ *       over {@code issue} joined to {@code issue_type} and {@code issue_status}. This is the
+ *       {@code ISSUE} card, <strong>the row-backed one and the only one</strong>, and it is the card
+ *       that replaced the card this module used to own.</li>
  *   <li><strong>Which executions are outstanding, and for whom</strong> — {@link #assignedExecutions},
  *       over {@code test_execution} joined to {@code test_run} and {@code test_case}. This is the
  *       {@code EXECUTION} card.</li>
@@ -42,18 +50,21 @@ import org.springframework.stereotype.Component;
  *       question #24's *"no data until M3 ingestion exists"*, which §117 removed.</li>
  * </ol>
  *
- * <p>A fourth crossing since §84, and it is not a generator: {@link #teamMembers} reads
- * {@code team_membership} ({@code identity}) on its own, for §6l's <strong>team board</strong>. It
- * produces no cards — it produces the set of people whose cards are kept — which is why it sits
- * beside the generators rather than among them. Its header records why the expansion belongs here
- * and not behind {@code project.TeamDirectory}.
+ * <p>Two further crossings that are not generators. {@link #teamMembers} reads
+ * {@code team_membership} ({@code identity}) on its own, for §6l's <strong>team board</strong> (§84):
+ * it produces no cards — it produces the set of people whose cards are kept — which is why it sits
+ * beside the generators rather than among them, and its header records why the expansion belongs
+ * here and not behind {@code project.TeamDirectory}. {@link #legalMoves} reads
+ * {@code issue_transition} for the same shape of reason: it produces no cards either, it says where
+ * the ones the first generator produced may <em>go</em>, and it is one-to-many so it cannot be
+ * folded into that generator's row.
  *
  * <h2>Every generator takes a SET of projects, and the project board is the one-element case</h2>
  *
  * <p>Since §83 the board is not always about one project — §6l's "My Work" aggregates every project
  * the caller can see, and asking each generator once per project would be 3N round trips for the
  * person the board was designed for, the one working on three. So the predicate is
- * {@code project_id IN (:projectIds)} in all four, and the project-scoped board passes a set of one.
+ * {@code project_id IN (:projectIds)} in all five, and the project-scoped board passes a set of one.
  * A per-project overload beside it would be a second spelling of each query for the older caller to
  * keep in step with (§58's E1) — and the two would drift in the direction nobody tests, since only
  * one board would exercise each.
@@ -82,6 +93,188 @@ class BoardFacts {
 
     BoardFacts(EntityManager entities) {
         this.entities = entities;
+    }
+
+    /**
+     * One issue assigned to somebody — <strong>the row-backed card, and the only one</strong>.
+     *
+     * <p>Fifth crossing in this class and the first that reads {@code tracker}. Same rule as the
+     * other four and stated again because it is the one a reader will question: {@code work} may not
+     * depend on {@code tracker} ({@code allowedDependencies} is unchanged and stays unchanged), so
+     * this holds ids into that module's tables and reads them through <em>this file</em>. A shared
+     * row is not a shared class, and what plan §3 forbids is two modules becoming deployable only
+     * together.
+     *
+     * <p><strong>The card that replaced the card this module used to own.</strong> Until M1 the
+     * stored card was {@code work_item}, mapped by an entity in this package. It is now an
+     * {@code issue} in another module, read here as a fact — which is why this method exists at all
+     * and why {@code WorkItemRepository} does not.
+     *
+     * @param typeLevel {@code EPIC}, {@code STORY} or {@code TASK}, as a String because it is
+     *                  {@code tracker}'s vocabulary and re-declaring it as an enum here would put a
+     *                  second copy of another module's value set in a module forbidden to import the
+     *                  first. It is read for one thing: D31 gives an Epic no legal moves.
+     * @param statusId  what the transition lookup is keyed on. The card's allowed moves are the
+     *                  project's workflow rather than "every column but this one", so the status has
+     *                  to travel as an id and not only as a name.
+     * @param priority  {@code tracker}'s four values as a String, for {@code typeLevel}'s reason.
+     */
+    record AssignedIssue(
+            UUID issueId,
+            UUID projectId,
+            String issueKey,
+            String title,
+            String description,
+            String typeLevel,
+            UUID statusId,
+            String statusName,
+            String statusKind,
+            String priority,
+            LocalDate dueDate,
+            UUID assigneeId) {
+    }
+
+    /**
+     * The issues still open in these projects — §6l's stored card, one module over.
+     *
+     * <h2>{@code kind <> 'DONE'} is the "card leaves" rule the other four generators already keep</h2>
+     *
+     * <p>Expressed against the one column that survives a project renaming its columns. §6l puts it
+     * plainly for executions — <em>"execution completed → card leaves"</em> — and without it a board
+     * becomes an append-only list of everything anybody was ever assigned. {@code my-work.html}'s
+     * "Hide done" checkbox is checked by default and is a <em>client</em> filter over what is left,
+     * not a substitute for this.
+     *
+     * <h2>An Epic's kind is DERIVED here, and that is the second copy of one derivation</h2>
+     *
+     * <p>D31 derives an epic's status from its stories and refuses to let anybody set it, so an epic
+     * whose stored {@code status_id} still says Backlog while every story is done would sit on this
+     * board for ever <em>and</em> disagree with its own screen — the "two contradictory numbers on
+     * one screen" this repository has shipped once, reached through the card that replaced the one
+     * this module used to own. The {@code CASE} below is {@code tracker.EpicStatus}' four arms in
+     * SQL, and it is deliberately the same statement {@code tracker.IssueFactProjection} runs for the
+     * same reason: this module may not call that one, and the alternative to copying it is a board
+     * that is wrong about epics.
+     *
+     * <p>The display name follows the same rule that projection uses — the project's own first status
+     * at the derived kind, by position — because a hardcoded "Done" is the word-lookup story B1
+     * exists to remove.
+     *
+     * <p>{@code deleted_at IS NULL}: an issue is soft-deleted (scope §3), so without it a board would
+     * render work that is gone from every other screen.
+     */
+    List<AssignedIssue> assignedIssues(Collection<UUID> projectIds) {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = entities.createNativeQuery("""
+                SELECT f.id, f.project_id, f.issue_key, f.title, f.description,
+                       f.type_level, f.status_id,
+                       COALESCE(ds.name, f.status_name), f.derived_kind,
+                       f.priority, f.due_date, f.assignee_id
+                  FROM (
+                        SELECT i.id, i.project_id, i.issue_key, i.title, i.description,
+                               t.level AS type_level, i.status_id, s.name AS status_name,
+                               CASE WHEN t.level <> 'EPIC'             THEN s.kind
+                                    WHEN COALESCE(kids.counted, 0) = 0 THEN 'NOT_STARTED'
+                                    WHEN kids.done = kids.counted      THEN 'DONE'
+                                    WHEN kids.fresh = kids.counted     THEN 'NOT_STARTED'
+                                    ELSE 'IN_PROGRESS'
+                               END AS derived_kind,
+                               i.priority, i.due_date, i.assignee_id, i.key_seq
+                          FROM issue        i
+                          JOIN issue_type   t ON t.id = i.type_id
+                          JOIN issue_status s ON s.id = i.status_id
+                          LEFT JOIN LATERAL (
+                                   SELECT count(*)                                        AS counted,
+                                          count(*) FILTER (WHERE cs.kind = 'DONE')        AS done,
+                                          count(*) FILTER (WHERE cs.kind = 'NOT_STARTED') AS fresh
+                                     FROM issue        c
+                                     JOIN issue_type   ct ON ct.id = c.type_id
+                                     JOIN issue_status cs ON cs.id = c.status_id
+                                    WHERE c.parent_id = i.id
+                                      AND c.deleted_at IS NULL
+                                      AND ct.counts_toward_completion
+                               ) kids ON t.level = 'EPIC'
+                         WHERE i.project_id IN (:projectIds)
+                           AND i.deleted_at IS NULL
+                       ) f
+                  LEFT JOIN LATERAL (
+                           SELECT ps.name
+                             FROM issue_status ps
+                            WHERE ps.project_id = f.project_id
+                              AND ps.kind = f.derived_kind
+                            ORDER BY ps."position"
+                            LIMIT 1
+                       ) ds ON f.type_level = 'EPIC'
+                 WHERE f.derived_kind <> 'DONE'
+                 ORDER BY f.key_seq
+                """)
+                .setParameter("projectIds", projectIds)
+                .getResultList();
+
+        return rows.stream()
+                .map(row -> new AssignedIssue(
+                        (UUID) row[0],
+                        (UUID) row[1],
+                        (String) row[2],
+                        (String) row[3],
+                        (String) row[4],
+                        (String) row[5],
+                        (UUID) row[6],
+                        (String) row[7],
+                        (String) row[8],
+                        (String) row[9],
+                        row[10] == null ? null : ((java.sql.Date) row[10]).toLocalDate(),
+                        (UUID) row[11]))
+                .toList();
+    }
+
+    /**
+     * One legal move out of one status — the project's workflow, as the board needs it.
+     *
+     * <p>Sixth crossing and the second into {@code tracker}, and it is here rather than folded into
+     * {@link #assignedIssues} because it is one-to-many: a card's allowed moves are a list, and a
+     * join would multiply every issue row by its workflow's out-edges for the board to fold back up.
+     */
+    record LegalMove(
+            UUID fromStatusId,
+            UUID toStatusId,
+            String toName,
+            String toKind,
+            int toPosition) {
+    }
+
+    /**
+     * Every legal move in these projects' workflows, ordered by the destination's position.
+     *
+     * <p>One statement for the whole board rather than one per card, for the reason every generator
+     * here gives: the personal board of somebody on six projects is a handful of statements rather
+     * than one per card. The board keys them by {@code fromStatusId} in Java.
+     *
+     * <p><strong>This is what makes an {@code ISSUE} card's allowed moves a fact about the project
+     * rather than about the column set.</strong> {@code work_item} let a card go anywhere and called
+     * that the model; the workflow is the authority now, which is what makes
+     * {@code settings-workflow.html}'s "Allowed moves" panel mean anything.
+     */
+    List<LegalMove> legalMoves(Collection<UUID> projectIds) {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = entities.createNativeQuery("""
+                SELECT t.from_status_id, s.id, s.name, s.kind, s."position"
+                  FROM issue_transition t
+                  JOIN issue_status s ON s.id = t.to_status_id
+                 WHERE t.project_id IN (:projectIds)
+                 ORDER BY s."position", s.name
+                """)
+                .setParameter("projectIds", projectIds)
+                .getResultList();
+
+        return rows.stream()
+                .map(row -> new LegalMove(
+                        (UUID) row[0],
+                        (UUID) row[1],
+                        (String) row[2],
+                        (String) row[3],
+                        ((Number) row[4]).intValue()))
+                .toList();
     }
 
     /**

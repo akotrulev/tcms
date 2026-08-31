@@ -116,7 +116,7 @@ class ProjectMemberEndpointTest extends IntegrationTestBase {
     private TransactionTemplate tx;
 
     @BeforeEach
-    void seed() {
+    void seed() throws java.sql.SQLException {
         Instant now = Instant.now();
 
         tx.executeWithoutResult(status -> {
@@ -157,6 +157,17 @@ class ProjectMemberEndpointTest extends IntegrationTestBase {
             grant("invitee", RoleAssignment.forUserOnProject(
                     id("invitee"), ACME, Role.TEST_ENGINEER_ID, INVITEE, PROJECT, null, now));
         }));
+
+        // The project's workflow, without which POST /issues has no status to open an issue in.
+        // Members are still the subject here; the tracker is only the write side this list has to
+        // agree with, and it needs a project that could hold an issue at all.
+        try (java.sql.Connection acme = appConnection(ACME);
+                java.sql.PreparedStatement statement = acme.prepareStatement(
+                        "SELECT tcms_seed_project_defaults(CAST(? AS uuid), CAST(? AS uuid))")) {
+            statement.setObject(1, ACME);
+            statement.setObject(2, PROJECT);
+            statement.execute();
+        }
 
         inCompany(UMBRA, () -> tx.executeWithoutResult(status -> {
             seedProject(UMBRA_PROJECT, UMBRA, "PMU", "Umbra Project", now);
@@ -308,14 +319,14 @@ class ProjectMemberEndpointTest extends IntegrationTestBase {
     class Agreement {
 
         @Test
-        @DisplayName("everybody on the list is accepted as an assignee by POST /work-items")
+        @DisplayName("everybody on the list is accepted as an assignee by POST /issues")
         void everyMemberIsAssignable() throws Exception {
             // The property that makes a picker built from this endpoint honest. If these two ever
             // disagree, the user fills the form in correctly, submits, and gets a field error
             // naming a person the product just offered them.
             for (JsonNode member : membersAs(LEAD, PROJECT)) {
                 String assigneeId = member.get("id").asText();
-                int status = createTask(LEAD, assigneeId);
+                int status = createIssue(LEAD, assigneeId);
                 assertThat(status)
                         .as("%s is on the members list and the create refused them",
                                 member.get("displayName").asText())
@@ -324,12 +335,12 @@ class ProjectMemberEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("somebody absent from the list is refused by POST /work-items")
+        @DisplayName("somebody absent from the list is refused by POST /issues")
         void nonMembersAreRefused() throws Exception {
             // The other direction, so the test above cannot be satisfied by a create that accepts
             // everybody.
-            assertThat(createTask(LEAD, NO_GRANT.toString())).isEqualTo(400);
-            assertThat(createTask(LEAD, INVITEE.toString())).isEqualTo(400);
+            assertThat(createIssue(LEAD, NO_GRANT.toString())).isEqualTo(400);
+            assertThat(createIssue(LEAD, INVITEE.toString())).isEqualTo(400);
         }
     }
 
@@ -353,14 +364,34 @@ class ProjectMemberEndpointTest extends IntegrationTestBase {
     }
 
     /** Creates a task assigned to {@code assigneeId}, and answers the status code. */
-    private int createTask(UUID callerId, String assigneeId) throws Exception {
-        return mvc.perform(MockMvcRequestBuilders.post("/api/v1/work-items")
+    /**
+     * ~~{@code POST /work-items}~~ → {@code POST /issues} since 009 module M1: the row an assignee
+     * is named on is a {@code tracker} issue, and the predicate this list agrees with moved with it.
+     * The <em>agreement</em> is unchanged and is the whole reason these two tests exist.
+     */
+    private int createIssue(UUID callerId, String assigneeId) throws Exception {
+        return mvc.perform(MockMvcRequestBuilders.post("/api/v1/issues")
                         .header("Authorization", "Bearer " + tokenFor(callerId, ACME))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"projectId":"%s","title":"Assignment probe","assigneeId":"%s"}"""
-                                .formatted(PROJECT, assigneeId)))
+                                {"projectId":"%s","typeId":"%s","title":"Assignment probe",\
+                                "assigneeId":"%s"}"""
+                                .formatted(PROJECT, storyTypeId(), assigneeId)))
                 .andReturn().getResponse().getStatus();
+    }
+
+    /** The seeded workflow's first story-level type — what an ordinary issue is. */
+    private String storyTypeId() throws Exception {
+        String body = mvc.perform(MockMvcRequestBuilders
+                        .get("/api/v1/projects/" + PROJECT + "/workflow")
+                        .header("Authorization", "Bearer " + tokenFor(LEAD, ACME)))
+                .andReturn().getResponse().getContentAsString();
+        for (JsonNode type : json.readTree(body).get("types")) {
+            if ("Story".equals(type.get("name").asText())) {
+                return type.get("id").asText();
+            }
+        }
+        throw new AssertionError("tcms_seed_project_defaults did not seed a Story type");
     }
 
     private static List<String> idsOf(JsonNode members) {

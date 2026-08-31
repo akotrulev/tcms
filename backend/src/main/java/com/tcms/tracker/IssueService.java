@@ -64,6 +64,20 @@ public class IssueService {
 
     private static final String AUDIT_TARGET = "issue";
 
+    /**
+     * {@code CaseCreateService}'s cap, for its reason: the header is attacker-controlled and it is
+     * indexed.
+     *
+     * <p>One of eleven identical declarations, pinned by {@code IdempotencyKeyCapTest} rather than
+     * shared — that class carries the argument for why a header's length cap does not belong in a
+     * foundation module. <strong>This one was missing until T4</strong>: {@code POST /issues}
+     * declared the parameter from its first day and stored whatever arrived, and the count only
+     * became wrong when {@code work.BoardService}'s declaration retired with {@code work_item} —
+     * the check catching the defect by the population moving rather than by anybody reading the
+     * service.
+     */
+    private static final int MAX_IDEMPOTENCY_KEY = 200;
+
     private final ProjectService projects;
     private final IssueRepository issues;
     private final IssueTypeRepository types;
@@ -240,6 +254,10 @@ public class IssueService {
           with a flaky client would show gaps in its keys that look like deleted work.
         */
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            if (idempotencyKey.length() > MAX_IDEMPOTENCY_KEY) {
+                return new Outcome.Invalid(Map.of("Idempotency-Key",
+                        List.of("Send a key of at most " + MAX_IDEMPOTENCY_KEY + " characters.")));
+            }
             Optional<Issue> replay = issues.findReplay(project.getId(), idempotencyKey);
             if (replay.isPresent()) {
                 return new Outcome.Replayed(viewOf(replay.get(), project));
@@ -285,6 +303,7 @@ public class IssueService {
                 now));
 
         audit(project, userId, created, "issue.created", now);
+        announceAssignment(created, null);
         return new Outcome.Created(viewOf(created, project));
     }
 
@@ -322,9 +341,11 @@ public class IssueService {
         }
 
         Instant now = clock.instant();
+        UUID wasAssignedTo = issue.getAssigneeId();
         issue.apply(edit, parent == null ? null : parent.getId(), userId, now);
         Issue saved = issues.save(issue);
         audit(project, userId, saved, "issue.updated", now);
+        announceAssignment(saved, wasAssignedTo);
         return new Outcome.Updated(viewOf(saved, project));
     }
 
@@ -431,6 +452,42 @@ public class IssueService {
                 "{\"key\":" + AuditEvent.jsonString(issue.getIssueKey())
                         + ",\"title\":" + AuditEvent.jsonString(issue.getTitle()) + "}",
                 now));
+    }
+
+    /**
+     * Records that this issue went to somebody, for whoever is subscribed to hear about it.
+     *
+     * <p><strong>Inside the write's transaction, which is the whole pattern.</strong> The issue and
+     * the notice of it commit together or neither does; {@code Outbox#record} throws when it is
+     * called outside one rather than trusting this comment.
+     *
+     * <p><strong>Nothing at all for unassigned work</strong>, which is most of a backlog. The event
+     * is "assigned to somebody" and not "an issue changed", so work that goes onto the board for
+     * whoever picks it up records no occurrence — an event whose payload named no assignee would be
+     * one every consumer had to filter, and one of them would forget.
+     *
+     * <p><strong>And nothing for an edit that left the assignee where it was.</strong> Renaming an
+     * issue is not handing it to anybody, and a notice on every save is how a subscriber learns to
+     * ignore the channel.
+     *
+     * <p>Not coalesced. Fifty issues assigned in a planning session are fifty notices, because each
+     * names a different person and a coalesced event could name only one of them truthfully.
+     */
+    private void announceAssignment(Issue issue, UUID previousAssignee) {
+        UUID assignee = issue.getAssigneeId();
+        if (assignee == null || assignee.equals(previousAssignee)) {
+            return;
+        }
+        outbox.record(
+                IssueAssignedEvent.AGGREGATE,
+                issue.getId(),
+                OutboxEvents.ITEM_ASSIGNED,
+                new IssueAssignedEvent(
+                        UUID.randomUUID(),
+                        issue.getId(),
+                        issue.getTitle(),
+                        issue.getProjectId(),
+                        assignee));
     }
 
     // =====================================================================

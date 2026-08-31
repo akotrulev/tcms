@@ -21,10 +21,14 @@ import com.tcms.reporting.ReportJobRunner;
 import com.tcms.reporting.ReportJobService;
 import com.tcms.repository.TestCaseDetailView;
 import com.tcms.tenancy.OutboxEvents;
-import com.tcms.work.BoardService;
-import com.tcms.work.Priority;
-import com.tcms.work.WorkItemStatus;
-import com.tcms.work.WorkItemWriteRequest;
+import com.tcms.tracker.IssueInput;
+import com.tcms.tracker.IssueService;
+import com.tcms.tracker.IssueStatusView;
+import com.tcms.tracker.IssueTypeView;
+import com.tcms.tracker.Priority;
+import com.tcms.tracker.TransitionService;
+import com.tcms.tracker.WorkflowService;
+import com.tcms.tracker.WorkflowView;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -53,7 +57,9 @@ public class DemoWorkspaceSeeder {
     private final ArtifactWriteService artifacts;
     private final ReportJobService reportJobs;
     private final ReportJobRunner reportRunner;
-    private final BoardService board;
+    private final IssueService issues;
+    private final TransitionService transitions;
+    private final WorkflowService workflows;
     private final NotificationChannelService channels;
     private final ApiTokenService apiTokens;
     private final RoleRepository roles;
@@ -64,7 +70,9 @@ public class DemoWorkspaceSeeder {
             ArtifactWriteService artifacts,
             ReportJobService reportJobs,
             ReportJobRunner reportRunner,
-            BoardService board,
+            IssueService issues,
+            TransitionService transitions,
+            WorkflowService workflows,
             NotificationChannelService channels,
             ApiTokenService apiTokens,
             RoleRepository roles,
@@ -74,7 +82,9 @@ public class DemoWorkspaceSeeder {
         this.artifacts = artifacts;
         this.reportJobs = reportJobs;
         this.reportRunner = reportRunner;
-        this.board = board;
+        this.issues = issues;
+        this.transitions = transitions;
+        this.workflows = workflows;
         this.channels = channels;
         this.apiTokens = apiTokens;
         this.roles = roles;
@@ -231,13 +241,19 @@ public class DemoWorkspaceSeeder {
     }
 
     /**
-     * Board cards across the columns, so the board is not a single stack — and one assigned to
-     * each person, so "my work" answers differently depending on who is signed in.
+     * Issues across the workflow, so the board is not a single stack — and one assigned to each
+     * person, so "my work" answers differently depending on who is signed in.
+     *
+     * <p>~~Board cards~~ → <strong>issues since 009 module M1.</strong> The row behind a board card
+     * is a {@code tracker} issue now, so this seeds through {@code POST /issues}' service and moves
+     * them with the transition service — which also means the demo data exercises the project's real
+     * workflow rather than a five-member enum, and a status this seed names that the seeded workflow
+     * does not have is a card that stays where it started rather than a failure.
      */
     private void seedBoard(
             DemoCast cast, UUID projectId, boolean full, DemoSeedReport report, String label) {
 
-        record Card(String title, String description, Priority priority, WorkItemStatus status,
+        record Card(String title, String description, Priority priority, String status,
                     UUID assignee, int dueInDays) {
         }
 
@@ -245,60 +261,94 @@ public class DemoWorkspaceSeeder {
                 ? List.of(
                         new Card("Automate the gift-card checkout case",
                                 "Blocked on the sandbox supporting partial captures.",
-                                Priority.HIGH, WorkItemStatus.BLOCKED, cast.engineer(), 9),
+                                Priority.HIGH, "Blocked", cast.engineer(), 9),
                         new Card("Rewrite the search filter cases after the facet change",
                                 "The facet names all changed; the cases still name the old ones.",
-                                Priority.MEDIUM, WorkItemStatus.IN_PROGRESS, cast.tester(), 4),
+                                Priority.MEDIUM, "In Progress", cast.tester(), 4),
                         new Card("Review the release test plan",
                                 "Needs a second pair of eyes before the release meeting.",
-                                Priority.HIGH, WorkItemStatus.IN_REVIEW, cast.lead(), 2),
+                                Priority.HIGH, "In Review", cast.lead(), 2),
                         new Card("Retire the duplicated smoke cases",
                                 "Three of them test the same thing twice.",
-                                Priority.LOW, WorkItemStatus.TODO, cast.engineer(), 21),
+                                Priority.LOW, null, cast.engineer(), 21),
                         new Card("Write the accessibility sweep charter",
-                                null, Priority.MEDIUM, WorkItemStatus.TODO, cast.tester(), 14),
+                                null, Priority.MEDIUM, null, cast.tester(), 14),
                         new Card("Move the nightly run to the new agent pool",
                                 "Done — the schedule now points at pool B.",
-                                Priority.MEDIUM, WorkItemStatus.DONE, cast.engineer(), -3))
+                                Priority.MEDIUM, "Done", cast.engineer(), -3))
                 : List.of(
                         new Card("Triage the offline queue failures",
-                                null, Priority.HIGH, WorkItemStatus.TODO, cast.engineer(), 7));
+                                null, Priority.HIGH, null, cast.engineer(), 7));
+
+        Optional<WorkflowView> workflow = workflows.workflow(cast.lead(), projectId);
+        if (workflow.isEmpty()) {
+            report.note("the project's workflow was unreadable, so no issues were seeded");
+            return;
+        }
+        UUID taskType = levelType(workflow.get(), "Task");
+        if (taskType == null) {
+            report.note("the project's workflow has no Task type, so no issues were seeded");
+            return;
+        }
 
         int created = 0;
         for (Card card : cards) {
-            var gate = board.create(cast.lead(),
-                    new WorkItemWriteRequest(projectId, card.title(), card.description(),
-                            card.priority(), LocalDate.now(clock).plusDays(card.dueInDays()),
-                            card.assignee()),
+            var gate = issues.create(cast.lead(),
+                    new IssueInput(projectId, taskType, card.title(), card.description(), null,
+                            card.assignee(), card.priority(), null, null, null,
+                            LocalDate.now(clock).plusDays(card.dueInDays()), null),
                     DemoProjectSeeder.idempotencyKey(projectId, "card", card.title()));
 
-            String cardId = cardIdOf(gate);
-            if (cardId == null) {
+            String key = keyOf(gate);
+            if (key == null) {
                 continue;
             }
             created++;
 
-            // Every card is born in TODO — the column is a property of the row, not of the create
-            // request — so anything that should sit further along is moved there afterwards, which
-            // is also the only transition the board itself offers.
-            if (card.status() != WorkItemStatus.TODO) {
-                board.move(cast.lead(), cardId, card.status());
+            // Every issue is born in the project's FIRST status by position — an issue's column is
+            // not a field on the create request — so anything that should sit further along is moved
+            // there afterwards, through the workflow that would refuse an illegal step.
+            UUID target = statusNamed(workflow.get(), card.status());
+            if (target != null) {
+                transitions.move(cast.lead(), key, target);
             }
         }
-        report.line(label, created + " board cards across the columns");
+        report.line(label, created + " issues across the workflow");
+    }
+
+    /** The created issue's key, or null if the tracker refused it. */
+    private String keyOf(GateResult<IssueService.Outcome> gate) {
+        if (gate instanceof GateResult.Allowed<IssueService.Outcome> allowed
+                && allowed.value() instanceof IssueService.Outcome.Created created) {
+            return created.view().key();
+        }
+        return null;
+    }
+
+    private static UUID levelType(WorkflowView workflow, String name) {
+        for (IssueTypeView type : workflow.types()) {
+            if (type.name().equals(name)) {
+                return type.id();
+            }
+        }
+        return null;
     }
 
     /**
-     * The created card's id, or null if the board refused it.
+     * The status this project calls {@code name}, or null when it has none.
      *
-     * <p>{@code work_item.id} is a String and not a UUID on the wire, because the board serves
-     * derived cards — a review waiting on you, a run assigned to you — beside real rows, and those
-     * have no row to have an id of. {@code BoardService#move} takes that same String.
+     * <p>Null rather than a throw, and null for a null argument too: a demo instance whose workflow
+     * somebody renamed is a project with different columns, not a broken seed, and a card that stays
+     * where it started is a better outcome than a provisioning command that stops halfway.
      */
-    private String cardIdOf(GateResult<BoardService.CreateOutcome> gate) {
-        if (gate instanceof GateResult.Allowed<BoardService.CreateOutcome> allowed
-                && allowed.value() instanceof BoardService.CreateOutcome.Created created) {
-            return created.view().id();
+    private static UUID statusNamed(WorkflowView workflow, String name) {
+        if (name == null) {
+            return null;
+        }
+        for (IssueStatusView status : workflow.statuses()) {
+            if (status.name().equals(name)) {
+                return status.id();
+            }
         }
         return null;
     }

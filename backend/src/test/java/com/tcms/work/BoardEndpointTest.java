@@ -36,7 +36,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * {@code /work-items} — the kanban board (plan §6l).
+ * {@code GET /board} — the kanban board (plan §6l), renamed from {@code /work-items} by M1.
  *
  * <h2>The failures this class exists to catch, and why none of them throws</h2>
  *
@@ -52,11 +52,14 @@ import org.springframework.transaction.support.TransactionTemplate;
  *   <li><strong>Skipped work resurrected.</strong> The unrecorded executions in a <em>completed</em>
  *       run are cases that were deliberately not run. Putting them on the board makes closed runs a
  *       permanent backlog nobody can ever clear.</li>
- *   <li><strong>A task assigned to somebody who cannot open its project.</strong> The id is trivially
+ *   <li><strong>Work assigned to somebody who cannot open its project.</strong> The id is trivially
  *       available from any other tab, the card renders their name perfectly, and the only person who
  *       ever sees the problem is the assignee — who gets a 404 when they click it.</li>
- *   <li><strong>{@code kind} accepted from the client.</strong> A POST with {@code kind: EXECUTION}
- *       would materialise a derived item, which is defect 1 arriving through the front door.</li>
+ *   <li>~~<strong>{@code kind} accepted from the client.</strong> A POST with
+ *       {@code kind: EXECUTION} would materialise a derived item.~~ <strong>→ unreachable since
+ *       M1</strong>: there is no POST here at all (D-a), and {@code POST /issues} has no
+ *       {@code kind} field to abuse. The defect it guarded against is now prevented by the shape of
+ *       the surface rather than by a check on it, which is the better place for it.</li>
  *   <li><strong>A personal board carrying work from a project the caller cannot open (§83).</strong>
  *       The cross-project board names no project, so it has no 404 to answer and nothing about the
  *       request bounds it — the bound has to be the set of projects it assembles from. Built from
@@ -69,18 +72,19 @@ import org.springframework.transaction.support.TransactionTemplate;
  *       needs a team-mate who can see a project the caller cannot ({@code TEAMMATE} on
  *       {@code OTHER_PROJECT}) or the two bounds agree on every row in this fixture and the test
  *       passes against the leak.</li>
- *   <li><strong>The read gate used as the write gate.</strong> Every role holds {@code project:read};
- *       {@code workitem:manage} is held by four of the six (roles spec §A6). A Viewer must be able to
- *       look at the board and unable to change it.</li>
+ *   <li>~~<strong>The read gate used as the write gate.</strong>~~ <strong>→ moved with the
+ *       writes.</strong> There is nothing to write here since M1; what this class still owns is the
+ *       read half — a caller with no grant gets the same 404 an absent project gets, never an empty
+ *       board that confirms the project exists. The {@code issue:*} gates are
+ *       {@code IssueEndpointTest}'s.</li>
  * </ol>
  *
  * <h2>The fixture</h2>
  *
  * <p>Two companies with identically keyed cases, so only ids prove the scoping. In Acme: a run
  * {@code IN_PROGRESS} holding one unrecorded and one recorded execution, a {@code COMPLETED} run
- * holding an unrecorded one, a case flagged in {@code case_health}, and a stored task. Personas are
- * a Test Lead (holds {@code workitem:manage}), a Viewer (does not), and a member with no grant at
- * all.
+ * holding an unrecorded one, a case flagged in {@code case_health}, and four issues. Personas are
+ * a Test Lead, a Viewer, and a member with no grant at all.
  *
  * <p><strong>Three Acme projects, and the third is what makes §83 provable.</strong> LEAD is granted
  * on {@code PROJECT} and {@code SECOND_PROJECT} and not on {@code OTHER_PROJECT} — each of the three
@@ -93,7 +97,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * another class: green alone, red in the suite, §19's shape exactly.
  */
 @AutoConfigureMockMvc
-@DisplayName("Board endpoints — tasks are rows, everything else is a projection")
+@DisplayName("Board endpoints — issues are rows, everything else is a projection")
 class BoardEndpointTest extends IntegrationTestBase {
 
     private static final UUID ACME = UUID.fromString("b0000000-0000-4000-8000-000000000001");
@@ -113,9 +117,9 @@ class BoardEndpointTest extends IntegrationTestBase {
     private static final UUID SECOND_SUITE = UUID.fromString("b0002000-0000-4000-8000-000000000003");
     private static final UUID SIBLING_SUITE = UUID.fromString("b0002000-0000-4000-8000-000000000004");
 
-    /** Holds workitem:manage on PROJECT. */
+    /** Test Lead on PROJECT — holds the whole issue:* slice. */
     private static final UUID LEAD = UUID.fromString("b0003000-0000-4000-8000-000000000001");
-    /** Can see the board, holds no workitem:manage. */
+    /** Can see the board, and cannot change what is on it. */
     private static final UUID VIEWER = UUID.fromString("b0003000-0000-4000-8000-000000000002");
     /** ACTIVE member of Acme holding nothing at all. Persona 3. */
     private static final UUID NO_GRANT = UUID.fromString("b0003000-0000-4000-8000-000000000003");
@@ -346,6 +350,15 @@ class BoardEndpointTest extends IntegrationTestBase {
             flake(acme, ACME, PROJECT, FLAGGED, "0.5000", LEAD, "Races the login redirect");
             flake(acme, ACME, PROJECT, RELEASED, "0.9000", null, null);
 
+            // 011 T4's issue fixture — the row-backed card, which is an `issue` now. Three of
+            // them, because the three properties the board has to get right about a stored card
+            // need three different rows: one assigned to the caller, one assigned to nobody, and
+            // one assigned to a team-mate who is not the caller.
+            issue(acme, ACME, PROJECT, "BRDA-1", 1, "Mine", LEAD);
+            issue(acme, ACME, PROJECT, "BRDA-2", 2, "Nobody's", null);
+            issue(acme, ACME, PROJECT, "BRDA-3", 3, "Viewer's issue", VIEWER);
+            issue(acme, ACME, PROJECT, "BRDA-4", 4, "Outsider's issue", OUTSIDER);
+
             // The review fixture. VIEWER is in the team on purpose: the suite review is asked of
             // nobody by name, so if the expansion is missing, VIEWER's board is silently empty and
             // the only test that fails is the one written for it.
@@ -451,29 +464,28 @@ class BoardEndpointTest extends IntegrationTestBase {
                 assertThat(List.of("id", "derived", "kind", "title", "status", "priority",
                         "overdue", "projectId", "projectKey", "allowedTransitions"))
                         .allSatisfy(field -> assertThat(card.has(field))
-                                .as("WorkItem.%s is required by openapi.yaml, missing on %s",
+                                .as("BoardCard.%s is required by openapi.yaml, missing on %s",
                                         field, card.get("kind"))
                                 .isTrue());
             }
         }
 
         @Test
-        @DisplayName("status is a code from the contract's enum, never a display label")
-        void statusIsAStableCode() throws Exception {
-            // §53's whole finding on the frontend side: the SPA compared status to 'To do' and the
-            // mock served 'To do', so mock mode agreed with itself while a real server answering
-            // TODO would have filed every card into no column. This is that check on the server.
-            //
-            // The valid set is DERIVED from the enum rather than listed. It was listed until §54,
-            // and the literal list is what would have quietly gone stale when BLOCKED was added —
-            // a check whose expected values are maintained by hand stops checking the thing it was
-            // written for the moment somebody forgets to widen it.
-            List<String> columns = java.util.Arrays.stream(WorkItemStatus.values())
-                    .map(Enum::name)
-                    .toList();
-
+        @DisplayName("status is {name, kind}, and the kind is a code rather than a display label")
+        void statusCarriesAReadableNameAndAComputableKind() throws Exception {
+            // ~~status is a code from the contract's enum.~~ → D-c: an issue's status is a
+            // per-project row, so a fixed five-member enum cannot spell it and a card carrying both
+            // spellings would be two contradictory values on one screen. What survives §53's
+            // finding — the SPA compared status to 'To do' while the mock served 'To do', so a real
+            // server answering TODO filed every card into no column — is that ONE HALF of the pair
+            // has to be a stable code: `kind` is what a column is computed from, `name` is what a
+            // person reads, and no client branches on the second.
             for (JsonNode card : boardAs(LEAD, PROJECT)) {
-                assertThat(card.get("status").asText()).isIn(columns);
+                assertThat(card.get("status").get("name").asText())
+                        .as("%s has a name a person can read", card.get("kind"))
+                        .isNotBlank();
+                assertThat(card.get("status").get("kind").asText())
+                        .isIn("NOT_STARTED", "IN_PROGRESS", "DONE");
             }
         }
     }
@@ -560,7 +572,8 @@ class BoardEndpointTest extends IntegrationTestBase {
             assertThat(card.get("sourceId").asText()).isEqualTo(UNDER_REVIEW.toString());
             assertThat(card.get("id").asText())
                     .isEqualTo("review:" + REVIEW_OPEN + ":" + LEAD);
-            assertThat(card.get("status").asText()).isEqualTo("TODO");
+            assertThat(card.get("status").get("name").asText()).isEqualTo("To do");
+            assertThat(card.get("status").get("kind").asText()).isEqualTo("NOT_STARTED");
         }
 
         @Test
@@ -678,14 +691,15 @@ class BoardEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("a review card cannot be moved — the sign-off has one door and this is not it")
+        @DisplayName("a review card offers no move, which is the whole of what a board can refuse")
         void reviewCardsAreNotMovable() throws Exception {
-            String cardId = cardOfKind(boardAs(LEAD, PROJECT), "REVIEW").get("id").asText();
-
-            // 409, not 404: the card is real and only its storage is not. §6l's eventual behaviour
-            // is that dragging it to Done performs the approval — which is a gated act with an
-            // If-Match behind it, so a drag would be a second, unguarded door to the sign-off.
-            patchAs(LEAD, cardId, "DONE", 409);
+            // ~~409, not 404: the card is real and only its storage is not.~~ The PATCH that
+            // answered that is gone with /work-items (D-a), so what is left to assert is the list
+            // the SPA renders its buttons from. §6l's eventual behaviour is that dragging this to
+            // Done performs the approval — a gated act with an If-Match behind it, so a drag would
+            // be a second, unguarded door to the sign-off.
+            assertThat(cardOfKind(boardAs(LEAD, PROJECT), "REVIEW").get("allowedTransitions"))
+                    .isEmpty();
         }
     }
 
@@ -712,7 +726,8 @@ class BoardEndpointTest extends IntegrationTestBase {
                             + "debt nobody can evaluate without reading the test (V38's comment)")
                     .contains("Flaky on Firefox")
                     .contains("Lead");
-            assertThat(card.get("status").asText()).isEqualTo("TODO");
+            assertThat(card.get("status").get("name").asText()).isEqualTo("To do");
+            assertThat(card.get("status").get("kind").asText()).isEqualTo("NOT_STARTED");
         }
 
         @Test
@@ -758,252 +773,18 @@ class BoardEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("a quarantine card cannot be dragged — releasing a test is a gated write")
+        @DisplayName("a quarantine card offers no move — releasing a test is a gated write")
         void quarantineCardsAreNotMovable() throws Exception {
-            String cardId =
-                    cardOfKind(boardAs(LEAD, PROJECT), "QUARANTINE", "TC-12").get("id").asText();
-
-            // 409, for the execution card's reason. And its own: releasing a test needs case:edit
-            // and a reason field (§121), neither of which a drag has anywhere to collect.
-            patchAs(LEAD, cardId, "DONE", 409);
+            // For the review card's reason, and its own: releasing a test needs case:edit and a
+            // reason field (§121), neither of which a drag has anywhere to collect.
+            assertThat(cardOfKind(boardAs(LEAD, PROJECT), "QUARANTINE", "TC-12")
+                    .get("allowedTransitions"))
+                    .isEmpty();
         }
     }
 
     @Nested
-    @DisplayName("Creating a task")
-    class Creating {
-
-        @Test
-        @DisplayName("a created task starts in TODO and is not derived")
-        void createsATask() throws Exception {
-            JsonNode created = createAs(LEAD, """
-                    {"projectId":"%s","title":"Update the refund cases"}""".formatted(PROJECT), 201);
-
-            assertThat(created.get("status").asText())
-                    .as("a create that could choose its column is a move nobody recorded")
-                    .isEqualTo("TODO");
-            assertThat(created.get("derived").asBoolean()).isFalse();
-            assertThat(created.get("kind").asText()).isEqualTo("TASK");
-            // Every column but the one it is in. Sized from the enum rather than written as `4`,
-            // for the reason the status check above now gives: a hand-maintained expectation is
-            // the first thing to go stale when the enum grows, and it grew in this slice.
-            assertThat(created.get("allowedTransitions"))
-                    .hasSize(WorkItemStatus.values().length - 1);
-        }
-
-        @Test
-        @DisplayName("kind is ignored — a client cannot materialise a derived item")
-        void kindIsNotAnInput() throws Exception {
-            // The front-door version of the invariant. A stored row claiming to be an EXECUTION owns
-            // a status the execution cannot see, and the two diverge on the first result recorded.
-            JsonNode created = createAs(LEAD, """
-                    {"projectId":"%s","title":"Sneaky","kind":"EXECUTION"}""".formatted(PROJECT), 201);
-
-            assertThat(created.get("kind").asText()).isEqualTo("TASK");
-            assertThat(created.get("derived").asBoolean()).isFalse();
-        }
-
-        @Test
-        @DisplayName("a blank title is refused on its own field")
-        void titleIsRequired() throws Exception {
-            JsonNode problem = createAs(LEAD, """
-                    {"projectId":"%s","title":"   "}""".formatted(PROJECT), 400);
-
-            assertThat(problem.get("errors").has("title")).isTrue();
-        }
-
-        @Test
-        @DisplayName("an assignee with no grant on the project is refused")
-        void assigneeMustBeOnTheProject() throws Exception {
-            // NO_GRANT is an ACTIVE member of Acme, so a membership check alone accepts them. The
-            // card would render their name, show on their board, and 404 when they click it — and
-            // the person who assigned it would never see anything wrong.
-            JsonNode problem = createAs(LEAD, """
-                    {"projectId":"%s","title":"For a stranger","assigneeId":"%s"}"""
-                    .formatted(PROJECT, NO_GRANT), 400);
-
-            assertThat(problem.get("errors").has("assigneeId")).isTrue();
-        }
-
-        @Test
-        @DisplayName("an unassigned task is unassigned, not silently assigned to its author")
-        void unassignedStaysUnassigned() throws Exception {
-            // §6l's unclaimed pool. Defaulting to the author makes it unreachable, and the
-            // correction is invisible once made because the author's own name looks plausible.
-            JsonNode created = createAs(LEAD, """
-                    {"projectId":"%s","title":"Nobody's yet"}""".formatted(PROJECT), 201);
-
-            assertThat(created.hasNonNull("assignee")).isFalse();
-        }
-    }
-
-    @Nested
-    @DisplayName("Moving a card — the invariant, enforced on the server")
-    class Moving {
-
-        @Test
-        @DisplayName("a task moves, and reports its new column")
-        void aTaskMoves() throws Exception {
-            String id = createAs(LEAD, """
-                    {"projectId":"%s","title":"Movable"}""".formatted(PROJECT), 201)
-                    .get("id").asText();
-
-            JsonNode moved = patchAs(LEAD, id, "IN_PROGRESS", 200);
-
-            assertThat(moved.get("status").asText()).isEqualTo("IN_PROGRESS");
-            assertThat(moved.get("allowedTransitions"))
-                    .as("the column it is now in is not a move it can make")
-                    .noneSatisfy(t -> assertThat(t.asText()).isEqualTo("IN_PROGRESS"));
-        }
-
-        @Test
-        @DisplayName("a derived card is refused with 409, not 404")
-        void aDerivedCardCannotBeMoved() throws Exception {
-            // THE test for this module. 404 would read as "that card is gone" and invite a reload
-            // that brings it straight back; 409 says the request is impossible, not the resource
-            // absent. The detail names the action that does work.
-            String derivedId = cardOfKind(boardAs(LEAD, PROJECT), "EXECUTION").get("id").asText();
-
-            JsonNode problem = patchAs(LEAD, derivedId, "DONE", 409);
-
-            assertThat(problem.get("detail").asText())
-                    .as("the refusal has to say where to go instead, or it is just a wall")
-                    .contains("follows");
-        }
-
-        @Test
-        @DisplayName("an unknown id is 404")
-        void unknownIdsAreNotFound() throws Exception {
-            patchAs(LEAD, UUID.randomUUID().toString(), "DONE", 404);
-        }
-
-        @Test
-        @DisplayName("an unknown column is 400 and names the valid ones")
-        void unknownColumnsAreRefused() throws Exception {
-            // This test used to send "BLOCKED" as its unknown value, which stopped being unknown
-            // in §54 — so it would have gone green for the wrong reason, asserting a 400 that was
-            // now a successful move. Worth recording: a negative test whose input becomes valid
-            // does not fail, it silently stops testing anything.
-            String id = createAs(LEAD, """
-                    {"projectId":"%s","title":"Movable"}""".formatted(PROJECT), 201)
-                    .get("id").asText();
-
-            JsonNode problem = patchAs(LEAD, id, "PARKED", 400);
-
-            assertThat(problem.get("detail").asText())
-                    .contains("TODO", "IN_PROGRESS", "BLOCKED", "IN_REVIEW", "DONE");
-        }
-
-        @Test
-        @DisplayName("BLOCKED is a real column a task can be moved into and back out of")
-        void blockedIsAColumn() throws Exception {
-            // §53 left BLOCKED out of the enum on purpose because the board renders exactly the
-            // columns the enum names, and a status with no column is a card that exists, is
-            // returned by this API, and appears nowhere on screen. The value, the label and the
-            // fifth grid column arrive together in §54; this is the server half.
-            String id = createAs(LEAD, """
-                    {"projectId":"%s","title":"Waiting on the API team"}""".formatted(PROJECT), 201)
-                    .get("id").asText();
-
-            assertThat(patchAs(LEAD, id, "BLOCKED", 200).get("status").asText()).isEqualTo("BLOCKED");
-            // Out again, with no return-to-sender rule: the board is where people correct their own
-            // record, and a board that argues is a board people stop updating.
-            assertThat(patchAs(LEAD, id, "DONE", 200).get("status").asText()).isEqualTo("DONE");
-        }
-    }
-
-    @Nested
-    @DisplayName("Idempotency-Key — a retry must not leave two cards on the board")
-    class Idempotency {
-
-        @Test
-        @DisplayName("the same key twice answers 200 with the task the first call made")
-        void aRetryReplays() throws Exception {
-            // 201 then 200, and the SAME id. Two identical cards in To do are two people picking up
-            // the same work and the second one finding it already done — which is worse on a board
-            // than anywhere else, because a coordination surface that misstates how much work there
-            // is stops being used.
-            String body = """
-                    {"projectId":"%s","title":"Only once"}""".formatted(PROJECT);
-
-            JsonNode first = createAs(LEAD, body, 201, "intent-54-a");
-            JsonNode replay = createAs(LEAD, body, 200, "intent-54-a");
-
-            assertThat(replay.get("id").asText()).isEqualTo(first.get("id").asText());
-            assertThat(titlesOf(boardAs(LEAD, PROJECT)))
-                    .filteredOn("Only once"::equals)
-                    .as("the retry must not have left a second card")
-                    .hasSize(1);
-        }
-
-        @Test
-        @DisplayName("a replay answers with the task it made even when the payload has drifted")
-        void aReplayIgnoresTheNewPayload() throws Exception {
-            // The client is asking "did my intent land", not "please apply this body". Validating
-            // first would send it to fix fields on a card that already exists — CaseCreateService's
-            // rule, and the reason the replay lookup runs before validation.
-            JsonNode first = createAs(LEAD, """
-                    {"projectId":"%s","title":"As typed"}""".formatted(PROJECT), 201, "intent-54-b");
-
-            JsonNode replay = createAs(LEAD, """
-                    {"projectId":"%s","title":"   "}""".formatted(PROJECT), 200, "intent-54-b");
-
-            assertThat(replay.get("id").asText()).isEqualTo(first.get("id").asText());
-            assertThat(replay.get("title").asText()).isEqualTo("As typed");
-        }
-
-        @Test
-        @DisplayName("two different keys create two tasks")
-        void differentKeysAreDifferentIntents() throws Exception {
-            String body = """
-                    {"projectId":"%s","title":"Twice on purpose"}""".formatted(PROJECT);
-
-            JsonNode first = createAs(LEAD, body, 201, "intent-54-c");
-            JsonNode second = createAs(LEAD, body, 201, "intent-54-d");
-
-            assertThat(second.get("id").asText()).isNotEqualTo(first.get("id").asText());
-        }
-
-        @Test
-        @DisplayName("a key the caller cannot reach the project with is 404, not a replay")
-        void aReplayIsStillGated() throws Exception {
-            // Recognising somebody else's key would confirm that something exists in a project the
-            // caller may not know about — which is why the lookup runs inside the gate rather than
-            // in front of it.
-            createAs(LEAD, """
-                    {"projectId":"%s","title":"Lead's"}""".formatted(PROJECT), 201, "intent-54-e");
-
-            createAs(NO_GRANT, """
-                    {"projectId":"%s","title":"Lead's"}""".formatted(PROJECT), 404, "intent-54-e");
-        }
-
-        @Test
-        @DisplayName("an over-long key is refused as a field error, not indexed")
-        void anOverLongKeyIsRefused() throws Exception {
-            JsonNode problem = createAs(LEAD, """
-                    {"projectId":"%s","title":"Hostile header"}""".formatted(PROJECT), 400,
-                    "x".repeat(201));
-
-            assertThat(problem.get("errors").has("Idempotency-Key")).isTrue();
-        }
-
-        @Test
-        @DisplayName("no key at all still creates, every time")
-        void theHeaderIsOptional() throws Exception {
-            String body = """
-                    {"projectId":"%s","title":"Unkeyed"}""".formatted(PROJECT);
-
-            JsonNode first = createAs(LEAD, body, 201);
-            JsonNode second = createAs(LEAD, body, 201);
-
-            // The partial index is ON (created_idempotency_key IS NOT NULL) precisely so that two
-            // unkeyed creates are not a uniqueness violation on NULL.
-            assertThat(second.get("id").asText()).isNotEqualTo(first.get("id").asText());
-        }
-    }
-
-    @Nested
-    @DisplayName("Gates — the read gate is not the write gate")
+    @DisplayName("Gates — a board you cannot see is a 404, never an empty one")
     class Gates {
 
         @Test
@@ -1013,24 +794,16 @@ class BoardEndpointTest extends IntegrationTestBase {
         }
 
         @Test
-        @DisplayName("a Viewer cannot create a task — 403, not 404")
-        void viewersCannotWrite() throws Exception {
-            // The distinction that matters: they CAN see the project, so hiding it would be a lie.
-            // 403 here and 404 for NO_GRANT below is the whole of §6t's rule on one endpoint.
-            createAs(VIEWER, """
-                    {"projectId":"%s","title":"Not mine to add"}""".formatted(PROJECT), 403);
-        }
-
-        @Test
-        @DisplayName("a member with no grant gets 404 on read and on write")
+        @DisplayName("a member with no grant gets 404")
         void noGrantIsNotFound() throws Exception {
-            mvc.perform(MockMvcRequestBuilders.get("/api/v1/work-items")
+            // ~~404 on read and on write.~~ There is no write here since M1 — creating and moving
+            // are POST /issues and POST /issues/{key}/transitions, and IssueEndpointTest owns the
+            // 403-versus-404 pair on them. What this board still has to get right is the read half:
+            // a caller who cannot see the project gets the same 404 an absent one gets.
+            mvc.perform(MockMvcRequestBuilders.get("/api/v1/board")
                             .param("projectId", PROJECT.toString())
                             .header("Authorization", "Bearer " + tokenFor(NO_GRANT, ACME)))
                     .andExpect(result -> assertThat(result.getResponse().getStatus()).isEqualTo(404));
-
-            createAs(NO_GRANT, """
-                    {"projectId":"%s","title":"Invisible"}""".formatted(PROJECT), 404);
         }
 
         @Test
@@ -1038,7 +811,7 @@ class BoardEndpointTest extends IntegrationTestBase {
         void siblingProjectsAreNotReachable() throws Exception {
             // OTHER_PROJECT is in the same company, so RLS and the Hibernate filter both pass it.
             // Only the project grant keeps it out — persona 3's failure mode one level up.
-            mvc.perform(MockMvcRequestBuilders.get("/api/v1/work-items")
+            mvc.perform(MockMvcRequestBuilders.get("/api/v1/board")
                             .param("projectId", OTHER_PROJECT.toString())
                             .header("Authorization", "Bearer " + tokenFor(LEAD, ACME)))
                     .andExpect(result -> assertThat(result.getResponse().getStatus()).isEqualTo(404));
@@ -1047,7 +820,7 @@ class BoardEndpointTest extends IntegrationTestBase {
         @Test
         @DisplayName("another company's project is 404, indistinguishable from an absent one")
         void otherCompaniesAreNotFound() throws Exception {
-            mvc.perform(MockMvcRequestBuilders.get("/api/v1/work-items")
+            mvc.perform(MockMvcRequestBuilders.get("/api/v1/board")
                             .param("projectId", UMBRA_PROJECT.toString())
                             .header("Authorization", "Bearer " + tokenFor(LEAD, ACME)))
                     .andExpect(result -> assertThat(result.getResponse().getStatus()).isEqualTo(404));
@@ -1059,14 +832,8 @@ class BoardEndpointTest extends IntegrationTestBase {
     class Mine {
 
         @Test
-        @DisplayName("filters to the caller across stored and derived cards alike")
+        @DisplayName("filters to the caller across issues and derived cards alike")
         void filtersBothKinds() throws Exception {
-            createAs(LEAD, """
-                    {"projectId":"%s","title":"Mine","assigneeId":"%s"}"""
-                    .formatted(PROJECT, LEAD), 201);
-            createAs(LEAD, """
-                    {"projectId":"%s","title":"Nobody's"}""".formatted(PROJECT), 201);
-
             JsonNode mine = boardAs(LEAD, PROJECT, true);
 
             assertThat(mine).isNotEmpty();
@@ -1076,7 +843,10 @@ class BoardEndpointTest extends IntegrationTestBase {
                                 + "and nothing would ever fail because of it")
                         .isEqualTo(LEAD.toString());
             }
-            assertThat(titlesOf(mine)).doesNotContain("Nobody's");
+            assertThat(titlesOf(mine))
+                    .as("BRDA-2 is an issue nobody has taken, and an unassigned card is not "
+                            + "silently anybody's")
+                    .doesNotContain("Nobody's");
         }
     }
 
@@ -1124,16 +894,16 @@ class BoardEndpointTest extends IntegrationTestBase {
         @Test
         @DisplayName("every card on it is assigned to the caller, in both kinds")
         void isPersonal() throws Exception {
-            createAs(LEAD, """
-                    {"projectId":"%s","title":"Somebody else's"}""".formatted(PROJECT), 201);
-
             JsonNode board = myWork(LEAD);
 
             assertThat(board).isNotEmpty();
             for (JsonNode card : board) {
                 assertThat(card.get("assignee").get("id").asText()).isEqualTo(LEAD.toString());
             }
-            assertThat(titlesOf(board)).doesNotContain("Somebody else's");
+            assertThat(titlesOf(board))
+                    .as("BRDA-2 is unassigned and BRDA-3 is VIEWER's — neither is anybody's "
+                            + "personal board but their own")
+                    .doesNotContain("Nobody's", "Viewer's issue");
         }
 
         @Test
@@ -1158,7 +928,7 @@ class BoardEndpointTest extends IntegrationTestBase {
             // The project board's 404 says "you cannot see THAT" — this request names nothing to be
             // unable to see. It is also the empty-IN() path: with no visible project there is no set
             // to query with, and `IN ()` is a syntax error rather than a predicate matching nothing.
-            var response = mvc.perform(MockMvcRequestBuilders.get("/api/v1/work-items")
+            var response = mvc.perform(MockMvcRequestBuilders.get("/api/v1/board")
                             .param("mine", "true")
                             .header("Authorization", "Bearer " + tokenFor(NO_GRANT, ACME)))
                     .andReturn().getResponse();
@@ -1172,7 +942,7 @@ class BoardEndpointTest extends IntegrationTestBase {
         void unscopedIsRefused() throws Exception {
             // Refused rather than narrowed: forcing mine=true on would answer a request nobody made
             // with a list the client cannot tell apart from a company holding only its own work.
-            var response = mvc.perform(MockMvcRequestBuilders.get("/api/v1/work-items")
+            var response = mvc.perform(MockMvcRequestBuilders.get("/api/v1/board")
                             .header("Authorization", "Bearer " + tokenFor(LEAD, ACME)))
                     .andReturn().getResponse();
 
@@ -1199,27 +969,19 @@ class BoardEndpointTest extends IntegrationTestBase {
         @Test
         @DisplayName("shows a team-mate's work, which is what read-time expansion means")
         void expandsTheTeam() throws Exception {
-            // VIEWER is on DEV_TEAM and is not the caller. Their suite-review card is the fixture's
-            // own proof: nothing in this test writes a membership row, so an implementation that
-            // materialised the team at any earlier moment cannot produce it.
-            createAs(LEAD, """
-                    {"projectId":"%s","title":"Viewer's task","assigneeId":"%s"}"""
-                    .formatted(PROJECT, VIEWER), 201);
-
-            assertThat(titlesOf(teamBoard(LEAD, DEV_TEAM))).contains("Viewer's task");
+            // VIEWER is on DEV_TEAM and is not the caller. Nothing in this test writes a
+            // membership row, so an implementation that materialised the team at any earlier
+            // moment cannot produce their card.
+            assertThat(titlesOf(teamBoard(LEAD, DEV_TEAM))).contains("Viewer's issue");
         }
 
         @Test
         @DisplayName("a person outside the team contributes nothing, however visible their work")
         void nonMembersAreNotOnIt() throws Exception {
-            // OUTSIDER holds a grant on PROJECT, so this card is on the project board and on
+            // OUTSIDER holds a grant on PROJECT, so their card is on the project board and on
             // OUTSIDER's own. A team board that filtered on "anything in the projects the team can
             // see" rather than on the members themselves would carry it.
-            createAs(LEAD, """
-                    {"projectId":"%s","title":"Outsider's task","assigneeId":"%s"}"""
-                    .formatted(PROJECT, OUTSIDER), 201);
-
-            assertThat(titlesOf(teamBoard(LEAD, DEV_TEAM))).doesNotContain("Outsider's task");
+            assertThat(titlesOf(teamBoard(LEAD, DEV_TEAM))).doesNotContain("Outsider's issue");
         }
 
         @Test
@@ -1401,7 +1163,7 @@ class BoardEndpointTest extends IntegrationTestBase {
     private org.springframework.mock.web.MockHttpServletResponse request(
             UUID userId, UUID teamId, UUID projectId, Boolean mine) throws Exception {
 
-        var request = MockMvcRequestBuilders.get("/api/v1/work-items")
+        var request = MockMvcRequestBuilders.get("/api/v1/board")
                 .header("Authorization", "Bearer " + tokenFor(userId, ACME));
         if (teamId != null) {
             request = request.param("teamId", teamId.toString());
@@ -1420,7 +1182,7 @@ class BoardEndpointTest extends IntegrationTestBase {
     }
 
     private JsonNode myWork(UUID userId) throws Exception {
-        String body = mvc.perform(MockMvcRequestBuilders.get("/api/v1/work-items")
+        String body = mvc.perform(MockMvcRequestBuilders.get("/api/v1/board")
                         .param("mine", "true")
                         .header("Authorization", "Bearer " + tokenFor(userId, ACME)))
                 .andReturn().getResponse().getContentAsString();
@@ -1432,48 +1194,12 @@ class BoardEndpointTest extends IntegrationTestBase {
     }
 
     private JsonNode boardAs(UUID userId, UUID projectId, boolean mine) throws Exception {
-        String body = mvc.perform(MockMvcRequestBuilders.get("/api/v1/work-items")
+        String body = mvc.perform(MockMvcRequestBuilders.get("/api/v1/board")
                         .param("projectId", projectId.toString())
                         .param("mine", String.valueOf(mine))
                         .header("Authorization", "Bearer " + tokenFor(userId, ACME)))
                 .andReturn().getResponse().getContentAsString();
         return json.readTree(body);
-    }
-
-    private JsonNode createAs(UUID userId, String body, int expectedStatus) throws Exception {
-        return createAs(userId, body, expectedStatus, null);
-    }
-
-    private JsonNode createAs(UUID userId, String body, int expectedStatus, String idempotencyKey)
-            throws Exception {
-
-        var request = MockMvcRequestBuilders.post("/api/v1/work-items")
-                .header("Authorization", "Bearer " + tokenFor(userId, ACME))
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(body);
-        if (idempotencyKey != null) {
-            request = request.header("Idempotency-Key", idempotencyKey);
-        }
-
-        var response = mvc.perform(request).andReturn().getResponse();
-
-        assertThat(response.getStatus()).isEqualTo(expectedStatus);
-        String content = response.getContentAsString();
-        return content.isEmpty() ? json.createObjectNode() : json.readTree(content);
-    }
-
-    private JsonNode patchAs(UUID userId, String cardId, String status, int expectedStatus)
-            throws Exception {
-
-        var response = mvc.perform(MockMvcRequestBuilders.patch("/api/v1/work-items/" + cardId)
-                        .header("Authorization", "Bearer " + tokenFor(userId, ACME))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"status\":\"" + status + "\"}"))
-                .andReturn().getResponse();
-
-        assertThat(response.getStatus()).isEqualTo(expectedStatus);
-        String content = response.getContentAsString();
-        return content.isEmpty() ? json.createObjectNode() : json.readTree(content);
     }
 
     private static List<String> keysOfKind(JsonNode board, String kind) {
@@ -1533,6 +1259,47 @@ class BoardEndpointTest extends IntegrationTestBase {
     // Fixture plumbing
     // =====================================================================
 
+    /**
+     * One issue, written through the table rather than through {@code POST /issues}.
+     *
+     * <p>Directly, because this class is about the <em>board</em>: routing every fixture row through
+     * another module's endpoint makes a failure there read as a failure here, and
+     * {@code IssueEndpointTest} already owns whether a create works. The type and the opening status
+     * come from {@code tcms_seed_project_defaults}, which this fixture already runs — a project's
+     * first status is taken <strong>by position</strong> and never by the word "Backlog", for story
+     * B1's reason.
+     */
+    private void issue(
+            Connection connection, UUID companyId, UUID projectId,
+            String key, long seq, String title, UUID assignee) throws SQLException {
+
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO issue (id, company_id, project_id, key_seq, issue_key, type_id,
+                                   status_id, title, acceptance_criteria, priority,
+                                   status_entered_at, assignee_id, created_at, updated_at)
+                SELECT gen_random_uuid(), CAST(? AS uuid), CAST(? AS uuid), ?, ?,
+                       (SELECT t.id FROM issue_type t
+                         WHERE t.project_id = CAST(? AS uuid) AND t.level = 'STORY'
+                         ORDER BY t."position" LIMIT 1),
+                       (SELECT s.id FROM issue_status s
+                         WHERE s.project_id = CAST(? AS uuid)
+                         ORDER BY s."position" LIMIT 1),
+                       ?, '[]'::jsonb, 'MEDIUM', now(), CAST(? AS uuid), now(), now()
+                 WHERE NOT EXISTS (SELECT 1 FROM issue i WHERE i.issue_key = ?)
+                """)) {
+            statement.setObject(1, companyId);
+            statement.setObject(2, projectId);
+            statement.setLong(3, seq);
+            statement.setString(4, key);
+            statement.setObject(5, projectId);
+            statement.setObject(6, projectId);
+            statement.setString(7, title);
+            statement.setObject(8, assignee);
+            statement.setString(9, key);
+            statement.executeUpdate();
+        }
+    }
+
     private void company(UUID id, String slug, String name, Instant now) {
         if (companies.findById(id).isEmpty()) {
             companies.save(Company.provision(id, slug, name, now));
@@ -1584,7 +1351,9 @@ class BoardEndpointTest extends IntegrationTestBase {
                 // subject tables: the FKs cascade from review, but nothing cascades from a case to
                 // the review of it — the subject triple has no FK at all, which is what lets one
                 // record serve three artifacts (§76).
-                for (String table : List.of("work_item_link", "work_item", "case_health",
+                for (String table : List.of("issue_doc_link", "issue_watcher", "issue_link",
+                        "issue_comment", "issue_fact", "issue",
+                        "derived_item_annotation", "case_health",
                         "case_flake",
                         "step_result", "test_execution", "test_run", "review_assignment",
                         "review_participation", "review_comment", "review", "team_membership",

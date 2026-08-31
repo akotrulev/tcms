@@ -744,7 +744,13 @@ class ContractConventionTest {
             Map.entry("IssueCommentInput", List.of(com.tcms.tracker.IssueCommentInput.class)),
             Map.entry("IssueDocLink", List.of(com.tcms.tracker.IssueDocLinkView.class)),
             Map.entry("IssueTypeRef", List.of(com.tcms.tracker.IssueTypeView.class)),
-            Map.entry("IssueStatusRef", List.of(com.tcms.tracker.IssueStatusView.class)),
+            // TWO owners since T4, and it is the modulith property again: `work` may not import
+            // `tracker`, so a shape both put on the wire is declared in both. This rule comparing
+            // each to the schema is what keeps them identical — a rename on one side is a failure
+            // here rather than a divergence somebody finds from the client end.
+            Map.entry("IssueStatusRef",
+                    List.of(com.tcms.tracker.IssueStatusView.class,
+                            com.tcms.work.BoardStatusRef.class)),
             Map.entry("IssueCompletion", List.of(com.tcms.tracker.CompletionView.class)),
             Map.entry("IssueInput", List.of(com.tcms.tracker.IssueInput.class)),
             Map.entry("IssueUpdate", List.of(com.tcms.tracker.IssueUpdate.class)),
@@ -752,7 +758,15 @@ class ContractConventionTest {
                     List.of(com.tcms.tracker.IssueTransitionInput.class)),
             Map.entry("ProjectWorkflow", List.of(com.tcms.tracker.WorkflowView.class)),
             Map.entry("StatusRemovalInput",
-                    List.of(com.tcms.tracker.StatusRemovalInput.class)));
+                    List.of(com.tcms.tracker.StatusRemovalInput.class)),
+            // ---- T4's board block ----
+            //
+            // BoardCard replaces the WorkItem entry the first bullet above records removing, and
+            // CardAnnotation is a schema for a table V1 shipped a year before it had an endpoint:
+            // derived_item_annotation had no door at all until D11 said it mattered more, not less.
+            Map.entry("BoardCard", List.of(com.tcms.work.BoardCardView.class)),
+            Map.entry("CardAnnotation", List.of(com.tcms.work.CardAnnotationView.class)),
+            Map.entry("CardAnnotationInput", List.of(com.tcms.work.CardAnnotationInput.class)));
 
     /**
      * The owners this file cannot name as class literals, because they are package-private.
@@ -1322,6 +1336,11 @@ class ContractConventionTest {
             // two states the caller wants.
             Map.entry("PUT /issues/{key}/watchers (request)",
                     List.of(com.tcms.tracker.IssueWatchInput.class)),
+            // 011 T4, D-c. A card's status is an object for EVERY card kind — an issue's status is
+            // a per-project row, so a fixed five-member enum could not spell it and a card carrying
+            // both spellings would be the two-contradictory-numbers failure this repo has shipped
+            // once. Inline rather than a named schema because M2 replaces it with real columns.
+            Map.entry("BoardCard.status", List.of(com.tcms.work.CardStatus.class)),
             Map.entry("GranteeList.grantees[]", List.of(com.tcms.identity.GranteeView.class)),
             Map.entry("PlanStatistics.byConfiguration[]",
                     List.of(com.tcms.execution.PlanStatisticsView.ConfigurationCountsView.class)),

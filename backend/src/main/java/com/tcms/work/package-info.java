@@ -1,30 +1,44 @@
 /**
- * Work — the kanban board: real tasks, and projections of work that already exists (plan §6l).
+ * Work — the kanban board: issues, and projections of work that already exists (plan §6l).
  *
  * <h2>The one design decision this module is built around</h2>
  *
  * <p>Two kinds of thing appear on the board and <strong>only one of them is a row</strong>.
  *
  * <ul>
- *   <li>A <strong>task</strong> is first-class. Somebody typed it, it owns its own status, and
- *       {@code work_item} is where it lives.</li>
+ *   <li>~~A <strong>task</strong> is first-class. Somebody typed it, it owns its own status, and
+ *       {@code work_item} is where it lives.~~ <strong>→ superseded by 009 module M1.</strong> The
+ *       row-backed card is an {@code issue} in {@code com.tcms.tracker}, read here through
+ *       {@link com.tcms.work.BoardFacts#assignedIssues}. <strong>The rule this module is built
+ *       around is unchanged and is why the replacement was possible at all</strong>: exactly one
+ *       kind of card is a row, and it is the one somebody typed. D11 keeps that true with a
+ *       different table under it.</li>
  *   <li>A <strong>derived item</strong> is a <em>view over something else</em> — an assigned
  *       execution, a case the health computation has flagged. It is never stored, and its status is
  *       computed from its source on every single read.</li>
  * </ul>
  *
- * <p>{@code V1}'s comment on {@code work_item} states the rule from the schema side: "there is
- * deliberately no column here that could let a card status diverge from its execution". The failure
- * being prevented is specific and fatal to the feature — materialise executions as rows carrying
+ * <p>{@code V1}'s comment on {@code work_item} stated the rule from the schema side: "there is
+ * deliberately no column here that could let a card status diverge from its execution" — and
+ * {@code V4} dropped that table, in the same commit that deleted the entity, because a database
+ * without it cannot boot a context that still maps it. The rule outlived the table: {@code issue}
+ * carries no execution status either. The failure being prevented is specific and fatal to the
+ * feature — materialise executions as rows carrying
  * their own status, and the moment a tester marks a case Passed in the run, the card sits in "In
  * Progress" forever. Within a week nobody trusts the board, and a board nobody trusts is worse than
  * no board, because it is still on everyone's screen.
  *
  * <p>Everything awkward about this module follows from that one decision. A derived card's id is
- * synthetic ({@code execution:{uuid}}), because it has no row to have an id. {@code PATCH} refuses
- * it with a 409 rather than a 404, because the card is real and only its <em>storage</em> is not.
- * {@code allowedTransitions} is computed per card rather than being a property of the column,
- * because what a card may do is a fact about its source.
+ * synthetic ({@code execution:{uuid}}), because it has no row to have an id. ~~{@code PATCH}
+ * refuses it with a 409 rather than a 404, because the card is real and only its <em>storage</em>
+ * is not.~~ <strong>→ lost with the operation in M1, and it is a regression rather than a
+ * simplification.</strong> {@code PATCH /work-items/{id}} is gone (D-a) and moving a card is
+ * {@code POST /issues/{key}/transitions}, which answers 404 for a synthetic id because it is not an
+ * issue key — so the sentence that named the action that <em>does</em> work is gone with it.
+ * Recorded in the plan's built-and-unverified list; M2's board, where a drag actually happens,
+ * restores it. {@code allowedTransitions} is computed per card rather than being a property of the
+ * column, because what a card may do is a fact about its source — and for an {@code ISSUE} card
+ * that fact is now the project's own workflow rather than "every column but this one".
  *
  * <h2>Allowed dependencies</h2>
  *
@@ -34,19 +48,26 @@
  * for assignees. As in both of those modules, {@code identity} is asked <em>what is this person
  * called</em> and never <em>may they</em>.
  *
- * <h2>The two edges this module does not have, and the one class that carries both</h2>
+ * <h2>The three edges this module does not have, and the one class that carries all of them</h2>
  *
- * <p><strong>{@code execution} and {@code repository} are not on the list and must never be.</strong>
- * And yet the entire derived half of the board is made of their rows: an {@code EXECUTION} card is a
- * {@code test_execution}, a {@code CASE_MAINTENANCE} card is a {@code case_health} row. This is the
+ * <p><strong>{@code execution}, {@code repository} and — since M1 — {@code tracker} are not on the
+ * list and must never be.</strong> And yet the entire derived half of the board is made of their
+ * rows, and so is the half that is not derived: an {@code EXECUTION} card is a
+ * {@code test_execution}, a {@code CASE_MAINTENANCE} card is a {@code case_health} row, and an
+ * {@code ISSUE} card is an {@code issue}. This is the
  * same tension {@code execution}'s package comment resolves, resolved the same way — a shared row is
  * not a shared class, and what plan §3 forbids is two modules becoming deployable only together.
  *
- * <p>So the whole of both edges lives in exactly one class, {@link com.tcms.work.BoardFacts}, which
- * issues SQL naming those tables and returns records declared here. It is the third instance of a
- * pattern the codebase now has a name for — {@code execution.CaseFacts} reads {@code repository},
- * {@code repository.ExecutionFacts} reads {@code execution}, and this reads both. Nothing else in
- * this package may name a foreign table. Concentrating it is what makes the coupling reviewable, and
+ * <p>So the whole of all three edges lives in exactly one class, {@link com.tcms.work.BoardFacts},
+ * which issues SQL naming those tables and returns records declared here. <strong>M1 is the test of
+ * that concentration and it passed</strong>: the stored card moved into another module and what it
+ * cost was one method and one record in the file that already existed for this, with
+ * {@code allowedDependencies} below unchanged.
+ *
+ * <p>It is the third instance of a pattern the codebase now has a name for —
+ * {@code execution.CaseFacts} reads {@code repository}, {@code repository.ExecutionFacts} reads
+ * {@code execution}, and this reads all three. Nothing else in this package may name a foreign
+ * table. Concentrating it is what makes the coupling reviewable, and
  * what makes it one file to rewrite on the day these facts arrive as events instead.
  *
  * <p><strong>And since §81 that concentration is the reason a whole feature lives here.</strong> The
@@ -87,10 +108,20 @@
  * opens no reviews and therefore has no review cards — which is the argument for leaving the toggles
  * until a generator exists that a project cannot escape.
  *
- * <p>Also not built: WIP limits, configurable columns, swimlanes, team boards and the cross-project
- * personal board. The columns are the four §6l names as a fixed enum
- * ({@code WorkItemStatus} in {@code openapi.yaml}), which is what makes per-board configuration a
- * later change to <em>configuration</em> rather than to the contract.
+ * <p>Also not built: WIP limits, configurable columns and swimlanes. ~~The columns are the four §6l
+ * names as a fixed enum ({@code WorkItemStatus} in {@code openapi.yaml}), which is what makes
+ * per-board configuration a later change to <em>configuration</em> rather than to the
+ * contract.~~ <strong>→ superseded by M1's D-c</strong>, which is that later change arriving: a
+ * card's status is {@link com.tcms.work.CardStatus} — a name a person reads and a kind a percentage
+ * can be computed from — because an issue's status is a per-project {@code issue_status} row and a
+ * fixed five-member enum cannot spell it. M2 builds real columns over the kind plus the project's
+ * own statuses.
+ *
+ * <p><strong>And the annotation finally has a door.</strong> {@code derived_item_annotation} is
+ * {@code V1}'s table for a private note on a card you do not own, and until M1 the board wrote it
+ * and nothing else did. D11 says it matters more, not less, once the board mixes your own issues
+ * with reviews other people asked of you — so {@link com.tcms.work.AnnotationController} is the
+ * endpoint it never had.
  */
 @org.springframework.modulith.ApplicationModule(
         allowedDependencies = {"api", "tenancy", "project", "identity"})

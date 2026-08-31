@@ -25,7 +25,7 @@ import org.junit.jupiter.api.Test;
  * <p>Ten services accept the header and each caps its length itself:
  * {@code CaseCreateService}, {@code SuiteWriteService} ({@code repository}),
  * {@code RunCreateService}, {@code PlanCreateService}, {@code IngestionEdit} ({@code execution}),
- * {@code DocPageWriteService} ({@code documentation}), {@code BoardService} ({@code work}),
+ * {@code DocPageWriteService} ({@code documentation}), {@code IssueService} ({@code tracker}),
  * {@code AiProposalService} ({@code repository}, §138), {@code ArtifactWriteService}
  * (B4, {@code V59}) and {@code ReportJobService} ({@code reporting}, E2, {@code V66}).
  * They live in four Modulith modules, and <strong>the only module all four may import is
@@ -91,6 +91,14 @@ class IdempotencyKeyCapTest {
      * proposed: §205 found {@code packages/mcp} declaring and sending a key this endpoint
      * discarded, which is a header that looks right and does nothing — the failure the paragraph
      * above is about, arriving from the client side.
+     *
+     * <p><strong>ELEVEN survived 011 T4, and how it survived is the finding.</strong>
+     * {@code work.BoardService}'s declaration retired with {@code work_item} and
+     * {@code tracker.IssueService} gained one — but not because the two were swapped. {@code POST
+     * /issues} had declared the parameter since T1 and capped nothing, so the count going to ten is
+     * what surfaced it: an endpoint accepting the header and indexing whatever the caller sends,
+     * found by the population moving rather than by anybody reading the service. That is the whole
+     * argument for pinning a count as well as a value.
      *
      * <p><strong>TEN became ELEVEN at 004 ({@code TrackerIssueService}).</strong> Its duplicate is
      * the most expensive on the list and the only one this instance cannot undo: a second row is
