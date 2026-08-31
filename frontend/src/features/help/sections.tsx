@@ -95,7 +95,7 @@ export const helpSections: HelpSection[] = [
             {
               term: 'My work',
               detail:
-                'In the rail, above the project groups, so it is not scoped by the switcher: everything assigned to you across every project you can see.',
+                'In the rail, above the project groups, so it is not scoped by the switcher: every issue, execution and review assigned to you, across every project you can see.',
             },
           ]}
         />
@@ -228,8 +228,11 @@ export const helpSections: HelpSection[] = [
           archived when the engagement finishes.
         </P>
         <P>
-          The project <strong>Overview</strong> is the dashboard: what needs attention, how cases
-          break down by lifecycle and by classification, and how execution is trending.
+          The project <strong>Overview</strong> is where opening a project lands, and it holds
+          delivery and quality together: the epics with their completion and the basis each
+          percentage was computed on, the story-level work that sits under no epic, and test health
+          — then the repository figures underneath, which is what needs attention, how cases break
+          down by lifecycle and by classification, and how execution is trending.
         </P>
 
         <H>What you configure per project</H>
@@ -460,11 +463,13 @@ export const helpSections: HelpSection[] = [
             },
             {
               term: 'Board',
-              detail: 'The cross-project execution board, with drag-and-drop.',
+              detail:
+                'ONE project’s board — its open issues in columns named by that project’s own workflow, alongside the work the repository already knows about: executions assigned to you, reviews you have been asked for, cases the health computation flagged, and tests somebody quarantined. Drag a card, or use the keyboard twin the footer shows while a card is lifted. A move the workflow forbids is refused and the card says why.',
             },
             {
               term: 'My work',
-              detail: 'Everything assigned to you, across every project.',
+              detail:
+                'Everything assigned to you, across every project you can see, as two tables over one read: your issues in one, your executions and reviews in the other. Not a board — two projects name their statuses separately, so columns there would be a grouping the data cannot support. You can also keep a private note and a personal due date on any card, which no teammate sees.',
             },
             {
               term: 'Team board',

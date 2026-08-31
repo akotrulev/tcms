@@ -55,8 +55,18 @@ Written for a reader deciding what the product does. Implementation detail is co
   project key or team project inside it. The binding holds no credential; the settings page
   also lists which team members have connected one of their own
 - Manage who is on the project and what role they hold
-- A dashboard per project showing what needs attention, how cases break down by lifecycle and
-  classification, and how execution is trending
+- An **overview per project**, which is where opening a project lands: delivery and quality
+  together — the epics with their completion and the basis each percentage was computed on, the
+  story-level work sitting under no epic, and test health, with the repository figures underneath
+  (what needs attention, how cases break down by lifecycle and classification, how execution is
+  trending). ~~A dashboard per project showing the repository figures alone.~~ → superseded
+  (011 M1), which put the tracker's half above them rather than replacing them
+- **A section the product has no data for explains itself; it does not render empty.** The overview's
+  release panel says what a release *is* and what it buys, because a release is a thing the project
+  will have and has none yet. A budget panel is not rendered at all — that module is not installed,
+  and an empty card for it would be an advertisement rather than an explanation
+- A project belonging to a company with **no clients** is the same screen with no client chip, no
+  client column and no prompt to attach one. Nothing nags a company that has none
 
 ## Writing Test Cases
 
@@ -157,9 +167,20 @@ use them to drive suite membership.
 
 - A run detail view with live pass/fail/blocked counts and progress
 - A **What Failed** panel putting the run's failures and their steps on one screen
-- A **cross-project execution board** with drag-and-drop
-- **My Work** — everything assigned to you, across every project
-- **Team board** — everything assigned to a team, across every project
+- ~~A **cross-project execution board** with drag-and-drop~~ → **superseded (011 M1).** The project
+  board was never cross-project — it is one project's, and it composes that project's **issues**
+  with the work the repository already knows about: executions assigned to you, reviews asked of
+  you, cases the health computation flagged, and quarantined tests. The old line is left visible
+  because a reader who finds `GET /work-items` in the git history should know it became
+  `GET /board`, one operation still serving all three boards
+- **My Work** — everything assigned to you, across every project, as **two tables over one read**:
+  your issues in one, your executions and reviews in the other, beside a private note and personal
+  due date on any card that no teammate sees. ~~A kanban with `mine=true` pre-applied.~~ →
+  superseded (011 M1): two projects name their statuses separately, so columns across them were a
+  grouping the data cannot support
+- **Team board** — everything assigned to a team, across every project. Bounded by the *caller's*
+  project visibility, never the team's, so two people asking for one team's board legitimately see
+  different card sets — which is why nothing built on it presents a team total
 - Configurable handling of retries versus genuinely distinct runs when results are collapsed
 
 ## Results From CI
@@ -210,11 +231,49 @@ And around them:
   than offering a choice that will fail
 - Reports carry freshness information so you know how current the data is
 
-## Work Items
+## Issues
 
-- Create and track work items — tasks and action items attached to test activity
-- Each carries a status and a priority
-- They surface on the cross-project and team boards alongside executions
+~~**Work Items** — create and track work items, tasks and action items attached to test activity;
+each carries a status and a priority; they surface on the cross-project and team boards alongside
+executions.~~ → **superseded (011 M1), and the correction is not cosmetic.** A stored card was a
+`work_item` — a task somebody typed beside a test activity, with a status from a fixed five-member
+enum. It is now an **issue** in the project's own tracker, and every task that existed before the
+upgrade is still there, still called a Task, now with a per-project key. The old paragraph stays
+visible so a reader who finds `work_item` in the git history knows where it went.
+
+What replaces it:
+
+- **A hierarchy, in three levels** — an epic holds story-level issues, and a story-level issue holds
+  sub-tasks. The depth rule is expressed in *levels*, not in type names, so a fourth story-level
+  type is a row rather than a migration
+- **Six issue types per project** — Epic, Story, Task, Bug, Spike and Sub-task, seeded on every new
+  project. `Task` sits at the **story** level deliberately, so a solo or internal project never
+  needs an epic and a story before "a thing to do"; `Sub-task` is the level below it
+- **A per-project key** — `ACME-124`, allocated server-side from the project's own counter and never
+  chosen by the caller. It is what a person types into a commit message, and it is what the issue's
+  URL takes
+- **The project names its own statuses** — six are seeded (Backlog, Ready, In Progress, In Review,
+  Blocked, Done) and a project may add, rename and reorder them. Each status carries what it
+  *means* — not started, in progress, done — which is what lets a percentage be computed without
+  knowing what a project called its columns
+- **The legal moves are an allow-list.** A move that is not allowed is refused, and the card says
+  which moves are legal instead rather than snapping back in silence
+- **Removing a status cannot orphan the issues holding it.** The screen names the count, shows which
+  issues are affected, and asks where they go; the move and the removal are one transaction. The
+  project's last status meaning *done* cannot be removed at all
+- **An epic's completion, with the basis beside it** — a percentage over its story-level children,
+  weighted by estimate when every counted child carries one and by head count otherwise. The page
+  always says which it got, because a number that changes meaning silently is a number people learn
+  to distrust. Spikes are excluded from both halves, and the page says how many
+- **An epic's status is derived from its stories** and is not editable. A story's status is its own:
+  closing it is a person's decision, whatever its sub-tasks say
+- **Comments, watchers and acceptance criteria** on an issue — commenting adds the author as a
+  watcher
+- **A link from an issue to a specification block**, kept as a projection that marks itself stale
+  when the linked page changed after the issue last did
+- **A work table** with five views over one project's issues, and a one-field quick add
+- **Settings per project** — the issue types the project holds, and the workflow screen where
+  statuses are reordered with ↑ / ↓ as well as by drag, because dragging is never the only way
 
 ## Teams and People
 
