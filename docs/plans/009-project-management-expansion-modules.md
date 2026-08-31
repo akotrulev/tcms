@@ -64,7 +64,7 @@ would mean eight edits to three documents that a test pins byte-for-byte. It is 
 | # | Module | Migration | A person can now … | Depends on | Status |
 |---|---|---|---|---|---|
 | **M0** | Foundation | `V2` | *(nothing — see above)* | none | done 2026-08-30 @ `24f997bb` |
-| **M1** | Tracker core | `V3` | run a project's work — epics, stories, tasks, statuses, comments, spec links — and see it all on My Work | M0 | not started |
+| **M1** | Tracker core | `V3` | run a project's work — epics, stories, tasks, statuses, comments, spec links — and see it all on My Work | M0 | done 2026-08-31 @ `8bf37408` |
 | **M2** | Board & backlog | `V4` | work the board, rank the backlog, filter once across every view | M1 | not started |
 | **M3** | Releases, roadmap & readiness | `V5` | plan versions, see the roadmap, and answer "can we ship 2.4?" | M2 | not started |
 | **M4** | Jira offramp | ~~`V6`~~ → `V7` | move a Jira project in, keys intact, with a preview and a report | M1 | not started |
@@ -256,10 +256,15 @@ tasks, moves them through the workflow, comments, and sees the epic's completion
   `issue_transition`, `issue_link`, `issue_comment`, `issue_watcher`, `issue_doc_link`, `issue_fact`.
 - Default workflow seeded per project: Backlog · Ready · In Progress · In Review · Blocked · Done.
   **Two seeding paths, both in this module (review R5):** `V3` backfills the workflow for every
-  project that already exists, and `project` publishes a new `ProjectCreatedEvent`
+  project that already exists, and ~~`project` publishes a new `ProjectCreatedEvent`
   (a `CompanyScopedEvent`; none exists today — `ProjectCreateService` writes an audit row and
   nothing else) which `tracker` consumes to seed the workflow for every project created after.
-  `project` cannot import `tracker`, so the event is the only legal direction.
+  `project` cannot import `tracker`, so the event is the only legal direction.~~ →
+  **superseded 2026-08-31 (011 D-b): no event was built and none must be.** A `CompanyScopedEvent`'s
+  own header says an event *type* may not cross a module boundary, so the shared class cannot exist;
+  and outbox delivery has a one-minute floor, which would leave a brand-new project unable to hold
+  its first issue for that long. Both paths are `tcms_seed_project_defaults`, synchronous, in the
+  creating transaction — see the close-out below.
 - Story-level type named `Task` per D29, so a solo project never needs a Story first.
 - **`work_item` → `issue` migration** as parentless Stories per D12, then **part of** the `work`
   module retires. By file (review R4): `WorkItem`, `WorkItemController`, `WorkItemEdit`,
@@ -301,15 +306,124 @@ that already answers *"what is on my plate"*.
 **fe** — ports `work-table.html`, `epic.html`, `story.html`, `task.html`, `issue-new.html`,
 `documents.html`, `settings-workflow.html`, `settings-general.html`, and extends the existing
 My Work screen to `my-work.html` — issues beside executions and reviews, with the private note and
-personal due date. `project-overview.html` lands here **without** its release and test-health
-panels — those are M3, and the page is built so a missing section explains itself rather than
-rendering empty.
+personal due date. ~~`project-overview.html` lands here **without** its release and test-health
+panels — those are M3~~ → **wrong, corrected 2026-08-31 (011 D-f): the test-health panel landed
+here.** `DashboardPage` already rendered it against endpoints that exist, and D27 says the overview
+reuses those regions. Only the **release** panel is absent, and the page is built so a missing
+section explains itself rather than rendering empty. `my-work.html` is **two tables, not a kanban**
+— see the close-out below.
 
 **Done when:** a person runs a project's work in the UI with no board, and My Work shows their
 issues across two projects beside their pending reviews and executions; `./gradlew build` green on
 `shanks`; the `work_item` migration verified by counting rows either side, not by reading the SQL.
 
 **Not in this module:** boards, rank, labels, releases, timeline, calendar.
+
+---
+
+### M1 closed — 2026-08-31 @ `8bf37408`, plan [011-tracker-core.md](011-tracker-core.md)
+
+**The migration actually taken is `V3`**, as reserved. `V3__tracker_core.sql` — nine tables, the
+default workflow and six issue types seeded through `tcms_seed_project_defaults`, and the
+`work_item` → `issue` backfill. Nothing in the table below it needed correcting.
+
+**Seven tasks, one stack each:** T1 the contract, T2 `V3` + the roles copies, T3 the `tracker`
+module, T4 spec links + comments + the retirement of `work`, T5 the CLI/MCP issue verbs, T6 the
+issue screens, T7 settings + My Work + the overview + this close-out.
+
+#### Two of this plan's own claims about M1 were wrong, and are corrected here
+
+1. **`ProjectCreatedEvent` was not built, and must not be.** See the `**db**` line above, now
+   struck through, and review R5. The reason is in 011 D-b and it is not a preference: a
+   `CompanyScopedEvent`'s own header says an event **type** may not cross a module boundary, so
+   `ProjectCreatedEvent` as a shared class cannot exist; and outbox delivery has a **one-minute
+   floor** (`tcms.outbox.interval: PT1M` plus `OutboxScheduler`'s `PT1M` initial delay), so a
+   workflow seeded that way leaves a brand-new project with no statuses — and therefore unable to
+   hold its first issue — for up to a minute. Story B1's *"a sensible default is already there"* is
+   false for exactly that long. `tcms_seed_project_defaults` seeds `issue_status`, `issue_transition`
+   and `issue_type` synchronously in the creating transaction, from all three project-creation paths.
+2. **`project-overview.html` landed WITH its test-health panel.** The M1 section above says the page
+   arrives "without its release and **test-health** panels". That was wrong in the cheap direction:
+   `DashboardPage` already rendered those numbers against endpoints that exist, and D27 says the
+   overview reuses those regions as its quality half — so the panel cost a move, not a build. The
+   release panel is the one that is genuinely absent, and it explains itself.
+
+#### Built and unverified
+
+The gates prove it compiles, not that it works. Backend `./gradlew build` on `shanks`: **3680 tests,
+6 failed — all six in `com.tcms.reporting.FlakeScoreTest`, pre-existing and independently confirmed**
+at `668fd608` (before any T7 change) in CI run 33366513189, where the same six and nothing else
+failed. It pins `BASE = 2026-06-01T08:00:00Z` against a 90-day window that expired on 2026-08-30.
+Frontend: build clean, lint 0 warnings, **2313 tests in 167 files pass**. Packages: build clean,
+lint 0 warnings, 414 tests pass.
+
+What that leaves unverified:
+
+- **Every screen T6 and T7 built.** Nobody has clicked through the lab. Ten screens, and the three
+  the gates are least able to speak for are the workflow settings screen's removal panel (the count
+  and the affected-issue chips are a live `GET /issues?statusId=…`, exercised only against a double),
+  the epics list on the overview (one `GET /issues/{key}` per epic through `useQueries`, so its
+  combined pending/failed states are the states a real server's latency actually produces), and the
+  private-note dialog (`PUT /board/annotations/ISSUE/{issueId}` has never been sent to a running
+  server).
+- **The `work_item` migration on an instance that actually holds rows.** The count test proves it on
+  a synthetic fixture, not on the lab's data.
+- **`issue_fact.release_assigned_at`** — the column is written by nothing until M3, which is when a
+  release exists to point at. `issue_fact.release_id` beside it is in the same state.
+- **`issue_link`** — the table exists (`work_item_link` became it) and has **no writer until M3's H7
+  work**. A row in it today would have to have been migrated.
+- **The lost 409 message** (T4 Part B step 3). Moving a *derived* card used to answer *"this card
+  mirrors a source; fix the source instead"*. It now answers **404 from `/issues/{key}`**, because a
+  derived card's id is not an issue key. A known regression, restored by M2's board, and the reason
+  it is not repaired here is that the board is the screen that produces the drop and M2 rebuilds it.
+- **The one-request split on My Work is asserted against a double, not a server.** The test pins the
+  whole list of paths requested, which is the strongest available statement that there is one read;
+  what it cannot show is that a real `GET /board?mine=true` answers both halves in one response
+  quickly enough to be the screen somebody keeps open all day.
+- **`api.delWithBody` has never sent a real request.** It is the one DELETE in the product carrying a
+  payload (the workflow status removal), and `fetch` with a `DELETE` body is a shape no other call
+  site exercises.
+
+#### Findings this module chose NOT to fix
+
+Recorded here so the next agent finds the answer rather than the finding.
+
+- **The three hardcoded `'Agent'` role names** (011 D-h) — `frontend/src/features/admin/IssueTokenDialog.tsx:123`
+  and `:212`, `frontend/src/features/help/AgentTokenPanel.tsx:127`. **Left in place.** They are not
+  what the M1 prompt's grep was written to catch: they select the one role that is
+  `assignable = false`, to decide **which configuration block to print**, and each carries a comment
+  saying it matches on the name because role ids are seeded data the client does not hold. The grant
+  picker itself filters on `role.assignable` and never on a name, so M0's "no screen changes" claim
+  stands. Removing them needs a stable role **code** on the contract that no module has asked for.
+- **`settings-general.html` shows five issue types; the product seeds six** (011 T2 Part C). The
+  mockup's own "Add sub-task" affordance on a story requires a `TASK`-level type, and D29 puts `Task`
+  at `STORY` — so both cannot be true with one Task type. Six rows land, and
+  `GeneralSettingsPage` names the **level** of each so `Task` and `Sub-task` are distinguishable.
+- **This plan's M1 section said the overview lands without its test-health panel.** Corrected above;
+  the section's own text is struck through rather than rewritten.
+- **`Sub-task` renders as `S`, not the `T` the plan predicted.** `V3` seeds its `icon_code` as `'T'`
+  ("two of them render as `T`"), but `IssueTypeView` deliberately omits `iconCode` — the contract
+  declares four members and `ContractConventionTest` compares both directions — so `TypeIcon` derives
+  the glyph from the type's initial. Not fixed: putting `iconCode` on the wire is a contract change
+  for one glyph, and the level badge beside the name already answers the question the glyph would.
+- **The project's name and key have no write on the contract**, so `GeneralSettingsPage`'s Identity
+  panel is read-only and the mockup's two inputs and its Save button are absent. The key is
+  documented as **immutable**, which contradicts the mockup's caption *"Existing links keep working
+  if it changes"*; the screen keeps the true half of that sentence and states the immutability
+  instead. A rename endpoint is nobody's module today.
+- **`BoardCard` carries no `estimateHours`**, so `my-work.html`'s "Est" column is absent. An `Est`
+  column reading `—` on every row is worse than no column; widening the board's card is a contract
+  change no module has asked for.
+- **The overview's "Tests passing" tile is denominated over cases carrying a Feature**, because there
+  is no project-wide latest-result-per-case count on the contract — the only rows available are
+  `RepositoryDashboard.byLastRun`, which is per Feature. The tile therefore **says what it counted**,
+  and reads the same rows as the `By last run` figure below it so the two cannot disagree. When no
+  case with a feature has a result the tile is not rendered at all rather than reading `0%`.
+- **Two `tracker` contract-vs-code disagreements found while building T6, both backend, both left**:
+  `IssueDocLink.blockExcerpt` is documented as *"what you linked, not what the block says now"* while
+  `IssueDocLinkFacts.refreshIssueDocLinks` re-inserts the projection from the block's **current**
+  text; and there is no re-confirm operation on the contract (correct — `stale` is a comparison, not
+  a stored decision), so `LinkedSpecPanel` sends an empty `PATCH /issues/{key}` instead.
 
 ---
 
@@ -699,7 +813,18 @@ Then:
    changed (the allocator's class and method name, the event or seam project exposes).
 ````
 
-### M1 — Tracker core
+### ~~M1 — Tracker core~~ → **done. Do not run this prompt.**
+
+**M1 landed 2026-08-31 at `8bf37408`** — `V3__tracker_core.sql`, plan
+[011-tracker-core.md](011-tracker-core.md). Its closure is written up in
+[the M1 section above](#m1--tracker-core): the V actually taken, the built-and-unverified list, the
+findings it chose not to fix, and the two claims this plan made about M1 that were wrong.
+
+The prompt is kept, not deleted, so a reader can see what the module was asked to do — and because
+two of its instructions turned out to be false and are worth reading beside the answer: it asks for a
+`ProjectCreatedEvent` (011 D-b refused it, review R5) and for `project-overview.html` without its
+test-health panel (011 D-f landed it). **Running it again would re-run a migration that only ever
+runs on an empty database.**
 
 ````text
 You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
@@ -813,6 +938,70 @@ tables scroll inside themselves. The plan and the scope spec are the source of t
 Confirm M1 reads `done` in the status table before starting. ~~Only M6 or M7 may run beside M2.~~
 Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M2 runs SECOND; task list in docs/plans/009-execution-breakdown.md, phase 2.
 
+
+M1 landed 2026-08-31 (`V3`, plan 011-tracker-core.md, `8bf37408`). **What it actually built, which is
+not everywhere what this plan guessed:**
+
+- **Package `com.tcms.tracker`** — `@ApplicationModule(allowedDependencies = {"api","tenancy",
+  "project","identity","storage"})`. It imports no other module, and no other module imports it.
+- **Endpoints, as they landed.** `GET|POST /issues` · `GET|PATCH|DELETE /issues/{key}` ·
+  `POST /issues/{key}/transitions` · `GET|POST /issues/{key}/comments` ·
+  `PUT /issues/{key}/watchers` · `GET /issues/{key}/doc-links` ·
+  `GET|PUT /projects/{projectId}/workflow` ·
+  `DELETE /projects/{projectId}/workflow/statuses/{statusId}` (a DELETE **with a body** naming where
+  the removed status's issues go — `api.delWithBody` on the client, which exists for it).
+  **The composite board is `GET /board`, NOT `/work-items`** — that path is gone, and `/board` still
+  serves all three boards with the same semantics: `projectId` narrows *where*, `teamId` and `mine`
+  narrow *whose*. `PUT /board/annotations/{sourceType}/{sourceId}` is the viewer's private note.
+  `POST /work-items` and `PATCH /work-items/{workItemId}` are gone outright.
+- **The outbox event is `tracker.issues_changed`** — plural, as `OutboxEvents.ISSUES_CHANGED` spells
+  it. `tracker.IssueFactProjection` is its only handler and the **only writer of `issue_fact`**;
+  the producers are `tracker.IssueService` and `tracker.TransitionService`.
+- **`issue_fact` columns**, for a module that needs to join without importing `tracker`:
+  `issue_id` (PK) · `company_id` · `project_id` · `issue_key` · `title` · `type_name` ·
+  `type_level` · `counts_toward_completion` · `status_name` · `status_kind` · `epic_id` ·
+  `parent_id` · `assignee_id` · `estimate_hours` · `release_id` · `created_at` ·
+  `status_entered_at` · `done_at` · `release_assigned_at` · `deleted_at`. `release_id` and
+  `release_assigned_at` are **NULL until M3** — nothing writes them yet.
+- **Two decisions you must honour:**
+  1. **There is no `ProjectCreatedEvent`, and you must not build one** (011 D-b). A module adding a
+     per-project default seeds it in **`tcms_seed_project_defaults`**, reproducing that function IN
+     FULL under `CREATE OR REPLACE` — a block you omit silently stops being seeded, and
+     `ProjectKeySequenceSchemaTest` is the check that one went missing. The reasons are that an
+     event *type* may not cross a module boundary and that outbox delivery has a one-minute floor.
+  2. **A card's status is `{ name, kind }`, and `WorkItemStatus` is gone** (011 D-c). `kind` is
+     `NOT_STARTED | IN_PROGRESS | DONE`; the name is a per-project `issue_status` row. Every
+     percentage in the product is `DONE` over the counted total. There is no five-member status enum
+     to switch on anywhere on either stack.
+- `work.BoardFacts`, `BoardService`, `BoardPeople`, `ItemAssignedEvent` and
+  `derived_item_annotation` survive, as D11 says; `BoardFacts.assignedIssues` reads `tracker`'s
+  **table**, and `work/package-info.java` deliberately does not name `tracker` as a dependency.
+  `WorkItemController` is now `BoardController`.
+
+**What M1 left specifically for you:**
+
+- **The board's columns are assembled FROM THE CARDS** (`features/board/cardMove.ts::columnsFor`),
+  because no single request answers "every status on this board" for the two cross-project boards.
+  Sort by **kind first, then position within the kind** — ordering by `position` alone with unknowns
+  last put `Ready` behind `Done` on every board whose backlog is never a transition target, and that
+  was the first cut of it.
+- **The transition is NOT optimistic**, deliberately: `useTransitionIssue` has no optimistic patch
+  and no snapshot restore, because a move can be refused by the workflow and an optimistic one shows
+  the card in a column the server is about to reject. **M2 is where the rollback machinery is earned**
+  — a *drag* is worth it, a menu press was not. `tcmsFaults.issue('conflict')` fabricates the 409
+  that names the legal moves, which no ordinary session can produce because the picker only offers
+  legal ones.
+- **A known regression to restore, and it is yours:** moving a *derived* card used to answer *"this
+  card mirrors a source; fix the source instead"* and now answers **404 from `/issues/{key}`**,
+  because a derived card's id is not an issue key. Put the sentence back on the board that produces
+  the drop.
+- **`MyWorkPage` is no longer a board** — `my-work.html` is two tables, and the personal board's
+  kanban is gone (011 T7). `BoardPage` and `TeamBoardPage` still mount `Board`. If your work needs a
+  personal board back, that is a disagreement with the mockup to record, not to assume.
+- `frontend/src/api/queries/board.ts` (~~`workItems.ts`~~) holds the three board reads and the
+  annotation write; the issues live in `issues.ts`. `features/board/cardLink.ts` holds `linkFor`,
+  which decides where a card opens — one definition, three boards.
+
 This is the hardest frontend in the expansion and your module plan must say so: optimistic
 reordering on a fractional rank, swimlanes by epic, WIP limits that report a breach rather than
 refusing a drop, and keyboard parity with the pointer. frontend/src/features/board/cardMove.ts and
@@ -837,6 +1026,16 @@ Then:
 ````
 
 ### M3 — Releases, roadmap & readiness
+
+> **One line from M1 (2026-08-31, `8bf37408`), which is not a dependency but will save you a
+> rebuild:** `project-overview.html`'s **Next release** panel already exists, as
+> `NextReleasePanel` in `frontend/src/features/projects/ProjectOverviewPage.tsx`, rendering
+> `solo-overview.html`'s "No releases yet" empty state with a **disabled** "Create a release"
+> action. It was written against the endpoint from the start so **you turn it on with data, not by
+> replacing the component**: give it the release list and enable the action. `issue_fact.release_id`
+> and `issue_fact.release_assigned_at` are the two columns M1 landed for you and nothing writes yet;
+> M1 also landed the **test-health** panel this plan's M1 section wrongly deferred to you, so do not
+> build it twice.
 
 ````text
 You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
@@ -895,6 +1094,54 @@ Confirm M1 reads `done` in the status table before starting. ~~Only M7 may run b
 Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M4 runs FIFTH, AFTER M5 — so M4 takes `V7` and M5 takes `V6`, the reverse of what the
 status table originally reserved. Task list in docs/plans/009-execution-breakdown.md, phase 5.
 
+
+M1 landed 2026-08-31 (`V3`, plan 011-tracker-core.md, `8bf37408`). **What it actually built, which is
+not everywhere what this plan guessed:**
+
+- **Package `com.tcms.tracker`** — `@ApplicationModule(allowedDependencies = {"api","tenancy",
+  "project","identity","storage"})`. It imports no other module, and no other module imports it.
+- **Endpoints, as they landed.** `GET|POST /issues` · `GET|PATCH|DELETE /issues/{key}` ·
+  `POST /issues/{key}/transitions` · `GET|POST /issues/{key}/comments` ·
+  `PUT /issues/{key}/watchers` · `GET /issues/{key}/doc-links` ·
+  `GET|PUT /projects/{projectId}/workflow` ·
+  `DELETE /projects/{projectId}/workflow/statuses/{statusId}` (a DELETE **with a body** naming where
+  the removed status's issues go — `api.delWithBody` on the client, which exists for it).
+  **The composite board is `GET /board`, NOT `/work-items`** — that path is gone, and `/board` still
+  serves all three boards with the same semantics: `projectId` narrows *where*, `teamId` and `mine`
+  narrow *whose*. `PUT /board/annotations/{sourceType}/{sourceId}` is the viewer's private note.
+  `POST /work-items` and `PATCH /work-items/{workItemId}` are gone outright.
+- **The outbox event is `tracker.issues_changed`** — plural, as `OutboxEvents.ISSUES_CHANGED` spells
+  it. `tracker.IssueFactProjection` is its only handler and the **only writer of `issue_fact`**;
+  the producers are `tracker.IssueService` and `tracker.TransitionService`.
+- **`issue_fact` columns**, for a module that needs to join without importing `tracker`:
+  `issue_id` (PK) · `company_id` · `project_id` · `issue_key` · `title` · `type_name` ·
+  `type_level` · `counts_toward_completion` · `status_name` · `status_kind` · `epic_id` ·
+  `parent_id` · `assignee_id` · `estimate_hours` · `release_id` · `created_at` ·
+  `status_entered_at` · `done_at` · `release_assigned_at` · `deleted_at`. `release_id` and
+  `release_assigned_at` are **NULL until M3** — nothing writes them yet.
+- **Two decisions you must honour:**
+  1. **There is no `ProjectCreatedEvent`, and you must not build one** (011 D-b). A module adding a
+     per-project default seeds it in **`tcms_seed_project_defaults`**, reproducing that function IN
+     FULL under `CREATE OR REPLACE` — a block you omit silently stops being seeded, and
+     `ProjectKeySequenceSchemaTest` is the check that one went missing. The reasons are that an
+     event *type* may not cross a module boundary and that outbox delivery has a one-minute floor.
+  2. **A card's status is `{ name, kind }`, and `WorkItemStatus` is gone** (011 D-c). `kind` is
+     `NOT_STARTED | IN_PROGRESS | DONE`; the name is a per-project `issue_status` row. Every
+     percentage in the product is `DONE` over the counted total. There is no five-member status enum
+     to switch on anywhere on either stack.
+- `work.BoardFacts`, `BoardService`, `BoardPeople`, `ItemAssignedEvent` and
+  `derived_item_annotation` survive, as D11 says; `BoardFacts.assignedIssues` reads `tracker`'s
+  **table**, and `work/package-info.java` deliberately does not name `tracker` as a dependency.
+  `WorkItemController` is now `BoardController`.
+
+**What M1 left specifically for you:** the importer writes `issue`, `issue_type`, `issue_status`,
+`issue_transition` and `issue_comment` directly — it is a `tracker.imports` sub-package, so those are
+its own module's tables. Two constraints it inherits: **the key comes from
+`com.tcms.project.ProjectKeys.allocate`** unless D5's original-key rule says otherwise, and the
+**depth rule is expressed in `IssueLevel` (`EPIC · STORY · TASK`), never in type names** — a Jira
+issue type maps to a level, and a fourth story-level type is a row rather than a migration. An
+imported issue must publish `tracker.issues_changed` like any other, or `issue_fact` will not hold it.
+
 Review R14 is yours to close in your module plan: whether the importer may reuse the per-person
 credential in integration.tracker (TrackerIdentity / TrackerCredential). Reusing it is a forbidden
 module crossing; the alternative — the connection entered per run on import-connect.html and stored
@@ -943,6 +1190,64 @@ Confirm M1 reads `done` in the status table before starting. ~~Only M7 may run b
 Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M5 runs FOURTH, BEFORE M4 — so M5 takes `V6` and M4 takes `V7`, the reverse of what
 the status table originally reserved. Task list in docs/plans/009-execution-breakdown.md, phase 4.
 
+
+M1 landed 2026-08-31 (`V3`, plan 011-tracker-core.md, `8bf37408`). **What it actually built, which is
+not everywhere what this plan guessed:**
+
+- **Package `com.tcms.tracker`** — `@ApplicationModule(allowedDependencies = {"api","tenancy",
+  "project","identity","storage"})`. It imports no other module, and no other module imports it.
+- **Endpoints, as they landed.** `GET|POST /issues` · `GET|PATCH|DELETE /issues/{key}` ·
+  `POST /issues/{key}/transitions` · `GET|POST /issues/{key}/comments` ·
+  `PUT /issues/{key}/watchers` · `GET /issues/{key}/doc-links` ·
+  `GET|PUT /projects/{projectId}/workflow` ·
+  `DELETE /projects/{projectId}/workflow/statuses/{statusId}` (a DELETE **with a body** naming where
+  the removed status's issues go — `api.delWithBody` on the client, which exists for it).
+  **The composite board is `GET /board`, NOT `/work-items`** — that path is gone, and `/board` still
+  serves all three boards with the same semantics: `projectId` narrows *where*, `teamId` and `mine`
+  narrow *whose*. `PUT /board/annotations/{sourceType}/{sourceId}` is the viewer's private note.
+  `POST /work-items` and `PATCH /work-items/{workItemId}` are gone outright.
+- **The outbox event is `tracker.issues_changed`** — plural, as `OutboxEvents.ISSUES_CHANGED` spells
+  it. `tracker.IssueFactProjection` is its only handler and the **only writer of `issue_fact`**;
+  the producers are `tracker.IssueService` and `tracker.TransitionService`.
+- **`issue_fact` columns**, for a module that needs to join without importing `tracker`:
+  `issue_id` (PK) · `company_id` · `project_id` · `issue_key` · `title` · `type_name` ·
+  `type_level` · `counts_toward_completion` · `status_name` · `status_kind` · `epic_id` ·
+  `parent_id` · `assignee_id` · `estimate_hours` · `release_id` · `created_at` ·
+  `status_entered_at` · `done_at` · `release_assigned_at` · `deleted_at`. `release_id` and
+  `release_assigned_at` are **NULL until M3** — nothing writes them yet.
+- **Two decisions you must honour:**
+  1. **There is no `ProjectCreatedEvent`, and you must not build one** (011 D-b). A module adding a
+     per-project default seeds it in **`tcms_seed_project_defaults`**, reproducing that function IN
+     FULL under `CREATE OR REPLACE` — a block you omit silently stops being seeded, and
+     `ProjectKeySequenceSchemaTest` is the check that one went missing. The reasons are that an
+     event *type* may not cross a module boundary and that outbox delivery has a one-minute floor.
+  2. **A card's status is `{ name, kind }`, and `WorkItemStatus` is gone** (011 D-c). `kind` is
+     `NOT_STARTED | IN_PROGRESS | DONE`; the name is a per-project `issue_status` row. Every
+     percentage in the product is `DONE` over the counted total. There is no five-member status enum
+     to switch on anywhere on either stack.
+- `work.BoardFacts`, `BoardService`, `BoardPeople`, `ItemAssignedEvent` and
+  `derived_item_annotation` survive, as D11 says; `BoardFacts.assignedIssues` reads `tracker`'s
+  **table**, and `work/package-info.java` deliberately does not name `tracker` as a dependency.
+  `WorkItemController` is now `BoardController`.
+
+**What M1 left specifically for you:**
+
+- **The legal-transition set is already on the wire** — `Issue.allowedTransitions` and
+  `BoardCard.allowedTransitions`, each an `IssueStatusRef`. Empty for an Epic (D31 derives an epic's
+  status from its stories and it is not editable) and empty for a derived card with no board-driven
+  action. Your "an assistant reaches In Review at most" rule narrows that set; it does not replace it.
+- **`POST /issues/{key}/transitions` is the ONLY path a status changes on.** `PATCH /issues/{key}`
+  has no `status` property, deliberately: a PATCH that could set one would be a second, unchecked
+  spelling of the rule. Whatever refuses an assistant must refuse it there.
+- **The AI-eligible marker is absent from every M1 screen, not empty** — `work-table.html`'s
+  `AI-eligible` filter chip, `task.html`'s `AI-ELIGIBLE` chip, `my-work.html`'s `AI` tags and its
+  "My assistant" panel, and `issue-new.html`'s AI-eligible toggle are all unrendered. Adding them is
+  additive; nothing is stubbed out waiting.
+- `frontend/src/features/tracker/` holds the issue screens: `WorkTablePage` (five views on `?view=`),
+  `IssueNewPage`, and `IssueDetailPage` at **`/issues/:key` — outside the project segment**,
+  dispatching on `type.level` to `EpicPanels` / `StoryPanels` / `TaskPanels`. `TaskPanels` is where
+  `task.html`'s four assistant panels go.
+
 Then:
 1. Write docs/plans/0NN-agent-execution.md with ep-writing-plans — next free NNN, next free V from
    the migration directory (the table says V7). project_repository as reference data, issue.pr_url,
@@ -983,6 +1288,59 @@ Confirm M1 reads `done` in the status table before starting. ~~This module may r
 (it touches no tracker file).~~ Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M6 runs EIGHTH, after M7; task list in
 docs/plans/009-execution-breakdown.md, phase 8. M6 takes `V10`, not the `V8` the status table
 originally reserved — five modules and Mc land migrations before it.
+
+
+M1 landed 2026-08-31 (`V3`, plan 011-tracker-core.md, `8bf37408`). **What it actually built, which is
+not everywhere what this plan guessed:**
+
+- **Package `com.tcms.tracker`** — `@ApplicationModule(allowedDependencies = {"api","tenancy",
+  "project","identity","storage"})`. It imports no other module, and no other module imports it.
+- **Endpoints, as they landed.** `GET|POST /issues` · `GET|PATCH|DELETE /issues/{key}` ·
+  `POST /issues/{key}/transitions` · `GET|POST /issues/{key}/comments` ·
+  `PUT /issues/{key}/watchers` · `GET /issues/{key}/doc-links` ·
+  `GET|PUT /projects/{projectId}/workflow` ·
+  `DELETE /projects/{projectId}/workflow/statuses/{statusId}` (a DELETE **with a body** naming where
+  the removed status's issues go — `api.delWithBody` on the client, which exists for it).
+  **The composite board is `GET /board`, NOT `/work-items`** — that path is gone, and `/board` still
+  serves all three boards with the same semantics: `projectId` narrows *where*, `teamId` and `mine`
+  narrow *whose*. `PUT /board/annotations/{sourceType}/{sourceId}` is the viewer's private note.
+  `POST /work-items` and `PATCH /work-items/{workItemId}` are gone outright.
+- **The outbox event is `tracker.issues_changed`** — plural, as `OutboxEvents.ISSUES_CHANGED` spells
+  it. `tracker.IssueFactProjection` is its only handler and the **only writer of `issue_fact`**;
+  the producers are `tracker.IssueService` and `tracker.TransitionService`.
+- **`issue_fact` columns**, for a module that needs to join without importing `tracker`:
+  `issue_id` (PK) · `company_id` · `project_id` · `issue_key` · `title` · `type_name` ·
+  `type_level` · `counts_toward_completion` · `status_name` · `status_kind` · `epic_id` ·
+  `parent_id` · `assignee_id` · `estimate_hours` · `release_id` · `created_at` ·
+  `status_entered_at` · `done_at` · `release_assigned_at` · `deleted_at`. `release_id` and
+  `release_assigned_at` are **NULL until M3** — nothing writes them yet.
+- **Two decisions you must honour:**
+  1. **There is no `ProjectCreatedEvent`, and you must not build one** (011 D-b). A module adding a
+     per-project default seeds it in **`tcms_seed_project_defaults`**, reproducing that function IN
+     FULL under `CREATE OR REPLACE` — a block you omit silently stops being seeded, and
+     `ProjectKeySequenceSchemaTest` is the check that one went missing. The reasons are that an
+     event *type* may not cross a module boundary and that outbox delivery has a one-minute floor.
+  2. **A card's status is `{ name, kind }`, and `WorkItemStatus` is gone** (011 D-c). `kind` is
+     `NOT_STARTED | IN_PROGRESS | DONE`; the name is a per-project `issue_status` row. Every
+     percentage in the product is `DONE` over the counted total. There is no five-member status enum
+     to switch on anywhere on either stack.
+- `work.BoardFacts`, `BoardService`, `BoardPeople`, `ItemAssignedEvent` and
+  `derived_item_annotation` survive, as D11 says; `BoardFacts.assignedIssues` reads `tracker`'s
+  **table**, and `work/package-info.java` deliberately does not name `tracker` as a dependency.
+  `WorkItemController` is now `BoardController`.
+
+**What M1 left specifically for you:**
+
+- **`issue_fact` is your join, and you may only READ it** (review R10). Its `estimate_hours` column
+  is the estimate half of estimate-vs-actual; `counts_toward_completion` and `type_level` are how you
+  exclude a spike or roll up to an epic without importing `tracker`. Writing to `issue_fact` is the
+  failure scope §3 names by name — there is exactly one writer, `tracker.IssueFactProjection`.
+- **Hours, never points** (D8). `Issue.estimateHours` is a `double` on the wire in the same unit a
+  budget and an invoice use, which is the whole reason the estimate is expressible in your module.
+- **The "Time" panel on `settings-general.html`, the `Logged` column on `work-table.html`, the
+  estimate-vs-actual panel on `epic.html`, the "Time" panel on `story.html` and the "This week" hours
+  KPI on `my-work.html` are all ABSENT rather than empty** — M1 rendered none of them. Adding them is
+  additive; `GeneralSettingsPage` will need a new panel rather than a stub filled in.
 
 Then:
 1. Write docs/plans/0NN-time.md with ep-writing-plans — next free NNN, next free V from the
@@ -1267,8 +1625,8 @@ where it was resolved above; the two that need the owner or a module plan are na
 | R1 | M0's `key_sequence` PK `(company_id, entity_type, project_id)` with `project_id` nullable is invalid — Postgres rejects a nullable PK column. Seven Java readers and the V1 seed function were also unlisted. | **Resolved** — new `project_key_sequence` table owned by `project`; `key_sequence` untouched. M0 db + be. |
 | R2 | M0's "`git diff --stat frontend/src` is empty" contradicted "both generated clients move" — `schema.d.ts` is under `frontend/src`, and `Role.name` is a contract enum. | **Resolved** — done-when names the one generated file. |
 | R3 | M0's `project.client_id` bullet said `REFERENCES client(id)` and "the FK is added by Mc" in one sentence. | **Resolved** — column only, no `REFERENCES`. |
-| R4 | M1 said "the `work` module retires" and "`BoardFacts` does not retire" with no file list; nothing said what happens to `/work-items`, its CLI/MCP verbs, or `workitem:manage` in the three pinned copies. | **Resolved** — file list, contract removal and matrix strike-through in M1 db. |
-| R5 | M1 seeds the workflow "per project" but `project` cannot import `tracker`, and no project-created event exists. | **Resolved** — `V3` backfill + new `ProjectCreatedEvent` consumed by `tracker`. |
+| R4 | M1 said "the `work` module retires" and "`BoardFacts` does not retire" with no file list; nothing said what happens to `/work-items`, its CLI/MCP verbs, or `workitem:manage` in the three pinned copies. | **Closed 2026-08-31 by M1** (`8bf37408`). The nine files went, `work_item` and `work_item_link` with them (`work_item_link` → `issue_link`); `BoardFacts`, `BoardService`, `BoardPeople`, `ItemAssignedEvent` and `derived_item_annotation` stayed and `WorkItemController` became `BoardController`. The **path** `/work-items` is gone and the composite list is `GET /board` — 011 D-a, because `GET /work-items` was never work-item CRUD, it was the one operation serving all three boards, and deleting it literally would have deleted My Work. `POST` and `PATCH /work-items` are gone outright. The "six `work-item` verbs in `packages/cli` and `packages/mcp`" was **not a count of anything in the tree** (011 D-d): the CLI had none, MCP had one tool with two arms, plus one read inside the orient/quarantine tool and `WORK_ITEM_SHAPE` in the client — four sites, all replaced. `workitem:manage` is struck through in the roles spec, `permission-matrix-summary.md` and `README.md` together; its `role_permission` rows are **not deleted**, because a permission with no reader is inert and deleting seeded catalogue rows is a statement whose only effect is to make `SeedDataTest` disagree with three pinned documents (011 D-i). |
+| R5 | M1 seeds the workflow "per project" but `project` cannot import `tracker`, and no project-created event exists. | **Closed 2026-08-31 by M1 (`8bf37408`) — RESOLVED DIFFERENTLY FROM THE PROPOSAL, and the reason matters more than the outcome.** The proposal was `V3` backfill **plus a new `ProjectCreatedEvent`** that `project` publishes and `tracker` consumes. **No event was built, and none should be** (011 D-b). Two facts, either of which is sufficient: (1) `CompanyScopedEvent`'s own header says *"an event **type** is a dependency like any other, so the publishing module's class is unreachable from the consuming one"* — cross-module delivery is an `OutboxEvents` string plus a JSONB payload claimed by an `OutboxHandler`, so `ProjectCreatedEvent` **as a shared class cannot exist**; (2) outbox delivery is asynchronous with a **one-minute floor** (`tcms.outbox.interval: PT1M`, plus `OutboxScheduler`'s `PT1M` initial delay), so a workflow seeded that way leaves a brand-new project with no statuses — and therefore unable to create its first issue — for up to a minute, making story B1's *"a sensible default is already there so I can start without configuring anything"* false for exactly that long. `tcms_seed_project_defaults` is the mechanism that already solves this shape and the precedent is not thin: it seeds `configuration` (an `execution` table) and `doc_space` (a `documentation` table) synchronously, in the creating transaction, and it is called by all three project-creation paths. **So no `project.created` outbox name was minted either** — an event with no work is a seam that grows a caller. The cost, accepted: `V3` reproduces the whole function again under `CREATE OR REPLACE`, and a block omitted silently stops being seeded; `ProjectKeySequenceSchemaTest` is the check. **Do not re-propose the event.** |
 | R6 | M3: `ReleaseSortKey` lives in `execution`, so `tracker` importing it is a forbidden crossing; `test_run.release_id` as a hard FK looked like it broke §3. | **Resolved** — `ReleaseSortKey` moves to `api`; the FK is kept, with the reason. |
 | R7 | M4's "existing Jira/ADO adapters gain an importer direction" — they are outbound single-issue clients, and an importer in `integration` writing `issue` is a forbidden crossing. | **Resolved** — importer is `tracker.imports` with its own read client; adapters untouched. |
 | R8 | M4's dependency on M1 alone held only if Jira sprints are not turned into labels (M2). | **Resolved** — sprints dropped and reported; label-per-sprint optional if M2 already exists. |
