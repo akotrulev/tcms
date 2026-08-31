@@ -7,6 +7,7 @@ import {
   refusalFor,
   resolveCardMove,
   resolveColumnMove,
+  serverColumnsOf,
   type ServerColumn,
 } from './cardMove'
 
@@ -370,5 +371,58 @@ describe('resolveColumnMove — the move and the refusal', () => {
 
     if (dropped.outcome !== 'REFUSED') throw new Error('expected a refusal')
     expect(dropped.reason).toBe(columnRefusalFor(card, DONE_COLUMN))
+  })
+})
+
+describe('serverColumnsOf — the mapping the compiler cannot check', () => {
+  it('takes the status IDS, not their names', () => {
+    /*
+      `statusIds` is `readonly string[]` and a status name is a string, so the wrong half of
+      `IssueStatusRef` typechecks here and then refuses every legal drop — a board on which nothing
+      can be dragged, with no error anywhere. This is the assertion instead of the type.
+    */
+    const mapped = serverColumnsOf([
+      {
+        id: 'in-flight',
+        name: 'In flight',
+        position: 1,
+        wipLimit: 3,
+        statuses: [PROGRESS, IN_REVIEW],
+        defaultStatusId: PROGRESS.id,
+      },
+    ])
+
+    expect(mapped[0].statusIds).toEqual([PROGRESS.id, IN_REVIEW.id])
+    expect(mapped[0].statusIds).not.toContain(PROGRESS.name)
+  })
+
+  it('reads an absent wipLimit as no limit, which is not zero', () => {
+    // The contract's `wipLimit` is optional AND nullable; `0` would be a column nothing may enter,
+    // and `??` keeps the two apart where a `||` would have collapsed them.
+    const mapped = serverColumnsOf([
+      { id: 'done', name: 'Done', position: 2, statuses: [DONE], defaultStatusId: DONE.id },
+    ])
+
+    expect(mapped[0].wipLimit).toBeNull()
+  })
+
+  it('produces columns resolveColumnMove accepts, so the two cannot drift apart', () => {
+    const columns = serverColumnsOf([
+      { id: 'ready', name: 'Ready', position: 0, statuses: [READY], defaultStatusId: READY.id },
+      {
+        id: 'in-flight',
+        name: 'In flight',
+        position: 1,
+        wipLimit: 3,
+        statuses: [PROGRESS],
+        defaultStatusId: PROGRESS.id,
+      },
+    ])
+    const card = issueCard({ columnId: 'ready', status: READY, allowedTransitions: [PROGRESS] })
+
+    expect(resolveColumnMove(card, 'in-flight', columns)).toEqual({
+      outcome: 'MOVE',
+      toColumnId: 'in-flight',
+    })
   })
 })

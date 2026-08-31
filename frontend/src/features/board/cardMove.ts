@@ -1,4 +1,10 @@
-import type { BoardCard, BoardIssueCard, IssueStatusKind, IssueStatusRef } from '../../api/types';
+import type {
+  BoardCard,
+  BoardColumnConfig,
+  BoardIssueCard,
+  IssueStatusKind,
+  IssueStatusRef,
+} from '../../api/types';
 import { issueStatusKinds } from '../../lib/labels';
 
 /**
@@ -252,6 +258,26 @@ export interface ServerColumn {
   wipLimit: number | null;
   statusIds: readonly string[];
   defaultStatusId: string;
+}
+
+/**
+ * The contract's columns as {@link resolveColumnMove} needs them.
+ *
+ * A function rather than a line at each call site, and it is the one place in this file the compiler
+ * cannot help: `statusIds` is `readonly string[]` and a status **name** is a string too, so mapping
+ * `statuses` to names instead of ids typechecks, lints, and then refuses every legal drop on a board
+ * whose column names happen not to be its status ids — which is every board. The mistake has no
+ * error and no empty screen, just a board where nothing can be dragged.
+ */
+export function serverColumnsOf(columns: readonly BoardColumnConfig[]): ServerColumn[] {
+  return columns.map((column) => ({
+    id: column.id,
+    name: column.name,
+    position: column.position,
+    wipLimit: column.wipLimit ?? null,
+    statusIds: column.statuses.map((status) => status.id),
+    defaultStatusId: column.defaultStatusId,
+  }));
 }
 
 export type ColumnMove =
