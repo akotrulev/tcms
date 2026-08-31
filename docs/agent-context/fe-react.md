@@ -1,6 +1,6 @@
 # fe-react — orientation cache
 
-**Baseline commit:** `fc173ba8` · **Last verified:** 2026-08-31 · **Verdict this run:** TRUST (the only delta since `ac848172` was this file; nothing in `frontend/` or the contract had moved, so nothing needed re-deriving. The seams below moved because 012 T7 built the project board's screen)
+**Baseline commit:** `aeea6b25` · **Last verified:** 2026-08-31 · **Verdict this run:** TRUST (the only delta since `fc173ba8` was this file; nothing in `frontend/` or the contract had moved, so nothing needed re-deriving. The seams below moved because 012 T8 built the backlog and extracted the shared filter)
 
 Per `ep-agent-orientation-cache`: validate this against a git delta before trusting it. A changed
 `frontend/package.json`, `package-lock.json`, `tsconfig*.json` or `vite.config.ts` invalidates the
@@ -54,6 +54,8 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 | The move decision, two boards, one file | `features/board/cardMove.ts` — `columnsFor` + `resolveCardMove` + `refusalFor` + `immobileReason` for the composite board; `serverColumnsOf` + `resolveColumnMove` + `columnRefusalFor` at the **foot** of the file for the project board. `serverColumnsOf` exists because `statusIds: readonly string[]` and a status *name* is a string too, so the wrong map typechecks and then refuses every legal drop (012 D-x) |
 | Keyboard drag | `features/board/boardKeyboard.ts` — `boardKeyboardCoordinates(columnOrder, laneOrder = [])`. Left/right steps a column; up/down steps a **swimlane** when `laneOrder` is non-empty and otherwise falls through to `@dnd-kit`'s 25px nudge. One `stepAlongAxis` behind both, so the nearest-centre and edge rules exist once. ~~`ColumnRect`~~ → `BandRect` |
 | The board's filter | **`BoardFilters` in `api/types.ts`, and it is NOT `IssueFilters`** — they differ in both directions (`statusId`/`parentKey` vs `labelId`/`priority`), so neither widens to cover the other (012 D-v) |
+| **One filter, three views, one file** | **`features/board/useWorkFilter.ts`** (012 T8) — reads the URL once and returns `{ filters: { issue, board }, setParam, appendOnce, dropOne, clearFilters }`. `filters.issue` is what `GET /issues` declares, `filters.board` what `/boards/{id}/cards` and `/projects/{id}/backlog` declare; the mapping is D-v's and is **not** a cast. `clearFilters` keeps `view`, `board`, `sort` and `cols` — none of them is a filter. The applied chips for the board's six live beside it as **`useBoardFilterChips`**, hook rather than function because two labels are names it looks up. `WorkTablePage` keeps its own `IssueFilters` chip list (different six) and its own Level/Status pickers |
+| The two picker sets are NOT the same | Table offers **Level + Status**; board and backlog offer **Label + Assignee + Priority**. `useWorkFilter` unifies how the URL is *read*, never what a view *offers*: a status picker on a board would empty the columns it is drawn from, and the table has no label column in M1. Every view chips **every filter its own endpoint applies**, picker or not — which is how T8 found `epicKey`/`parentKey` had neither on the table |
 | Client state | Session in Context; **filter state lives in the URL** (`useSearchParams`) |
 | Component library | **shadcn/ui over Radix** in `components/ui/` (18 files) + the house kit in `components/kit/` (16). ~~MUI v9~~ → gone in T16; `@mui/*`, `@emotion/*`, `notistack` are in no import and no `package.json` |
 | Styling authority | **Tailwind v4, single authority.** Preflight on, one stylesheet (`src/index.css`), no `sx`, no CSS-in-JS, no CSS Modules. Tokens are custom properties bridged into utility names by `@theme inline` (*inline* is load-bearing — it emits `var(…)` so the `[data-color-scheme]` swap moves every utility). `app/tokenSystem.test.ts` checks the system against itself |
@@ -63,7 +65,7 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 | Errors | `lib/describeError.ts` is the one place an error becomes user-facing copy (owns `isTransient()`); `app/queryClient.ts` is the one place a failure raises a notification; `components/ErrorBoundaries.tsx` has the root/route/region tiers |
 | Data states | `components/DataRegion.tsx` — loading/loaded/failed/empty/stale |
 | Display logic | **Shared layer, never the page**: `lib/labels.ts` (each `satisfies Record<Union, string>`, so a new enum member is a compile error until labeled), `lib/format.ts`, `lib/results.ts`, `lib/permissions.ts`, `components/Identifier` for anything monospace |
-| `TypeIcon` takes THREE fields, not `IssueTypeRef` | `Pick<IssueTypeRef, 'name' \| 'level' \| 'countsTowardCompletion'>` since 012 T7 — `BoardIssueCard` carries `typeName`/`typeLevel`/`countsTowardCompletion` and **no type id**, and a synthesised one would be a value the component has never read. A widening; every existing caller passes the full ref. `iconCode` is on the board's card and deliberately unused, so the board and the table draw the same glyph |
+| `TypeIcon` takes name + level, and `countsTowardCompletion` is OPTIONAL | `Pick<IssueTypeRef, 'name' \| 'level'> & { countsTowardCompletion?: boolean }`. Widened in T7 off the whole `IssueTypeRef` (`BoardIssueCard` has no type id, and a synthesised one is a value the component never read); widened again in T8 to make the field optional, because **`BacklogRow` does not carry it at all**. The spike test is `=== false`, never `!` — absent means the payload does not answer, so a backlog Spike renders as the level's green `S` rather than the board's amber `?`. `iconCode` is on both payloads and deliberately unused |
 | `label-1` … `label-10` DO NOT EXIST | `Label.color` is a design-token name and `index.css` declares none of them, so **board label chips are plain** (D-z). Adding the palette is a stylesheet decision that belongs with the screen that creates labels — T9's |
 | `data-testid` | ~1470 (676 literal + 794 composed), `Domain.Thing` PascalCase, per-file `TestIdPrefix` const. `ClassificationPicker.tsx:150` documents `Classification.Value.<id>` as a **locator contract QA page objects key on** — do not rename it here |
 | Field ↔ error wiring | `components/kit/Field.tsx` clones its child to add `aria-describedby` pointing at `${htmlFor}-message`. Callers pass nothing; do not re-add per-call-site ids |
@@ -74,7 +76,12 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 | The droppable is a CELL, and this is where the plan was wrong | `` `${columnId}\|${laneId}` ``, spelled ONLY in `ProjectBoardView` (`cellId` / `columnIdOf`). A column has one rect per lane once a full-width lane header sits between the bands, so it cannot be one droppable — the plan's *"register `column.id`"* holds only for a one-lane board (012 D-z). **Both keyboard axes come out of that one flat cell set**: `columnOrder` = the first EXPANDED lane's cells (x is the same in every lane), `laneOrder` = the first column's cell down the expanded lanes (y). A collapsed lane registers nothing and is a stop on neither |
 | Column headers are drawn ONCE | Above the lanes, not inside each — two CSS grids on one `--board-columns` template, aligned only because the columns are a fixed **272px**. Repeating them per lane would repeat one project-wide `breaches` entry per lane and put a WIP numerator beside a *lane's* card count (D-z) |
 | The WIP cell's two numerators | `ColumnHeader`: no limit → `—`; **breach** → `breach.count / breach.limit ⚠` **as sent** (project-wide, does not shrink under a filter); **under** → cards-drawn `/ limit`, because `breaches` lists only the columns that are over and there is no project-wide count on the wire for the rest. Each state carries a `title` saying which it is. **No `>` in the file** — the comparison is the server's |
-| Empty is a state only under a FILTER | Board and (per T8's prompt) backlog: a board with no cards and no filter still draws its columns, because that is the board's shape and what a freshly configured one looks like. Only a board emptied *by* a filter gets `no-filter-match`, which is the way back off it. Three of T7's own tests found the inverse |
+| Empty is a state only under a FILTER | **The board's rule; the backlog ports the reason, not the mechanism.** A board with no cards and no filter still draws its columns — that is the board's shape and what a freshly configured one looks like. A *list's* shape IS its rows, so `BacklogView` gives both empties a region and branches the **copy**: `no-filter-match` with the way out when a filter emptied it, `no-records` saying the backlog is finished when nothing did. The filter strip and the panel head sit **above** the region on both, so a failed read never unmounts the controls that would let a reader retry |
+| The backlog's screen | **`features/board/BacklogView.tsx`** (012 T8) — one file, two module-private components (`BacklogListRow`, `BulkBar`) and a `MoveButton`. Mounted as the `backlog` arm of `WorkTablePage`'s view switch, **not routed**: `?view=backlog`. **No release sections and no "Move to release"** (D-f) — `release` is M3's table, so the grouping would be one section called "Unscheduled" containing everything |
+| Both reorder affordances end in ONE expression | `BacklogView`'s `place(fromIndex, toIndex)`: `toIndex < fromIndex ? { beforeKey } : { afterKey }` over the row at `toIndex`. The `↑ ↓` buttons and `onDragEnd` both call it, so a drag and an arrow cannot disagree about where a row lands. **There is no `KeyboardSensor`** and that is the design (D-ab): the arrows are the keyboard path, not a fallback |
+| Bulk writes over issues are N calls | **`useBulkUpdateIssues(projectId)`** in `api/queries/issues.ts` — `Promise.allSettled` over one `PATCH /issues/{key}` each, returning `{ applied, failed }` and **never rejecting**, because a mixed outcome is ordinary. There is no bulk endpoint over issues (`/cases/bulk` and `/executions/bulk` exist and are not it). The caller names the failures and keeps them selected |
+| `Set epic` is refused over a TASK before the request | The contract's depth rule is 400 for *"a parent more than one level above the child"*, so a Task's parent is a Story. `typeLevel` is on every backlog row, so the picker is disabled with that sentence rather than rendered and rejected |
+| A `PermissionGate` cannot wrap a list | Its denied branch renders the child inside a tooltip-triggering `<span role="none">` — right around one control, and around an `<ol>` both invalid HTML and a tooltip over every row. `BacklogView` reads `useCan(projectId).can('board:rank')` directly and passes the verdict down as two props. **`ProjectBoardView` has the same shape** around `lanes.map(...)` and was deliberately left alone |
 | The three boards | `BoardPage` and `TeamBoardPage` mount `Board` (kanban). **`MyWorkPage` does not** — `my-work.html` is two tables over ONE `GET /board?mine=true`, split on `kind === 'ISSUE'`, plus a private notes panel (011 T7). `linkFor` lives in `features/board/cardLink.ts`, not in `BoardPage.tsx`: a file exporting a component and a function is oxlint's `react(only-export-components)`, and the gate is zero warnings |
 | Project settings | `/projects/:projectId/settings/{general,workflow,classification,review,notifications,trackers}` — six screens, all **routed for everybody** and read-only for a caller without the write key (§31). `general` holds the archive button (011 T7 moved it off the overview's header, with `ArchiveProject.test.tsx`) |
 | A DELETE with a body | **`api.delWithBody(path, body, options)`** — the one in the product, for the workflow status removal. Registered in `test/contractDoubles.ts`'s `METHODS` **and** `SENDS_A_BODY`; a body smuggled into `api.del`'s options is invisible to that seam, which reads the second argument positionally |
@@ -105,6 +112,13 @@ CLAUDE.md. Targeted tests may run locally for debugging.
   stale citation here **reddens the `packages` job**, not the frontend one.
 - **Tier claims** — `tierClaims.test.ts` fails if a comment claims somebody lacks a permission the
   roles spec §A3 says they hold.
+- **An optimistic mutation cannot be tested with the refetch running.** `useRankIssue`'s `onSettled`
+  invalidates on **both** paths, and a read double answers with the order it always had — so a naive
+  "it reordered" assertion asserts the fixture, and a naive "it snapped back" assertion passes
+  against a hook with no rollback at all. Hold the write pending with a hand-resolved promise to see
+  the patch; hold the **refetch** pending too to see the rollback (012 D-ab).
+- **`PATCH /issues/{key}` answers with the whole `Issue`.** A double returning `{}` is eleven
+  contract violations from `contractDoubles.ts`. `test/fixtures.ts::anIssue` is the factory.
 
 ## Conventions observed — where this repo narrows the plugin's rules
 
@@ -149,6 +163,14 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 - The renders were opened at 1680px only. No claim holds at 1280px, against a real API, or with a
   fifty-step case (design-language §0, §9.1).
 - E2E / Playwright surfaces belong to the `qa-ui-typescript` peer; none are mapped here.
+- **Neither T7's nor T8's screen has been seen in a browser**, and the backlog's drag is now the
+  **second** drag in this repository that has never run. Every backlog ranking assertion goes through
+  the `↑ ↓` buttons, which prove the *placement* and cannot prove that `pointerWithin` over a stack of
+  full-width rows picks the row the reader thinks they are on, or that a row registered as both
+  droppable and draggable under one id behaves. Also unverified on the backlog: the row's single
+  `flex-wrap` line at 1280 with three label chips on it, `rebalanced: true` reaching the screen, and
+  the depth rule actually refusing a `Set epic` over a task — the client disables it first, so the
+  400 the contract describes has never been provoked and the two rules have never been compared.
 - **Nothing about 012 T7's screen has been seen in a browser.** 18 + 8 component tests, `npm run
   build` and oxlint at zero; none of them is a renderer. Specifically unverified: the two-grid /
   fixed-272px column alignment (jsdom applies no stylesheet), **any drag at all** (the cell droppable
@@ -173,6 +195,29 @@ CLAUDE.md. Targeted tests may run locally for debugging.
   against a real backend.
 
 ## Session log
+
+- **2026-08-31** — 012 T8, `fe` (`8dc709e3`; plan `aeea6b25`). The ranked backlog, and one filter
+  across every view — the task that makes D34 true on screen. Five things worth carrying.
+  **The extraction's payoff showed up as a test file that needed no edit**: `ProjectBoardView.test.tsx`
+  asserts `ProjectBoard.Filters.Applied.<key>` chip ids and a `/boards/b1/cards?labelId=…` path, and
+  both survived the board's filter `useMemo` being deleted — which is the only evidence available
+  that `useWorkFilter` reads the URL the way the two `useMemo`s did. **The chips had to move into the
+  hook too**, not just the read: the board and the backlog take the same six parameters, so two chip
+  lists would have regrown the exact drift the hook removes, and the first thing to drift between
+  them is *which* filters get a chip at all. Applying that rule to the table's own six then found
+  `epicKey` and `parentKey` with neither chip nor picker — a reader who narrowed to one epic on the
+  Board and switched to Table was looking at a narrowed table with nothing on screen saying so.
+  **Three files the task's list did not predict**, all forced rather than chosen: `useBulkUpdateIssues`
+  because there is no bulk endpoint over issues and `ui-rules` §5 wants a per-item report; its barrel
+  line; and `TypeIcon.countsTowardCompletion` widened to optional because `BacklogRow` does not carry
+  it and `!undefined` would have drawn every backlog row as a Spike. **A `PermissionGate` cannot wrap
+  an `<ol>`** — a span containing a list is invalid HTML and the denied branch's tooltip would open
+  over every row — so the rank verdict comes from `useCan` and travels down as two props; the board
+  has the same shape around `lanes.map(...)` and was left alone rather than fixed in passing.
+  **And two test shapes that would have passed against no implementation**: `onSettled` invalidates on
+  both paths, so the optimistic reorder had to be asserted with the `PUT` held pending and the
+  rollback with the **refetch** held pending as well, which is what leaves the snapshot restore as the
+  only thing that could have moved the row back.
 
 - **2026-08-31** — 012 T7, `fe` (`98d547ad`; plan `fc173ba8`). The project board: swimlanes by epic,
   the WIP breach in the column header, and a `⋮ Move to…` on every card. Five things worth carrying.
