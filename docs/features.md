@@ -253,19 +253,19 @@ library) · `suite list` · `suite show` · `plan list` · `run list` · `doc li
 
 ## AI Agent Access (MCP Server)
 
-An MCP server exposing **25 tools**, over stdio or HTTP, so an AI assistant can work with TCMS
+An MCP server exposing **26 tools**, over stdio or HTTP, so an AI assistant can work with TCMS
 directly.
 
 *Orientation (3)* — `tcms_whoami` · `tcms_orient` (project summary with vocabularies and
 capabilities) · `tcms_shape` (what a payload of a given kind must look like, reaching no instance)
 
-*Reading (11)* — `tcms_search_cases` · `tcms_open_case` · `tcms_list_suites` · `tcms_list_library` ·
+*Reading (12)* — `tcms_search_cases` · `tcms_open_case` · `tcms_list_suites` · `tcms_list_library` ·
 `tcms_list_artifacts` · `tcms_doc_tree` · `tcms_open_doc_page` · `tcms_list_plans` · `tcms_open_run` ·
-`tcms_list_proposals` · `tcms_triage`
+`tcms_read_issue` · `tcms_list_proposals` · `tcms_triage`
 
 *Writing (11)* — `tcms_write_case` · `tcms_write_suite` · `tcms_write_doc_page` · `tcms_write_plan` ·
 `tcms_write_run` · `tcms_record_result` · `tcms_review_comment` · `tcms_review_verdict` ·
-`tcms_write_work_item` · `tcms_write_artifact` · `tcms_report`
+`tcms_write_issue` · `tcms_write_artifact` · `tcms_report`
 
 What makes it safe to point at real data:
 

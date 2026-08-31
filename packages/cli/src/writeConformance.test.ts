@@ -44,7 +44,10 @@ import {
   docPageSummary,
   execution,
   executionSummary,
+  issue,
+  issueComment,
   plan,
+  projectWorkflow,
   proposal,
   review,
   run as runFixture,
@@ -84,7 +87,7 @@ describe('write conformance — surface spec §8.3', () => {
   it('finds every write command in the registry', () => {
     // A vacuity guard: a registry this could not see would pass every assertion below by having
     // nothing to assert on, which reads exactly like a green run.
-    expect(writes.length).toBeGreaterThanOrEqual(14);
+    expect(writes.length).toBeGreaterThanOrEqual(17);
   });
 
   it.each(writes.map((command) => [command.name, command] as const))(
@@ -167,6 +170,7 @@ const PLAN = plan({ lockVersion: 7 });
 const RUN = runFixture({ id: 'tr-5', key: 'TR-5', status: 'IN_PROGRESS' });
 const PASSED = caseStatus({ id: 'st-1', name: 'Passed', kind: 'PASSED' });
 const REVIEW = review({ subjectId: 'c-9' });
+const ISSUE = issue();
 
 /** The four `TestCaseInput` requires, plus the step a STRUCTURED case needs to be acceptable. */
 const PROPOSABLE = {
@@ -212,6 +216,8 @@ function scaffolding(): Record<string, Answer> {
     'GET /executions/e-1': { status: 200, body: execution({ id: 'e-1', caseId: 'c-9', status: PASSED }) },
     'GET /statuses': { status: 200, body: [PASSED] },
     'GET /reviews': { status: 200, body: [REVIEW] },
+    // The create and move commands resolve a NAME against this, which is the point of taking one.
+    'GET /workflow': { status: 200, body: projectWorkflow() },
   };
 }
 
@@ -317,5 +323,20 @@ const INVOCATIONS: Record<string, Invocation> = {
     argv: () => ['review', 'comment', 'TC-42', '--body', 'Looks right.'],
     path: '/comments',
     routes: { 'POST /comments': { status: 201, body: REVIEW } },
+  },
+  'issue create': {
+    argv: () => ['issue', 'create', '--type', 'Story', '--title', 'Sign-out clears the session'],
+    path: '/issues',
+    routes: { 'POST /issues': { status: 201, body: ISSUE } },
+  },
+  'issue move': {
+    argv: () => ['issue', 'move', 'ACME-124', '--status', 'In Progress'],
+    path: '/issues/ACME-124/transitions',
+    routes: { 'POST /issues/ACME-124/transitions': { status: 200, body: ISSUE } },
+  },
+  'issue comment': {
+    argv: () => ['issue', 'comment', 'ACME-124', '--body', 'Reproduced on staging.'],
+    path: '/issues/ACME-124/comments',
+    routes: { 'POST /issues/ACME-124/comments': { status: 201, body: issueComment() } },
   },
 };

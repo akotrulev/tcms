@@ -58,8 +58,10 @@ import {
   review,
   run as runFixture,
   runDetail,
+  issue,
+  issueComment,
+  projectWorkflow,
   suite,
-  workItem,
 } from '../../client/src/test/fixtures.js';
 import { WRITE_TOOLS } from './writes.js';
 import { api, agentRoutes, sessionWith, withApi, type Answer, type Api } from './test/harness.js';
@@ -90,6 +92,13 @@ const WATCHED = ['idempotency-key', 'if-match'] as const;
  * report generate (audit E2).
  */
 const CREATE_WITHOUT_A_KEY: Record<string, string> = {
+  'tcms_write_issue.update':
+    'PATCH /issues/{key} declares no If-Match, and there is nothing to precondition on even if it '
+    + 'did: `Issue` carries no `lockVersion` on the wire at all. So closing this is a contract '
+    + 'change on both the response and the request, not a header here — the same wall the artifact '
+    + 'edit below meets. What it costs is bounded by the endpoint being a TRUE delta: `IssueUpdate` '
+    + 'says an absent key means leave it, so two callers editing one issue lose only the fields '
+    + 'they both named, where the case, suite and plan arms would overwrite the whole set.',
   'tcms_write_artifact.edit':
     'PATCH …/artifacts/{artifactId} declares no If-Match, so two callers correcting one register '
     + 'row race and the later write wins silently. It cannot simply be added: the endpoint would '
@@ -252,6 +261,10 @@ const ARTIFACTS = { 'GET /artifacts': { status: 200, body: [ARTIFACT] } } as con
 
 const REVIEW = review({ id: 'rv-1', state: 'IN_REVIEW' });
 const REVIEWS = { 'GET /reviews': { status: 200, body: [REVIEW] } } as const;
+
+const ISSUE = issue();
+/** The create and move arms resolve a NAME against this, which is the point of taking one. */
+const WORKFLOW = { 'GET /workflow': { status: 200, body: projectWorkflow() } } as const;
 
 /** The four `TestCaseInput` requires, plus the step a STRUCTURED case needs to be acceptable. */
 const PROPOSABLE = {
@@ -469,17 +482,29 @@ const INVOCATIONS: Record<string, Invocation> = {
     path: '/resolution',
     routes: { ...CASES, ...REVIEWS, 'PUT /resolution': { status: 200, body: REVIEW } },
   },
-  'tcms_write_work_item.create': {
-    tool: 'tcms_write_work_item',
-    input: { action: 'create', title: 'Repair the flaky sign-in case' },
-    path: '/work-items',
-    routes: { 'POST /work-items': { status: 201, body: workItem() } },
+  'tcms_write_issue.create': {
+    tool: 'tcms_write_issue',
+    input: { action: 'create', typeName: 'Story', title: 'Repair the flaky sign-in case' },
+    path: '/issues',
+    routes: { ...WORKFLOW, 'POST /issues': { status: 201, body: ISSUE } },
   },
-  'tcms_write_work_item.move': {
-    tool: 'tcms_write_work_item',
-    input: { action: 'move', workItemId: 'wi-1', status: 'IN_PROGRESS' },
-    path: '/work-items/wi-1',
-    routes: { 'PATCH /work-items/wi-1': { status: 200, body: workItem({ status: 'IN_PROGRESS' }) } },
+  'tcms_write_issue.update': {
+    tool: 'tcms_write_issue',
+    input: { action: 'update', issue: 'ACME-124', title: 'Sign-out clears the session, everywhere' },
+    path: '/issues/ACME-124',
+    routes: { 'PATCH /issues/ACME-124': { status: 200, body: ISSUE } },
+  },
+  'tcms_write_issue.move': {
+    tool: 'tcms_write_issue',
+    input: { action: 'move', issue: 'ACME-124', statusName: 'In Progress' },
+    path: '/issues/ACME-124/transitions',
+    routes: { ...WORKFLOW, 'POST /issues/ACME-124/transitions': { status: 200, body: ISSUE } },
+  },
+  'tcms_write_issue.comment': {
+    tool: 'tcms_write_issue',
+    input: { action: 'comment', issue: 'ACME-124', body: 'Reproduced on staging.' },
+    path: '/issues/ACME-124/comments',
+    routes: { 'POST /issues/ACME-124/comments': { status: 201, body: issueComment() } },
   },
   'tcms_report.generate': {
     tool: 'tcms_report',

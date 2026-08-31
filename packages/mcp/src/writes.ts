@@ -98,6 +98,7 @@
  */
 import {
   CASE_SHAPE,
+  ISSUE_SHAPE,
   caseInputFrom,
   createIntent,
   jsonSchemaFor,
@@ -1249,60 +1250,174 @@ const reviewVerdict: ToolDefinition = {
   },
 };
 
-/* ---------------------------------------------------------------- work items ---- */
+/* -------------------------------------------------------------------- issues ---- */
 
-const writeWorkItem: ToolDefinition = {
-  name: 'tcms_write_work_item',
-  title: 'Put a task on the board, or move a card',
+/**
+ * What this credential may do to an issue, in the words the model should read.
+ *
+ * The one `any`-gated write tool besides `tcms_review_verdict`, and the same argument: **Viewer
+ * holds `issue:comment` and neither of the other two** (roles spec §A3), so an `all` gate would
+ * hide a reader's only way of contributing. A listed tool whose arms are not all reachable has to
+ * say which are, or the model spends its refusals finding out.
+ */
+const ISSUE_ARMS: readonly { permission: string; can: string }[] = [
+  { permission: 'issue:create', can: 'create' },
+  { permission: 'issue:edit', can: 'update and move' },
+  { permission: 'issue:comment', can: 'comment' },
+];
+
+/**
+ * A `typeName` or `statusName` resolved against the project's own workflow.
+ *
+ * **Both are UUIDs on the wire and neither is guessable**, which is `RESULT_SHAPE.status`'s problem
+ * one module over: an agent handed a bare UUID field invents one, and the server's answer is a 400
+ * about an id the caller never chose. So the surface takes the name and refuses an unknown one
+ * here, naming what the project actually has.
+ *
+ * Only the **vocabulary** is checked. Whether a move is legal from where the issue stands is the
+ * workflow's, and the server's 409 names the moves that are allowed — a ladder here would be a
+ * second copy of the one rule `tracker` exists to enforce.
+ */
+function namedIn<T extends { id: string; name: string }>(
+  rows: readonly T[],
+  wanted: string,
+  what: string,
+): T {
+  const found = rows.find(
+    (row) => row.name.toLowerCase() === wanted.toLowerCase() || row.id === wanted,
+  );
+  if (!found) {
+    throw new InputError(
+      `No ${what} '${wanted}' in this project's workflow. It offers: `
+        + `${rows.map((row) => row.name).join(', ')}.`,
+    );
+  }
+  return found;
+}
+
+const writeIssue: ToolDefinition = {
+  name: 'tcms_write_issue',
+  title: 'Raise an issue, move it, edit it, or comment on it',
   description:
-    'Real tasks only. The board also shows DERIVED cards — outstanding executions, review '
-    + 'requests, case-health repairs, quarantined cases — which are computed on every read from '
-    + 'their source and cannot be created or moved here; fix the source instead. Use this to '
-    + 'record follow-up work a person should pick up.',
-  gate: { mode: 'all', permissions: ['workitem:manage', 'defect:create'] },
+    'Epics, stories, bugs, spikes and tasks. `typeName` and `statusName` are NAMES from this '
+    + 'project\'s workflow, never UUIDs — call tcms_read_issue or tcms_write_issue with a name it '
+    + 'does not have and the refusal lists the ones it does. A `move` is refused unless the '
+    + 'workflow permits that exact pair, and the refusal names the moves that are allowed; read '
+    + 'them off an issue\'s allowedTransitions first. An Epic cannot be moved at all — its status '
+    + 'is derived from its stories. The board also shows DERIVED cards — outstanding executions, '
+    + 'review requests, case-health repairs, quarantined cases — which are computed on every read '
+    + 'from their source and cannot be created or moved here; fix the source instead.',
+  gate: { mode: 'any', permissions: ['issue:create', 'issue:edit', 'issue:comment'] },
   arms: [
-    { action: 'create', kind: 'create', permission: 'workitem:manage' },
-    { action: 'move', kind: 'state', permission: 'workitem:manage' },
+    { action: 'create', kind: 'create', permission: 'issue:create' },
+    // `edit`, and it sends no `If-Match`: the endpoint declares none and `Issue` carries no
+    // `lockVersion` on the wire, so there is nothing to precondition on. Recorded in
+    // `writeConformance.test.ts`'s CREATE_WITHOUT_A_KEY with what it costs.
+    { action: 'update', kind: 'edit', permission: 'issue:edit' },
+    { action: 'move', kind: 'state', permission: 'issue:edit' },
+    // A `state`, not a `create`: `POST …/comments` declares no `Idempotency-Key`, and a create
+    // kind would send a header the endpoint never reads. `review comment` is declared the same way.
+    { action: 'comment', kind: 'state', permission: 'issue:comment' },
   ],
+  narrow: (held) => {
+    const reachable = ISSUE_ARMS.filter((arm) => held.has(arm.permission)).map((arm) => arm.can);
+    return `This credential may ${reachable.join(', ')}. The other actions will be refused.`;
+  },
   inputSchema: {
     type: 'object',
     additionalProperties: false,
     required: ['action'],
     properties: {
-      action: ACTION(['create', 'move'], 'What to do.'),
-      title: { type: 'string' },
-      description: { type: 'string' },
-      priority: { type: 'string' },
-      dueDate: { type: 'string', description: 'YYYY-MM-DD.' },
-      workItemId: { type: 'string', description: 'For `move`: the card id.' },
-      status: { type: 'string', description: 'For `move`: the column to move it to.' },
+      action: ACTION(['create', 'update', 'move', 'comment'], 'What to do.'),
+      issue: idProperty('issue to update, move or comment on — required for those, refused for create', 'ACME-124'),
+      /*
+        Rendered from the catalogue rather than written out, for `tcms_write_case`'s reason: two
+        hand-maintained field lists on two adapters is how `automationKey` came to be on one of
+        them and not the other, with nothing comparing them. `writes.test.ts` asserts this
+        direction, and `format.test.ts` the CLI's.
+      */
+      ...(jsonSchemaFor(ISSUE_SHAPE, 'create', 'all')['properties'] as Record<string, unknown>),
+      ...(jsonSchemaFor(ISSUE_SHAPE, 'move', 'all')['properties'] as Record<string, unknown>),
+      ...(jsonSchemaFor(ISSUE_SHAPE, 'comment', 'all')['properties'] as Record<string, unknown>),
     },
   },
   run: async (session, input) => {
+    const projectId = session.projectId();
     const action = requireStr(input, 'action');
+    const tcms = session.request;
 
-    if (action === 'move') {
-      return session.client.PATCH('/work-items/{workItemId}', {
-        params: { path: { workItemId: requireStr(input, 'workItemId') } },
-        body: { status: requireStr(input, 'status') as components['schemas']['WorkItemStatus'] },
-        tcms: session.request,
+    if (action === 'create') {
+      const workflow = await session.client.GET('/projects/{projectId}/workflow', {
+        params: { path: { projectId } }, tcms,
+      });
+      const type = namedIn(workflow.types, requireStr(input, 'typeName'), 'issue type');
+
+      return session.client.POST('/issues', {
+        body: present({
+          // The one body on this surface that carries a `projectId`, and §4.1 is untouched by it:
+          // the rule is that the parameter does not exist in any *tool schema*. It comes from the
+          // session here exactly as it does for every path parameter.
+          projectId,
+          typeId: type.id,
+          title: requireStr(input, 'title'),
+          description: nullableStr(input, 'description'),
+          parentKey: nullableStr(input, 'parentKey'),
+          priority: str(input, 'priority'),
+          estimateHours: nullableNum(input, 'estimateHours'),
+          startDate: nullableStr(input, 'startDate'),
+          targetDate: nullableStr(input, 'targetDate'),
+          dueDate: nullableStr(input, 'dueDate'),
+          acceptanceCriteria: strings(input, 'acceptanceCriteria'),
+        }) as components['schemas']['IssueInput'],
+        tcms: { ...tcms, ...createIntent({ key: session.callId }) },
       });
     }
 
-    if (action !== 'create') throw new InputError(`Unknown action '${action}'.`);
+    const key = requireStr(input, 'issue');
 
-    return session.client.POST('/work-items', {
-      body: present({
-        // The one body on this surface that carries a `projectId`, and §4.1 is untouched by it:
-        // the rule is that the parameter does not exist in any *tool schema*. It comes from the
-        // session here exactly as it does for every path parameter.
-        projectId: session.projectId(),
-        title: requireStr(input, 'title'),
-        description: str(input, 'description'),
-        priority: str(input, 'priority'),
-        dueDate: str(input, 'dueDate'),
-      }) as components['schemas']['WorkItemInput'],
-      tcms: { ...session.request, ...createIntent({ key: session.callId }) },
+    if (action === 'update') {
+      /*
+        A true delta — `IssueUpdate` says an absent key means *leave it* — so unlike the case,
+        suite and plan arms this one does not read the resource and lay the change on top. What it
+        sends is what the caller named.
+      */
+      return session.client.PATCH('/issues/{key}', {
+        params: { path: { key } },
+        body: present({
+          title: str(input, 'title'),
+          description: nullableStr(input, 'description'),
+          parentKey: nullableStr(input, 'parentKey'),
+          priority: str(input, 'priority'),
+          estimateHours: nullableNum(input, 'estimateHours'),
+          startDate: nullableStr(input, 'startDate'),
+          targetDate: nullableStr(input, 'targetDate'),
+          dueDate: nullableStr(input, 'dueDate'),
+        }) as components['schemas']['IssueUpdate'],
+        tcms,
+      });
+    }
+
+    if (action === 'move') {
+      const workflow = await session.client.GET('/projects/{projectId}/workflow', {
+        params: { path: { projectId } }, tcms,
+      });
+      const status = namedIn(workflow.statuses, requireStr(input, 'statusName'), 'status');
+
+      return session.client.POST('/issues/{key}/transitions', {
+        params: { path: { key } },
+        body: { statusId: status.id },
+        // No precondition: a transition names an absolute target state, and the legal-move set is
+        // the server's to check.
+        tcms,
+      });
+    }
+
+    if (action !== 'comment') throw new InputError(`Unknown action '${action}'.`);
+
+    return session.client.POST('/issues/{key}/comments', {
+      params: { path: { key } },
+      body: { body: requireStr(input, 'body') },
+      tcms,
     });
   },
 };
@@ -1634,7 +1749,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   recordResult,
   reviewComment,
   reviewVerdict,
-  writeWorkItem,
+  writeIssue,
   writeArtifact,
   report,
 ];

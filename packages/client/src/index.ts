@@ -52,6 +52,7 @@ export { REQUIRED_CASE_FIELDS, requireProposableCase } from './core/proposal.js'
 
 export {
   CASE_SHAPE,
+  ISSUE_SHAPE,
   READ_ENUMS,
   SHAPES,
   bindsRequired,

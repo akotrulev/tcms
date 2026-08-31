@@ -132,6 +132,7 @@ describe('the shape catalogue against the commands that declare it', () => {
     'case.propose': 'case propose',
     'case.edit': 'case edit',
     'docPage.create': 'doc create',
+    'issue.create': 'issue create',
     'docPage.edit': 'doc edit',
     'plan.create': 'plan create',
     'plan.edit': 'plan edit',

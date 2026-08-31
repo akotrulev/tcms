@@ -5,7 +5,19 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { caseDetail, casePage, caseSummary, condition, currentUser, permissions, suite } from '../../client/src/test/fixtures.js';
+import {
+  caseDetail,
+  casePage,
+  caseSummary,
+  condition,
+  currentUser,
+  issue,
+  issueComment,
+  issueStatus,
+  issueSummary,
+  permissions,
+  suite,
+} from '../../client/src/test/fixtures.js';
 import { EXIT, main } from './main.js';
 import { PROJECT, api, env, mainWith, recorder } from './test/harness.js';
 
@@ -304,6 +316,45 @@ describe('reads', () => {
     expect(asked).toContain('tag=smoke');
     expect(asked).toContain('tag=slow');
     expect(asked).toContain('size=5');
+  });
+
+  it('sends the issue filters, and prints the moves an issue may make as NAMES', async () => {
+    const out = recorder();
+    const stub = api({
+      '/projects': { status: 200, body: [PROJECT] },
+      'GET /issues': { status: 200, body: [issueSummary({ key: 'ACME-7' })] },
+    });
+
+    expect(await mainWith(
+      ['issue', 'list', '--level', 'STORY', '--unparented'], out, stub.fetch,
+    )).toBe(EXIT.ok);
+
+    const asked = stub.urls.find((url) => url.includes('/issues')) ?? '';
+    expect(asked).toContain('level=STORY');
+    expect(asked).toContain('unparented=true');
+    expect(out.stdout).toContain('ACME-7');
+  });
+
+  it('shows one issue with the statuses it may move to, spelled as `issue move` takes them', async () => {
+    const out = recorder();
+    const stub = api({
+      '/projects': { status: 200, body: [PROJECT] },
+      'GET /issues/ACME-124': {
+        status: 200,
+        body: issue({
+          allowedTransitions: [issueStatus({ id: 'is-2', name: 'In Progress', kind: 'IN_PROGRESS', position: 1 })],
+        }),
+      },
+      'GET /issues/ACME-124/comments': { status: 200, body: [issueComment({ body: 'Reproduced.' })] },
+      'GET /issues/ACME-124/doc-links': { status: 200, body: [] },
+    });
+
+    expect(await mainWith(['issue', 'show', 'ACME-124'], out, stub.fetch)).toBe(EXIT.ok);
+    // The name, never the id: it is the value `--status` takes, and printing a UUID beside it
+    // would offer a spelling this surface does not accept.
+    expect(out.stdout).toContain('In Progress');
+    expect(out.stdout).not.toContain('is-2');
+    expect(out.stdout).toContain('Reproduced.');
   });
 
   it('refuses a key of the wrong kind without making a request', async () => {

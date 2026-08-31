@@ -18,8 +18,14 @@ import {
   caseSummary,
   dashboard,
   dimension,
+  boardCard,
+  issue,
+  issueComment,
+  issueDocLink,
+  issueStatus,
+  issueSummary,
+  issueType,
   suite,
-  workItem,
 } from '../../client/src/test/fixtures.js';
 import { READ_TOOLS } from './reads.js';
 import type { ToolDefinition } from './tool.js';
@@ -227,15 +233,93 @@ describe('the four lists the contract does not paginate', () => {
   });
 });
 
+describe('tcms_read_issue', () => {
+  const REVIEWING = issueStatus({ id: 'is-3', name: 'In Review', kind: 'IN_PROGRESS', position: 2 });
+  const DONE = issueStatus({ id: 'is-4', name: 'Done', kind: 'DONE', position: 3 });
+
+  it('sends every filter it was given, so a narrowed ask is not answered with the whole list', async () => {
+    const stub = api(agentRoutes({ 'GET /issues': { status: 200, body: [issueSummary()] } }));
+
+    await run(stub, 'tcms_read_issue', {
+      level: 'STORY', epic: 'ACME-3', parent: 'ACME-12', unparented: true, sort: 'dueDate',
+    });
+
+    const query = queryOf(stub, '/issues');
+    expect(query.get('projectId')).toBe(PROJECT.id);
+    expect(query.get('level')).toBe('STORY');
+    expect(query.get('epicKey')).toBe('ACME-3');
+    expect(query.get('parentKey')).toBe('ACME-12');
+    expect(query.get('unparented')).toBe('true');
+    expect(query.get('sort')).toBe('dueDate');
+  });
+
+  it('lists through the one envelope, with the type and status as names', async () => {
+    const stub = api(agentRoutes({
+      'GET /issues': {
+        status: 200,
+        body: [issueSummary({ key: 'ACME-7', type: issueType({ name: 'Bug' }), status: REVIEWING })],
+      },
+    }));
+
+    const answer = await run(stub, 'tcms_read_issue', {});
+
+    expect(answer['total']).toBe(1);
+    expect(answer['hasMore']).toBe(false);
+    expect((answer['items'] as Record<string, unknown>[])[0])
+      .toMatchObject({ key: 'ACME-7', type: 'Bug', status: 'In Review', statusKind: 'IN_PROGRESS' });
+  });
+
+  it('spells allowedTransitions as the NAMES the write tool takes', async () => {
+    /*
+      The whole point of the read. `IssueStatusRef` carries a UUID nothing on this surface accepts,
+      and `tcms_write_issue move` takes a name — handing back the objects would make the model
+      translate between two spellings of one thing, which is the step it gets wrong.
+    */
+    const stub = api(agentRoutes({
+      'GET /issues/ACME-124': {
+        status: 200,
+        body: issue({ allowedTransitions: [REVIEWING, DONE], watchers: [] }),
+      },
+    }));
+
+    const answer = await run(stub, 'tcms_read_issue', { issue: 'ACME-124' });
+
+    expect(answer['allowedTransitions']).toEqual(['In Review', 'Done']);
+  });
+
+  it('reads the comments and the spec links only when they were asked for', async () => {
+    const routes = {
+      'GET /issues/ACME-124': { status: 200, body: issue() },
+      'GET /issues/ACME-124/comments': { status: 200, body: [issueComment()] },
+      'GET /issues/ACME-124/doc-links': { status: 200, body: [issueDocLink()] },
+    };
+
+    const quiet = api(agentRoutes(routes));
+    const bare = await run(quiet, 'tcms_read_issue', { issue: 'ACME-124' });
+    expect(bare['comments']).toBeUndefined();
+    expect(quiet.sent.some((request) => request.path.endsWith('/comments'))).toBe(false);
+
+    const asked = api(agentRoutes(routes));
+    const full = await run(asked, 'tcms_read_issue', {
+      issue: 'ACME-124', comments: true, docLinks: true,
+    });
+    expect(full['comments']).toHaveLength(1);
+    expect(full['docLinks']).toHaveLength(1);
+  });
+});
+
 describe('tcms_triage', () => {
   it('answers the dashboard and the quarantined cases, and asks for no more than that', async () => {
     const stub = api(agentRoutes({
       '/dashboard': { status: 200, body: dashboard() },
-      '/work-items': {
+      // ~~`/work-items`~~ → `/board` since 011 M1. The path named a table that no longer exists;
+      // quarantine still comes off the board because §121's cards are generated from
+      // `case_flake`'s authored half and there is no quarantined-cases endpoint to read instead.
+      '/board': {
         status: 200,
         body: [
-          workItem({ id: 'w-1', kind: 'QUARANTINE', title: 'TC-42 is quarantined', description: 'Flaky since 2026-07' }),
-          workItem({ id: 'w-2', kind: 'REVIEW', title: 'Review TS-7', description: '' }),
+          boardCard({ id: 'ACME-9', kind: 'QUARANTINE', title: 'TC-42 is quarantined', description: 'Flaky since 2026-07' }),
+          boardCard({ id: 'ACME-8', kind: 'REVIEW', title: 'Review TS-7', description: '' }),
         ],
       },
     }));
@@ -244,7 +328,7 @@ describe('tcms_triage', () => {
 
     expect(answer['dashboard']).toBeDefined();
     expect(answer['quarantined']).toEqual([
-      { title: 'TC-42 is quarantined', description: 'Flaky since 2026-07', status: 'TODO' },
+      { title: 'TC-42 is quarantined', description: 'Flaky since 2026-07', status: 'To Do' },
     ]);
     expect(answer['ingestions']).toBeUndefined();
     expect(stub.sent.some((request) => request.path.endsWith('/ingestions'))).toBe(false);

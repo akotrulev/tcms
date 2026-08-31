@@ -30,7 +30,10 @@ import {
   docPageSummary,
   execution,
   executionSummary,
+  issue,
+  issueComment,
   plan,
+  projectWorkflow,
   proposal,
   review,
   run,
@@ -241,6 +244,8 @@ function scaffolding(): Record<string, { status: number; body?: unknown }> {
     'GET /executions/e-1': { status: 200, body: EXECUTION },
     'GET /statuses': { status: 200, body: STATUSES },
     'GET /reviews': { status: 200, body: [REVIEW] },
+    // `issue create` and `issue move` resolve a NAME against this — the point of taking one.
+    'GET /workflow': { status: 200, body: projectWorkflow() },
   };
 }
 
@@ -1009,5 +1014,71 @@ describe('review comment', () => {
 
     expect(await mainWith(['review', 'comment', 'DOC-3', '--body', 'x'], out, stub.fetch))
       .toBe(EXIT.usage);
+  });
+});
+
+describe('the issue commands', () => {
+  it('resolves --type to the id the contract takes, and sends what the flags said', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'POST /issues': { status: 201, body: issue() } });
+
+    expect(await mainWith(
+      [
+        'issue', 'create', '--type', 'Bug', '--title', 'Sign-out leaves the session live',
+        '--estimate-hours', '2.5', '--acceptance-criterion', 'The cookie is cleared',
+      ],
+      out,
+      stub.fetch,
+    )).toBe(EXIT.ok);
+
+    expect(JSON.parse(stub.write('/issues').body ?? '{}')).toEqual({
+      projectId: PROJECT.id,
+      typeId: 'it-2',
+      title: 'Sign-out leaves the session live',
+      // A fraction, not an integer: an estimate of two and a half hours is the commonest real
+      // value, and `--duration-ms`'s whole-number check would have refused it.
+      estimateHours: 2.5,
+      acceptanceCriteria: ['The cookie is cleared'],
+    });
+  });
+
+  it('refuses a type this project does not have, naming the ones it does', async () => {
+    const out = recorder();
+    const stub = api(scaffolding());
+
+    expect(await mainWith(['issue', 'create', '--type', 'Initiative', '--title', 'x'], out, stub.fetch))
+      .toBe(EXIT.usage);
+    expect(out.stderr).toContain('It offers: Epic, Story, Bug, Task');
+    expect(stub.sent.some((request) => request.method === 'POST')).toBe(false);
+  });
+
+  it('moves by status NAME, because nobody at a terminal has an issue_status UUID', async () => {
+    const out = recorder();
+    const stub = api({
+      ...scaffolding(),
+      'POST /issues/ACME-124/transitions': { status: 200, body: issue() },
+    });
+
+    expect(await mainWith(
+      ['issue', 'move', 'ACME-124', '--status', 'in progress'], out, stub.fetch,
+    )).toBe(EXIT.ok);
+
+    expect(JSON.parse(stub.write('/transitions').body ?? '{}')).toEqual({ statusId: 'is-2' });
+  });
+
+  it('comments, and says that commenting starts a watch', async () => {
+    const out = recorder();
+    const stub = api({
+      ...scaffolding(),
+      'POST /issues/ACME-124/comments': { status: 201, body: issueComment() },
+    });
+
+    expect(await mainWith(
+      ['issue', 'comment', 'ACME-124', '--body', 'Reproduced on staging.'], out, stub.fetch,
+    )).toBe(EXIT.ok);
+
+    expect(JSON.parse(stub.write('/comments').body ?? '{}')).toEqual({ body: 'Reproduced on staging.' });
+    // A side effect nobody asked for by name, so the command says it happened (story H8).
+    expect(out.stdout).toContain('Watching');
   });
 });

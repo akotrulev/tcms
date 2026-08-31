@@ -577,8 +577,13 @@ const format: Command = {
  *
  * `case propose` is the CLI's one create and it files into a queue this surface could not read, so
  * a person driving an agent from a terminal had no way to see what became of what it filed. The
- * three nouns surface spec §6 promises and does not deliver (`work-item`, `report`, `triage`) are
- * a recorded asymmetry; this one was an omission on both surfaces at once.
+ * ~~three~~ **two** nouns surface spec §6 promises and does not deliver (`report`, `triage`) are a
+ * recorded asymmetry; this one was an omission on both surfaces at once.
+ *
+ * ~~`work-item`~~ was the third and **011 T5 delivered it, renamed**: `work_item` is gone, and
+ * `issue list`, `issue show`, `issue create`, `issue move` and `issue comment` are below. A comment
+ * that goes on naming a gap after it has closed is the failure `citedFiles.test.ts` exists over,
+ * arriving through a noun instead of a filename.
  */
 const proposalList: Command = {
   name: 'proposal list',
@@ -668,6 +673,140 @@ const proposalShow: Command = {
   },
 };
 
+/* ------------------------------------------------------------------- issues ---- */
+
+const issueList: Command = {
+  name: 'issue list',
+  summary: 'The project\'s issues',
+  usage:
+    'tcms issue list [--level EPIC|STORY|TASK] [--epic ACME-3] [--parent ACME-12]\n'
+    + '                [--unparented] [--sort key|title|status|dueDate|estimateHours]\n'
+    + '                [--page N] [--size N]',
+  options: {
+    level: { type: 'string' },
+    epic: { type: 'string' },
+    parent: { type: 'string' },
+    unparented: { type: 'boolean' },
+    sort: { type: 'string' },
+    page: { type: 'string' },
+    size: { type: 'string' },
+  },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const level = first(options['level']);
+
+    const rows = await client.GET('/issues', {
+      params: {
+        query: {
+          projectId: await projectOf(context),
+          ...(level === undefined ? {} : { level: level as 'EPIC' | 'STORY' | 'TASK' }),
+          ...(first(options['epic']) === undefined ? {} : { epicKey: first(options['epic'])! }),
+          ...(first(options['parent']) === undefined ? {} : { parentKey: first(options['parent'])! }),
+          ...(flag(options['unparented']) ? { unparented: true } : {}),
+          ...(first(options['sort']) === undefined
+            ? {}
+            : { sort: first(options['sort']) as 'key' | 'title' | 'status' | 'dueDate' | 'estimateHours' }),
+        },
+      },
+      tcms: request,
+    });
+
+    if (json) return out.json(rows);
+
+    // A client-side window: `/issues` is not paginated on the wire, the same as the four lists
+    // `reads.ts` in the MCP package records. It bounds a terminal's scrollback, not the server.
+    const size = clampPageSize(number(first(options['size'])));
+    const page = Math.max(0, number(first(options['page'])) ?? 0);
+    const shown = rows.slice(page * size, page * size + size);
+
+    table(out, shown, [
+      { header: 'KEY', value: (row) => show(row.key) },
+      { header: 'TYPE', value: (row) => show(row.type.name) },
+      { header: 'TITLE', value: (row) => show(row.title) },
+      { header: 'STATUS', value: (row) => show(row.status.name) },
+      { header: 'EPIC', value: (row) => show(row.epicKey) },
+      { header: 'ASSIGNEE', value: (row) => show(row.assignee?.displayName) },
+      { header: 'DUE', value: (row) => show(row.dueDate) },
+    ]);
+
+    out.line();
+    out.line(`${shown.length} of ${rows.length} — page ${page + 1}`);
+  },
+};
+
+const issueShow: Command = {
+  name: 'issue show',
+  summary: 'One issue, with its children, comments and the moves it may make',
+  usage: 'tcms issue show ACME-124',
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    // By key. `project.key` is unique per company and the counter is per project, so the pair is
+    // unique in the only scope RLS lets this caller see — which is why the contract addresses an
+    // issue this way rather than by UUID.
+    const key = requireArg(context, 'issue');
+    const path = { key };
+
+    const issue = await client.GET('/issues/{key}', { params: { path }, tcms: request });
+    const comments = await client.GET('/issues/{key}/comments', { params: { path }, tcms: request });
+    const docLinks = await client.GET('/issues/{key}/doc-links', { params: { path }, tcms: request });
+
+    if (json) return out.json({ ...issue, comments, docLinks });
+
+    fields(out, [
+      ['Issue', `${show(issue.key)} — ${show(issue.title)}`],
+      ['Type', `${show(issue.type.name)} (${show(issue.type.level)})`],
+      ['Status', `${show(issue.status.name)} — ${show(issue.status.kind)}`],
+      ['Parent', show(issue.parentKey)],
+      ['Epic', show(issue.epicKey)],
+      ['Assignee', show(issue.assignee?.displayName)],
+      ['Priority', show(issue.priority)],
+      ['Estimate', show(issue.estimateHours)],
+      ['Due', show(issue.dueDate)],
+      // The NAMES, which is what `issue move --status` takes. An id here would be a second
+      // spelling of one thing and the one this surface does not accept.
+      ['Can move to', issue.allowedTransitions.map((status) => status.name).join(', ') || '(none)'],
+      ['Watchers', issue.watchers.map((watcher) => watcher.displayName).join(', ') || '(none)'],
+    ]);
+
+    if (issue.completion) {
+      out.line();
+      // Epics only, and the basis is printed beside the number: a percentage that changed meaning
+      // silently is the two-contradictory-figures failure one screen over.
+      out.line(
+        `Completion  ${show(issue.completion.percent)}% by ${show(issue.completion.basis)} `
+          + `(${show(issue.completion.done)} of ${show(issue.completion.total)})`,
+      );
+    }
+
+    if (issue.children.length > 0) {
+      out.line();
+      table(out, issue.children, [
+        { header: 'KEY', value: (row) => show(row.key) },
+        { header: 'TYPE', value: (row) => show(row.type.name) },
+        { header: 'TITLE', value: (row) => show(row.title) },
+        { header: 'STATUS', value: (row) => show(row.status.name) },
+      ]);
+    }
+
+    if (docLinks.length > 0) {
+      out.line();
+      table(out, docLinks, [
+        { header: 'SPEC', value: (row) => show(row.pageKey ?? row.externalUrl) },
+        { header: 'RELATION', value: (row) => show(row.relationship) },
+        // The whole reason the projection carries the excerpt: `true` means the page moved on
+        // after this issue last did, so what was linked is not what the page says now.
+        { header: 'STALE', value: (row) => (row.stale ? 'yes' : 'no') },
+      ]);
+    }
+
+    for (const comment of comments) {
+      out.line();
+      out.line(`${show(comment.author.displayName)} — ${showDate(comment.createdAt)}`);
+      out.line(comment.body);
+    }
+  },
+};
+
 export const READS: readonly Command[] = [
   whoami,
   format,
@@ -683,4 +822,6 @@ export const READS: readonly Command[] = [
   docShow,
   proposalList,
   proposalShow,
+  issueList,
+  issueShow,
 ];

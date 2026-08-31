@@ -1,5 +1,5 @@
 /**
- * The read tools — ten of the twenty-one.
+ * The read tools — ~~ten of the twenty-one~~ **twelve of the twenty-six**.
  *
  * Nouns match the CLI's exactly (surface spec §6), so a person who has read one surface can
  * predict the other even though the granularities are deliberately different: one command per
@@ -569,6 +569,135 @@ const openRun: ToolDefinition = {
   },
 };
 
+/* ------------------------------------------------------------------- issues ---- */
+
+/**
+ * A status, type or transition spelled the way both surfaces take it — as a **name**.
+ *
+ * The read half of `tcms_write_issue`'s decision. `allowedTransitions` arrives as
+ * `IssueStatusRef` objects carrying a UUID nothing on this surface accepts, and the tool that
+ * consumes them takes a name — so handing back the objects would make the model translate between
+ * two spellings of one thing, which is the step it gets wrong.
+ */
+function nameOf(row: { name: string }): string {
+  return row.name;
+}
+
+const readIssue: ToolDefinition = {
+  name: 'tcms_read_issue',
+  title: 'List the project\'s issues, or open one',
+  description:
+    'Epics, stories, bugs, spikes and tasks. Omit `issue` to list them, with `level`, `epic`, '
+    + '`parent` and `unparented` to narrow; name one to open it with its children, watchers and '
+    + '**allowedTransitions** — the statuses it may legally move to from where it stands, spelled '
+    + 'as the NAMES tcms_write_issue takes. Read those before moving anything: a move the workflow '
+    + 'forbids is refused, and an Epic can never be moved because its status is derived from its '
+    + 'stories. Ask for `comments` to see what people have said and `docLinks` for the '
+    + 'specification blocks it is bound to.',
+  gate: { mode: 'all', permissions: ['issue:read'] },
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      issue: idProperty('issue to open — omit to list them', 'ACME-124'),
+      level: {
+        type: 'string',
+        enum: ['EPIC', 'STORY', 'TASK'],
+        description: 'Where a type sits in the hierarchy. Story, Bug and Spike are all STORY.',
+      },
+      epic: idProperty('epic whose stories to list', 'ACME-3'),
+      parent: idProperty('issue whose children to list', 'ACME-12'),
+      unparented: {
+        type: 'boolean',
+        description:
+          'Story-level issues with no epic — the unscheduled backlog. A flag rather than an empty '
+          + '`epic`, because an absent filter already means "do not filter".',
+      },
+      sort: {
+        type: 'string',
+        enum: ['key', 'title', 'status', 'dueDate', 'estimateHours'],
+        description: 'Newest key first when omitted.',
+      },
+      comments: { type: 'boolean', description: 'For one issue: include its comment thread.' },
+      docLinks: { type: 'boolean', description: 'For one issue: include the spec blocks it links to.' },
+      ...PAGING_PROPERTIES,
+    },
+  },
+  run: async (session, input) => {
+    const projectId = session.projectId();
+    const tcms = session.request;
+    const key = str(input, 'issue');
+
+    if (!key) {
+      const rows = await session.client.GET('/issues', {
+        params: {
+          query: {
+            projectId,
+            ...optional('level', str(input, 'level')),
+            ...optional('epicKey', str(input, 'epic')),
+            ...optional('parentKey', str(input, 'parent')),
+            ...optional('unparented', bool(input, 'unparented')),
+            ...optional('sort', str(input, 'sort')),
+          },
+        },
+        tcms,
+      });
+
+      // The list is not paginated on the wire, so this is the client-side window — see `window`.
+      return window(
+        rows.map((row) => ({
+          key: row.key,
+          title: row.title,
+          type: row.type.name,
+          status: row.status.name,
+          statusKind: row.status.kind,
+          parentKey: row.parentKey,
+          epicKey: row.epicKey,
+          assignee: row.assignee?.displayName,
+          dueDate: row.dueDate,
+          overdue: row.overdue,
+          estimateHours: row.estimateHours,
+        })),
+        input,
+      );
+    }
+
+    const detail = await session.client.GET('/issues/{key}', { params: { path: { key } }, tcms });
+
+    return {
+      ...detail,
+      // The ids are dropped and the names kept, §6's rule: an id here is a second handle for a row
+      // that no tool on this surface takes one for.
+      type: detail.type.name,
+      level: detail.type.level,
+      status: detail.status.name,
+      statusKind: detail.status.kind,
+      allowedTransitions: detail.allowedTransitions.map(nameOf),
+      watchers: detail.watchers.map((watcher) => watcher.displayName),
+      children: detail.children.map((child) => ({
+        key: child.key,
+        title: child.title,
+        type: child.type.name,
+        status: child.status.name,
+      })),
+      ...(bool(input, 'comments')
+        ? {
+          comments: await session.client.GET('/issues/{key}/comments', {
+            params: { path: { key } }, tcms,
+          }),
+        }
+        : {}),
+      ...(bool(input, 'docLinks')
+        ? {
+          docLinks: await session.client.GET('/issues/{key}/doc-links', {
+            params: { path: { key } }, tcms,
+          }),
+        }
+        : {}),
+    };
+  },
+};
+
 /* ------------------------------------------------------------------- triage ---- */
 
 const triage: ToolDefinition = {
@@ -604,7 +733,7 @@ const triage: ToolDefinition = {
       is no "quarantined cases" endpoint to read instead. The board is gated by project
       visibility, which this caller already has past `case:read`.
     */
-    const board = await session.client.GET('/work-items', {
+    const board = await session.client.GET('/board', {
       params: { query: { projectId } }, tcms,
     });
 
@@ -612,7 +741,9 @@ const triage: ToolDefinition = {
       dashboard,
       quarantined: board
         .filter((item) => item.kind === 'QUARANTINE')
-        .map((item) => ({ title: item.title, description: item.description, status: item.status })),
+        // `status` is an object since 011 M1 — a card's status is a per-project row, not a fixed
+        // enum — and the name is the half a reader of this list wants.
+        .map((item) => ({ title: item.title, description: item.description, status: item.status.name })),
       ...(bool(input, 'ingestions')
         ? {
           ingestions: window(
@@ -727,6 +858,7 @@ export const READ_TOOLS: readonly ToolDefinition[] = [
   openDocPage,
   listPlans,
   openRun,
+  readIssue,
   listProposals,
   triage,
 ];

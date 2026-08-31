@@ -29,7 +29,9 @@ import {
   docPageSummary,
   execution,
   executionSummary,
+  issue,
   plan,
+  projectWorkflow,
   proposal,
   review,
   run as runFixture,
@@ -603,6 +605,82 @@ describe('tcms_review_verdict', () => {
   });
 });
 
+describe('tcms_write_issue', () => {
+  const WORKFLOW = { 'GET /workflow': { status: 200, body: projectWorkflow() } } as const;
+
+  it('resolves the type NAME to the id the contract takes', async () => {
+    /*
+      The whole design of this tool. `IssueInput.typeId` is a UUID of a per-project row, and an
+      agent handed a bare UUID field invents one — so the surface takes `Story` and looks it up.
+    */
+    const stub = api(agentRoutes({ ...WORKFLOW, 'POST /issues': { status: 201, body: issue() } }));
+
+    await run(stub, 'tcms_write_issue', {
+      action: 'create', typeName: 'bug', title: 'Sign-out leaves the session live',
+    });
+
+    expect(JSON.parse(stub.write('/issues').body ?? '{}'))
+      // Matched case-insensitively: a model that writes `bug` for `Bug` has named the right row.
+      .toMatchObject({ typeId: 'it-2', title: 'Sign-out leaves the session live' });
+  });
+
+  it('refuses a type this project does not have, and lists the ones it does', async () => {
+    const stub = api(agentRoutes(WORKFLOW));
+
+    await expect(run(stub, 'tcms_write_issue', { action: 'create', typeName: 'Initiative', title: 'x' }))
+      .rejects.toThrow(/It offers: Epic, Story, Bug, Task/);
+  });
+
+  it('refuses a status this project does not have, and never sends the transition', async () => {
+    const stub = api(agentRoutes(WORKFLOW));
+
+    await expect(run(stub, 'tcms_write_issue', { action: 'move', issue: 'ACME-124', statusName: 'Shipped' }))
+      .rejects.toThrow(/It offers: To Do, In Progress, In Review, Done/);
+    expect(stub.sent.some((request) => request.path.endsWith('/transitions'))).toBe(false);
+  });
+
+  it('leaves a legal-move ladder to the server, and sends a known status straight through', async () => {
+    // The division of labour: this side checks the VOCABULARY, the server checks the LEGALITY.
+    // `In Review` is not reachable from `To Do` in the fixture's transition list and is still sent
+    // — the 409 that comes back names the moves that are allowed, which a ladder here could not.
+    const stub = api(agentRoutes({
+      ...WORKFLOW,
+      'POST /issues/ACME-124/transitions': { status: 200, body: issue() },
+    }));
+
+    await run(stub, 'tcms_write_issue', { action: 'move', issue: 'ACME-124', statusName: 'In Review' });
+
+    expect(JSON.parse(stub.write('/transitions').body ?? '{}')).toEqual({ statusId: 'is-3' });
+  });
+
+  it('sends only the fields an update named, because the PATCH is a true delta', async () => {
+    const stub = api(agentRoutes({ 'PATCH /issues/ACME-124': { status: 200, body: issue() } }));
+
+    await run(stub, 'tcms_write_issue', { action: 'update', issue: 'ACME-124', dueDate: null });
+
+    // No read first, unlike the case, suite and plan arms: `IssueUpdate` says an absent key means
+    // leave it, so echoing the whole resource back would be this surface inventing a whole-set
+    // write the endpoint does not ask for. `null` is a real value here and clears the date.
+    expect(JSON.parse(stub.write('/issues/ACME-124').body ?? '{}')).toEqual({ dueDate: null });
+    expect(stub.sent.filter((request) => request.method === 'GET' && request.path.endsWith('/issues/ACME-124')))
+      .toHaveLength(0);
+  });
+
+  it('is listed for a Viewer, and says which actions they may use', () => {
+    /*
+      The `any` gate, and the reason for it: Viewer holds `issue:comment` and neither of the other
+      two keys (roles spec §A3). An `all` gate would hide this tool from them entirely, taking a
+      reader's only way of contributing away — `tcms_review_verdict`'s argument, one noun over.
+    */
+    const writeIssue = tool('tcms_write_issue');
+    expect(writeIssue.gate.mode).toBe('any');
+
+    const viewer = writeIssue.narrow?.(new Set(['issue:comment']));
+    expect(viewer).toContain('comment');
+    expect(viewer).not.toContain('create');
+  });
+});
+
 describe('registry declarations', () => {
   /*
     Derived from the registry, so a tool added later is checked without anybody remembering to
@@ -675,7 +753,7 @@ describe('registry declarations', () => {
 });
 
 describe('the surface as a whole — surface spec §2 and §4.1', () => {
-  it('is 23 tools', () => {
+  it('is 26 tools', () => {
     // The count is an OUTCOME of "a tool never spans two permissions on its write path", not a
     // target. It is asserted so that a merge or a split has to be a decision somebody records.
     // ~~21~~ → 23 with audit C10: `tcms_list_artifacts` and `tcms_write_artifact`, which arrived
@@ -685,7 +763,11 @@ describe('the surface as a whole — surface spec §2 and §4.1', () => {
     // than of the instance, and so has no gate and no project.
     // ~~24~~ → 25 with `tcms_list_proposals`: `tcms_write_case propose` is the flagship write and
     // its queue was on neither surface, so an agent filed into a list it could never read.
-    expect(TOOLS).toHaveLength(25);
+    // ~~25~~ → 26 with `tcms_read_issue` (011 T5). It is a SPLIT, not a merge: the tracker's
+    // reads cost `issue:read` and its writes cost three other keys, so folding them into
+    // `tcms_write_issue` would gate a read on a write permission and hide the project's issues
+    // from every Viewer.
+    expect(TOOLS).toHaveLength(26);
   });
 
   it('names every tool in the tcms_ namespace', () => {
@@ -778,8 +860,8 @@ describe('the shape catalogue against the tools that declare it', () => {
     plan: 'tcms_write_plan',
     result: 'tcms_record_result',
     run: 'tcms_write_run',
+    issue: 'tcms_write_issue',
     suite: 'tcms_write_suite',
-    workItem: 'tcms_write_work_item',
   };
 
   /**

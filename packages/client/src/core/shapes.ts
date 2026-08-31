@@ -62,7 +62,7 @@ export type Requirement = 'always' | { readonly when: string; readonly is: reado
 export interface FieldSpec {
   /** The name this surface takes, which is not always the contract's — see {@link contract}. */
   readonly name: string;
-  readonly type: 'string' | 'integer' | 'boolean' | 'string[]' | 'string[][]' | 'object[]';
+  readonly type: 'string' | 'integer' | 'number' | 'boolean' | 'string[]' | 'string[][]' | 'object[]';
   readonly required?: Requirement;
   /** The permitted values, pinned to {@link enumOf}. */
   readonly enum?: readonly string[];
@@ -813,21 +813,113 @@ const RESULT_SHAPE: EntityShape = {
   ],
 };
 
-/* -------------------------------------------------------------- work item ---- */
+/* ------------------------------------------------------------------ issue ---- */
 
-const WORK_ITEM_SHAPE: EntityShape = {
-  entity: 'workItem',
-  title: 'Work item',
-  contractSchema: 'WorkItemInput',
+/**
+ * ~~`WORK_ITEM_SHAPE`, over `WorkItemInput`.~~ → **superseded by 011 M1**: `work_item` is gone and
+ * every stored board card is a `tracker` issue, so the entity is `issue` and the contract schema is
+ * `IssueInput`. `workitem:manage` is superseded by the `issue:*` family (roles spec §A3).
+ *
+ * ## The type and the status are NAMES, and that is the whole design of this entry
+ *
+ * `IssueInput.typeId` and `IssueTransitionInput.statusId` are UUIDs of per-project rows. Handed a
+ * bare UUID field a model will invent one, so both are taken here as a **name** and resolved against
+ * `GET /projects/{projectId}/workflow` — the same answer {@link RESULT_SHAPE}'s `status` already
+ * gives for the same reason, and the note there is the one this follows.
+ *
+ * The client checks the **vocabulary** and the server checks the **legality**: a status this project
+ * does not have is refused before the request, naming what it does have; a status it has that the
+ * workflow forbids from where this issue stands is the server's 409, whose `detail` names the moves
+ * that are allowed. A legal-move ladder here would be a second copy of the one rule `tracker` exists
+ * to enforce.
+ */
+export const ISSUE_SHAPE: EntityShape = {
+  entity: 'issue',
+  title: 'Issue',
+  keyExample: 'ACME-124',
+  contractSchema: 'IssueInput',
   actions: [
-    { name: 'create', kind: 'create', permission: 'workitem:manage', mcp: true, cli: false, cliSpelling: 'flags', describe: 'Raises a work item.' },
-    { name: 'move', kind: 'state', permission: 'workitem:manage', mcp: true, cli: false, describe: 'Moves it along its board.' },
+    { name: 'create', kind: 'create', permission: 'issue:create', mcp: true, cli: true, cliSpelling: 'flags', describe: 'Raises an epic, story, bug, spike or task.' },
+    // MCP only. A field-by-field update is composed from a read the model has already made; a
+    // person at a terminal reaches for `move` and `comment`, which is what the CLI offers.
+    { name: 'update', kind: 'edit', permission: 'issue:edit', mcp: true, cli: false, cliSpelling: 'flags', describe: 'Changes its fields. NOT its status.' },
+    { name: 'move', kind: 'state', permission: 'issue:edit', mcp: true, cli: true, describe: 'Moves it to another status, if the workflow allows that exact pair.' },
+    { name: 'comment', kind: 'state', permission: 'issue:comment', mcp: true, cli: true, describe: 'Says something about it, and starts watching it.' },
   ],
   fields: [
-    { name: 'title', type: 'string', required: 'always', describe: 'What needs doing.' },
-    { name: 'description', type: 'string', nullable: true, describe: 'The detail.' },
-    { name: 'priority', type: 'string', enum: PRIORITY, enumOf: 'Priority', describe: 'How urgent it is.' },
-    { name: 'dueDate', type: 'string', nullable: true, example: '2026-09-30', describe: 'When it is due, as a date.' },
+    {
+      name: 'typeName',
+      type: 'string',
+      required: 'always',
+      contract: 'typeId',
+      actions: ['create'],
+      cli: { flag: 'type' },
+      example: 'Story',
+      describe: 'A type NAME from the project workflow — Epic, Story, Bug, Spike, Task — not a UUID.',
+      note:
+        'Per-project and configurable, so a type guessed from another project is refused with the '
+        + "list this project has. The type's LEVEL decides `parentKey`: an EPIC-level type refuses "
+        + 'one, a TASK-level type requires one, and a story-level type takes an optional epic.',
+    },
+    {
+      name: 'statusName',
+      type: 'string',
+      required: 'always',
+      contract: 'statusId',
+      contractSchema: 'IssueTransitionInput',
+      actions: ['move'],
+      cli: { flag: 'status' },
+      example: 'In Review',
+      describe: 'A status NAME from the project workflow, not a UUID.',
+      note:
+        'A status this project does not have is refused here, naming the ones it does. A status it '
+        + 'has that the workflow forbids FROM WHERE THIS ISSUE STANDS is the server\'s 409, which '
+        + 'names the moves that are allowed — read them off `allowedTransitions` first. An Epic is '
+        + 'refused whatever the target: its status is derived from its stories.',
+    },
+    { name: 'title', type: 'string', required: 'always', actions: ['create', 'update'], describe: 'What needs doing, in one line.' },
+    { name: 'description', type: 'string', nullable: true, actions: ['create', 'update'], describe: 'The detail.' },
+    {
+      name: 'parentKey',
+      type: 'string',
+      nullable: true,
+      actions: ['create', 'update'],
+      keyExample: 'ACME-12',
+      cli: { flag: 'parent' },
+      describe: 'The issue this one breaks down. Required for a TASK-level type, refused for an EPIC-level one.',
+    },
+    { name: 'priority', type: 'string', enum: PRIORITY, enumOf: 'Priority', actions: ['create', 'update'], describe: 'How urgent it is.' },
+    {
+      name: 'estimateHours',
+      type: 'number',
+      nullable: true,
+      actions: ['create', 'update'],
+      example: '6.5',
+      describe: 'Hours, never points — the same unit a budget and an invoice use.',
+    },
+    { name: 'startDate', type: 'string', nullable: true, actions: ['create', 'update'], example: '2026-09-01', describe: 'Epics only. Ignored on every other level.' },
+    { name: 'targetDate', type: 'string', nullable: true, actions: ['create', 'update'], example: '2026-10-15', describe: 'Epics only. Ignored on every other level.' },
+    { name: 'dueDate', type: 'string', nullable: true, actions: ['create', 'update'], example: '2026-09-30', describe: 'When it is due, as a date.' },
+    {
+      name: 'acceptanceCriteria',
+      type: 'string[]',
+      actions: ['create'],
+      cli: { flag: 'acceptance-criterion', multiple: true },
+      describe: 'What has to be true for this to be done, one line each.',
+      note:
+        'CREATE ONLY. `IssueUpdate` takes `{text, done}` objects against an INLINE item schema with '
+        + 'no component name, and every nested pin in `shapesContract.test.ts` resolves a named one '
+        + '— so ticking a criterion off is the story screen\'s, not this surface\'s. Written down '
+        + 'rather than discovered as a missing field.',
+    },
+    {
+      name: 'body',
+      type: 'string',
+      required: 'always',
+      contractSchema: 'IssueCommentInput',
+      actions: ['comment'],
+      describe: 'The remark. Commenting adds you as a watcher, so you hear about what happens next.',
+    },
   ],
 };
 
@@ -904,8 +996,8 @@ export const SHAPES: Readonly<Record<string, EntityShape>> = {
   plan: PLAN_SHAPE,
   result: RESULT_SHAPE,
   run: RUN_SHAPE,
+  issue: ISSUE_SHAPE,
   suite: SUITE_SHAPE,
-  workItem: WORK_ITEM_SHAPE,
 };
 
 export function shapeOf(entity: string): EntityShape | undefined {
@@ -1036,7 +1128,7 @@ function propertyOf(field: FieldSpec): Record<string, unknown> {
     };
   }
 
-  const base = field.type === 'integer' ? 'integer' : field.type;
+  const base = field.type;
   return {
     type: field.nullable ? [base, 'null'] : base,
     ...(field.enum ? { enum: field.nullable ? [...field.enum, null] : [...field.enum] } : {}),
@@ -1255,7 +1347,7 @@ export function templateFor(shape: EntityShape, action: string): Record<string, 
 function exampleOf(field: FieldSpec): unknown {
   if (field.enum) return field.enum[0];
   if (field.type === 'string[]' || field.type === 'string[][]') return [];
-  if (field.type === 'integer') return 0;
+  if (field.type === 'integer' || field.type === 'number') return 0;
   if (field.type === 'boolean') return false;
   if (field.type === 'object[]') {
     return [Object.fromEntries(

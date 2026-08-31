@@ -416,18 +416,101 @@ export function proposal(overrides: Partial<Schemas['AiProposal']> = {}): Schema
   };
 }
 
-export function workItem(overrides: Partial<Schemas['WorkItem']> = {}): Schemas['WorkItem'] {
+/**
+ * A board card — ~~`WorkItem`~~ since 011 M1, when `work_item` was retired.
+ *
+ * `kind: 'ISSUE'` is the row-backed one and replaces `TASK`; `status` is an object rather than a
+ * fixed enum, because an issue's status is a per-project row and a five-member enum cannot spell
+ * one without a mapping table.
+ */
+export function boardCard(overrides: Partial<Schemas['BoardCard']> = {}): Schemas['BoardCard'] {
   return {
-    id: 'wi-1',
+    id: 'ACME-124',
     derived: false,
-    kind: 'TASK',
+    kind: 'ISSUE',
     title: 'Update the smoke suite',
-    status: 'TODO',
+    status: { name: 'To Do', kind: 'NOT_STARTED' },
     priority: 'HIGH',
     overdue: false,
     projectId: IDS.project,
     projectKey: 'OLB',
     allowedTransitions: [],
+    ...overrides,
+  };
+}
+
+export function issueType(overrides: Partial<Schemas['IssueTypeRef']> = {}): Schemas['IssueTypeRef'] {
+  return { id: 'it-1', name: 'Story', level: 'STORY', countsTowardCompletion: true, ...overrides };
+}
+
+export function issueStatus(
+  overrides: Partial<Schemas['IssueStatusRef']> = {},
+): Schemas['IssueStatusRef'] {
+  return { id: 'is-1', name: 'To Do', kind: 'NOT_STARTED', position: 0, ...overrides };
+}
+
+export function issueSummary(
+  overrides: Partial<Schemas['IssueSummary']> = {},
+): Schemas['IssueSummary'] {
+  return {
+    key: 'ACME-124',
+    title: 'Sign-out clears the session',
+    type: issueType(),
+    status: issueStatus(),
+    projectId: IDS.project,
+    projectKey: 'ACME',
+    ...overrides,
+  };
+}
+
+export function issue(overrides: Partial<Schemas['Issue']> = {}): Schemas['Issue'] {
+  return {
+    key: 'ACME-124',
+    seq: 124,
+    title: 'Sign-out clears the session',
+    type: issueType(),
+    status: issueStatus(),
+    projectId: IDS.project,
+    projectKey: 'ACME',
+    watchers: [],
+    children: [],
+    allowedTransitions: [],
+    createdAt: NOW,
+    ...overrides,
+  };
+}
+
+export function issueComment(
+  overrides: Partial<Schemas['IssueComment']> = {},
+): Schemas['IssueComment'] {
+  return { id: 'ic-1', body: 'Reproduced on staging.', author: userRef(), createdAt: NOW, ...overrides };
+}
+
+export function issueDocLink(
+  overrides: Partial<Schemas['IssueDocLink']> = {},
+): Schemas['IssueDocLink'] {
+  return { id: 'idl-1', targetKind: 'DOC_BLOCK', relationship: 'VERIFIES', stale: false, ...overrides };
+}
+
+/** A project workflow with the six seeded statuses and the five seeded types (011 D-b). */
+export function projectWorkflow(
+  overrides: Partial<Schemas['ProjectWorkflow']> = {},
+): Schemas['ProjectWorkflow'] {
+  return {
+    projectId: IDS.project,
+    statuses: [
+      issueStatus({ id: 'is-1', name: 'To Do', kind: 'NOT_STARTED', position: 0 }),
+      issueStatus({ id: 'is-2', name: 'In Progress', kind: 'IN_PROGRESS', position: 1 }),
+      issueStatus({ id: 'is-3', name: 'In Review', kind: 'IN_PROGRESS', position: 2 }),
+      issueStatus({ id: 'is-4', name: 'Done', kind: 'DONE', position: 3 }),
+    ],
+    types: [
+      issueType({ id: 'it-0', name: 'Epic', level: 'EPIC', countsTowardCompletion: false }),
+      issueType({ id: 'it-1', name: 'Story', level: 'STORY' }),
+      issueType({ id: 'it-2', name: 'Bug', level: 'STORY' }),
+      issueType({ id: 'it-3', name: 'Task', level: 'TASK' }),
+    ],
+    transitions: [{ fromStatusId: 'is-1', toStatusId: 'is-2' }],
     ...overrides,
   };
 }

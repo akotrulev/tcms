@@ -138,12 +138,14 @@ const UNOFFERED: Readonly<Record<string, string>> = {
     'Per-step outcomes. `tcms_record_result` records the case-level verdict only; the step array '
     + 'is an untyped object in the contract, so there is nothing to render.',
 
-  /* ---- work item ---- */
-  'WorkItemInput.projectId':
+  /* ---- issue ---- */
+  'IssueInput.projectId':
     'Surface spec §4.1: `projectId` appears in NO schema on either adapter. It comes from the '
     + 'session scope, and a tool taking one would let a caller name a project they never resolved.',
-  'WorkItemInput.assigneeId':
-    'A user UUID — the same wall `ownerId` and `TestRunInput.assigneeId` hit.',
+  'IssueInput.assigneeId':
+    'A user UUID — the same wall `ownerId` and `TestRunInput.assigneeId` hit. It is the one issue '
+    + 'field a person would most want and the one this surface cannot obtain a value for: /users is '
+    + 'COMPANY-scope (§3.3) and `Agent` does not hold company:read.',
 
   /* ---- doc page ---- */
   'DocBlockInput.id':

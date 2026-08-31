@@ -156,7 +156,7 @@ The count below is the **outcome** of this rule, not a target.
 
 ---
 
-## 3. The MCP surface — 21 tools
+## 3. The MCP surface — ~~21~~ 26 tools
 
 Namespaced `tcms_*`. `projectId` and `companyId` **do not appear in any schema** (§4.1).
 
@@ -181,11 +181,13 @@ Namespaced `tcms_*`. `projectId` and `companyId` **do not appear in any schema**
 | 17 | `tcms_write_run` | `run:create` ~~alone~~ + `run:close` (§212) | `POST …/runs`, `POST …/runs/{runId}/clone`, `PUT …/runs/{runId}/status` | **Buildable** |
 | 18 | `tcms_record_result` | `run:execute` + `result:submit` + `evidence:attach` | `PATCH …/executions/{executionId}`, `POST …/evidence` | **Buildable** |
 | 19 | `tcms_triage` | `case:read` + `report:view` | dashboard, quarantine state, `GET …/ingestions`, `…/automation-mappings` | **Buildable** |
-| 20 | `tcms_write_work_item` | `workitem:manage` + `defect:create` | `POST`/`PATCH /work-items` | **Buildable** |
+| 20 | `tcms_write_issue` ~~`tcms_write_work_item`~~ | **any of** `issue:create` / `issue:edit` / `issue:comment` | `POST /issues`, `PATCH /issues/{key}`, `POST …/transitions`, `POST …/comments` | 011 T5 — see §3.4 |
 | 21 | `tcms_report` | `report:view` + `report:export` | `POST …/reports/generate`, poll, download | **Buildable** |
 | 22 | `tcms_list_artifacts` | `case:read` | `GET …/artifacts` | Audit C10 |
 | 23 | `tcms_write_artifact` | `artifact:edit` + `artifact:delete` | `POST`/`PATCH`/`DELETE …/artifacts` | Audit C10 |
 | 24 | `tcms_shape` | **none** | **nothing — it reads no endpoint** | §253 |
+| 25 | `tcms_list_proposals` | `case:read` | `GET …/ai-proposals`, `…/{proposalId}` | Shipped; this row was missing |
+| 26 | `tcms_read_issue` | `issue:read` | `GET /issues`, `GET /issues/{key}`, `…/comments`, `…/doc-links` | 011 T5 — see §3.4 |
 
 Eighteen are buildable against today's contract; two need §4.2's contract addition first; one has a
 blocked arm (§5).
@@ -351,6 +353,133 @@ dump — instructions truncate at 2KB. The refusal-copy constraint in §4.5 gove
   refused. Splitting it into per-operation tools is available later and is not free — it is one tool
   per bulk operation, and the ceiling on this surface is the whole design.
 
+### 3.4 The issue verbs (011 T5) — and the count 009 got wrong
+
+009 said *"the six `work-item` verbs in `packages/cli` and `packages/mcp` become `issue` verbs"*.
+**That counted nothing in the tree.** What existed was four sites, and the CLI's share of them was a
+sentence saying it had none:
+
+| Site | What it was |
+|---|---|
+| `mcp/src/writes.ts` | `tcms_write_work_item` — **one** tool, **two** arms (`create`, `move`) |
+| `mcp/src/reads.ts` | one `GET /work-items` inside `tcms_triage`, kept for its `QUARANTINE` cards |
+| `client/src/core/shapes.ts` | `WORK_ITEM_SHAPE`, registered under `workItem` |
+| `cli/src/reads.ts` | a **comment** naming `work-item` as a noun §6 promises and does not deliver |
+
+So this is not six verbs becoming six verbs. It is one tool growing from two arms to four, one read
+changing its path, one catalogue entry being renamed, and **the CLI gaining five commands it never
+had** — the asymmetry §6 recorded is closed for `work-item` and still open for `report` and `triage`.
+
+#### Type and status are NAMES here, never UUIDs
+
+`IssueInput.typeId` and `IssueTransitionInput.statusId` are UUIDs of per-project rows, and **an agent
+handed a bare UUID field will invent one**. This is the problem `shapes.ts`'s execution status already
+solved, in the words its own note uses — *a status guessed from another project is refused, and
+`tcms_orient` serves this project's own list*.
+
+Both surfaces therefore take a **name**, resolve it against `GET /projects/{projectId}/workflow`, and
+refuse an unknown one **by listing what the project has**. The division of labour is deliberate and is
+the CLI's `requireStatus` rule restated: **the client checks the vocabulary, the server checks the
+legality.** A status this project does not have is refused here, with the list; a status it has that
+the workflow forbids *from where this issue stands* is a 409 from `POST …/transitions`, whose `detail`
+names the moves that are allowed. A client-side legal-move ladder would be a second copy of a rule
+that lives in one place.
+
+#### `tcms_write_issue` — typed input
+
+Gate: **`any` of `issue:create`, `issue:edit`, `issue:comment`.** `any`, not `all`, for
+`tcms_review_verdict`'s reason one noun over: **Viewer holds `issue:comment` and neither of the other
+two** (roles spec §A3), so an `all` gate would take a reader's only way of contributing away from them
+entirely. The description is narrowed per session with the actions the credential can actually reach.
+
+| Field | Type | Arms | Notes |
+|---|---|---|---|
+| `action` | `create` / `update` / `move` / `comment` | all | required |
+| `issue` | string — a key, `ACME-124` | update · move · comment | required for those, refused for `create` |
+| `typeName` | string | create | a **name** from the project's workflow — `Story`, `Bug` |
+| `statusName` | string | move | a **name** from the project's workflow — `In Review` |
+| `title` | string | create · update | required on `create` |
+| `description` | string or null | create · update | |
+| `parentKey` | string or null | create · update | required for a `TASK`-level type, refused for an `EPIC`-level one |
+| `priority` | `Priority` | create · update | enumerated, pinned to the contract by `shapesContract.test.ts` |
+| `estimateHours` | number or null | create · update | hours, never points (011 D8) |
+| `startDate` · `targetDate` | date or null | create · update | epics only, server-side |
+| `dueDate` | date or null | create · update | |
+| `acceptanceCriteria` | string[] | **create only** | see the shortfall below |
+| `body` | string | comment | required |
+
+Arms, and the header each one's `kind` implies (§4.2/§4.3):
+
+| Arm | Kind | Permission | Writes to |
+|---|---|---|---|
+| `create` | `create` | `issue:create` | `POST /issues` — carries `Idempotency-Key` |
+| `update` | `edit` | `issue:edit` | `PATCH /issues/{key}` — carries **no** `If-Match`; see below |
+| `move` | `state` | `issue:edit` | `POST /issues/{key}/transitions` |
+| `comment` | `state` | `issue:comment` | `POST /issues/{key}/comments` |
+
+**`comment` is a `state` arm, not a `create`.** `POST …/comments` declares no `Idempotency-Key`, and
+`review comment` is declared the same way for the same reason: a `create` kind would send a header the
+endpoint never reads, which is *the absence of the guarantee wearing the guarantee's name*.
+
+**`update` sends no `If-Match`, and that is a recorded shortfall rather than an oversight.**
+`PATCH /issues/{key}` declares no such parameter and `Issue` carries no `lockVersion` on the wire, so
+there is nothing to precondition on — the same wall `tcms_write_artifact.edit` meets, and it is
+recorded the same way, in `writeConformance.test.ts`'s `CREATE_WITHOUT_A_KEY` with what it costs. What
+it costs is bounded by the endpoint being a **true delta**: an absent key is *leave it*, so two
+concurrent editors lose only the fields they both named. Closing it is a contract change on both the
+response and the request, not a header here.
+
+**`acceptanceCriteria` is create-only, and this is a stated gap.** `IssueInput` takes `string[]`;
+`IssueUpdate` takes `{text, done}[]` against an **inline** item schema with no component name, and
+every nested pin in `shapesContract.test.ts` resolves a named one. So ticking a criterion off is not
+on this surface — it is the story screen's (011 T6), and it is written down here rather than
+discovered as a missing field.
+
+#### `tcms_read_issue` — typed input
+
+Gate: `issue:read`. **Two branches, not a third composite.** With no `issue` it is a list; with one it
+is the detail, and the two optional sub-reads are `tcms_open_case`'s shape exactly — opt-in and off by
+default, so the tool never fans out unasked and §3.1's ceiling is untouched.
+
+| Field | Type | Notes |
+|---|---|---|
+| `issue` | string — a key | omit to list |
+| `level` | `EPIC` / `STORY` / `TASK` | list |
+| `epic` · `parent` | string — a key | list |
+| `unparented` | boolean | story-level issues with no epic |
+| `sort` | `key` / `title` / `status` / `dueDate` / `estimateHours` | list |
+| `page` · `size` | integer | list — §4.6's window |
+| `comments` | boolean | detail — also reads `GET …/comments` |
+| `docLinks` | boolean | detail — also reads `GET …/doc-links` |
+
+**`allowedTransitions` comes back as NAMES**, and so do `type` and `status`. That is the read half of
+the same decision the write half makes: the tool hands back exactly the token `move` takes, so an
+assistant that can see which moves are legal does not attempt one that is not — the difference between
+a refusal it can act on and a retry loop. The ids are dropped for §6's own rule (*UUIDs resolved to
+display keys*), and because an id on this surface is a second handle nothing here accepts.
+
+#### The shared output envelope
+
+Unchanged, and named here because this section is where a reader will look for it:
+
+- **A list** — `tcms_read_issue` with no `issue` — answers §4.6's one list shape,
+  `{ items, page, size, total, hasMore, truncated }`. `GET /issues` is not paginated on the wire, so
+  this is the client-side window `reads.ts`'s header describes; `hasMore` and `truncated` mean
+  different things there and are kept apart.
+- **A detail read** answers the projected resource, with `comments` and `docLinks` beside it when
+  they were asked for.
+- **Every write arm** answers the contract resource the endpoint returned, through `result.ts` — JSON,
+  no prose — and a refusal is composed once by `core/outcome.ts`.
+
+#### One measured gap in the §8.1 check
+
+`declaredPermissionsOf` reads a gate out of an operation's prose by matching the literal word
+**`Requires`**. The tracker operations state their gates as `` `issue:create` — Instance Admin, … ``
+and do not use that word, so §8.1's permission assertion is **skipped, not satisfied**, for all four
+write arms. The header half (§8.3) does cover them, because it reads `parameters` rather than prose.
+Closing it is a contract-prose change plus a regeneration of both schema copies; it is recorded here
+rather than left as a silent no-op, which is the failure that check's own vacuity guard exists to name.
+
 ---
 
 ## 4. Cross-cutting rules — all of them in the command core
@@ -366,8 +495,10 @@ client call, and the MCP adapter never offers it.
 ### 4.2 `Idempotency-Key` on every create arm — and the two the contract is missing
 
 Verified against `openapi.yaml`: carried by cases, case clone, plans, plan clone, runs, run clone,
-ingestions (required there), work-items, projects, users. **Absent from `POST …/suites` and
-`POST …/doc-pages`** — the WIP plan's §6.1 audit, confirmed.
+ingestions (required there), ~~work-items~~ **issues** (011 T5 — `POST /issues` inherited the
+parameter when `POST /work-items` was removed), projects, users. **Absent from `POST …/suites` and
+`POST …/doc-pages`** — the WIP plan's §6.1 audit, confirmed. **`POST /issues/{key}/comments` is
+absent too**, which is why that arm is declared a `state` rather than a `create` on both surfaces.
 
 Both are inside this surface, so **the contract addition is a prerequisite of tools 9 and 11**, not
 a task to remember before the write phase. Conditions and shared steps stay without one, on their
@@ -470,6 +601,28 @@ it.
   covers. Which actions each surface offers is declared per action in the shape catalogue
   (`ActionSpec.cli` / `.mcp`) and printed by `tcms format`, so the asymmetry is a checked fact
   rather than a sentence here — see §253.
+  - ~~Three of those nouns~~ → **two, since 011 T5.** `work-item` is gone as a noun and `issue` is
+    the one that replaced it, and the CLI **delivers** it: `tcms issue list`, `issue show`,
+    `issue create`, `issue move`, `issue comment`. `report` and `triage` are the two that remain
+    undelivered, and the comment in `cli/src/reads.ts` that recorded the asymmetry now names those
+    two rather than going on claiming a gap that has closed.
+
+**The five issue commands**, and how each is spelled (§3.4 carries the typed inputs and the reasons):
+
+| Command | Kind | Permission | Reaches |
+|---|---|---|---|
+| `tcms issue list [--level L] [--epic K] [--parent K] [--unparented] [--sort F]` | read | `issue:read` | `GET /issues` |
+| `tcms issue show ACME-124` | read | `issue:read` | `GET /issues/{key}` + comments + doc-links |
+| `tcms issue create --type Story --title T [...]` | `create` | `issue:create` | `POST /issues` |
+| `tcms issue move ACME-124 --status "In Review"` | `state` | `issue:edit` | `POST …/transitions` |
+| `tcms issue comment ACME-124 --body TEXT` | `state` | `issue:comment` | `POST …/comments` |
+
+`--type` and `--status` take **names**, not UUIDs, for §3.4's reason — and at a terminal the reason is
+sharper still, because nobody has a `issue_status` UUID to paste. `issue create`'s option list is
+rendered from the catalogue by `optionSpecFor`, so a field added there cannot be missing a flag here;
+`format.test.ts` is what asserts it. There is **no `tcms issue edit`**: the three issue writes here are
+the ones a person or a CI step actually reaches for, and the field-by-field update stays on the MCP
+side, where it is composed from a read the model has already made.
 - **Read commands are phase 5, writes are phase 7**, per the plan's order.
 - **`--json` on every command**, so the CLI composes in a shell. Human-readable output is the
   default and the JSON is the generated client's response verbatim.

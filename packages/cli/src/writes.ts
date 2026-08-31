@@ -25,6 +25,7 @@
  */
 import {
   CASE_SHAPE,
+  ISSUE_SHAPE,
   TcmsClientError,
   caseInputFrom,
   classify,
@@ -103,6 +104,28 @@ function nullableNumber(
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed < 0) {
     throw new UsageError(`${flag} takes a whole number of milliseconds, not '${raw}'.`);
+  }
+  return parsed;
+}
+
+/**
+ * {@link nullableNumber}'s shape for a value the contract declares `format: double`.
+ *
+ * Separate rather than a flag on that one, because the check is the difference: an estimate of
+ * `2.5` hours is legitimate and a duration of 2.5 milliseconds is a typo. Rejecting a fraction
+ * here would make the flag refuse the commonest real value; accepting one there would send the
+ * server a number it stores as an integer column.
+ */
+function nullableFraction(
+  value: string | boolean | (string | boolean)[] | undefined,
+  flagName: string,
+): number | null | undefined {
+  const raw = first(value);
+  if (raw === undefined) return undefined;
+  if (raw === '') return null;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new UsageError(`${flagName} takes a number of hours, not '${raw}'.`);
   }
   return parsed;
 }
@@ -1224,6 +1247,144 @@ const SUBJECTS: Partial<Record<
   PLAN: { entity: 'PLAN', wire: 'PLAN' },
 };
 
+/* ------------------------------------------------------------------- issues ---- */
+
+/**
+ * A type or status **named**, resolved against the project's own workflow.
+ *
+ * `IssueInput.typeId` and `IssueTransitionInput.statusId` are UUIDs of per-project rows and
+ * nobody at a terminal has one to paste — the same argument `result record --status` already
+ * makes for `case_status`. An unknown name is refused here rather than sent, because the
+ * server's answer would be a 400 about an id the caller never chose.
+ *
+ * Only the vocabulary is checked. Which moves are legal from where the issue stands is
+ * {@link requireStatus}'s rule one noun over: a client-side ladder would be a second copy of the
+ * one rule `tracker` exists to enforce, and the server's 409 names the moves that are allowed.
+ */
+function namedInWorkflow<T extends { id: string; name: string }>(
+  rows: readonly T[],
+  wanted: string,
+  what: string,
+): T {
+  const found = rows.find(
+    (row) => row.name.toLowerCase() === wanted.toLowerCase() || row.id === wanted,
+  );
+  if (!found) {
+    throw new UsageError(
+      `No ${what} '${wanted}' in this project's workflow. It offers: `
+        + `${rows.map((row) => row.name).join(', ')}.`,
+    );
+  }
+  return found;
+}
+
+const issueCreate: Command = {
+  name: 'issue create',
+  summary: 'Raise an epic, story, bug, spike or task',
+  usage: `tcms issue create --type Story --title "Sign-out clears the session"\n\n${usageFor(ISSUE_SHAPE, 'create')}`,
+  // Rendered from the catalogue, so a field added there cannot be a flag this command refuses in
+  // strict mode — the defect `format.test.ts`'s header records finding on three commands at once.
+  options: optionSpecFor(ISSUE_SHAPE, 'create'),
+  write: { kind: 'create', permission: 'issue:create' },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const projectId = await projectOf(context);
+
+    const workflow = await client.GET('/projects/{projectId}/workflow', {
+      params: { path: { projectId } }, tcms: request,
+    });
+    const type = namedInWorkflow(
+      workflow.types, requireOption(context, 'type'), 'issue type',
+    );
+
+    const intent = createIntent({ key: text(options['idempotency-key']) });
+    const created = await client.POST('/issues', {
+      body: present({
+        projectId,
+        typeId: type.id,
+        title: requireOption(context, 'title'),
+        description: nullableText(options['description']),
+        parentKey: nullableText(options['parent']),
+        priority: text(options['priority']) as components['schemas']['Priority'] | undefined,
+        estimateHours: nullableFraction(options['estimate-hours'], '--estimate-hours'),
+        startDate: nullableText(options['start-date']),
+        targetDate: nullableText(options['target-date']),
+        dueDate: nullableText(options['due-date']),
+        acceptanceCriteria: completeSet(options['acceptance-criterion']),
+      }) as components['schemas']['IssueInput'],
+      tcms: { ...request, ...intent },
+    });
+
+    reportWrite(out, json, created, [
+      // Server-allocated from the project's own counter — `ACME-1`, `ACME-2` — so it is the first
+      // thing the caller learns and the handle every later command takes.
+      [outcome(intent, 'Created'), `${show(created.key)} — ${show(created.title)}`],
+      ['Type', show(created.type.name)],
+      ['Status', show(created.status.name)],
+    ]);
+  },
+};
+
+const issueMove: Command = {
+  name: 'issue move',
+  summary: 'Move an issue to another status',
+  usage: 'tcms issue move ACME-124 --status "In Review"',
+  options: { status: { type: 'string' } },
+  // There is no `board:move`: dragging a card changes the issue's status and costs exactly this.
+  write: { kind: 'state', permission: 'issue:edit' },
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const key = requireArg(context, 'issue');
+
+    const workflow = await client.GET('/projects/{projectId}/workflow', {
+      params: { path: { projectId: await projectOf(context) } }, tcms: request,
+    });
+    const status = namedInWorkflow(
+      workflow.statuses, requireOption(context, 'status'), 'status',
+    );
+
+    const moved = await client.POST('/issues/{key}/transitions', {
+      params: { path: { key } },
+      body: { statusId: status.id },
+      tcms: request,
+    });
+
+    reportWrite(out, json, moved, [
+      ['Issue', `${show(moved.key)} — ${show(moved.title)}`],
+      ['Status', show(moved.status.name)],
+      ['Can move to', moved.allowedTransitions.map((row) => row.name).join(', ') || '(none)'],
+    ]);
+  },
+};
+
+const issueComment: Command = {
+  name: 'issue comment',
+  summary: 'Say something about an issue, and start watching it',
+  usage: 'tcms issue comment ACME-124 --body TEXT',
+  options: { body: { type: 'string' } },
+  // `state`, not `create`: the endpoint declares no `Idempotency-Key`, so a create kind would send
+  // a header nothing reads. `review comment` is declared the same way for the same reason.
+  write: { kind: 'state', permission: 'issue:comment' },
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const key = requireArg(context, 'issue');
+
+    const written = await client.POST('/issues/{key}/comments', {
+      params: { path: { key } },
+      body: { body: requireOption(context, 'body') },
+      tcms: request,
+    });
+
+    reportWrite(out, json, written, [
+      ['Commented on', key],
+      ['Author', show(written.author.displayName)],
+      // Story H8: commenting makes you a watcher, so a person who has said something hears about
+      // what happens next. Printed because it is a side effect nobody asked for by name.
+      ['Watching', 'yes — you are notified of status and assignee changes'],
+    ]);
+  },
+};
+
 export const WRITES: readonly Command[] = [
   caseEdit,
   caseProposal,
@@ -1241,4 +1402,7 @@ export const WRITES: readonly Command[] = [
   runStatus,
   resultRecord,
   reviewComment,
+  issueCreate,
+  issueMove,
+  issueComment,
 ];
