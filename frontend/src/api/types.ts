@@ -808,6 +808,45 @@ export interface BoardFilters {
 }
 
 /**
+ * What the **backlog** declares — {@link BoardFilters} plus a release filter (013 D-k).
+ *
+ * <h2>A type of its own, because `contractParameters.test.ts` reads the type and not the call site</h2>
+ *
+ * `GET /projects/{id}/backlog` takes `releaseId` and `unscheduled`; `GET /boards/{id}/cards`
+ * **deliberately does not** — `BoardCardController.cards` passes `null, false` into the shared parser
+ * with the reason on the line, which is that a board groups by release through the `RELEASE`
+ * swimlane axis instead, so every card stays on screen.
+ *
+ * The first attempt widened `BoardFilters` itself, which the plan predicted and which is wrong: both
+ * hooks spread their filter object into `qs`, so the keys the SPA sends to `/boards/{id}/cards` are
+ * *that type's members*, and the check that reads them failed in exactly the words §47 and §49 are
+ * recorded in — *"an undeclared query parameter is not rejected, it is IGNORED."* Two endpoints that
+ * declare different parameters are two types; the same rule that keeps `BoardFilters` and
+ * {@link IssueFilters} apart (D-v) keeps this apart from `BoardFilters`.
+ *
+ * The other half of the cost, had it typechecked: both views draw their chips from
+ * `useBoardFilterChips`, so a `release` in the URL would have put a `Release · 2.4` chip on the
+ * **board**, over a list nothing had narrowed.
+ */
+export interface BacklogFilters extends BoardFilters {
+  /**
+   * Only issues targeting this release — **a filter over the one project-wide rank order rather than
+   * a second order** (D-k). The rows come back in the sequence they would have without it, so a drag
+   * from one release section into another is still one neighbour-relative `PUT /issues/{key}/rank`.
+   */
+  releaseId?: string;
+  /**
+   * Only issues with **no** target release. A flag rather than `releaseId=null`, for `unparented`'s
+   * reason: an absent parameter already means *don't filter*, and a client cannot spell the
+   * difference between "every release" and "no release" in one value.
+   *
+   * **Mutually exclusive with `releaseId`** — sending both is a 400 — so the two controls replace
+   * each other rather than accumulating.
+   */
+  unscheduled?: boolean;
+}
+
+/**
  * Work-table filter state. Mirrored into the URL so a view is shareable and survives a switch
  * between the five views (D34), which is the whole reason it is not component state.
  */

@@ -10,7 +10,7 @@
  * call site re-deriving the shape and getting it subtly wrong.
  */
 import type { QueryClient } from '@tanstack/react-query';
-import type { AuditFilters, BoardFilters, CaseFilters, IssueFilters } from '../types';
+import type { AuditFilters, BacklogFilters, BoardFilters, CaseFilters, IssueFilters } from '../types';
 
 export const keys = {
   me: ['me'] as const,
@@ -530,9 +530,11 @@ export const keys = {
    */
   boardCardsRoot: ['board-cards'] as const,
   /**
-   * The ranked backlog, keyed by the same filter the board carries — one filter, three views (D34).
+   * The ranked backlog, keyed by the filter it declares — `BacklogFilters`, which since 013 T6 is
+   * the board's six **plus** `releaseId` and `unscheduled` (D-k). One filter, three views (D34), and
+   * three parameter sets.
    */
-  backlog: (p: string, filters: BoardFilters) => ['projects', p, 'backlog', filters] as const,
+  backlog: (p: string, filters: BacklogFilters) => ['projects', p, 'backlog', filters] as const,
   /**
    * Every backlog list this project has, as a prefix — what the rank write targets.
    *

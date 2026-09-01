@@ -11,9 +11,10 @@ import {
   type RowSelectionState,
   type SortingState,
 } from '@tanstack/react-table';
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
-import type { TestCaseSummary } from '../../api/types';
+import { useCaseVerifications } from '../../api/queries';
+import type { IssueRef, TestCaseSummary } from '../../api/types';
 import { AutomationLabel, HealthChip, LifecycleChip, PriorityLabel, StatusDot } from '../../components/StatusChip';
 import { Identifier } from '../../components/Identifier';
 import {
@@ -25,6 +26,7 @@ import {
   TableHeaderCell,
   TableRow,
 } from '../../components/kit';
+import { Chip } from '../../components/kit';
 import { Checkbox } from '../../components/ui';
 import { cn } from '../../lib/cn';
 import { formatAge, formatCount, formatDateTime, plural } from '../../lib/format';
@@ -83,7 +85,17 @@ const PAGE_SIZES = [25, 50, 100];
 /** The class of truncated cell that keeps its full value in a `title`. */
 const truncated = 'block overflow-hidden text-ellipsis whitespace-nowrap';
 
-function caseColumns(projectId: string) {
+/**
+ * Which stories each case verifies, by case id — the reverse direction of the story's linked-cases
+ * panel (013 D-i).
+ *
+ * A `Map` built once per response rather than a `find` per cell: the payload lists **only cases with
+ * at least one link**, so it is proportional to the links and not to the catalogue, and a linear scan
+ * per row over a hundred-row page is the one shape a grid cell must not have.
+ */
+type Verifications = ReadonlyMap<string, IssueRef[]>;
+
+function caseColumns(projectId: string, verifications: Verifications) {
   return helper.columns([
     helper.display({
       id: 'select',
@@ -317,6 +329,58 @@ function caseColumns(projectId: string) {
         </span>
       ),
     }),
+    /*
+      `test-cases.html`'s **Verifies** column (013 D-i) — the stories a case proves, from a second
+      endpoint merged in client-side.
+
+      Not a field on `TestCaseSummary`, and that is the decision rather than a compromise. Widening
+      the summary would make `repository` read `issue_link` and `issue` — a fourth foreign-table seam
+      in that module, and a synchronous request-path coupling into `tracker` on the product's busiest
+      list. `GET /projects/{id}/case-verifications` reads two of `tracker`'s **own** tables, so it
+      needs no crossing in either direction, and the list pays one extra parallel read.
+
+      `helper.display`, so it is unsortable by construction: the order would be over a merged map the
+      server never ranked, and a header claiming an order it is not carrying is this file's own rule
+      three columns up.
+    */
+    helper.display({
+      id: 'verifies',
+      header: 'Verifies',
+      meta: { width: 160 },
+      cell: ({ row }) => {
+        const issues = verifications.get(row.original.id);
+        /*
+          `—` for BOTH "no links" and "the second read has not landed", deliberately: a spinner in a
+          table cell moves the row it is in, and this column is never the reason somebody opened this
+          screen. The trade is that an in-flight read is indistinguishable from an unlinked case for
+          the fraction of a second it is in flight, which is the cheaper of the two wrong readings.
+        */
+        if (!issues?.length) {
+          return (
+            <span className="text-ink-4" data-testid={`${TestIdPrefix}.Row.Verifies`}>
+              —
+            </span>
+          );
+        }
+        return (
+          <span
+            className="flex flex-wrap gap-1.5"
+            data-testid={`${TestIdPrefix}.Row.Verifies`}
+          >
+            {issues.map((issue) => (
+              <RouterLink
+                key={issue.key}
+                to={`/issues/${encodeURIComponent(issue.key)}`}
+                title={issue.title}
+                className="no-underline hover:underline"
+              >
+                <Identifier className="text-steel">{issue.key}</Identifier>
+              </RouterLink>
+            ))}
+          </span>
+        );
+      },
+    }),
   ]);
 }
 
@@ -347,7 +411,39 @@ export function CaseGrid({
   projectId: string;
   loading: boolean;
 }) {
-  const columns = useMemo(() => caseColumns(projectId), [projectId]);
+  /*
+    The **second parallel read** D-i's decision buys: `tracker`'s own tables, keyed by case id, and
+    only cases with a link appear in it. Optional by construction — the grid renders every column
+    without it and this one renders an em dash — so it is neither in a `Promise.all` with the case
+    list nor given a region of its own.
+  */
+  const verifications = useCaseVerifications(projectId);
+  const verifiesBy: Verifications = useMemo(
+    () => new Map((verifications.data ?? []).map((row) => [row.caseId, row.issues])),
+    [verifications.data],
+  );
+
+  /**
+   * `test-cases.html`'s `Verifies a story ×` chip — **client-side over the map, and it says so.**
+   *
+   * Component state rather than the URL, which is where every other filter on this screen lives, and
+   * the difference is which side applies it. `useCaseFilters` mirrors what `GET /cases` declares, so
+   * every chip in that strip means *the query is narrowed*; there is no `hasVerification` parameter,
+   * so this one narrows **the rows already on this page** and nothing else. Putting it in the same
+   * strip would make one chip mean something different from the five beside it — and the page count
+   * below would then disagree with the rows above it, which is the two-contradictory-numbers defect
+   * this repo has shipped once.
+   *
+   * So it sits above the table with the basis on its face, and the row count beneath the chip says
+   * how many of this page it kept.
+   */
+  const [verifiesOnly, setVerifiesOnly] = useState(false);
+  const shown = useMemo(
+    () => (verifiesOnly ? rows.filter((row) => (verifiesBy.get(row.id)?.length ?? 0) > 0) : rows),
+    [rows, verifiesBy, verifiesOnly],
+  );
+
+  const columns = useMemo(() => caseColumns(projectId, verifiesBy), [projectId, verifiesBy]);
 
   const [sortField, sortDir] = sort.split(',');
 
@@ -405,7 +501,7 @@ export function CaseGrid({
 
   const table = useTable({
     features,
-    data: rows,
+    data: shown,
     columns,
     // A domain id, never the row index: selection and every row locator have to survive paging.
     getRowId: (row) => row.id,
@@ -455,7 +551,28 @@ export function CaseGrid({
   return (
     <div data-testid={`${TestIdPrefix}.Grid`}>
       {/*
-        The floor is the SUM of the declared widths (1588), not a round number under it.
+        Above the table, not in the filter strip, and the sentence beside it is the whole reason —
+        see `verifiesOnly` above. The chip states the page it narrowed, so the count in the foot and
+        the rows above it cannot be read as disagreeing.
+      */}
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <Chip
+          selected={verifiesOnly}
+          onClick={() => setVerifiesOnly((held) => !held)}
+          data-testid={`${TestIdPrefix}.VerifiesOnly`}
+        >
+          Verifies a story
+        </Chip>
+        <span className="text-[11.5px] text-ink-4" data-testid={`${TestIdPrefix}.VerifiesOnly.Basis`}>
+          {verifiesOnly
+            ? `${plural(shown.length, 'case')} of the ${plural(rows.length, 'case')} on this page — applied here, not by the server, so the page count below is unchanged.`
+            : 'narrows this page only, not the query'}
+        </span>
+      </div>
+
+      {/*
+        The floor is the SUM of the declared widths — 1588 through 012, **1748 since the Verifies
+        column's 160** — and not a round number under it.
         `meta.width` is a hint to `table-layout: auto`, and with 1588px of hints inside a 1240px
         floor the browser satisfied the floor and then squeezed the one column allowed to wrap:
         the renders audit measured Title at **137px** at a 1680px viewport, against Suite's 143 and
@@ -463,7 +580,7 @@ export function CaseGrid({
         rule failed by layout — the exact defect design language §9.5 predicted for this grid, and
         it is why Title also carries a real `min-width` in its cell below rather than only a hint.
       */}
-      <Table className="min-w-[1588px]">
+      <Table className="min-w-[1748px]">
         <TableHead>
           {table.getHeaderGroups().map((group) => (
             <TableRow key={group.id}>

@@ -16,6 +16,7 @@ import {
 import { Button } from '../../components/ui';
 import { plural } from '../../lib/format';
 import { AcceptanceCriteria } from './AcceptanceCriteria';
+import { LinkedCasesPanel } from './LinkedCasesPanel';
 import { LinkedSpecPanel } from './LinkedSpecPanel';
 import { StatusBadge } from './StatusBadge';
 import { TypeIcon } from './TypeIcon';
@@ -32,11 +33,19 @@ import { TypeIcon } from './TypeIcon';
  *
  *   - the review-gate warning and the "Request approval to close" button — M5;
  *   - the whole "Time" panel and the `Logged` row — M6;
- *   - the Release row (M3) and the Labels row (M2);
+ *   - the Release row in Details (M3's field, and **still absent** — see below) and the Labels row (M2);
  *   - the "3 proposed by claude-code" button on Sub-tasks — M5;
- *   - the **"Linked test cases" panel**, which is H7 and lands in M3's `t18`. Its absence is why
- *     the mockup's red footer — *"TC-311 failed, so 2.4 is not ready"* — does not render either:
- *     that sentence is a claim about a run this screen cannot see.
+ *   - ~~the **"Linked test cases" panel**, which is H7 and lands in M3's `t18`.~~ → **landed
+ *     2026-09-01 (plan 013, T6)** as {@link LinkedCasesPanel}, mounted below the sub-tasks. It is
+ *     the only writer of the `TEST_CASE` link in the product (D-p), so readiness had nothing to read
+ *     until it existed. The mockup's red footer is there too, minus the version — the panel's own
+ *     header says why it cannot name one.
+ *
+ * **What M3 did NOT close on this screen:** the **Release** row in the Details rail. `Issue.release`
+ * is on the contract and `PATCH /issues/{key}` takes `releaseId`, so the field is reachable — but the
+ * only affordance the product ships for it is the backlog's `Move to release` (013 T6 step 2), and
+ * putting a second writer on the rail was outside that task's file list. A story's target release is
+ * therefore set from the backlog and not from the story.
  */
 export function StoryPanels({ issue }: { issue: Issue }) {
   const subTasks = issue.children;
@@ -146,6 +155,14 @@ export function StoryPanels({ issue }: { issue: Issue }) {
           </>
         )}
       </Panel>
+
+      {/*
+        Below the sub-tasks, where `story.html` puts it — and unconditionally, because "no cases are
+        linked" is the state this panel exists to make visible. A story with no proof is what a
+        release reads as `NOT_TESTED`, so a panel that hid itself when empty would hide the one thing
+        somebody needs to act on.
+      */}
+      <LinkedCasesPanel issue={issue} />
     </>
   );
 }

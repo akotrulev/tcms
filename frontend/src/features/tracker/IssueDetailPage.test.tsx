@@ -52,6 +52,7 @@ type Arms = {
   issue?: unknown
   comments?: unknown
   docLinks?: unknown
+  testCases?: unknown
   failIssue?: boolean
   failDocLinks?: boolean
 }
@@ -71,6 +72,9 @@ function mockReads(arms: Arms) {
       return aProjectWorkflow({ statuses: ALL, types: [EPIC_TYPE, STORY_TYPE, TASK_TYPE] })
     }
     if (/^\/issues\/[^/]+\/comments$/.test(path)) return arms.comments ?? []
+    // 013 T6's `LinkedCasesPanel`, on every story. Anchored ahead of the detail arm like its
+    // siblings, or `/issues/ACME-118/test-cases` would be served an `Issue`.
+    if (/^\/issues\/[^/]+\/test-cases$/.test(path)) return arms.testCases ?? []
     if (/^\/issues\/[^/]+\/doc-links$/.test(path)) {
       if (arms.failDocLinks) throw new Error('the doc links read failed')
       return arms.docLinks ?? []
@@ -324,7 +328,23 @@ describe('The story’s closing rule (H4)', () => {
     await screen.findByTestId('Story.Closing')
     expect(screen.queryByText(/Request approval to close/)).toBeNull()
     expect(screen.queryByText(/Log time/)).toBeNull()
-    expect(screen.queryByText(/Linked test cases/)).toBeNull()
+    /*
+      ~~And no "Linked test cases" panel, which is M3's.~~ → **013 T6 landed it**, so the assertion
+      is now the other way round: it is on the story unconditionally, because "no cases are linked"
+      is the state it exists to make visible and a release reads that story as `NOT_TESTED`.
+    */
+    expect(screen.getByTestId('Story.LinkedCases')).toBeInTheDocument()
+  })
+
+  it('mounts the linked-cases panel on a story, empty and explaining what it is for', async () => {
+    // The QA link's ONLY writer in the product (D-p). Without it every release reads NOT_TESTED
+    // forever, which is why its absence-when-empty would be the wrong shape for this panel.
+    mockReads({ issue: anIssue({ key: 'ACME-118', type: STORY_TYPE, status: PROGRESS }) })
+    renderPage('ACME-118')
+
+    const empty = await screen.findByTestId('Story.LinkedCases.Region.Empty')
+    expect(empty.textContent).toContain('No cases linked')
+    expect(empty.textContent).toContain('reads as untested rather than as passing')
   })
 })
 

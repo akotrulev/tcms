@@ -10,7 +10,7 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core';
 import { ChevronDown, ChevronUp, GripVertical, X } from 'lucide-react';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { useAnnounce } from '../../a11y/useAnnounce';
 import { useCan } from '../../auth/useCan';
@@ -21,17 +21,18 @@ import {
   useLabels,
   useProjectMembers,
   useRankIssue,
+  useReleases,
   type BulkIssueResult,
   type RankPlacement,
 } from '../../api/queries';
-import type { BacklogRow, Priority } from '../../api/types';
+import type { BacklogRow, Priority, ReleaseSummary } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PermissionGate } from '../../components/PermissionGate';
 import { Banner, Chip, FilterStrip } from '../../components/kit';
 import { NativeSelect } from '../../components/ui/native-select';
 import { cn } from '../../lib/cn';
-import { plural } from '../../lib/format';
+import { formatDate, plural } from '../../lib/format';
 import { priorityLabels } from '../../lib/labels';
 import { labelFill } from '../../lib/statusColors';
 import { StatusBadge } from '../tracker/StatusBadge';
@@ -41,15 +42,35 @@ import { useBoardFilterChips, useWorkFilter } from './useWorkFilter';
 const TEST_ID = 'Backlog';
 
 /**
+ * The `<option>` value that means *take these out of their release*.
+ *
+ * A sentinel rather than the empty string, which is already taken by the select's own "Move to
+ * release…" placeholder — and a placeholder that silently unscheduled five stories the moment
+ * somebody re-opened the menu and pressed Escape wrong is the write nobody would report as a bug
+ * because nobody would know it happened.
+ */
+const NO_RELEASE = '__none__';
+
+/**
  * The ranked backlog — story B4, `work-backlog.html`.
  *
- * <h2>One list, not the mockup's release sections (D-f)</h2>
+ * <h2>The release sections are two slices of ONE order (D-k)</h2>
  *
- * `work-backlog.html` groups under "2.4 · target 18 Sep" and "Unscheduled"; `release` is M3's table
- * and `issue_fact.release_id` is NULL until it lands, so the grouping would be one section called
- * "Unscheduled" containing everything — which looks like a defect rather than an unbuilt feature.
- * M3 adds it, and the **"Move to release"** bulk action with it; the two that ship here are
- * `Set epic` and `Assign`, both M1 fields.
+ * ~~One list, not the mockup's release sections (D-f) — `release` is M3's table.~~ → **superseded
+ * 2026-09-01 (plan 013, T6).** `work-backlog.html`'s "2.4 · target 18 Sep" and "Unscheduled"
+ * headers are here, and so is **Move to release**.
+ *
+ * **`issue.rank` is one project-wide sequence and stays one.** The grouping is therefore a
+ * *rendering* of that sequence and not a second order: {@link sectionsOf} walks the rows the server
+ * sent, in the order it sent them, and marks where a run of one release ends. The headers sit inside
+ * the existing `DataRegion` and **above the `<ol>`** — one list, one `<ol>`, headers between runs of
+ * `<li>`s — so a drag from one section into another is still one `PUT /issues/{key}/rank` against a
+ * neighbour, because the neighbour is the row above or below it in the same sequence.
+ *
+ * The consequence worth stating: `place(fromIndex, toIndex)` indexes the **flat** row array, and a
+ * section header is not a row. Nothing here renumbers or offsets an index, and the test that moves a
+ * row across a boundary and asserts the request body names the neighbour rather than the header is
+ * what holds that true.
  *
  * <h2>Two ways to reorder and both persist</h2>
  *
@@ -77,6 +98,13 @@ const TEST_ID = 'Backlog';
  * stories under it double-counts the same work in the one view whose whole job is "what is next".
  * Nothing here filters for that — the server does — and the consequence worth knowing is that
  * `Set epic` is offered over rows that may be either level, which {@link BulkBar} gates.
+ *
+ * <h2>The two release pickers replace each other rather than accumulating</h2>
+ *
+ * `releaseId` and `unscheduled` are a 400 when sent together, so choosing one clears the other —
+ * enforced at both ends, here in the writes and again in {@link useWorkFilter}'s read. Two
+ * parameters rather than `releaseId=null` for `unparented`'s reason: an absent parameter already
+ * means *don't filter*, and a client cannot spell "no release" in a value.
  */
 export function BacklogView({ projectId }: { projectId: string }) {
   const announce = useAnnounce();
@@ -93,11 +121,16 @@ export function BacklogView({ projectId }: { projectId: string }) {
   const canRank = gate.can('board:rank');
   const rankRefusal = gate.reason('board:rank');
 
-  const backlog = useBacklog(projectId, filters.board);
+  /*
+    `filters.backlog`, not `filters.board` — the backlog declares `releaseId` and `unscheduled` and
+    `GET /boards/{id}/cards` does not (013 T6; the reason is in `useWorkFilter`'s `WorkFilters`).
+  */
+  const backlog = useBacklog(projectId, filters.backlog);
   const rank = useRankIssue(projectId);
   const labels = useLabels(projectId);
   const members = useProjectMembers(projectId, true);
-  const applied = useBoardFilterChips(projectId, filters.board, { setParam, dropOne });
+  const releases = useReleases(projectId);
+  const applied = useBoardFilterChips(projectId, filters.backlog, { setParam, dropOne });
 
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [dragging, setDragging] = useState<BacklogRow | null>(null);
@@ -142,6 +175,7 @@ export function BacklogView({ projectId }: { projectId: string }) {
     });
 
   const chosen = rows.filter((row) => selected.has(row.key));
+  const sections = sectionsOf(rows, releases.data ?? []);
 
   return (
     <div data-testid={`${TEST_ID}.View`}>
@@ -208,6 +242,57 @@ export function BacklogView({ projectId }: { projectId: string }) {
                 </option>
               ))}
             </NativeSelect>
+
+            {/*
+              The mockup's `Release: 2.4` control, and the fourth picker on this strip — the one the
+              board does not get. `set` rather than `appendOnce`: `releaseId` is a single value, so a
+              second choice replaces the first instead of narrowing to two versions at once, which
+              the endpoint could not answer anyway.
+
+              Both writes **drop the other parameter**, because sending `releaseId` and
+              `unscheduled` together is a 400. Enforced here as well as in the read, so the URL never
+              holds the pair rather than being repaired every time it is parsed.
+            */}
+            <NativeSelect
+              aria-label="Release"
+              className="w-auto"
+              value={filters.backlog.releaseId ?? ''}
+              data-testid={`${TEST_ID}.Filter.Release`}
+              onChange={(event) =>
+                setParam((next) => {
+                  next.delete('unscheduled');
+                  if (event.target.value) next.set('release', event.target.value);
+                  else next.delete('release');
+                })
+              }
+            >
+              <option value="">Any release…</option>
+              {(releases.data ?? []).map((release) => (
+                <option key={release.id} value={release.id}>
+                  {release.version}
+                </option>
+              ))}
+            </NativeSelect>
+
+            {/*
+              A `Chip`, not a fifth select: it is one boolean the reader turns on, and `Chip` is the
+              type in this kit for a value the reader owns and can take back. `unparented` beside it
+              has no picker at all (B3), which is the asymmetry this one does not repeat: "what has no
+              release yet" is the question this screen is grouped around, so it earns a control.
+            */}
+            <Chip
+              selected={filters.backlog.unscheduled === true}
+              onClick={() =>
+                setParam((next) => {
+                  next.delete('release');
+                  if (filters.backlog.unscheduled) next.delete('unscheduled');
+                  else next.set('unscheduled', 'true');
+                })
+              }
+              data-testid={`${TEST_ID}.Filter.Unscheduled`}
+            >
+              No release
+            </Chip>
           </>
         }
       />
@@ -296,21 +381,33 @@ export function BacklogView({ projectId }: { projectId: string }) {
                 );
               }}
             >
+              {/*
+                ONE `<ol>`, with headers between runs of rows — never two lists. `sectionsOf` marks
+                the index each run starts at and the row indices are untouched, so `place` still
+                indexes the flat array and a drag across a boundary is one neighbour-relative rank
+                write. A second `<ol>` per section would have made that arithmetic per-section, which
+                is the second order D-k refuses.
+              */}
               <ol className="m-0 list-none p-0" data-testid={`${TEST_ID}.List`}>
-                {list.map((row, index) => (
-                  <BacklogListRow
-                    key={row.key}
-                    row={row}
-                    selected={selected.has(row.key)}
-                    onSelect={() => toggle(row.key)}
-                    onUp={() => place(index, index - 1)}
-                    onDown={() => place(index, index + 1)}
-                    first={index === 0}
-                    last={index === list.length - 1}
-                    canRank={canRank}
-                    rankRefusal={rankRefusal}
-                  />
-                ))}
+                {list.map((row, index) => {
+                  const head = sections.get(index);
+                  return (
+                    <Fragment key={row.key}>
+                      {head && <SectionHead head={head} />}
+                      <BacklogListRow
+                        row={row}
+                        selected={selected.has(row.key)}
+                        onSelect={() => toggle(row.key)}
+                        onUp={() => place(index, index - 1)}
+                        onDown={() => place(index, index + 1)}
+                        first={index === 0}
+                        last={index === list.length - 1}
+                        canRank={canRank}
+                        rankRefusal={rankRefusal}
+                      />
+                    </Fragment>
+                  );
+                })}
               </ol>
 
               {/*
@@ -342,6 +439,122 @@ export function BacklogView({ projectId }: { projectId: string }) {
   );
 }
 
+
+/**
+ * Where a section starts, and what its header says.
+ *
+ * `releaseId` is `null` for the Unscheduled run. `done` / `open` are the release's own story counts
+ * and are absent for Unscheduled, which has no release to count over.
+ */
+interface SectionHead {
+  releaseId: string | null;
+  title: string;
+  done: number | null;
+  open: number | null;
+  rows: number;
+}
+
+/**
+ * The mockup's two section headers, derived from **the order the server sent** (D-k).
+ *
+ * A run ends where the next row's release differs from this one's, and that is the whole rule —
+ * nothing here groups, sorts or partitions. `issue.rank` is one project-wide sequence, so a release
+ * that appears twice in the list would legitimately get two headers: the sections are a *rendering*
+ * of the order and not a claim that the order is grouped. In practice a backlog is usually ranked
+ * release-first, and if it is not, two headers for `2.4` is the truth about where its rows are.
+ *
+ * A `Map` keyed by the row index rather than an array of `{ rows: [...] }` groups, because the row
+ * index **is** the argument `place(fromIndex, toIndex)` takes: an array of groups would mean
+ * translating a group-local index back to a flat one at every call site, which is the arithmetic
+ * this shape does not have.
+ */
+function sectionsOf(
+  rows: readonly BacklogRow[],
+  releases: readonly ReleaseSummary[],
+): Map<number, SectionHead> {
+  const heads = new Map<number, SectionHead>();
+
+  rows.forEach((row, index) => {
+    const previous = index === 0 ? undefined : rows[index - 1];
+    const id = row.release?.id ?? null;
+    if (previous !== undefined && (previous.release?.id ?? null) === id) return;
+
+    let rowsInRun = 0;
+    for (let at = index; at < rows.length && (rows[at].release?.id ?? null) === id; at += 1) {
+      rowsInRun += 1;
+    }
+
+    /*
+      The mockup's `2.4 · target 18 Sep`. The date comes off the row's own `ReleaseRef` rather than
+      from the release list, so a header still names its date when the list read has not landed —
+      and `21 done · 6 open` comes off the list's inline readiness, which is why it is nullable here
+      and rendered only when that read has.
+    */
+    const summary = id === null ? undefined : releases.find((release) => release.id === id);
+    const target = row.release?.targetDate ?? null;
+
+    heads.set(index, {
+      releaseId: id,
+      title:
+        row.release === null || row.release === undefined
+          ? 'Unscheduled'
+          : target
+            ? `${row.release.version} · target ${formatDate(target)}`
+            : row.release.version,
+      done: summary ? summary.readiness.storiesDone : null,
+      open: summary ? summary.readiness.storiesTotal - summary.readiness.storiesDone : null,
+      rows: rowsInRun,
+    });
+  });
+
+  return heads;
+}
+
+/**
+ * A section header, and it is **not a list item**.
+ *
+ * `role="presentation"` on the `<li>`: `<ol>` permits only `<li>` children, so a heading between two
+ * runs of rows has to be one — and a real list item here would make the list's announced length the
+ * row count plus the number of sections, on the one screen whose numbers are its content. The
+ * heading inside it is what a reader hears.
+ *
+ * <h2>`21 done · 6 open` is the release's numbers, not the section's, and says so</h2>
+ *
+ * They come off `ReleaseSummary.readiness` — the same inline counts the release list and the
+ * overview's panel draw, so the three cannot disagree. Two things they are not: they count **stories**
+ * (D8's set, spikes excluded) while a section holds stories and tasks, and they are **not narrowed by
+ * the filters above**. Both are on the `title`, because a number whose basis is invisible is the
+ * two-contradictory-percentages defect waiting for its second reader.
+ */
+function SectionHead({ head }: { head: SectionHead }) {
+  return (
+    <li
+      role="presentation"
+      data-testid={`${TEST_ID}.Section.${head.releaseId ?? 'unscheduled'}`}
+      className="flex flex-wrap items-center gap-2 border-b border-line bg-wash-1 px-3 py-1.5"
+    >
+      <h3 className="m-0 text-[12px] font-semibold text-ink">{head.title}</h3>
+      {head.releaseId === null ? (
+        <span className="text-[11.5px] text-ink-4">
+          {`${plural(head.rows, 'issue')} with no target release`}
+        </span>
+      ) : (
+        <span
+          className="text-[11.5px] text-ink-4"
+          title={
+            head.done === null
+              ? undefined
+              : 'Counted over every story targeting this release — spikes excluded, and not narrowed by the filters above. The rows below are what the filters left.'
+          }
+        >
+          {head.done !== null && head.open !== null
+            ? `${head.done} done · ${head.open} open`
+            : plural(head.rows, 'issue')}
+        </span>
+      )}
+    </li>
+  );
+}
 
 /**
  * One row — the mockup's `.rank-row`, and both of its reorder affordances.
@@ -533,7 +746,14 @@ function MoveButton({
 }
 
 /**
- * The mockup's "N selected" bar — **Set epic** and **Assign**, and no "Move to release" (D-f).
+ * The mockup's "N selected" bar — **Move to release**, **Set epic** and **Assign**.
+ *
+ * ~~No "Move to release" (D-f) — `release` is M3's table.~~ → **superseded 2026-09-01 (plan 013,
+ * T6).** It is the mockup's first control and it is here, and it is **N `PATCH`es, not a bulk
+ * endpoint** (D-l): a bulk operation over issues was considered and refused for this module, because
+ * it is a `be` task with a partial-failure contract of its own and the screen that would justify it —
+ * a hundred-row release move — is not a flow anybody has yet. Recorded so the next person finds the
+ * decision rather than the limit.
  *
  * <h2>Set epic is refused over a TASK-level row, before the request</h2>
  *
@@ -562,13 +782,16 @@ function BulkBar({
 }) {
   const epics = useIssues(projectId, { level: 'EPIC' }, 'key');
   const members = useProjectMembers(projectId, true);
+  const releases = useReleases(projectId);
   const bulk = useBulkUpdateIssues(projectId);
   const [report, setReport] = useState<BulkIssueResult | null>(null);
 
   const keys = rows.map((row) => row.key);
   const tasks = rows.filter((row) => row.typeLevel === 'TASK');
 
-  const apply = (input: { parentKey: string } | { assigneeId: string }) => {
+  const apply = (
+    input: { parentKey: string } | { assigneeId: string } | { releaseId: string | null },
+  ) => {
     setReport(null);
     bulk.mutate(
       { keys, input },
@@ -595,6 +818,36 @@ function BulkBar({
         <PermissionGate projectId={projectId} permission="issue:edit">
           {({ allowed, reason }) => (
             <>
+              {/*
+                The mockup's `Move to release ▾`, and `issue:edit` is its gate rather than
+                `release:manage`: what this writes is `issue.releaseId`, a field on the issue, so the
+                key is the one that lets somebody edit an issue. A caller who may plan releases and
+                not edit issues cannot re-target somebody else's story from a list.
+
+                A `— No release —` option as well as the versions, because taking a story *out* of a
+                release is the same field set to null and there is nowhere else on this screen to do
+                it. `releaseId` is nullable on `IssueUpdate` precisely for that.
+              */}
+              <NativeSelect
+                aria-label="Move to release"
+                className="w-auto"
+                value=""
+                disabled={!allowed || bulk.isPending}
+                title={allowed ? undefined : reason}
+                data-testid={`${TEST_ID}.Bulk.Release`}
+                onChange={(event) =>
+                  apply({ releaseId: event.target.value === NO_RELEASE ? null : event.target.value })
+                }
+              >
+                <option value="">Move to release…</option>
+                <option value={NO_RELEASE}>— No release —</option>
+                {(releases.data ?? []).map((release) => (
+                  <option key={release.id} value={release.id}>
+                    {release.version}
+                  </option>
+                ))}
+              </NativeSelect>
+
               <NativeSelect
                 aria-label="Set epic"
                 className="w-auto"

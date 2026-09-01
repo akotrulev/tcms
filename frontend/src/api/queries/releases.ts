@@ -245,8 +245,17 @@ export function useCaseVerifications(projectId: string): UseQueryResult<CaseVeri
  *
  * Spelled once here rather than at seven call sites — the failure mode of the second copy is that
  * one write refreshes the table and leaves the timeline showing a release that no longer exists.
+ *
+ * **Exported since 013 T6, for one caller outside this file.** `useBulkUpdateIssues` in `issues.ts`
+ * is the backlog's `Move to release`, and a story changing which version it targets moves the
+ * readiness of the release it left as well as the one it joined — so that mutation sweeps
+ * {@link keys.releaseRoot} and calls this. Exported rather than copied for the reason it exists at
+ * all: a second spelling of the pair is how one of the two stops being invalidated.
  */
-function invalidateReleaseReaders(client: ReturnType<typeof useQueryClient>, projectId: string) {
+export function invalidateReleaseReaders(
+  client: ReturnType<typeof useQueryClient>,
+  projectId: string,
+) {
   void client.invalidateQueries({ queryKey: keys.releases(projectId) });
   void client.invalidateQueries({ queryKey: keys.roadmap(projectId) });
 }

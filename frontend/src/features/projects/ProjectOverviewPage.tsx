@@ -6,9 +6,17 @@ import {
   useEpicCompletions,
   useIssues,
   useProject,
+  useReadiness,
+  useReleases,
 } from '../../api/queries';
-import type { IssueCompletion, IssueSummary, RepositoryDashboard } from '../../api/types';
-import { DataRegion, EmptyState } from '../../components/DataRegion';
+import type {
+  IssueCompletion,
+  IssueSummary,
+  ReleaseReadiness,
+  ReleaseSummary,
+  RepositoryDashboard,
+} from '../../api/types';
+import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
@@ -22,9 +30,20 @@ import {
   TableRow,
 } from '../../components/kit';
 import { Button } from '../../components/ui';
-import { formatCount, formatPercent, plural, pluralNoun } from '../../lib/format';
+import {
+  EM_DASH,
+  formatCount,
+  formatDate,
+  formatDueIn,
+  formatPercent,
+  percentOf,
+  plural,
+  pluralNoun,
+} from '../../lib/format';
 import { labelForKey, lastRunLabels } from '../../lib/labels';
 import { statusVar } from '../../lib/statusColors';
+import { doneButFailing, releaseBadge } from '../releases/releaseBadge';
+import { nextRelease } from '../releases/nextRelease';
 import { CompletionMeter } from '../tracker/CompletionMeter';
 import { StatusBadge } from '../tracker/StatusBadge';
 import { TypeIcon } from '../tracker/TypeIcon';
@@ -67,8 +86,13 @@ const TEST_ID = 'ProjectOverview';
  * - **Budget burn** (M6) and **Team** (M7) are **not rendered at all**. A budget is a module that is
  *   not installed, and an empty-state card for one is an advertisement rather than an explanation.
  *
- * The two KPI tiles the mockup carries and this page does not are the same call: `2.4 complete` and
- * `To target date` are both a release's numbers (M3).
+ * ~~The two KPI tiles the mockup carries and this page does not are the same call: `2.4 complete`
+ * and `To target date` are both a release's numbers (M3).~~ → **superseded 2026-09-01 (plan 013,
+ * T6).** M3 landed, so both tiles are here — see {@link ReleaseCompleteTile} and
+ * {@link TargetDateTile} — and {@link NextReleasePanel} reads real data. What did not change is the
+ * panel's empty state: it is still `solo-overview.html`'s, word for word, because a project with no
+ * releases is a permanent and ordinary state rather than an unbuilt one, and only the button is now
+ * live.
  */
 export function ProjectOverviewPage() {
   const { projectId = '' } = useParams();
@@ -126,9 +150,21 @@ export function ProjectOverviewPage() {
         }
       />
 
-      <div className="mb-3.5 grid gap-3.5 sm:grid-cols-2" data-testid={`${TEST_ID}.Tiles`}>
+      {/*
+        The mockup's four tiles, in the mockup's order — `2.4 complete` leads, because the release
+        is what the page is about, and `To target date` closes. Both release tiles render an em dash
+        with a `title` rather than disappearing when there is no next release: a tile that vanishes
+        moves the three beside it, so the row would be a different shape on a project that has not
+        typed a version yet.
+      */}
+      <div
+        className="mb-3.5 grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4"
+        data-testid={`${TEST_ID}.Tiles`}
+      >
+        <ReleaseCompleteTile projectId={projectId} />
         <OpenIssuesTile projectId={projectId} />
         <TestsPassingTile projectId={projectId} />
+        <TargetDateTile projectId={projectId} />
       </div>
 
       <div className="grid gap-3.5 lg:grid-cols-[minmax(0,1fr)_340px]">
@@ -167,19 +203,133 @@ function Tile({
   value,
   label,
   detail,
+  title,
   testId,
 }: {
   value: string;
   label: string;
   detail?: string;
+  /** Why this tile has no number, on the tiles that render an em dash rather than disappearing. */
+  title?: string;
   testId: string;
 }) {
   return (
-    <div className="rounded-[10px] border border-line bg-panel px-3.5 py-3" data-testid={testId}>
+    <div
+      className="rounded-[10px] border border-line bg-panel px-3.5 py-3"
+      title={title}
+      data-testid={testId}
+    >
       <span className="block font-mono text-[24px] leading-[1.1] font-semibold text-ink">{value}</span>
       <span className="mt-1 block text-[12px] text-ink-2">{label}</span>
       {detail && <span className="mt-0.5 block text-[11.5px] text-ink-4">{detail}</span>}
     </div>
+  );
+}
+
+/**
+ * The next release and its readiness, for the three places on this page that need the same pair.
+ *
+ * One hook rather than three copies of `useReleases` + `nextRelease` + `useReadiness`, so the two
+ * tiles and the panel cannot name different versions — which is the two-contradictory-numbers
+ * failure this page has already had to answer for once, three tiles along.
+ *
+ * `useReadiness` is gated on the release actually existing (`''` disables it), so a project with no
+ * releases makes one request and not two.
+ */
+function useNextRelease(projectId: string) {
+  const releases = useReleases(projectId);
+  const release = nextRelease(releases.data ?? []);
+  const readiness = useReadiness(release?.id ?? '');
+  return { releases, release, readiness };
+}
+
+/**
+ * `project-overview.html`'s first tile — **`2.4 complete`**, and its basis is named beneath it.
+ *
+ * **The mockup's basis is not the one on the wire, and the caption is the whole of the honesty
+ * here.** It reads *"by estimate · 214 of 306 h"*; readiness carries `ReleaseStories.done` /
+ * `.total` and no estimate roll-up at all — `scopeAddedAfterCreation` is the only other number on
+ * that payload and it counts issues, not hours. So the tile is by **story count** and says so, which
+ * is `IssueCompletion`'s own mitigation applied one screen over: a percentage never changes meaning
+ * silently, and the caption is what keeps it from doing so. An estimate-based figure needs an
+ * estimate roll-up on the readiness contract; it is not silently dropped.
+ *
+ * `stories.total === 0` is a real answer rather than a missing one — a release with no stories
+ * pointed at it yet — and `percentOf` returns null over a zero denominator rather than `0%`, which
+ * would be a claim about progress on work nobody has scoped.
+ */
+function ReleaseCompleteTile({ projectId }: { projectId: string }) {
+  const { release, readiness } = useNextRelease(projectId);
+  const stories = readiness.data?.stories;
+  const percent = stories ? percentOf(stories.done, stories.total) : null;
+
+  if (!release || !stories || percent === null) {
+    return (
+      <Tile
+        value={EM_DASH}
+        label="Release complete"
+        detail={
+          release
+            ? `${release.version} has no stories pointed at it yet`
+            : 'no release planned on this project'
+        }
+        title={
+          release
+            ? `${release.version} counts no stories, so there is no completion to state — not a completion of zero.`
+            : 'A release is a version you ship from this project. Create one and this tile measures it.'
+        }
+        testId={`${TEST_ID}.ReleaseComplete.None`}
+      />
+    );
+  }
+
+  return (
+    <Tile
+      value={formatPercent(percent, 0)}
+      label={`${release.version} complete`}
+      detail={`by story count · ${formatCount(stories.done)} of ${formatCount(stories.total)}`}
+      testId={`${TEST_ID}.ReleaseComplete.Tile`}
+    />
+  );
+}
+
+/**
+ * `project-overview.html`'s fourth tile — **To target date**.
+ *
+ * `formatDueIn` and **not `formatAge`**, which reads a negative interval as *"just now"* and so
+ * cannot answer a future deadline at all (013 T5 paid for this on the release header). It counts
+ * whole UTC days, so "tomorrow" does not become "in 0 days" at eleven at night.
+ *
+ * A release with no target date gets the em dash and a sentence, not a zero: no target is an
+ * ordinary state the release form offers on purpose, and a countdown to nothing is a number that
+ * cannot be wrong in a way anybody would notice.
+ */
+function TargetDateTile({ projectId }: { projectId: string }) {
+  const { release } = useNextRelease(projectId);
+
+  if (!release || !release.targetDate) {
+    return (
+      <Tile
+        value={EM_DASH}
+        label="To target date"
+        detail={release ? `${release.version} has no target date` : 'no release planned'}
+        title={
+          release
+            ? 'A release does not need a target date. Set one on the release and this tile counts down to it.'
+            : 'A release is a version you ship from this project. Create one with a target date and this tile counts down to it.'
+        }
+        testId={`${TEST_ID}.TargetDate.None`}
+      />
+    );
+  }
+
+  return (
+    <Tile
+      value={formatDueIn(release.targetDate)}
+      label="To target date"
+      detail={`${release.version} · ${formatDate(release.targetDate)}`}
+      testId={`${TEST_ID}.TargetDate.Tile`}
+    />
   );
 }
 
@@ -514,7 +664,7 @@ function BacklogRow({ issue }: { issue: IssueSummary }) {
 }
 
 /**
- * The next release, on a project that has none — **which in M1 is every project.**
+ * The next release — `project-overview.html`'s panel, and `solo-overview.html`'s empty state.
  *
  * **A missing section explains itself; it does not render empty.** `solo-overview.html` is the
  * template and it is not a different screen: it is this screen for a company with no clients, and
@@ -522,43 +672,91 @@ function BacklogRow({ issue }: { issue: IssueSummary }) {
  * releases yet", a sentence saying what a release IS and what it buys, and the action that creates
  * one.
  *
- * In M1 that state is the **only** state, because releases arrive in M3: there is no `/releases`
- * path on the contract, so this panel has nothing to read and no `Release` type to read it into. The
- * component boundary is here rather than the panel being written inline, so M3 turns it on by
- * fetching and passing the list — not by replacing what a reader has learned to look at.
+ * ~~In M1 that state is the **only** state, because releases arrive in M3.~~ → **superseded
+ * 2026-09-01 (plan 013, T6).** M3 landed, so the panel now reads `useReleases` and `useReadiness`
+ * and draws the mockup's version, badge, target date, two meters, red note and *Open release
+ * readiness*. What was written against this endpoint from the start is **kept**, not replaced: the
+ * component boundary was here so M3 could turn it on by fetching, and that is what happened.
  *
- * **The action is disabled with its reason**, and that is the one deviation from the mockup, whose
- * button links to `releases.html`. There is no releases route in this build, and a link to a page
- * that does not exist is the render-then-reject failure with the reject left to the reader. §31's
- * disable-don't-hide is the established answer: the affordance is visible, so somebody learns the
- * product will do this, and it says why it cannot yet.
+ * **The empty state's copy is unchanged, word for word.** A project with no releases is not an
+ * unbuilt feature any more, it is an ordinary and permanent state — the state every freshly
+ * provisioned project is in, because nothing is backfilled into `release` when M3 ships (D14) — so
+ * the sentence saying what a release is remains the right sentence. Only the button changed: it is
+ * now **enabled and linked**, gated on `release:manage`, and disabled with its reason for a caller
+ * who lacks the key rather than for an instance that lacks the module.
  *
- * The footer is the sentence that keeps the page honest in the meantime, kept verbatim: *"the epics
- * section above keeps working regardless — the sections do not depend on each other."*
+ * The footer is the sentence that keeps the page honest, kept verbatim: *"the epics section above
+ * keeps working regardless — the sections do not depend on each other."*
  */
 function NextReleasePanel({ projectId }: { projectId: string }) {
+  const { releases, release, readiness } = useNextRelease(projectId);
+
   return (
     <section className="rounded-[10px] border border-line bg-panel" data-testid={`${TEST_ID}.Release`}>
-      <div className="border-b border-line px-3.5 py-2.5">
+      <div className="flex flex-wrap items-center gap-2.5 border-b border-line px-3.5 py-2.5">
         <h2 className="m-0 text-[13.5px] font-semibold text-ink">Next release</h2>
+        <span className="flex-1" />
+        {/* The mockup's `All releases` button. Ungated, like the rail entry it duplicates. */}
+        <Button asChild size="sm" data-testid={`${TEST_ID}.Release.All`}>
+          <RouterLink to={`/projects/${projectId}/releases`}>All releases</RouterLink>
+        </Button>
       </div>
 
-      <EmptyState
-        testId={`${TEST_ID}.Release.Empty`}
-        kind="by-design"
-        icon={Hexagon}
-        title="No releases yet"
-        body={`A release is a version you ship from this project — 0.9, 1.0 — with an optional target date. Epics and stories can point at one, and readiness is measured against it.`}
-        action={
-          <Button
-            disabled
-            title="Releases arrive with the release and roadmap module; this instance has nowhere to create one yet."
-            data-testid={`${TEST_ID}.Release.Create`}
-          >
-            Create a release
-          </Button>
+      {/*
+        The region wraps the list read, not the readiness one. Readiness is a **second, dependent**
+        request whose absence leaves the version, the date and the link renderable — so a failed
+        readiness read degrades the panel's two meters in place rather than blanking a panel whose
+        heading a reader is looking at (`data-fetching`'s critical-vs-optional split: the list is
+        critical here and the readiness is not).
+      */}
+      <DataRegion
+        testId={`${TEST_ID}.Release.Region`}
+        state={{ ...releases, refetch: () => void releases.refetch() }}
+        isEmpty={() => release === null}
+        empty={{
+          /*
+            The locator M1 shipped, kept deliberately: `DataRegion` would name this
+            `…Release.Region.Empty`, and `EmptyState`'s own `testId` wins over the derived one
+            because `empty` is spread last. A renamed locator on an unchanged empty state is a
+            broken page object for no gain.
+          */
+          testId: `${TEST_ID}.Release.Empty`,
+          kind: 'by-design',
+          icon: Hexagon,
+          title: 'No releases yet',
+          body: `A release is a version you ship from this project — 0.9, 1.0 — with an optional target date. Epics and stories can point at one, and readiness is measured against it.`,
+          action: (
+            <PermissionGate projectId={projectId} permission="release:manage">
+              {({ allowed, reason }) =>
+                allowed ? (
+                  <Button asChild data-testid={`${TEST_ID}.Release.Create`}>
+                    <RouterLink to={`/projects/${projectId}/releases/new`}>
+                      Create a release
+                    </RouterLink>
+                  </Button>
+                ) : (
+                  // Disabled rather than hidden (§31), and the reason is now the caller's key
+                  // rather than the module's absence.
+                  <Button disabled title={reason} data-testid={`${TEST_ID}.Release.Create`}>
+                    Create a release
+                  </Button>
+                )
+              }
+            </PermissionGate>
+          ),
+        }}
+      >
+        {() =>
+          release && (
+            <NextReleaseBody
+              projectId={projectId}
+              release={release}
+              readiness={readiness.data}
+              failedReadiness={readiness.isError}
+            />
+          )
         }
-      />
+      </DataRegion>
 
       <div className="border-t border-line px-3.5 py-2.5">
         <span className="text-[11.5px] leading-[1.55] text-ink-4" data-testid={`${TEST_ID}.Release.Foot`}>
@@ -570,6 +768,182 @@ function NextReleasePanel({ projectId }: { projectId: string }) {
         </span>
       </div>
     </section>
+  );
+}
+
+/**
+ * The panel with a release in it — the mockup's version, badge, date, two meters and red note.
+ *
+ * <h2>`readiness` is optional and the panel says which half is missing</h2>
+ *
+ * It is a second request, so it can be in flight or failed while the release itself is on screen.
+ * The version, the badge's fallback and the target date come off the `ReleaseSummary` the list
+ * already carried; the meters and the note need readiness and are replaced by one line when it is
+ * not there. Nothing here draws a meter from an absent number.
+ *
+ * <h2>Both meters are gated the way `release.html`'s are (D-d)</h2>
+ *
+ * `readiness.tests.hasRun` false means `passed`, `failed` and the rest are **null and not zero**, so
+ * the cases meter is replaced by the words `no run yet` rather than drawn as an empty bar. A bar at
+ * zero says "nothing passed"; the absence of a run says "nobody has looked". Those are not the same
+ * claim and this module exists because they were being read as one.
+ *
+ * <h2>The red note is `doneButFailing`, not a second implementation of it</h2>
+ *
+ * The function is in `features/releases/releaseBadge.ts` — one file, four callers, and the sentence
+ * it supports is the one this whole module exists to be able to write. The overview's copy is the
+ * short form of `release.html`'s banner: one story, one case, and a link to the readiness screen for
+ * the rest.
+ */
+function NextReleaseBody({
+  projectId,
+  release,
+  readiness,
+  failedReadiness,
+}: {
+  projectId: string;
+  release: ReleaseSummary;
+  readiness: ReleaseReadiness | undefined;
+  failedReadiness: boolean;
+}) {
+  /*
+    The row-sized readiness is **inline on every `ReleaseSummary`**, so the badge and the story
+    meter have an answer before the second read lands and never flicker through a wrong one. The
+    detail payload is what the *cases* meter and the note need, because only it carries the blockers.
+  */
+  const summary = release.readiness;
+  const badge = releaseBadge(release.status, summary.verdict);
+  const failing = readiness ? doneButFailing(readiness.blockers) : null;
+
+  return (
+    <div className="flex flex-col gap-3 p-3.5" data-testid={`${TEST_ID}.Release.Body`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <RouterLink
+          to={`/projects/${projectId}/releases/${release.id}`}
+          data-testid={`${TEST_ID}.Release.Version`}
+          className="text-[17px] font-semibold text-ink no-underline hover:text-steel hover:underline"
+        >
+          {release.version}
+        </RouterLink>
+        <Badge tone={badge.tone} data-testid={`${TEST_ID}.Release.Badge`}>
+          {badge.label}
+        </Badge>
+        <span className="flex-1" />
+        {/*
+          Not omitted when there is no target date: a release without one is a state the release
+          form offers deliberately, and an absent date reads as one that failed to load.
+        */}
+        <span className="text-[12px] text-ink-4" data-testid={`${TEST_ID}.Release.Target`}>
+          {release.targetDate
+            ? `${formatDate(release.targetDate)} · ${formatDueIn(release.targetDate)}`
+            : 'no target date'}
+        </span>
+      </div>
+
+      <ReleaseMeter
+        label="Stories done"
+        value={`${formatCount(summary.storiesDone)} / ${formatCount(summary.storiesTotal)}`}
+        segments={[{ key: 'done', count: summary.storiesDone, color: 'var(--color-passed)' }]}
+        total={summary.storiesTotal}
+        testId={`${TEST_ID}.Release.Stories`}
+      />
+
+      {summary.hasRun ? (
+        <ReleaseMeter
+          label="Linked cases passing"
+          value={`${formatCount(summary.casesPassed ?? 0)} / ${formatCount(summary.linkedCases)}`}
+          segments={[
+            { key: 'passed', count: summary.casesPassed ?? 0, color: 'var(--color-passed)' },
+            { key: 'failed', count: summary.casesFailed ?? 0, color: 'var(--color-failed)' },
+          ]}
+          total={summary.linkedCases}
+          testId={`${TEST_ID}.Release.Cases`}
+        />
+      ) : (
+        <div data-testid={`${TEST_ID}.Release.NoRun`}>
+          <div className="mb-1 flex justify-between text-[11.5px] text-ink-4">
+            <span>Linked cases passing</span>
+            <Identifier variant="muted">no run yet</Identifier>
+          </div>
+          <span className="block text-[11.5px] leading-[1.5] text-ink-4">
+            {`${plural(summary.linkedCases, 'case')} linked to this version, and nothing has been executed against it. That is not a pass rate of zero.`}
+          </span>
+        </div>
+      )}
+
+      {failing && (
+        <p
+          className="m-0 text-[11.5px] leading-[1.55] text-[color:var(--color-failed)]"
+          data-testid={`${TEST_ID}.Release.Failing`}
+        >
+          {`Not ready: `}
+          <RouterLink
+            to={`/issues/${encodeURIComponent(failing.key)}`}
+            className="text-inherit hover:underline"
+          >
+            <strong>{failing.key}</strong>
+          </RouterLink>
+          {' is done but its '}
+          {failing.failedCaseKeys.length === 1 ? 'case ' : 'cases '}
+          <span className="identifier">{failing.failedCaseKeys.join(', ')}</span>
+          {' failed in the latest run.'}
+        </p>
+      )}
+
+      {/*
+        The one thing this panel says about its own second read. Not a region of its own: the meters
+        above are already correct without it, and a failed-state block here would replace a panel
+        that is still telling the reader which version is next and when it is due.
+      */}
+      {failedReadiness && (
+        <p className="m-0 text-[11.5px] text-ink-4" data-testid={`${TEST_ID}.Release.ReadinessFailed`}>
+          The blockers behind this verdict could not be loaded. The counts above came with the
+          release itself and are current.
+        </p>
+      )}
+
+      <Button asChild data-testid={`${TEST_ID}.Release.Open`}>
+        <RouterLink to={`/projects/${projectId}/releases/${release.id}`}>Open release readiness</RouterLink>
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * One labelled meter — the mockup's `Stories done` and `Linked cases passing` rows.
+ *
+ * A zero total renders the empty track rather than dividing by it, which is the state a release with
+ * nothing pointed at it is genuinely in.
+ */
+function ReleaseMeter({
+  label,
+  value,
+  segments,
+  total,
+  testId,
+}: {
+  label: string;
+  value: string;
+  segments: { key: string; count: number; color: string }[];
+  total: number;
+  testId: string;
+}) {
+  return (
+    <div data-testid={testId}>
+      <div className="mb-1 flex justify-between text-[11.5px] text-ink-4">
+        <span>{label}</span>
+        <Identifier variant="muted">{value}</Identifier>
+      </div>
+      <div className="flex h-1.5 overflow-hidden rounded-full bg-line" aria-hidden>
+        {total > 0
+          && segments.map((segment) => (
+            <span
+              key={segment.key}
+              style={{ width: `${(segment.count / total) * 100}%`, background: segment.color }}
+            />
+          ))}
+      </div>
+    </div>
   );
 }
 

@@ -23,6 +23,7 @@ import type {
   UserRef,
 } from '../types';
 import { keys } from './keys';
+import { invalidateReleaseReaders } from './releases';
 
 /**
  * The columns the work table may be ordered by — the contract's own enum, not a free string.
@@ -361,6 +362,16 @@ export function useBulkUpdateIssues(projectId: string) {
       // can set are drawn on the board and in the backlog — neither of which is under `issuesRoot`.
       void client.invalidateQueries({ queryKey: keys.backlogRoot(projectId) });
       void client.invalidateQueries({ queryKey: keys.boardCardsRoot });
+      /*
+        `Move to release` (013 T6) is the third field this can set, and it is the one whose readers
+        are on other screens entirely. A story changing which version it targets moves the readiness
+        of **two** releases — the one it left and the one it joined — and the payload names only the
+        second, so `keys.releaseRoot` is the sweep rather than a pair of readiness keys.
+        `invalidateReleaseReaders` takes the list and the roadmap with it, because a re-targeted story
+        changes which bar an epic is drawn under.
+      */
+      void client.invalidateQueries({ queryKey: keys.releaseRoot });
+      invalidateReleaseReaders(client, projectId);
     },
   });
 }

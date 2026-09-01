@@ -2,12 +2,29 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { Issue, IssueSummary, RepositoryDashboard } from '../../api/types'
+import type {
+  Issue,
+  IssueSummary,
+  ReleaseReadiness,
+  ReleaseSummary,
+  RepositoryDashboard,
+} from '../../api/types'
 import { completionBases } from '../../lib/labels'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
-import { aProject, anIssue, anIssueSummary, anIssueType } from '../../test/fixtures'
+import {
+  aProject,
+  aReadinessSummary,
+  aReleaseBlocker,
+  aReleaseReadiness,
+  aReleaseStories,
+  aReleaseSummary,
+  anIssue,
+  anIssueSummary,
+  anIssueType,
+  aStatusRef,
+} from '../../test/fixtures'
 import { drivingAFailedRead } from '../../test/renderFailures'
 import { ProjectOverviewPage } from './ProjectOverviewPage'
 
@@ -33,6 +50,10 @@ import { ProjectOverviewPage } from './ProjectOverviewPage'
  *    no meter rather than a zero.
  * 6. **A failed epics read does not read as a project with no epics**, and the rest of the page
  *    still renders — the sections do not depend on each other.
+ * 7. **013 T6:** the release panel and the two release tiles read real data; the empty state's copy
+ *    is byte-identical to what M1 shipped, because a project with no releases is now a permanent
+ *    ordinary state rather than an unbuilt module; and both tiles render an em dash **with a reason**
+ *    rather than disappearing, because a tile that vanishes moves the three beside it.
  */
 
 const PROJECT_ID = 'p1'
@@ -73,6 +94,22 @@ const BACKLOG = [
   anIssueSummary({ key: 'ACME-204', title: 'Currency symbol wrong in Swedish' }),
 ]
 
+/** `2.4`, due, with 21 of 27 stories done and 61 of 63 cases passing — the mockup's own numbers. */
+const RELEASE = aReleaseSummary({
+  id: 'rel-24',
+  version: '2.4',
+  targetDate: '2026-09-18',
+  readiness: aReadinessSummary({
+    verdict: 'NOT_READY',
+    storiesDone: 21,
+    storiesTotal: 27,
+    linkedCases: 63,
+    hasRun: true,
+    casesPassed: 61,
+    casesFailed: 2,
+  }),
+})
+
 interface Reads {
   epics?: IssueSummary[]
   backlog?: IssueSummary[]
@@ -80,6 +117,10 @@ interface Reads {
   epic?: Issue
   dashboard?: RepositoryDashboard
   failEpics?: boolean
+  releases?: ReleaseSummary[]
+  readiness?: ReleaseReadiness
+  failReadiness?: boolean
+  permissions?: string[]
 }
 
 function mockReads({
@@ -102,10 +143,21 @@ function mockReads({
   }),
   dashboard = DASHBOARD,
   failEpics = false,
+  releases = [],
+  readiness = aReleaseReadiness(),
+  failReadiness = false,
+  permissions = ['project:read', 'issue:create'],
 }: Reads = {}) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
-    if (path.startsWith('/me/permissions')) return heldPermissions(['project:read', 'issue:create'])
+    if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
     if (path.includes('/dashboard')) return dashboard
+    // Anchored ahead of `/releases/{id}` so the readiness sub-resource is not caught by the prefix —
+    // the collision `/boards/{id}` vs `/boards/{id}/cards` cost 012 T7 the same half hour.
+    if (/^\/releases\/[^/]+\/readiness$/.test(path)) {
+      if (failReadiness) throw new Error('readiness unavailable')
+      return readiness
+    }
+    if (/\/projects\/[^/]+\/releases$/.test(path)) return releases
     if (path.startsWith('/issues/')) return epic
     if (path.startsWith('/issues?')) {
       if (path.includes('level=EPIC')) {
@@ -212,14 +264,19 @@ describe('The delivery half', () => {
   })
 })
 
-describe('The sections M1 has no data for', () => {
+describe('A project with no releases — solo-overview.html\u2019s rendering, unchanged in copy', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
   })
 
   it('explains the release section rather than rendering an empty box', async () => {
-    // 009's acceptance criterion, worded as a negative because the failure is a panel that renders
-    // with nothing in it and no explanation.
+    /*
+      009's acceptance criterion, worded as a negative because the failure is a panel that renders
+      with nothing in it and no explanation. **The copy is asserted verbatim on purpose (013 T6):**
+      nothing is backfilled into `release` when M3 ships (D14), so this is the state every freshly
+      provisioned project is in — permanently ordinary rather than temporarily unbuilt — and the
+      sentence saying what a release IS remains the right sentence.
+    */
     mockReads()
     renderPage()
 
@@ -228,20 +285,62 @@ describe('The sections M1 has no data for', () => {
     // What a release IS, and what it buys — not merely that there are none.
     expect(empty.textContent).toContain('a version you ship')
     expect(empty.textContent).toContain('readiness is measured against it')
-    // The action is rendered and says why it cannot be used yet: a link to a route that does not
-    // exist would be render-then-reject with the reject left to the reader.
-    expect(screen.getByTestId('ProjectOverview.Release.Create')).toBeDisabled()
-    // And the sentence that keeps the page honest in the meantime.
+    // And the sentence that keeps the page honest.
     expect(screen.getByTestId('ProjectOverview.Release.Foot').textContent).toContain(
       'do not depend on each other',
     )
   })
 
+  it('disables Create a release for a caller without release:manage, and says why', async () => {
+    // §31 disable-don't-hide. The reason is now the CALLER'S KEY rather than the module's absence,
+    // which is the one thing 013 T6 changed about this button.
+    mockReads()
+    renderPage()
+
+    await screen.findByTestId('ProjectOverview.Release.Empty')
+    await waitFor(() => {
+      // Re-queried inside the waitFor: `PermissionGate` REMOUNTS its child when the verdict lands,
+      // so a node captured before the answer is a detached element that stays disabled forever.
+      expect(screen.getByTestId('ProjectOverview.Release.Create')).toBeDisabled()
+    })
+  })
+
+  it('links Create a release for a caller who holds release:manage', async () => {
+    mockReads({ permissions: ['project:read', 'issue:create', 'release:manage'] })
+    renderPage()
+
+    await screen.findByTestId('ProjectOverview.Release.Empty')
+    await waitFor(() => {
+      expect(screen.getByTestId('ProjectOverview.Release.Create')).toHaveAttribute(
+        'href',
+        `/projects/${PROJECT_ID}/releases/new`,
+      )
+    })
+  })
+
+  it('keeps both release tiles on screen with a reason, rather than dropping them', async () => {
+    /*
+      A tile that vanishes moves the three beside it, so the row would be a different shape on a
+      project that has not typed a version yet. The em dash plus the `title` is the alternative, and
+      it is the same disable-don't-hide argument applied to a number.
+    */
+    mockReads()
+    renderPage()
+
+    const complete = await screen.findByTestId('ProjectOverview.ReleaseComplete.None')
+    expect(complete.textContent).toContain('no release planned on this project')
+    expect(complete).toHaveAttribute('title', expect.stringContaining('Create one'))
+
+    const target = screen.getByTestId('ProjectOverview.TargetDate.None')
+    expect(target.textContent).toContain('To target date')
+    expect(target.textContent).toContain('no release planned')
+  })
+
   it('renders no budget card and no team card at all', async () => {
     /*
-      M6 and M7. The difference from the release panel is the whole rule: a release is a thing this
-      project will have and has none YET, so its absence is a state. A budget is a module that is
-      not installed, and an empty-state card for one is an advertisement rather than an explanation.
+      M6 and M7, and the difference from the release panel is the whole rule: a release is a thing
+      this project will have, so its absence is a STATE with a tile and an empty panel. A budget is a
+      module that is not installed, and an empty-state card for one is an advertisement.
     */
     mockReads()
     renderPage()
@@ -251,9 +350,6 @@ describe('The sections M1 has no data for', () => {
     expect(screen.queryByText(/Budget burn/i)).toBeNull()
     expect(screen.queryByText(/Approved hours/i)).toBeNull()
     expect(screen.queryByText(/Staffing/i)).toBeNull()
-    // Nor the two KPI tiles that are a release's numbers.
-    expect(screen.queryByText(/To target date/i)).toBeNull()
-    expect(screen.queryByText(/complete$/i)).toBeNull()
   })
 
   it('renders the test-health panel, which M1 owns rather than defers', async () => {
@@ -268,6 +364,176 @@ describe('The sections M1 has no data for', () => {
     const passed = await screen.findByTestId('ProjectOverview.TestHealth.PASSED')
     expect(passed.textContent).toContain('48')
     expect(screen.getByTestId('ProjectOverview.TestHealth.FAILED').textContent).toContain('2')
+  })
+})
+
+describe('The release panel and its two tiles, with a release in them (013 T6)', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('names the next release, its badge and its target date', async () => {
+    mockReads({ releases: [RELEASE] })
+    renderPage()
+
+    const body = await screen.findByTestId('ProjectOverview.Release.Body')
+    expect(within(body).getByTestId('ProjectOverview.Release.Version').textContent).toBe('2.4')
+    // The badge is the verdict's word, never the status's — `releaseBadge` owns that and D-e is why.
+    expect(within(body).getByTestId('ProjectOverview.Release.Badge').textContent).toBe('Not ready')
+    // `formatDueIn`, not `formatAge`: a future date read as "just now" is what T5 paid for.
+    const target = within(body).getByTestId('ProjectOverview.Release.Target').textContent ?? ''
+    expect(target).toContain('2026-09-18')
+    expect(target).toContain('in 17 days')
+    expect(target).not.toContain('just now')
+  })
+
+  it('is the earliest PLANNED target date and not the first row the server sent', async () => {
+    // The rule lives in `features/releases/nextRelease.ts` with its own test; this asserts the
+    // screen actually asks it, which is the half a pure test cannot see.
+    mockReads({
+      releases: [
+        RELEASE,
+        aReleaseSummary({ id: 'rel-25', version: '2.5', targetDate: '2026-08-01' }),
+      ],
+    })
+    renderPage()
+
+    const body = await screen.findByTestId('ProjectOverview.Release.Body')
+    expect(within(body).getByTestId('ProjectOverview.Release.Version').textContent).toBe('2.5')
+  })
+
+  it('draws both meters from the readiness carried INLINE on the row', async () => {
+    // `ReleaseSummary.readiness` is on the list payload, so the meters have an answer before the
+    // second read lands and never flicker through a wrong one.
+    mockReads({ releases: [RELEASE] })
+    renderPage()
+
+    const stories = await screen.findByTestId('ProjectOverview.Release.Stories')
+    expect(stories.textContent).toContain('21 / 27')
+    expect(screen.getByTestId('ProjectOverview.Release.Cases').textContent).toContain('61 / 63')
+  })
+
+  it('says "no run yet" instead of a meter when nothing has been executed (D-d)', async () => {
+    /*
+      The claim this whole module exists to keep apart. `hasRun: false` means `casesPassed` is NULL
+      and not zero, and a bar drawn at zero says "nothing passed" where the truth is "nobody has
+      looked". `aReadinessSummary`'s inert defaults are what make this reachable.
+    */
+    mockReads({
+      releases: [aReleaseSummary({ id: 'rel-30', version: '3.0', targetDate: '2026-11-01' })],
+    })
+    renderPage()
+
+    const noRun = await screen.findByTestId('ProjectOverview.Release.NoRun')
+    expect(noRun.textContent).toContain('no run yet')
+    expect(noRun.textContent).toContain('not a pass rate of zero')
+    expect(screen.queryByTestId('ProjectOverview.Release.Cases')).toBeNull()
+  })
+
+  it('writes the red note from doneButFailing, naming the story and the case', async () => {
+    mockReads({
+      releases: [RELEASE],
+      readiness: aReleaseReadiness({
+        version: '2.4',
+        verdict: 'NOT_READY',
+        blockers: [
+          aReleaseBlocker({
+            key: 'ACME-118',
+            title: 'Guest checkout',
+            status: aStatusRef({ kind: 'DONE', name: 'Done' }),
+            failedCaseKeys: ['TC-311'],
+          }),
+        ],
+      }),
+    })
+    renderPage()
+
+    const note = await screen.findByTestId('ProjectOverview.Release.Failing')
+    expect(note.textContent).toContain('ACME-118')
+    expect(note.textContent).toContain('TC-311')
+    expect(note.textContent).toContain('is done but its case')
+  })
+
+  it('keeps the panel when the readiness read fails, and says which half is missing', async () => {
+    /*
+      Readiness is the panel's SECOND, dependent request and it is optional here: the version, the
+      badge, the date and both meters come off the list payload. A failed-state block would have
+      replaced a panel that is still telling the reader which version is next and when it is due.
+    */
+    drivingAFailedRead() // the readiness read, deliberately — this test is about degrading in place
+    mockReads({ releases: [RELEASE], failReadiness: true })
+    renderPage()
+
+    const body = await screen.findByTestId('ProjectOverview.Release.Body')
+    expect(within(body).getByTestId('ProjectOverview.Release.Version').textContent).toBe('2.4')
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('ProjectOverview.Release.ReadinessFailed').textContent,
+      ).toContain('came with the release itself and are current')
+    })
+    // And no red note, because the blockers it is derived from never arrived.
+    expect(screen.queryByTestId('ProjectOverview.Release.Failing')).toBeNull()
+  })
+
+  it('states the completion tile\u2019s basis, which is NOT the mockup\u2019s estimate', async () => {
+    /*
+      `project-overview.html` reads "by estimate · 214 of 306 h". `ReleaseReadiness` carries no
+      estimate roll-up at all, so the tile is by story count AND SAYS SO — a percentage never changes
+      meaning silently, and the caption is the whole of it.
+    */
+    mockReads({
+      releases: [RELEASE],
+      readiness: aReleaseReadiness({ stories: aReleaseStories({ done: 21, total: 27 }) }),
+    })
+    renderPage()
+
+    const tile = await screen.findByTestId('ProjectOverview.ReleaseComplete.Tile')
+    expect(tile.textContent).toContain('78%')
+    expect(tile.textContent).toContain('2.4 complete')
+    expect(tile.textContent).toContain('by story count · 21 of 27')
+  })
+
+  it('counts down to the target date, and says nothing when there is none', async () => {
+    mockReads({ releases: [RELEASE] })
+    renderPage()
+
+    const tile = await screen.findByTestId('ProjectOverview.TargetDate.Tile')
+    expect(tile.textContent).toContain('To target date')
+    expect(tile.textContent).toContain('2.4 · 2026-09-18')
+  })
+
+  it('renders an em dash rather than 0% when the release counts no stories', async () => {
+    // A release with nothing pointed at it yet. `percentOf` answers null over a zero denominator
+    // rather than 0%, which would be a claim about progress on work nobody has scoped.
+    mockReads({
+      releases: [RELEASE],
+      readiness: aReleaseReadiness({ stories: aReleaseStories({ done: 0, total: 0 }) }),
+    })
+    renderPage()
+
+    /*
+      `waitFor` and not `findByTestId`: the tiles are outside a `DataRegion`, so the FIRST paint has
+      no releases yet and renders the same `.None` node with the other sentence. Finding the node is
+      not the assertion — which sentence it settles on is.
+    */
+    await waitFor(() => {
+      expect(screen.getByTestId('ProjectOverview.ReleaseComplete.None').textContent).toContain(
+        'has no stories pointed at it yet',
+      )
+    })
+    expect(screen.getByTestId('ProjectOverview.ReleaseComplete.None').textContent).not.toContain('0%')
+  })
+
+  it('never names a RELEASED version as next', async () => {
+    mockReads({
+      releases: [
+        aReleaseSummary({ id: 'rel-23', version: '2.3', status: 'RELEASED', targetDate: '2026-07-01' }),
+      ],
+    })
+    renderPage()
+
+    // Back to the empty state, because "next" is what ships now and this one shipped.
+    expect(await screen.findByTestId('ProjectOverview.Release.Empty')).toBeInTheDocument()
   })
 })
 

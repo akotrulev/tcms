@@ -32,6 +32,7 @@ import {
 } from '@tanstack/react-query';
 import { TIMEOUTS, api, qs } from '../client';
 import type {
+  BacklogFilters,
   BacklogRow,
   BoardConfig,
   BoardContents,
@@ -150,10 +151,17 @@ export function useBoardCards(
   });
 }
 
-/** The ranked backlog, under the same filter the board carries — one filter, three views (D34). */
+/**
+ * The ranked backlog, under the filter **it** declares — one filter, three views (D34).
+ *
+ * `BacklogFilters` and not `BoardFilters` since 013 T6: this endpoint takes `releaseId` and
+ * `unscheduled` and `GET /boards/{boardId}/cards` above does not. The two types exist because the
+ * hooks spread their filter into `qs`, so the type IS the set of keys sent — see `BacklogFilters`'
+ * own header for the check that proved a widened `BoardFilters` wrong.
+ */
 export function useBacklog(
   projectId: string,
-  filters: BoardFilters,
+  filters: BacklogFilters,
 ): UseQueryResult<BacklogRow[]> {
   return useQuery({
     queryKey: keys.backlog(projectId, filters),

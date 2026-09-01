@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useLabels, useProjectMembers, useProjectWorkflow } from '../../api/queries';
-import type { BoardFilters, IssueFilters, IssueLevel, Priority } from '../../api/types';
+import { useLabels, useProjectMembers, useProjectWorkflow, useReleases } from '../../api/queries';
+import type { BacklogFilters, BoardFilters, IssueFilters, IssueLevel, Priority } from '../../api/types';
 import type { AppliedFilter } from '../../components/kit';
 import { issueLevels, priorityLabels } from '../../lib/labels';
 
@@ -25,6 +25,9 @@ import { issueLevels, priorityLabels } from '../../lib/labels';
  * and it is also incoherent on its face, because a status filter would empty the columns the board
  * is drawn from.
  *
+ * Since 013 T6 that is **three** subsets rather than two: the backlog takes a release filter the
+ * board does not. See {@link WorkFilters}`.backlog`, which is where the reason is written.
+ *
  * Two `useMemo`s over one URL, in two files, is exactly the drift this removes. Neither was wrong
  * on the day it was written, which is the point.
  *
@@ -38,10 +41,25 @@ import { issueLevels, priorityLabels } from '../../lib/labels';
  * argument covers the chosen sort and the chosen columns.
  */
 export interface WorkFilters {
-  /** What `GET /issues` declares — the table's. */
+  /** What `GET /issues` declares — the table's and the calendar's. */
   issue: IssueFilters;
-  /** What `GET /boards/{id}/cards` and `GET /projects/{id}/backlog` declare — the board's and the backlog's. */
+  /** What `GET /boards/{id}/cards` declares — the board's. */
   board: BoardFilters;
+  /**
+   * What `GET /projects/{id}/backlog` declares — {@link BacklogFilters}, the board's six **plus
+   * `releaseId` and `unscheduled`** (013 T6).
+   *
+   * ~~One `board` member serves both.~~ → **superseded 2026-09-01 (plan 013, T6).** It served both
+   * while the two endpoints declared the same six parameters, and M3 ended that: the backlog takes a
+   * release filter and `GET /boards/{id}/cards` **deliberately does not**.
+   *
+   * A third member rather than one widened object, and it is D-v's own rule rather than a new one:
+   * each view is handed **the subset its own endpoint declares**. `BacklogFilters`' own header
+   * carries what the shortcut cost — `contractParameters.test.ts` reads the *type* a hook spreads
+   * into `qs`, so widening `BoardFilters` made the board send two parameters its endpoint would have
+   * ignored in silence.
+   */
+  backlog: BacklogFilters;
 }
 
 /**
@@ -84,10 +102,21 @@ export function useWorkFilter(): WorkFilter {
     const statusId = someOf(params.getAll('statusId'));
     const labelId = someOf(params.getAll('labelId'));
     const priority = someOf(params.getAll('priority').filter(isPriority));
+    /*
+      `unscheduled` loses to `releaseId` when both are somehow in the URL, rather than both being
+      sent: the server answers 400 for the pair, and a hand-edited link is not worth a screen-wide
+      failed state. The pickers make the pair unreachable — each one clears the other.
+    */
+    const releaseId = params.get('release') || undefined;
+    const unscheduled =
+      releaseId === undefined && params.get('unscheduled') === 'true' ? true : undefined;
+
+    const board: BoardFilters = { level, epicKey, labelId, assigneeId, priority, unparented };
 
     return {
       issue: { level, epicKey, parentKey, statusId, assigneeId, unparented },
-      board: { level, epicKey, labelId, assigneeId, priority, unparented },
+      board,
+      backlog: { ...board, releaseId, unscheduled },
     };
   }, [params]);
 
@@ -131,8 +160,7 @@ export function useWorkFilter(): WorkFilter {
 }
 
 /**
- * The applied chips for a `BoardFilters` view — the board's and the backlog's, which are the same
- * six parameters and therefore the same six chips.
+ * The applied chips for a `BoardFilters` view — the board's and the backlog's.
  *
  * **A chip for every filter this endpoint applies, whether or not this strip can apply it.** `level`,
  * `epicKey` and `unparented` have no picker on either screen — B3 asks for label, assignee and
@@ -143,16 +171,54 @@ export function useWorkFilter(): WorkFilter {
  *
  * It lives here rather than in either screen for the reason the hook above does: two copies of one
  * list drift, and the first thing to drift is which filters get a chip at all.
+ *
+ * <h2>The release chip appears on the backlog and not on the board, and that is the same rule</h2>
+ *
+ * Both views call this hook, and what separates them is what they *pass*: `filters.board` carries no
+ * `releaseId`, so the chip does not render there — see {@link WorkFilters}`.backlog`. The board is
+ * genuinely not narrowed by a release (it groups by the `RELEASE` swimlane axis instead), so a chip
+ * there would claim a narrowing that is not happening.
+ *
+ * `useReleases` is read here rather than taken as a parameter, for the reason `useLabels` and
+ * `useProjectMembers` are: the chip's label is a **version**, not a uuid, and only a lookup turns
+ * one into the other. It is why this is a hook and not a function.
  */
 export function useBoardFilterChips(
   projectId: string,
-  filters: BoardFilters,
+  filters: BacklogFilters,
   { setParam, dropOne }: Pick<WorkFilter, 'setParam' | 'dropOne'>,
 ): AppliedFilter[] {
   const labels = useLabels(projectId);
   const members = useProjectMembers(projectId, true);
+  /*
+    Gated on the filter actually being set, so the board and an unfiltered backlog do not pay a
+    release list read to render no chip. `useReleases` is `enabled` on a non-empty project id, so an
+    empty string is the off switch the hook already understands.
+  */
+  const releases = useReleases(filters.releaseId ? projectId : '');
 
   return [
+    ...(filters.releaseId
+      ? [
+          {
+            key: `release:${filters.releaseId}`,
+            label: `Release · ${
+              releases.data?.find((release) => release.id === filters.releaseId)?.version
+              ?? filters.releaseId
+            }`,
+            onRemove: () => setParam((next) => next.delete('release')),
+          },
+        ]
+      : []),
+    ...(filters.unscheduled
+      ? [
+          {
+            key: 'unscheduled',
+            label: 'No release',
+            onRemove: () => setParam((next) => next.delete('unscheduled')),
+          },
+        ]
+      : []),
     ...(filters.labelId ?? []).map((id) => ({
       key: `label:${id}`,
       label: `Label · ${labels.data?.find((label) => label.id === id)?.name ?? id}`,
