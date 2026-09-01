@@ -195,13 +195,17 @@ export const issueStatusKinds = {
 /**
  * `SwimlaneBy` — how story B3's board bands its rows.
  *
- * Four members, and the fifth is the mechanism rather than an omission: `RELEASE` is B3's list
- * too, and M3 adding it to the contract makes **this line** a compile error until it is worded,
- * which is the whole reason the map is `satisfies Record<Union, string>` and not a lookup with a
- * default. A default would have shipped a grouping labelled `RELEASE`.
+ * ~~Four members, and the fifth is the mechanism rather than an omission~~ → **the mechanism fired,
+ * and it fired on the contract commit rather than on the screen commit** (013 T1). Adding `RELEASE`
+ * to the contract's enum broke this line, `ProjectBoardView.tsx` and `BoardSettingsPage.tsx` in one
+ * `tsc -b`, which is exactly what `satisfies Record<Union, string>` is here for and not what a
+ * lookup with a default would have done — that would have shipped a grouping labelled `RELEASE`.
+ *
+ * Worth keeping for the next axis: the wording lands in the task that lands the **enum**, not in the
+ * task that draws the screen, because the tree has to build at every task boundary.
  *
  * `NONE` is worded as what the reader chose ("No swimlanes"), not as the absence of a choice: it
- * is a selectable option in the board settings, and "None" beside three nouns reads as a
+ * is a selectable option in the board settings, and "None" beside four nouns reads as a
  * placeholder for one of them.
  */
 export const swimlaneByLabels = {
@@ -210,6 +214,7 @@ export const swimlaneByLabels = {
   ASSIGNEE: 'Assignee',
   LABEL: 'Label',
   PRIORITY: 'Priority',
+  RELEASE: 'Release',
 } as const satisfies Record<SwimlaneBy, string>;
 
 /**

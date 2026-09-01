@@ -10561,9 +10561,11 @@ export interface paths {
          *     backlog row (its status is derived from its stories, D31) and a done issue is not "what's
          *     next". Takes the same filter as `GET /boards/{boardId}/cards`.
          *
-         *     **Not grouped by release in M2.** `work-backlog.html` shows a "2.4 · target 18 Sep" section
-         *     and an "Unscheduled" one; `release` is M3's table, so this returns one list and M3 adds the
-         *     grouping.
+         *     ~~**Not grouped by release in M2.**~~ → **`releaseId` and `unscheduled` landed in M3**, which
+         *     is when `release` became a table. This still returns **one list in one order** and always
+         *     will: `issue.rank` is a single project-wide sequence, so `work-backlog.html`'s
+         *     "2.4 · target 18 Sep" and "Unscheduled" sections are two slices of it that the client draws,
+         *     not two orderings the server maintains.
          */
         get: operations["getBacklog"];
         put?: never;
@@ -10673,6 +10675,248 @@ export interface paths {
          *     endpoints for it would let a stale client remove a label somebody else had just added.
          */
         put: operations["putIssueLabels"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/releases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The project's releases, in version order
+         * @description `release:read` — Instance Admin, Company Admin, Project Manager, Test Lead, Test Engineer
+         *     and Viewer. **Automation Service does not hold it** (roles spec §A3): a CI token posts
+         *     results and has no business reading a delivery plan.
+         *
+         *     Ordered by a computed key, never by the version text — `2.10` comes after `2.5`, not between
+         *     `2.1` and `2.2`. Each row carries its readiness inline, because the list draws two meters and
+         *     a badge per row.
+         *
+         *     **An empty array is the ordinary state of a fresh instance**, not an error: nothing is
+         *     migrated into releases (D14), so the first one is one a person types.
+         */
+        get: operations["listReleases"];
+        put?: never;
+        /**
+         * Create a release
+         * @description `release:manage` — Instance Admin, Company Admin and Project Manager.
+         *
+         *     A version, and optionally a date and a description. The version is unique within the
+         *     **project**, case-insensitively (D13).
+         */
+        post: operations["createRelease"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/releases/{releaseId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                releaseId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One release
+         * @description `release:read`. The release itself, without its readiness — that is `/readiness`.
+         */
+        get: operations["getRelease"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a release
+         * @description `release:manage`.
+         *
+         *     **The issues pointing at it keep existing and lose their target release** — the foreign key
+         *     is `ON DELETE SET NULL`, and deliberately so: a release is a *plan*, and deleting a plan must
+         *     not require deleting or reassigning the work first. The issues return to the state they were
+         *     in before anybody scheduled them, which is exactly the backlog's "Unscheduled" section.
+         *
+         *     Test runs recorded against the version keep their `releaseVersion` text and lose only the
+         *     key, so nothing in execution history changes.
+         */
+        delete: operations["deleteRelease"];
+        options?: never;
+        head?: never;
+        /**
+         * Edit a release's version, date or description
+         * @description `release:manage`. **Not the status** — publishing is `POST /releases/{releaseId}/publish`,
+         *     and it costs a key `release:manage` does not imply.
+         *
+         *     Renaming the version recomputes the ordering key, so a release edited from `1.9` to `1.10`
+         *     moves in the list rather than staying where its old text sorted it.
+         */
+        patch: operations["updateRelease"];
+        trace?: never;
+    };
+    "/releases/{releaseId}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                releaseId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark a release released
+         * @description `release:publish` — Instance Admin, Company Admin and Project Manager. **A separate key from
+         *     `release:manage`**, for the reason `doc:publish` is separate from `doc:edit`: publishing
+         *     moves a state, and it is its own gate and its own audit row.
+         *
+         *     **Idempotent.** Publishing an already-released release answers 200 with it unchanged and does
+         *     **not** restamp `releasedAt` — a second press of a button is not a second shipment.
+         *
+         *     **Readiness does not gate this.** A team may ship a version with a known failure and record
+         *     that they did; a server that refused would be asserting a release policy this product has no
+         *     way to know.
+         */
+        post: operations["publishRelease"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/releases/{releaseId}/readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                releaseId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Can we ship this version?
+         * @description `release:read`. **Automation Service does not hold it** (roles spec §A3).
+         *
+         *     One answer over two halves: every counted story done, **and** every linked test case passing
+         *     in the latest result recorded against this version. Story R4, and the question neither a
+         *     tracker nor a test tool answers alone.
+         *
+         *     **The latest result per case, not the best one.** A case that failed and was not re-run is a
+         *     failure; taking the best result would let a release pass on a run somebody re-ran until it
+         *     went green.
+         *
+         *     **A version nothing has run against answers `NOT_TESTED`, with `tests.hasRun` false and every
+         *     count under it null** — never zero failures. That distinction is why this operation has this
+         *     shape rather than being two numbers on the release itself.
+         */
+        get: operations["getReleaseReadiness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/roadmap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Releases on a timeline, with their epics inside
+         * @description `release:read`. Story R3, and `work-timeline.html`.
+         *
+         *     Releases in version order, each with the epics targeting it; then an `unscheduled` list of
+         *     every epic that cannot be drawn under one — no dates at all, or no target release. An epic
+         *     with no dates does not disappear from the roadmap.
+         *
+         *     **Expect this to be empty on a fresh instance.** Nothing is migrated into releases (D14).
+         */
+        get: operations["getRoadmap"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/issues/{key}/test-cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * The test cases that prove this story
+         * @description `issue:read`. Story H7 — *"done" and "proven" are the same screen*.
+         *
+         *     Each case carries the latest result it has **anywhere**, not the latest for any particular
+         *     version. Ordered by case key.
+         */
+        get: operations["listIssueTestCases"];
+        /**
+         * Replace the test cases a story is proven by
+         * @description **`issue:edit`** — linking a case to a story edits the story, and there is no `link:*` key.
+         *     A replacement rather than add/remove pairs, for `putIssueLabels`' reason.
+         *
+         *     Rows land in `issue_link` with a target type of `TEST_CASE` — the polymorphic edge `V3`
+         *     created for exactly this and left empty until now. **There is no foreign key on the target**
+         *     (scope §3: `tracker` is not a foundation module), so the case ids are validated here and a
+         *     case belonging to another project is a **400 naming the field**, not a 404: the issue is
+         *     reachable and the ids are the caller's mistake.
+         */
+        put: operations["putIssueTestCases"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/case-verifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Which stories each test case verifies
+         * @description `issue:read`. `test-cases.html`'s **Verifies** column, and the reverse of
+         *     `GET /issues/{key}/test-cases`.
+         *
+         *     **Served from `tracker` rather than widened onto `TestCaseSummary`**, which is what it looks
+         *     like it should be: that would make `repository` read `issue_link` and `issue` on the request
+         *     path of the product's busiest list, a fourth foreign-table seam in that module. Read from
+         *     this side it crosses no boundary at all — both tables are `tracker`'s — and the client merges
+         *     it into the grid.
+         *
+         *     **Only cases with at least one link appear.** A case with none is absent rather than present
+         *     with an empty array, so the payload is proportional to the links and not to the catalogue;
+         *     the column renders an em dash for a missing key.
+         */
+        get: operations["listCaseVerifications"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -16176,6 +16420,11 @@ export interface components {
             overdue?: boolean;
             /** Format: double */
             estimateHours?: number | null;
+            /**
+             * @description The target release, or null. A story either has one or it does not — there is no join
+             *     table and there will not be one (D6).
+             */
+            release?: components["schemas"]["ReleaseRef"] | null;
         };
         Issue: {
             /** @example ACME-118 */
@@ -16237,6 +16486,11 @@ export interface components {
              *     everywhere; never recomputed in a component (D8, "one number, one place").
              */
             completion?: components["schemas"]["IssueCompletion"] | null;
+            /**
+             * @description The target release, or null. A story either has one or it does not — there is no join
+             *     table and there will not be one (D6).
+             */
+            release?: components["schemas"]["ReleaseRef"] | null;
             /** @description An epic's stories, or a story's sub-tasks. Empty for a Task. */
             children: components["schemas"]["IssueSummary"][];
             watchers: components["schemas"]["UserRef"][];
@@ -16289,6 +16543,12 @@ export interface components {
             targetDate?: string | null;
             /** Format: date */
             dueDate?: string | null;
+            /**
+             * Format: uuid
+             * @description The target release. **Must belong to this issue's own project** (D13) — a release from
+             *     another project is a 400 naming the field, never a silent null.
+             */
+            releaseId?: string | null;
             acceptanceCriteria?: string[];
         };
         /**
@@ -16312,6 +16572,12 @@ export interface components {
             targetDate?: string | null;
             /** Format: date */
             dueDate?: string | null;
+            /**
+             * Format: uuid
+             * @description The target release. **Must belong to this issue's own project** (D13) — a release from
+             *     another project is a 400 naming the field, never a silent null.
+             */
+            releaseId?: string | null;
             acceptanceCriteria?: {
                 text: string;
                 done: boolean;
@@ -16402,13 +16668,18 @@ export interface components {
             swimlaneBy: components["schemas"]["SwimlaneBy"];
         };
         /**
-         * @description Story B3's grouping axis. `RELEASE` is **absent until M3** — a member whose data does not
+         * @description Story B3's grouping axis. ~~`RELEASE` is **absent until M3** — a member whose data does not
          *     exist would be a grouping that silently yields one lane called "None", which reads as a
-         *     broken board rather than an unbuilt feature. Adding it later is one entry in a
-         *     `Record<Union, string>` and a compile error until it is labelled.
+         *     broken board rather than an unbuilt feature.~~ → **landed in M3, which is when that data
+         *     exists.** It groups by target release; a card with no release lands in the `None` lane the
+         *     grouping already produces on every other axis.
+         *
+         *     Adding a member is one entry in a `Record<Union, string>` and **a compile error until it is
+         *     labelled** — `frontend/src/lib/labels.ts::swimlaneByLabels`, which is the mechanism that file
+         *     exists for. A seventh axis has to edit two places: this enum and that file.
          * @enum {string}
          */
-        SwimlaneBy: "NONE" | "EPIC" | "ASSIGNEE" | "LABEL" | "PRIORITY";
+        SwimlaneBy: "NONE" | "EPIC" | "ASSIGNEE" | "LABEL" | "PRIORITY" | "RELEASE";
         /**
          * @description A board is a **lens, not a container** (scope §12.1): a grouping and a mapping from the
          *     project's statuses onto columns. It owns no issue, which is why deleting one loses no work.
@@ -16560,6 +16831,11 @@ export interface components {
             /** Format: double */
             estimateHours?: number | null;
             epicKey?: string | null;
+            /**
+             * @description The target release, or null. A story either has one or it does not — there is no join
+             *     table and there will not be one (D6).
+             */
+            release?: components["schemas"]["ReleaseRef"] | null;
             labels: components["schemas"]["Label"][];
         };
         /**
@@ -16613,6 +16889,333 @@ export interface components {
         };
         IssueLabelsInput: {
             labelIds: string[];
+        };
+        /**
+         * @description `PLANNED` until somebody presses **Mark released**, which is
+         *     `POST /releases/{releaseId}/publish` and costs `release:publish` — a separate key from
+         *     `release:manage` for the reason `doc:publish` is separate from `doc:edit`: publishing moves
+         *     a state, and it is its own gate and its own audit row.
+         * @enum {string}
+         */
+        ReleaseStatus: "PLANNED" | "RELEASED";
+        /**
+         * @description The one answer to *"can we ship 2.4?"* — story R4, and the question neither a tracker nor a
+         *     test tool answers alone.
+         *
+         *     **`NOT_TESTED` is not `NOT_READY` with zero failures.** It means no execution has been
+         *     recorded against this version at all, while every counted story is done. An untested version
+         *     and a clean version are not the same claim, and a meter drawn from a zero looks like the
+         *     second — so `ReleaseTests.hasRun` is on the wire beside this and the counts under it are
+         *     **null rather than zero** when it is false.
+         *
+         *     `NOT_READY` covers everything outstanding: a counted story not in a `DONE` status, a linked
+         *     case whose latest result *for this version* is not a pass, or a linked case with no result
+         *     for this version at all while others have one. An unrun case is unproven.
+         *
+         *     Counted stories are D8's set — story-level issues whose type counts toward completion — so a
+         *     **Spike never blocks a release**, exactly as it never moves an epic's percentage. The two
+         *     numbers come from one implementation and cannot disagree.
+         * @enum {string}
+         */
+        ReleaseVerdict: "READY" | "NOT_READY" | "NOT_TESTED";
+        /**
+         * @description A release as it appears on an issue or a backlog row — never its readiness. A story either
+         *     has a target release or it does not; there is no join table (D6).
+         */
+        ReleaseRef: {
+            /** Format: uuid */
+            id: string;
+            /** @example 2.4 */
+            version: string;
+            /** Format: date */
+            targetDate?: string | null;
+        };
+        Release: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: string;
+            /**
+             * @description Unique within the project, case-insensitively. **Not within the company** (D13): a
+             *     version shipped from a web project and an API project is two releases, gets two
+             *     roadmaps, and cannot be asked about across both — the accepted cost of not pushing a
+             *     cross-project visibility filter into every readiness query.
+             *
+             *     Compared segment by segment for ordering, never as text: `1.10` comes after `1.9`, and
+             *     `4.3.0-rc.1` before `4.3.0`.
+             * @example 2.4
+             */
+            version: string;
+            description?: string | null;
+            /**
+             * Format: date
+             * @description Optional. Without one the release still exists and still appears on the roadmap, in
+             *     version order, with a point marker instead of a bar.
+             */
+            targetDate?: string | null;
+            status: components["schemas"]["ReleaseStatus"];
+            /** Format: date-time */
+            releasedAt?: string | null;
+            /**
+             * Format: date-time
+             * @description The baseline "scope added after the release was created" is measured from (009 review
+             *     R12), which is why it is on the wire rather than left as audit furniture. Never edited.
+             */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt?: string | null;
+        };
+        /** @description The row-sized answer, carried inline on every `ReleaseSummary`. */
+        ReadinessSummary: {
+            verdict: components["schemas"]["ReleaseVerdict"];
+            storiesDone: number;
+            /** @description Counted story-level issues. Zero is a real answer, and the verdict is then about the test half alone. */
+            storiesTotal: number;
+            /** @description Distinct test cases linked to those stories. */
+            linkedCases: number;
+            /**
+             * @description False when no execution has been recorded against this version. `casesPassed` and
+             *     `casesFailed` are then **null and not zero** — see `ReleaseVerdict`.
+             */
+            hasRun: boolean;
+            casesPassed?: number | null;
+            casesFailed?: number | null;
+        };
+        /**
+         * @description A row in `releases.html`'s table. It carries its readiness **inline** because the list draws
+         *     two meters and a badge per row, and a list of ids the client then resolves one at a time is
+         *     N+1 over a screen the server already has every answer for.
+         */
+        ReleaseSummary: {
+            /** Format: uuid */
+            id: string;
+            version: string;
+            description?: string | null;
+            /** Format: date */
+            targetDate?: string | null;
+            status: components["schemas"]["ReleaseStatus"];
+            /** Format: date-time */
+            releasedAt?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            readiness: components["schemas"]["ReadinessSummary"];
+        };
+        /**
+         * @description The delivery half of readiness, counted over D8's set.
+         *
+         *     **There is no `blocked` count**, and `release.html` draws one. `IssueStatusKind` has exactly
+         *     three members — `NOT_STARTED`, `IN_PROGRESS`, `DONE` (D2) — so "blocked" is a status *name*
+         *     a project chose and not a class this contract can count. The blockers list below carries
+         *     each story's real status by name, which is where a reader sees the word.
+         */
+        ReleaseStories: {
+            done: number;
+            total: number;
+            inProgress: number;
+            notStarted: number;
+            /**
+             * @description Left out of both numerator and denominator (D8). A spike produces knowledge, not
+             *     shippable work, so it never blocks a release — and the number is served so the screen
+             *     can say so, rather than leaving a total that does not match the backlog to be doubted.
+             */
+            excludedSpikes: number;
+        };
+        /**
+         * @description The QA half, and **the latest result per case — not the best one.** A case that failed and
+         *     was not re-run is a failure; taking the best result would let a release pass on a run
+         *     somebody re-ran until it went green.
+         */
+        ReleaseTests: {
+            /** @description Whether any execution has been recorded against this version for any linked case. */
+            hasRun: boolean;
+            linkedCases: number;
+            /** @description Linked cases with any result against this version. */
+            withResult?: number | null;
+            passed?: number | null;
+            failed?: number | null;
+            blocked?: number | null;
+            /**
+             * @description Linked cases with no result against this version. Null — along with every count above —
+             *     when `hasRun` is false, where the answer is *every* linked case and serving it as a
+             *     number invites a client to draw it as a bar beside a zero.
+             */
+            untested?: number | null;
+            /** Format: date-time */
+            latestExecutedAt?: string | null;
+            /** Format: uuid */
+            latestRunId?: string | null;
+            latestRunName?: string | null;
+            executedBy?: components["schemas"]["UserRef"] | null;
+        };
+        /**
+         * @description One row of `release.html`'s **What stands between here and shipping**.
+         *
+         *     A story is here when it is not in a `DONE` status, **or** when it is done and one of its
+         *     linked cases did not pass in the latest result recorded against this version — which is the
+         *     case this whole module exists for, and the reason `status` is served rather than a boolean:
+         *     the screen distinguishes *"nobody has started"* from *"this is finished and its test says
+         *     otherwise"*, and only the status can tell it which.
+         */
+        ReleaseBlocker: {
+            /** @example ACME-118 */
+            key: string;
+            title: string;
+            type: components["schemas"]["IssueTypeRef"];
+            status: components["schemas"]["IssueStatusRef"];
+            casesPassed: number;
+            casesFailed: number;
+            casesBlocked: number;
+            casesUntested: number;
+            /** @description The cases that failed, by display key — `TC-311`. Empty when none did. */
+            failedCaseKeys: string[];
+        };
+        /** @description An epic as a bar on the timeline, or as a line under a release. */
+        RoadmapEpic: {
+            key: string;
+            title: string;
+            /** Format: date */
+            startDate?: string | null;
+            /** Format: date */
+            targetDate?: string | null;
+            /** Format: uuid */
+            releaseId?: string | null;
+            statusKind: components["schemas"]["IssueStatusKind"];
+            /**
+             * @description D8's percentage, computed server-side and read everywhere — never recomputed in a
+             *     component. Null when the epic counts nothing.
+             */
+            completionPercent?: number | null;
+        };
+        /** @description `GET /releases/{releaseId}/readiness` — the whole of `release.html`. */
+        ReleaseReadiness: {
+            /** Format: uuid */
+            releaseId: string;
+            version: string;
+            status: components["schemas"]["ReleaseStatus"];
+            verdict: components["schemas"]["ReleaseVerdict"];
+            stories: components["schemas"]["ReleaseStories"];
+            tests: components["schemas"]["ReleaseTests"];
+            blockers: components["schemas"]["ReleaseBlocker"][];
+            epics: components["schemas"]["RoadmapEpic"][];
+            /**
+             * @description Counted issues first pointed at this release **after** it was created, from
+             *     `issue_fact.release_assigned_at`.
+             *
+             *     That projection is event-fed, so this one number can lag the rest of this payload by a
+             *     tick and the screen says so. It is served from there rather than derived live because
+             *     the timestamp exists nowhere else and cannot be reconstructed after the fact (009 review
+             *     R12) — every other number here comes from live `issue` rows for exactly that reason.
+             */
+            scopeAddedAfterCreation: number;
+        };
+        RoadmapRelease: {
+            /** Format: uuid */
+            id: string;
+            version: string;
+            /** Format: date */
+            targetDate?: string | null;
+            status: components["schemas"]["ReleaseStatus"];
+            verdict: components["schemas"]["ReleaseVerdict"];
+            epics: components["schemas"]["RoadmapEpic"][];
+        };
+        /**
+         * @description `work-timeline.html`.
+         *
+         *     **Empty on the day this module merges, and that is a decision rather than a defect.** D14
+         *     migrates nothing into `release`, so the first row here is one a person typed. A client
+         *     rendering this must say so and offer to create one — an empty timeline that explains nothing
+         *     reads as a broken screen, and a reader has no way to tell the difference.
+         */
+        Roadmap: {
+            /** @description Every release, in version order — `2.10` after `2.5`, never between `2.1` and `2.2`. */
+            releases: components["schemas"]["RoadmapRelease"][];
+            /**
+             * @description Every epic that cannot be drawn under a release: one with **no dates at all**, whatever
+             *     its release, and one with **no target release**, whatever its dates. An epic with no
+             *     dates does not disappear from the roadmap — it lands here, where it can be seen and
+             *     given some.
+             */
+            unscheduled: components["schemas"]["RoadmapEpic"][];
+        };
+        /**
+         * @description A version, and optionally a date and a description. **Nothing else is required**, and there
+         *     is no field for a sprint, a velocity or a second project: planning has a cadence because
+         *     releases have dates, not because anybody invented a two-week rhythm they do not work in.
+         */
+        ReleaseInput: {
+            version: string;
+            description?: string | null;
+            /**
+             * Format: date
+             * @description A date in the past is accepted. A release that slipped is a real state, and refusing it would make it unrecordable.
+             */
+            targetDate?: string | null;
+        };
+        /**
+         * @description Every field optional; an absent key is "leave it".
+         *
+         *     **`status` is not here.** Publishing is `POST /releases/{releaseId}/publish` and costs
+         *     `release:publish`, which `release:manage` does not imply — a status property here would be
+         *     that state moved behind the other key.
+         */
+        ReleaseUpdate: {
+            version?: string;
+            description?: string | null;
+            /** Format: date */
+            targetDate?: string | null;
+        };
+        /**
+         * @description An issue as it appears on something that is not an issue — a test case's **Verifies**
+         *     column. Distinct from `IssueSummary`, which is a row in a list *of* issues and carries a
+         *     status, an assignee and an epic this shape has no room for.
+         */
+        IssueRef: {
+            /** @example ACME-118 */
+            key: string;
+            title: string;
+            typeLevel: components["schemas"]["IssueLevel"];
+        };
+        /**
+         * @description A case linked to this story (H7), with the latest result it has **anywhere** — deliberately
+         *     not scoped to a release. Release-scoped results are `GET /releases/{releaseId}/readiness`,
+         *     and the two answer different questions: a story's own panel asks *does this case pass*, and
+         *     readiness asks *did it pass for the version we are shipping*.
+         *
+         *     Sourced from `case_health`, the read model `repository` maintains — the same row
+         *     `TestCaseSummary.lastResult` is served from, so a case cannot show one result on its own
+         *     screen and another on the story that links it.
+         *
+         *     The three `last*` members are required and nullable together: a case that has never been
+         *     executed carries three nulls, and omitting them would leave a consumer unable to tell that
+         *     from an endpoint that does not serve them.
+         */
+        IssueTestCase: {
+            /** Format: uuid */
+            caseId: string;
+            /** @example TC-311 */
+            caseKey: string;
+            title: string;
+            lastResultKind: components["schemas"]["StatusKind"] | null;
+            /** Format: date-time */
+            lastExecutedAt: string | null;
+            lastReleaseVersion: string | null;
+        };
+        /**
+         * @description The whole set, written over whatever was there — a `PUT`, for `IssueLabelsInput`'s reason:
+         *     the control is a multi-select whose state *is* the set, and add/remove pairs let a stale
+         *     client unlink a case somebody else had just linked.
+         */
+        IssueTestCasesInput: {
+            caseIds: string[];
+        };
+        /**
+         * @description One case and the stories it verifies — `test-cases.html`'s new column, and the same fact as
+         *     `IssueTestCase` read from the other end.
+         */
+        CaseVerification: {
+            /** Format: uuid */
+            caseId: string;
+            issues: components["schemas"]["IssueRef"][];
         };
         /**
          * @description Where one project sends its notices — **without its credential, and there is deliberately
@@ -21246,6 +21849,19 @@ export interface operations {
                 level?: components["schemas"]["IssueLevel"];
                 priority?: components["schemas"]["Priority"][];
                 unparented?: boolean;
+                /**
+                 * @description Only issues targeting this release (story B4). **A filter over the one project-wide rank
+                 *     order, not a second order** — the rows come back in the sequence they would have without
+                 *     it, with the others removed, so a drag between two release sections is still one
+                 *     neighbour-relative `PUT /issues/{key}/rank`.
+                 */
+                releaseId?: string;
+                /**
+                 * @description Only issues with **no** target release. A flag rather than `releaseId=null`, for
+                 *     `unparented`'s reason: an absent parameter already means "don't filter", and a client
+                 *     cannot spell the difference. Sending both this and `releaseId` is a 400.
+                 */
+                unscheduled?: boolean;
             };
             header?: never;
             path: {
@@ -21347,6 +21963,7 @@ export interface operations {
                     "application/json": components["schemas"]["Label"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -21400,6 +22017,7 @@ export interface operations {
                     "application/json": components["schemas"]["Label"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -21430,8 +22048,335 @@ export interface operations {
                     "application/json": components["schemas"]["Label"][];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listReleases: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Releases, newest version last. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleaseSummary"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createRelease: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
+                 *     already succeeded answers **200** with the resource that intent created, instead of creating
+                 *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
+                 *     §136; the parameter has been shared by six other creates since `V14`, and by report generation since `V66`.)
+                 *
+                 *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
+                 *     it across retries. A key generated per attempt is the mistake that makes the header look
+                 *     right and do nothing.
+                 *
+                 *     Scoped to the project the request is addressed to, which is the scope the uniqueness
+                 *     constraint behind it uses. Optional: omitted, every call creates. At most 200 characters.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReleaseInput"];
+            };
+        };
+        responses: {
+            /** @description A replay — the `Idempotency-Key` had already created this release. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Release"];
+                };
+            };
+            /** @description Created */
+            201: {
+                headers: {
+                    /** @description The new release's canonical URL. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Release"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description This project already has a release with that version. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getRelease: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                releaseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The release */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Release"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteRelease: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                releaseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateRelease: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                releaseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReleaseUpdate"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Release"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Another release in this project already has that version. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    publishRelease: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                releaseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Released. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Release"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getReleaseReadiness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                releaseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The answer, with the stories that stand in the way named. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleaseReadiness"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getRoadmap: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The roadmap. Both arrays may be empty and that is a real answer. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Roadmap"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listIssueTestCases: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The linked cases, with their latest results. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueTestCase"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putIssueTestCases: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueTestCasesInput"];
+            };
+        };
+        responses: {
+            /** @description The story's linked cases after the write. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueTestCase"][];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listCaseVerifications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One entry per linked case. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseVerification"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };
     };

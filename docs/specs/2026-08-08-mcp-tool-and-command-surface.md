@@ -615,6 +615,66 @@ them, because it reads `parameters` rather than prose — and it found one short
 `writeConformance.test.ts`'s `CREATE_WITHOUT_A_KEY`: `PATCH /labels/{labelId}` declares no
 `If-Match` and `Label` carries no `lockVersion` on the wire to precondition on, so two people
 renaming one label at once lose a rename.
+
+### 3.6 The release verbs (013 T4) — two tools, because the gates split two ways
+
+The release contract (013 T1) adds eleven operations. §2's rule splits them three ways, and the split
+is the reason there is no single `tcms_write_release` covering all of them:
+
+| Operation | Gate | Roles holding it (§A3) |
+|---|---|---|
+| `listReleases` · `getRelease` · `getReleaseReadiness` · `getRoadmap` | `release:read` | **six of seven — not Automation Service** |
+| `listIssueTestCases` · `listCaseVerifications` | `issue:read` | Test Engineer and up, plus Viewer and Automation Service |
+| `createRelease` · `updateRelease` · `deleteRelease` | `release:manage` | **Project Manager and up** |
+| `publishRelease` | `release:publish` | **Project Manager and up** |
+| `putIssueTestCases` | `issue:edit` | Test Engineer and up |
+
+`release:manage` and `release:publish` are granted to the **same three roles**, so they merge into
+one `tcms_write_release` without violating anything: §2's rule is that a tool must not be listed to a
+caller who 403s on part of it, and two keys with one audience cannot produce that caller. Two keys,
+one tool.
+
+**`putIssueTestCases` does not join them.** It costs `issue:edit`, and `Agent ∩ Test Engineer` is a
+reachable credential holding `issue:edit` and neither release key — §2's failure exactly. So it
+becomes a **`cases` arm on the existing `tcms_write_issue`**, beside `label`, which is where every
+other `issue:edit` write already lives.
+
+#### `release:read` is the first gate on this surface an Automation Service credential does not hold
+
+Every read tool before this one is listed to every credential that can reach the project at all.
+`tcms_read_release` is not, and that is correct rather than awkward: a CI token posts results and has
+no business reading a delivery plan. It is worth an explicit assertion in `server.test.ts` rather
+than a tool count — a narrowing that nothing tests is a narrowing that comes back.
+
+#### `tcms_read_release` — typed input
+
+Gate: `release:read`. **Three branches, not three tools**, all read-only, all the same gate.
+
+| Field | Type | Notes |
+|---|---|---|
+| `release` | string — a **version** | omit for the list; §3.4's rule, one noun over |
+| `readiness` | boolean | with `release`: the full readiness rather than the summary |
+| `roadmap` | boolean | the timeline instead of the list |
+
+`release` is resolved against `GET /projects/{projectId}/releases` before the request, and an unknown
+version is refused **with the list** — `tcms_read_board`'s label-and-assignee rule, for its reason: a
+version passed through as a filter matching nothing reads to a model as *an empty release* rather
+than as a mistake.
+
+#### The one number a model must not round
+
+`ReadinessSummary.casesPassed` and `casesFailed` are **null, not zero**, when `hasRun` is false, and
+every rendering on both surfaces has to keep them that way. `tcms read` output and
+`tcms release list` print the words **`no run yet`**; a `?? 0` anywhere between the wire and the
+terminal turns *"nothing has been tested"* into *"nothing failed"*, which is the one sentence this
+whole module exists to stop the product saying.
+
+#### `putIssueTestCases` sends case KEYS on both surfaces
+
+§4.4's rule: display keys in both directions. The endpoint takes `caseIds` as UUIDs, and neither a
+person nor a model has one — `TC-311` is what a story lists and what a test plan names. Both surfaces
+resolve keys through the project's case list before the request and refuse an unknown one by name.
+
 ---
 
 ## 4. Cross-cutting rules — all of them in the command core

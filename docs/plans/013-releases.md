@@ -627,15 +627,18 @@ Append to `components.schemas`, after `BacklogRow`'s block, in this order.
           allOf: [{ $ref: '#/components/schemas/UserRef' }]
           nullable: true
 
+    # `blocked` was in this plan and is NOT in the contract that landed: IssueStatusKind has
+    # exactly three members (NOT_STARTED, IN_PROGRESS, DONE), so "blocked" is a status NAME a
+    # project chose and not a class this contract can count. release.html draws "1 blocked"; the
+    # blockers list carries each story's real status by name, which is where the word appears.
     ReleaseStories:
       type: object
-      required: [done, total, inProgress, notStarted, blocked, excludedSpikes]
+      required: [done, total, inProgress, notStarted, excludedSpikes]
       properties:
         done: { type: integer }
         total: { type: integer }
         inProgress: { type: integer }
         notStarted: { type: integer }
-        blocked: { type: integer }
         excludedSpikes:
           type: integer
           description: |
@@ -2254,17 +2257,13 @@ export type IssueTestCase = S['IssueTestCase'];
 export type CaseVerification = S['CaseVerification'];
 ```
 
-```ts
-// lib/labels.ts — swimlaneByLabels DOES NOT COMPILE until RELEASE is here (D-j)
-export const swimlaneByLabels = {
-  NONE: 'No swimlanes',
-  EPIC: 'Epic',
-  ASSIGNEE: 'Assignee',
-  LABEL: 'Label',
-  PRIORITY: 'Priority',
-  RELEASE: 'Release',
-} as const satisfies Record<SwimlaneBy, string>;
+> **`swimlaneByLabels` was already done in T1 and is not yours.** The `RELEASE` member broke
+> `lib/labels.ts`, `ProjectBoardView.tsx` and `BoardSettingsPage.tsx` in one `tsc -b` the moment the
+> contract's enum changed — which is what `satisfies Record<Union, string>` is for, and which means
+> the wording had to land in the task that landed the enum, because the tree builds at every task
+> boundary. The plan put it here; T1 corrected that in place. Add `releaseVerdictLabels` below it.
 
+```ts
 /**
  * D-e — the readiness badge's vocabulary, and it diverges from `releases.html` deliberately.
  *

@@ -8989,9 +8989,11 @@ paths:
         backlog row (its status is derived from its stories, D31) and a done issue is not "what's
         next". Takes the same filter as `GET /boards/{boardId}/cards`.
 
-        **Not grouped by release in M2.** `work-backlog.html` shows a "2.4 · target 18 Sep" section
-        and an "Unscheduled" one; `release` is M3's table, so this returns one list and M3 adds the
-        grouping.
+        ~~**Not grouped by release in M2.**~~ → **`releaseId` and `unscheduled` landed in M3**, which
+        is when `release` became a table. This still returns **one list in one order** and always
+        will: `issue.rank` is a single project-wide sequence, so `work-backlog.html`'s
+        "2.4 · target 18 Sep" and "Unscheduled" sections are two slices of it that the client draws,
+        not two orderings the server maintains.
       parameters:
         - { name: labelId, in: query, schema: { type: array, items: { type: string, format: uuid } } }
         - { name: assigneeId, in: query, schema: { type: array, items: { type: string, format: uuid } } }
@@ -8999,6 +9001,21 @@ paths:
         - { name: level, in: query, schema: { $ref: '#/components/schemas/IssueLevel' } }
         - { name: priority, in: query, schema: { type: array, items: { $ref: '#/components/schemas/Priority' } } }
         - { name: unparented, in: query, schema: { type: boolean } }
+        - name: releaseId
+          in: query
+          description: |
+            Only issues targeting this release (story B4). **A filter over the one project-wide rank
+            order, not a second order** — the rows come back in the sequence they would have without
+            it, with the others removed, so a drag between two release sections is still one
+            neighbour-relative `PUT /issues/{key}/rank`.
+          schema: { type: string, format: uuid }
+        - name: unscheduled
+          in: query
+          description: |
+            Only issues with **no** target release. A flag rather than `releaseId=null`, for
+            `unparented`'s reason: an absent parameter already means "don't filter", and a client
+            cannot spell the difference. Sending both this and `releaseId` is a 400.
+          schema: { type: boolean }
       responses:
         '200':
           description: Rows in rank order. An empty array is a project with nothing left to do.
@@ -9085,6 +9102,13 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Label' }
+        '400':
+          # A blank or over-long name, refused with Problem.validation by every label write
+          # and declared by NONE of them until 013 T1. Nothing in this repository compares a
+          # handler's status codes to the ones this document lists, so it was invisible to
+          # every gate — recorded by 012's close-out and closed by the task that next owned
+          # this file.
+          $ref: '#/components/responses/BadRequest'
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -9109,6 +9133,13 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Label' }
+        '400':
+          # A blank or over-long name, refused with Problem.validation by every label write
+          # and declared by NONE of them until 013 T1. Nothing in this repository compares a
+          # handler's status codes to the ones this document lists, so it was invisible to
+          # every gate — recorded by 012's close-out and closed by the task that next owned
+          # this file.
+          $ref: '#/components/responses/BadRequest'
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -9151,10 +9182,315 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/Label' }
+        '400':
+          # A blank or over-long name, refused with Problem.validation by every label write
+          # and declared by NONE of them until 013 T1. Nothing in this repository compares a
+          # handler's status codes to the ones this document lists, so it was invisible to
+          # every gate — recorded by 012's close-out and closed by the task that next owned
+          # this file.
+          $ref: '#/components/responses/BadRequest'
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+
+  /projects/{projectId}/releases:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+    get:
+      tags: [tracker]
+      summary: The project's releases, in version order
+      operationId: listReleases
+      description: |
+        `release:read` — Instance Admin, Company Admin, Project Manager, Test Lead, Test Engineer
+        and Viewer. **Automation Service does not hold it** (roles spec §A3): a CI token posts
+        results and has no business reading a delivery plan.
+
+        Ordered by a computed key, never by the version text — `2.10` comes after `2.5`, not between
+        `2.1` and `2.2`. Each row carries its readiness inline, because the list draws two meters and
+        a badge per row.
+
+        **An empty array is the ordinary state of a fresh instance**, not an error: nothing is
+        migrated into releases (D14), so the first one is one a person types.
+      responses:
+        '200':
+          description: Releases, newest version last.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ReleaseSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [tracker]
+      summary: Create a release
+      operationId: createRelease
+      description: |
+        `release:manage` — Instance Admin, Company Admin and Project Manager.
+
+        A version, and optionally a date and a description. The version is unique within the
+        **project**, case-insensitively (D13).
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReleaseInput' }
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location: { schema: { type: string }, description: The new release's canonical URL. }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Release' }
+        '200':
+          description: A replay — the `Idempotency-Key` had already created this release.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Release' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: This project already has a release with that version.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /releases/{releaseId}:
+    parameters:
+      - { name: releaseId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [tracker]
+      summary: One release
+      operationId: getRelease
+      description: '`release:read`. The release itself, without its readiness — that is `/readiness`.'
+      responses:
+        '200':
+          description: The release
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Release' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [tracker]
+      summary: Edit a release's version, date or description
+      operationId: updateRelease
+      description: |
+        `release:manage`. **Not the status** — publishing is `POST /releases/{releaseId}/publish`,
+        and it costs a key `release:manage` does not imply.
+
+        Renaming the version recomputes the ordering key, so a release edited from `1.9` to `1.10`
+        moves in the list rather than staying where its old text sorted it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReleaseUpdate' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Release' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Another release in this project already has that version.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+    delete:
+      tags: [tracker]
+      summary: Delete a release
+      operationId: deleteRelease
+      description: |
+        `release:manage`.
+
+        **The issues pointing at it keep existing and lose their target release** — the foreign key
+        is `ON DELETE SET NULL`, and deliberately so: a release is a *plan*, and deleting a plan must
+        not require deleting or reassigning the work first. The issues return to the state they were
+        in before anybody scheduled them, which is exactly the backlog's "Unscheduled" section.
+
+        Test runs recorded against the version keep their `releaseVersion` text and lose only the
+        key, so nothing in execution history changes.
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /releases/{releaseId}/publish:
+    parameters:
+      - { name: releaseId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [tracker]
+      summary: Mark a release released
+      operationId: publishRelease
+      description: |
+        `release:publish` — Instance Admin, Company Admin and Project Manager. **A separate key from
+        `release:manage`**, for the reason `doc:publish` is separate from `doc:edit`: publishing
+        moves a state, and it is its own gate and its own audit row.
+
+        **Idempotent.** Publishing an already-released release answers 200 with it unchanged and does
+        **not** restamp `releasedAt` — a second press of a button is not a second shipment.
+
+        **Readiness does not gate this.** A team may ship a version with a known failure and record
+        that they did; a server that refused would be asserting a release policy this product has no
+        way to know.
+      responses:
+        '200':
+          description: Released.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Release' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /releases/{releaseId}/readiness:
+    parameters:
+      - { name: releaseId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [tracker]
+      summary: Can we ship this version?
+      operationId: getReleaseReadiness
+      description: |
+        `release:read`. **Automation Service does not hold it** (roles spec §A3).
+
+        One answer over two halves: every counted story done, **and** every linked test case passing
+        in the latest result recorded against this version. Story R4, and the question neither a
+        tracker nor a test tool answers alone.
+
+        **The latest result per case, not the best one.** A case that failed and was not re-run is a
+        failure; taking the best result would let a release pass on a run somebody re-ran until it
+        went green.
+
+        **A version nothing has run against answers `NOT_TESTED`, with `tests.hasRun` false and every
+        count under it null** — never zero failures. That distinction is why this operation has this
+        shape rather than being two numbers on the release itself.
+      responses:
+        '200':
+          description: The answer, with the stories that stand in the way named.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReleaseReadiness' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{projectId}/roadmap:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+    get:
+      tags: [tracker]
+      summary: Releases on a timeline, with their epics inside
+      operationId: getRoadmap
+      description: |
+        `release:read`. Story R3, and `work-timeline.html`.
+
+        Releases in version order, each with the epics targeting it; then an `unscheduled` list of
+        every epic that cannot be drawn under one — no dates at all, or no target release. An epic
+        with no dates does not disappear from the roadmap.
+
+        **Expect this to be empty on a fresh instance.** Nothing is migrated into releases (D14).
+      responses:
+        '200':
+          description: The roadmap. Both arrays may be empty and that is a real answer.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Roadmap' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /issues/{key}/test-cases:
+    parameters:
+      - { name: key, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [tracker]
+      summary: The test cases that prove this story
+      operationId: listIssueTestCases
+      description: |
+        `issue:read`. Story H7 — *"done" and "proven" are the same screen*.
+
+        Each case carries the latest result it has **anywhere**, not the latest for any particular
+        version. Ordered by case key.
+      responses:
+        '200':
+          description: The linked cases, with their latest results.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/IssueTestCase' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [tracker]
+      summary: Replace the test cases a story is proven by
+      operationId: putIssueTestCases
+      description: |
+        **`issue:edit`** — linking a case to a story edits the story, and there is no `link:*` key.
+        A replacement rather than add/remove pairs, for `putIssueLabels`' reason.
+
+        Rows land in `issue_link` with a target type of `TEST_CASE` — the polymorphic edge `V3`
+        created for exactly this and left empty until now. **There is no foreign key on the target**
+        (scope §3: `tracker` is not a foundation module), so the case ids are validated here and a
+        case belonging to another project is a **400 naming the field**, not a 404: the issue is
+        reachable and the ids are the caller's mistake.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IssueTestCasesInput' }
+      responses:
+        '200':
+          description: The story's linked cases after the write.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/IssueTestCase' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{projectId}/case-verifications:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+    get:
+      tags: [tracker]
+      summary: Which stories each test case verifies
+      operationId: listCaseVerifications
+      description: |
+        `issue:read`. `test-cases.html`'s **Verifies** column, and the reverse of
+        `GET /issues/{key}/test-cases`.
+
+        **Served from `tracker` rather than widened onto `TestCaseSummary`**, which is what it looks
+        like it should be: that would make `repository` read `issue_link` and `issue` on the request
+        path of the product's busiest list, a fourth foreign-table seam in that module. Read from
+        this side it crosses no boundary at all — both tables are `tracker`'s — and the client merges
+        it into the grid.
+
+        **Only cases with at least one link appear.** A case with none is absent rather than present
+        with an empty array, so the payload is proportional to the links and not to the catalogue;
+        the column renders an em dash for a missing key.
+      responses:
+        '200':
+          description: One entry per linked case.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CaseVerification' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 # =============================================================================
 # COMPONENTS
 # =============================================================================
@@ -16580,6 +16916,12 @@ components:
         dueDate: { type: string, format: date, nullable: true }
         overdue: { type: boolean }
         estimateHours: { type: number, format: double, nullable: true }
+        release:
+          allOf: [{ $ref: '#/components/schemas/ReleaseRef' }]
+          nullable: true
+          description: |
+            The target release, or null. A story either has one or it does not — there is no join
+            table and there will not be one (D6).
 
     Issue:
       type: object
@@ -16637,6 +16979,12 @@ components:
             **Epics only** — null on every other level, because D8 counts story-level issues
             and an epic is the only thing that has them. Computed server-side and read
             everywhere; never recomputed in a component (D8, "one number, one place").
+        release:
+          allOf: [{ $ref: '#/components/schemas/ReleaseRef' }]
+          nullable: true
+          description: |
+            The target release, or null. A story either has one or it does not — there is no join
+            table and there will not be one (D6).
         children:
           type: array
           description: An epic's stories, or a story's sub-tasks. Empty for a Task.
@@ -16689,6 +17037,13 @@ components:
         startDate: { type: string, format: date, nullable: true }
         targetDate: { type: string, format: date, nullable: true }
         dueDate: { type: string, format: date, nullable: true }
+        releaseId:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            The target release. **Must belong to this issue's own project** (D13) — a release from
+            another project is a 400 naming the field, never a silent null.
         acceptanceCriteria:
           type: array
           items: { type: string }
@@ -16711,6 +17066,13 @@ components:
         startDate: { type: string, format: date, nullable: true }
         targetDate: { type: string, format: date, nullable: true }
         dueDate: { type: string, format: date, nullable: true }
+        releaseId:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            The target release. **Must belong to this issue's own project** (D13) — a release from
+            another project is a 400 naming the field, never a silent null.
         acceptanceCriteria:
           type: array
           items:
@@ -16821,11 +17183,16 @@ components:
     SwimlaneBy:
       type: string
       description: |
-        Story B3's grouping axis. `RELEASE` is **absent until M3** — a member whose data does not
+        Story B3's grouping axis. ~~`RELEASE` is **absent until M3** — a member whose data does not
         exist would be a grouping that silently yields one lane called "None", which reads as a
-        broken board rather than an unbuilt feature. Adding it later is one entry in a
-        `Record<Union, string>` and a compile error until it is labelled.
-      enum: [NONE, EPIC, ASSIGNEE, LABEL, PRIORITY]
+        broken board rather than an unbuilt feature.~~ → **landed in M3, which is when that data
+        exists.** It groups by target release; a card with no release lands in the `None` lane the
+        grouping already produces on every other axis.
+
+        Adding a member is one entry in a `Record<Union, string>` and **a compile error until it is
+        labelled** — `frontend/src/lib/labels.ts::swimlaneByLabels`, which is the mechanism that file
+        exists for. A seventh axis has to edit two places: this enum and that file.
+      enum: [NONE, EPIC, ASSIGNEE, LABEL, PRIORITY, RELEASE]
 
     Board:
       type: object
@@ -17024,6 +17391,12 @@ components:
           nullable: true
         estimateHours: { type: number, format: double, nullable: true }
         epicKey: { type: string, nullable: true }
+        release:
+          allOf: [{ $ref: '#/components/schemas/ReleaseRef' }]
+          nullable: true
+          description: |
+            The target release, or null. A story either has one or it does not — there is no join
+            table and there will not be one (D6).
         labels:
           type: array
           items: { $ref: '#/components/schemas/Label' }
@@ -17099,6 +17472,378 @@ components:
         labelIds:
           type: array
           items: { type: string, format: uuid }
+
+    # ----------------------------------------------------- tracker.release ---
+    ReleaseStatus:
+      type: string
+      description: |
+        `PLANNED` until somebody presses **Mark released**, which is
+        `POST /releases/{releaseId}/publish` and costs `release:publish` — a separate key from
+        `release:manage` for the reason `doc:publish` is separate from `doc:edit`: publishing moves
+        a state, and it is its own gate and its own audit row.
+      enum: [PLANNED, RELEASED]
+
+    ReleaseVerdict:
+      type: string
+      description: |
+        The one answer to *"can we ship 2.4?"* — story R4, and the question neither a tracker nor a
+        test tool answers alone.
+
+        **`NOT_TESTED` is not `NOT_READY` with zero failures.** It means no execution has been
+        recorded against this version at all, while every counted story is done. An untested version
+        and a clean version are not the same claim, and a meter drawn from a zero looks like the
+        second — so `ReleaseTests.hasRun` is on the wire beside this and the counts under it are
+        **null rather than zero** when it is false.
+
+        `NOT_READY` covers everything outstanding: a counted story not in a `DONE` status, a linked
+        case whose latest result *for this version* is not a pass, or a linked case with no result
+        for this version at all while others have one. An unrun case is unproven.
+
+        Counted stories are D8's set — story-level issues whose type counts toward completion — so a
+        **Spike never blocks a release**, exactly as it never moves an epic's percentage. The two
+        numbers come from one implementation and cannot disagree.
+      enum: [READY, NOT_READY, NOT_TESTED]
+
+    ReleaseRef:
+      type: object
+      required: [id, version]
+      description: |
+        A release as it appears on an issue or a backlog row — never its readiness. A story either
+        has a target release or it does not; there is no join table (D6).
+      properties:
+        id: { type: string, format: uuid }
+        version: { type: string, example: '2.4' }
+        targetDate: { type: string, format: date, nullable: true }
+
+    Release:
+      type: object
+      required: [id, projectId, version, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        projectId: { type: string, format: uuid }
+        version:
+          type: string
+          example: '2.4'
+          description: |
+            Unique within the project, case-insensitively. **Not within the company** (D13): a
+            version shipped from a web project and an API project is two releases, gets two
+            roadmaps, and cannot be asked about across both — the accepted cost of not pushing a
+            cross-project visibility filter into every readiness query.
+
+            Compared segment by segment for ordering, never as text: `1.10` comes after `1.9`, and
+            `4.3.0-rc.1` before `4.3.0`.
+        description: { type: string, nullable: true }
+        targetDate:
+          type: string
+          format: date
+          nullable: true
+          description: |
+            Optional. Without one the release still exists and still appears on the roadmap, in
+            version order, with a point marker instead of a bar.
+        status: { $ref: '#/components/schemas/ReleaseStatus' }
+        releasedAt: { type: string, format: date-time, nullable: true }
+        createdAt:
+          type: string
+          format: date-time
+          description: |
+            The baseline "scope added after the release was created" is measured from (009 review
+            R12), which is why it is on the wire rather than left as audit furniture. Never edited.
+        updatedAt: { type: string, format: date-time, nullable: true }
+
+    ReadinessSummary:
+      type: object
+      required: [verdict, storiesDone, storiesTotal, linkedCases, hasRun]
+      description: The row-sized answer, carried inline on every `ReleaseSummary`.
+      properties:
+        verdict: { $ref: '#/components/schemas/ReleaseVerdict' }
+        storiesDone: { type: integer }
+        storiesTotal:
+          type: integer
+          description: Counted story-level issues. Zero is a real answer, and the verdict is then about the test half alone.
+        linkedCases: { type: integer, description: Distinct test cases linked to those stories. }
+        hasRun:
+          type: boolean
+          description: |
+            False when no execution has been recorded against this version. `casesPassed` and
+            `casesFailed` are then **null and not zero** — see `ReleaseVerdict`.
+        casesPassed: { type: integer, nullable: true }
+        casesFailed: { type: integer, nullable: true }
+
+    ReleaseSummary:
+      type: object
+      required: [id, version, status, createdAt, readiness]
+      description: |
+        A row in `releases.html`'s table. It carries its readiness **inline** because the list draws
+        two meters and a badge per row, and a list of ids the client then resolves one at a time is
+        N+1 over a screen the server already has every answer for.
+      properties:
+        id: { type: string, format: uuid }
+        version: { type: string }
+        description: { type: string, nullable: true }
+        targetDate: { type: string, format: date, nullable: true }
+        status: { $ref: '#/components/schemas/ReleaseStatus' }
+        releasedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        readiness: { $ref: '#/components/schemas/ReadinessSummary' }
+
+    ReleaseStories:
+      type: object
+      required: [done, total, inProgress, notStarted, excludedSpikes]
+      description: |
+        The delivery half of readiness, counted over D8's set.
+
+        **There is no `blocked` count**, and `release.html` draws one. `IssueStatusKind` has exactly
+        three members — `NOT_STARTED`, `IN_PROGRESS`, `DONE` (D2) — so "blocked" is a status *name*
+        a project chose and not a class this contract can count. The blockers list below carries
+        each story's real status by name, which is where a reader sees the word.
+      properties:
+        done: { type: integer }
+        total: { type: integer }
+        inProgress: { type: integer }
+        notStarted: { type: integer }
+        excludedSpikes:
+          type: integer
+          description: |
+            Left out of both numerator and denominator (D8). A spike produces knowledge, not
+            shippable work, so it never blocks a release — and the number is served so the screen
+            can say so, rather than leaving a total that does not match the backlog to be doubted.
+
+    ReleaseTests:
+      type: object
+      required: [hasRun, linkedCases]
+      description: |
+        The QA half, and **the latest result per case — not the best one.** A case that failed and
+        was not re-run is a failure; taking the best result would let a release pass on a run
+        somebody re-ran until it went green.
+      properties:
+        hasRun:
+          type: boolean
+          description: Whether any execution has been recorded against this version for any linked case.
+        linkedCases: { type: integer }
+        withResult: { type: integer, nullable: true, description: Linked cases with any result against this version. }
+        passed: { type: integer, nullable: true }
+        failed: { type: integer, nullable: true }
+        blocked: { type: integer, nullable: true }
+        untested:
+          type: integer
+          nullable: true
+          description: |
+            Linked cases with no result against this version. Null — along with every count above —
+            when `hasRun` is false, where the answer is *every* linked case and serving it as a
+            number invites a client to draw it as a bar beside a zero.
+        latestExecutedAt: { type: string, format: date-time, nullable: true }
+        latestRunId: { type: string, format: uuid, nullable: true }
+        latestRunName: { type: string, nullable: true }
+        executedBy:
+          allOf: [{ $ref: '#/components/schemas/UserRef' }]
+          nullable: true
+
+    ReleaseBlocker:
+      type: object
+      required:
+        [key, title, type, status, casesPassed, casesFailed, casesBlocked, casesUntested,
+         failedCaseKeys]
+      description: |
+        One row of `release.html`'s **What stands between here and shipping**.
+
+        A story is here when it is not in a `DONE` status, **or** when it is done and one of its
+        linked cases did not pass in the latest result recorded against this version — which is the
+        case this whole module exists for, and the reason `status` is served rather than a boolean:
+        the screen distinguishes *"nobody has started"* from *"this is finished and its test says
+        otherwise"*, and only the status can tell it which.
+      properties:
+        key: { type: string, example: ACME-118 }
+        title: { type: string }
+        type: { $ref: '#/components/schemas/IssueTypeRef' }
+        status: { $ref: '#/components/schemas/IssueStatusRef' }
+        casesPassed: { type: integer }
+        casesFailed: { type: integer }
+        casesBlocked: { type: integer }
+        casesUntested: { type: integer }
+        failedCaseKeys:
+          type: array
+          description: The cases that failed, by display key — `TC-311`. Empty when none did.
+          items: { type: string }
+
+    RoadmapEpic:
+      type: object
+      required: [key, title, statusKind]
+      description: An epic as a bar on the timeline, or as a line under a release.
+      properties:
+        key: { type: string }
+        title: { type: string }
+        startDate: { type: string, format: date, nullable: true }
+        targetDate: { type: string, format: date, nullable: true }
+        releaseId: { type: string, format: uuid, nullable: true }
+        statusKind: { $ref: '#/components/schemas/IssueStatusKind' }
+        completionPercent:
+          type: integer
+          nullable: true
+          minimum: 0
+          maximum: 100
+          description: |
+            D8's percentage, computed server-side and read everywhere — never recomputed in a
+            component. Null when the epic counts nothing.
+
+    ReleaseReadiness:
+      type: object
+      required:
+        [releaseId, version, status, verdict, stories, tests, blockers, epics,
+         scopeAddedAfterCreation]
+      description: |
+        `GET /releases/{releaseId}/readiness` — the whole of `release.html`.
+      properties:
+        releaseId: { type: string, format: uuid }
+        version: { type: string }
+        status: { $ref: '#/components/schemas/ReleaseStatus' }
+        verdict: { $ref: '#/components/schemas/ReleaseVerdict' }
+        stories: { $ref: '#/components/schemas/ReleaseStories' }
+        tests: { $ref: '#/components/schemas/ReleaseTests' }
+        blockers:
+          type: array
+          items: { $ref: '#/components/schemas/ReleaseBlocker' }
+        epics:
+          type: array
+          items: { $ref: '#/components/schemas/RoadmapEpic' }
+        scopeAddedAfterCreation:
+          type: integer
+          description: |
+            Counted issues first pointed at this release **after** it was created, from
+            `issue_fact.release_assigned_at`.
+
+            That projection is event-fed, so this one number can lag the rest of this payload by a
+            tick and the screen says so. It is served from there rather than derived live because
+            the timestamp exists nowhere else and cannot be reconstructed after the fact (009 review
+            R12) — every other number here comes from live `issue` rows for exactly that reason.
+
+    RoadmapRelease:
+      type: object
+      required: [id, version, status, verdict, epics]
+      properties:
+        id: { type: string, format: uuid }
+        version: { type: string }
+        targetDate: { type: string, format: date, nullable: true }
+        status: { $ref: '#/components/schemas/ReleaseStatus' }
+        verdict: { $ref: '#/components/schemas/ReleaseVerdict' }
+        epics:
+          type: array
+          items: { $ref: '#/components/schemas/RoadmapEpic' }
+
+    Roadmap:
+      type: object
+      required: [releases, unscheduled]
+      description: |
+        `work-timeline.html`.
+
+        **Empty on the day this module merges, and that is a decision rather than a defect.** D14
+        migrates nothing into `release`, so the first row here is one a person typed. A client
+        rendering this must say so and offer to create one — an empty timeline that explains nothing
+        reads as a broken screen, and a reader has no way to tell the difference.
+      properties:
+        releases:
+          type: array
+          description: Every release, in version order — `2.10` after `2.5`, never between `2.1` and `2.2`.
+          items: { $ref: '#/components/schemas/RoadmapRelease' }
+        unscheduled:
+          type: array
+          description: |
+            Every epic that cannot be drawn under a release: one with **no dates at all**, whatever
+            its release, and one with **no target release**, whatever its dates. An epic with no
+            dates does not disappear from the roadmap — it lands here, where it can be seen and
+            given some.
+          items: { $ref: '#/components/schemas/RoadmapEpic' }
+
+    ReleaseInput:
+      type: object
+      required: [version]
+      description: |
+        A version, and optionally a date and a description. **Nothing else is required**, and there
+        is no field for a sprint, a velocity or a second project: planning has a cadence because
+        releases have dates, not because anybody invented a two-week rhythm they do not work in.
+      properties:
+        version: { type: string, minLength: 1, maxLength: 40 }
+        description: { type: string, nullable: true }
+        targetDate:
+          type: string
+          format: date
+          nullable: true
+          description: A date in the past is accepted. A release that slipped is a real state, and refusing it would make it unrecordable.
+
+    ReleaseUpdate:
+      type: object
+      required: []
+      description: |
+        Every field optional; an absent key is "leave it".
+
+        **`status` is not here.** Publishing is `POST /releases/{releaseId}/publish` and costs
+        `release:publish`, which `release:manage` does not imply — a status property here would be
+        that state moved behind the other key.
+      properties:
+        version: { type: string, minLength: 1, maxLength: 40 }
+        description: { type: string, nullable: true }
+        targetDate: { type: string, format: date, nullable: true }
+
+    IssueRef:
+      type: object
+      required: [key, title, typeLevel]
+      description: |
+        An issue as it appears on something that is not an issue — a test case's **Verifies**
+        column. Distinct from `IssueSummary`, which is a row in a list *of* issues and carries a
+        status, an assignee and an epic this shape has no room for.
+      properties:
+        key: { type: string, example: ACME-118 }
+        title: { type: string }
+        typeLevel: { $ref: '#/components/schemas/IssueLevel' }
+
+    IssueTestCase:
+      type: object
+      required: [caseId, caseKey, title, lastResultKind, lastExecutedAt, lastReleaseVersion]
+      description: |
+        A case linked to this story (H7), with the latest result it has **anywhere** — deliberately
+        not scoped to a release. Release-scoped results are `GET /releases/{releaseId}/readiness`,
+        and the two answer different questions: a story's own panel asks *does this case pass*, and
+        readiness asks *did it pass for the version we are shipping*.
+
+        Sourced from `case_health`, the read model `repository` maintains — the same row
+        `TestCaseSummary.lastResult` is served from, so a case cannot show one result on its own
+        screen and another on the story that links it.
+
+        The three `last*` members are required and nullable together: a case that has never been
+        executed carries three nulls, and omitting them would leave a consumer unable to tell that
+        from an endpoint that does not serve them.
+      properties:
+        caseId: { type: string, format: uuid }
+        caseKey: { type: string, example: TC-311 }
+        title: { type: string }
+        lastResultKind:
+          allOf: [{ $ref: '#/components/schemas/StatusKind' }]
+          nullable: true
+        lastExecutedAt: { type: string, format: date-time, nullable: true }
+        lastReleaseVersion: { type: string, nullable: true }
+
+    IssueTestCasesInput:
+      type: object
+      required: [caseIds]
+      description: |
+        The whole set, written over whatever was there — a `PUT`, for `IssueLabelsInput`'s reason:
+        the control is a multi-select whose state *is* the set, and add/remove pairs let a stale
+        client unlink a case somebody else had just linked.
+      properties:
+        caseIds:
+          type: array
+          items: { type: string, format: uuid }
+
+    CaseVerification:
+      type: object
+      required: [caseId, issues]
+      description: |
+        One case and the stories it verifies — `test-cases.html`'s new column, and the same fact as
+        `IssueTestCase` read from the other end.
+      properties:
+        caseId: { type: string, format: uuid }
+        issues:
+          type: array
+          items: { $ref: '#/components/schemas/IssueRef' }
 
     # ------------------------------------------------------- integration ---
     NotificationChannel:
