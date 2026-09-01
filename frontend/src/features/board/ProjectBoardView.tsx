@@ -10,7 +10,7 @@ import {
 } from '@dnd-kit/core';
 import { X } from 'lucide-react';
 import { useMemo, useState, type CSSProperties } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import { useAnnounce } from '../../a11y/useAnnounce';
 import { ApiError } from '../../api/client';
 import {
@@ -323,17 +323,15 @@ export function ProjectBoardView({ projectId }: { projectId: string }) {
         <span className="flex-1" />
 
         {/*
-          `settings-boards.html` is T9's screen and does not exist yet, so the control says when it
-          arrives rather than linking to a route that would 404. Disable-don't-hide, and the reason
-          on it — the same answer the release panel gave one module over.
+          ~~Disabled, with *"arrives with the board settings screen"* on it, because
+          `settings-boards.html` was T9's and the route did not exist.~~ → **012 T9 landed it**, so
+          the sentence is false and the control is what the mockup draws: a real `<Link>`. Ungated —
+          the screen is readable by anybody who can read a board and renders read-only without
+          `board:configure`, so gating the way in would hide the page that explains what a board is
+          from exactly the people who cannot change one.
         */}
-        <Button
-          size="sm"
-          disabled
-          title="Board configuration — columns, WIP limits and labels — arrives with the board settings screen."
-          data-testid={`${TEST_ID}.Configure`}
-        >
-          Configure boards
+        <Button asChild size="sm" data-testid={`${TEST_ID}.Configure`}>
+          <RouterLink to={`/projects/${projectId}/settings/boards`}>Configure boards</RouterLink>
         </Button>
       </div>
 

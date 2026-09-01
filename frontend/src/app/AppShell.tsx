@@ -368,6 +368,21 @@ function projectNav(
           to: `${p}/settings/workflow`,
           icon: <GitBranch className="size-4" />,
         },
+        /*
+          012 T9's board settings, at `settings-boards.html`'s position in the mockup's subnav —
+          between Workflow and the two entries this rail does NOT have. That row reads
+          *General · Workflow · Boards · Repositories · Imports*; Repositories is M5's and Imports is
+          M4's, and a rail entry leading to a route that does not exist is worse than an absent one,
+          so only Boards is here.
+
+          Ungated, like the two above it: the reads cost `board:read`, which every role holds, and
+          the page renders read-only without `board:configure`.
+        */
+        {
+          label: 'Boards',
+          to: `${p}/settings/boards`,
+          icon: <Kanban className="size-4" />,
+        },
         {
           label: 'Classification',
           to: `${p}/settings/classification`,

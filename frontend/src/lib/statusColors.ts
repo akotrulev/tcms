@@ -68,3 +68,47 @@ export const severityVar: Record<HealthSignalSeverity, string> = {
   INFO: 'var(--color-info)',
   NEUTRAL: 'var(--color-text-muted)',
 };
+
+/**
+ * The ten label slots, in the order a picker offers them, and the one place the names are spelled.
+ *
+ * `Label.color` is a `string` on the wire and not a union, because the contract stores a token
+ * *name* and the set of names is a stylesheet's business rather than the API's. That is the right
+ * shape and it means this file cannot use `Record<Union, string>` the way the three maps above do —
+ * so the exhaustiveness this list buys is over `index.css` instead: every member here resolves to a
+ * custom property declared in both palettes, and `app/tokenSystem.test.ts` is what checks it.
+ */
+export const LABEL_COLORS = [
+  'label-1',
+  'label-2',
+  'label-3',
+  'label-4',
+  'label-5',
+  'label-6',
+  'label-7',
+  'label-8',
+  'label-9',
+  'label-10',
+] as const;
+
+export type LabelColor = (typeof LABEL_COLORS)[number];
+
+/**
+ * What a label chip is filled with — and what an unrecognised value falls back to.
+ *
+ * The fallback is not defensive noise. `PATCH /labels/{id}` takes any string, the CLI's
+ * `--color` and `tcms_write_backlog`'s `color` field pass one through, and a token this stylesheet
+ * does not declare resolves to nothing — which paints the chip TRANSPARENT rather than raising
+ * anything. So an unknown value renders as the plain chip every label wore before 012 T9, and the
+ * word inside it, which is what a reader was scanning either way, is unaffected.
+ *
+ * **`--color-overlay-2` and not `--color-wash-2`**, which is the same colour under the name a class
+ * list uses: the wash names are Tailwind's, bridged by `@theme inline`, and the check at the foot
+ * of `app/tokenSystem.test.ts` reads every `var()` in this file against the two PALETTE blocks. A
+ * bridge name is declared in neither.
+ */
+export function labelFill(color: string): string {
+  return (LABEL_COLORS as readonly string[]).includes(color)
+    ? `var(--color-${color})`
+    : 'var(--color-overlay-2)';
+}

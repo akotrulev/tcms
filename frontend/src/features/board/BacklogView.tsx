@@ -33,6 +33,7 @@ import { NativeSelect } from '../../components/ui/native-select';
 import { cn } from '../../lib/cn';
 import { plural } from '../../lib/format';
 import { priorityLabels } from '../../lib/labels';
+import { labelFill } from '../../lib/statusColors';
 import { StatusBadge } from '../tracker/StatusBadge';
 import { TypeIcon } from '../tracker/TypeIcon';
 import { useBoardFilterChips, useWorkFilter } from './useWorkFilter';
@@ -448,16 +449,19 @@ function BacklogListRow({
       </RouterLink>
 
       {/*
-        Plain chips. `Label.color` is a design-token name (`label-1` … `label-10`) and those ten
+        ~~Plain chips. `Label.color` is a design-token name (`label-1` … `label-10`) and those ten
         tokens are not declared in `index.css`, so a hue here would be invented — the palette is the
-        label-creating screen's decision (D-z), and a chip with the wrong colour is worse than one
-        with none because the word is what is being scanned either way.
+        label-creating screen's decision (D-z).~~ → **012 T9 declared the ten**, so the chip is
+        filled from `labelFill`, which falls back to the plain wash for a token this stylesheet does
+        not know. The caution the old sentence carried is what that fallback is: a chip with the
+        wrong colour is worse than one with none, because the word is what is being scanned anyway.
       */}
       {row.labels.map((label) => (
         <span
           key={label.id}
           data-testid={`${TEST_ID}.Row.${row.key}.Label.${label.id}`}
-          className="flex-none rounded-full border border-line bg-wash-1 px-2 py-0.5 text-[11px] text-ink-2"
+          style={{ background: labelFill(label.color) }}
+          className="flex-none rounded-full border border-line px-2 py-0.5 text-[11px] text-ink"
         >
           {label.name}
         </span>

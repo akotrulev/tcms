@@ -467,6 +467,16 @@ export const helpSections: HelpSection[] = [
                 'ONE project’s board — its open issues in columns named by that project’s own workflow, alongside the work the repository already knows about: executions assigned to you, reviews you have been asked for, cases the health computation flagged, and tests somebody quarantined. Drag a card, or use the keyboard twin the footer shows while a card is lifted. A move the workflow forbids is refused and the card says why.',
             },
             {
+              term: 'Project boards',
+              detail:
+                'A project can carry several boards over the same statuses — a per-status one for the team, a three-column one for a stakeholder — because a board is a view and owns no issue. Move a card on one and it is in the matching column on the other. Swimlanes group by epic, assignee, label or priority; a WIP limit reports a breach rather than refusing the drop; and the columns, their claims and the project’s labels are defined on Project settings → Boards, where a status × board table shows every status claimed by exactly one column before a save is attempted.',
+            },
+            {
+              term: 'Backlog',
+              detail:
+                'Every story-level issue that is not done, in one project-wide order you can drag or move with ↑ ↓. Select rows to set an epic or an assignee on all of them at once, and the result names anything that was refused rather than reporting a partial write as a success. The filter is the same one the board and the table carry, held in the URL.',
+            },
+            {
               term: 'My work',
               detail:
                 'Everything assigned to you, across every project you can see, as two tables over one read: your issues in one, your executions and reviews in the other. Not a board — two projects name their statuses separately, so columns there would be a grouping the data cannot support. You can also keep a private note and a personal due date on any card, which no teammate sees.',
@@ -810,12 +820,12 @@ tcms review comment    # a remark on an open review`}</Terminal>
                 'tcms_whoami reports who the credential acts as and what it can reach. tcms_orient returns the project with its classification dimensions, execution statuses, suites, tags and case counts in one call — the vocabulary is per-project, so an agent that skips this guesses values that get refused. tcms_shape answers what a payload of a given kind must look like, and reaches no instance at all, so it is safe to call before anything is configured.',
             },
             {
-              term: 'Reading — 12',
+              term: 'Reading — 13',
               detail:
                 'tcms_search_cases · tcms_open_case · tcms_list_suites · tcms_list_library · tcms_list_artifacts · tcms_doc_tree · tcms_open_doc_page · tcms_list_plans · tcms_open_run · tcms_read_issue · tcms_read_board · tcms_list_proposals · tcms_triage',
             },
             {
-              term: 'Writing — 11',
+              term: 'Writing — 12',
               detail:
                 'tcms_write_case · tcms_write_suite · tcms_write_doc_page · tcms_write_plan · tcms_write_run · tcms_record_result · tcms_review_comment · tcms_review_verdict · tcms_write_issue · tcms_write_backlog · tcms_write_artifact · tcms_report',
             },

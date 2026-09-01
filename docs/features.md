@@ -173,6 +173,13 @@ use them to drive suite membership.
   you, cases the health computation flagged, and quarantined tests. The old line is left visible
   because a reader who finds `GET /work-items` in the git history should know it became
   `GET /board`, one operation still serving all three boards
+  - ~~one operation still serving all three boards~~ → **still true, and now one of two kinds of
+    board (012 M2).** The paragraph above describes the **composite** board — four kinds of card,
+    columns assembled from whatever cards came back, and no configuration anywhere. Beside it there
+    is now a **project board**, described under *Boards and the backlog* below, which shows issues
+    only and whose columns are rows a person defined. They are different screens over different
+    endpoints and this document does not use the bare phrase "team board" for either, because
+    `settings-boards.html` also ships a board *called* Team board that is one of the second kind
 - **My Work** — everything assigned to you, across every project, as **two tables over one read**:
   your issues in one, your executions and reviews in the other, beside a private note and personal
   due date on any card that no teammate sees. ~~A kanban with `mine=true` pre-applied.~~ →
@@ -182,6 +189,49 @@ use them to drive suite membership.
   project visibility, never the team's, so two people asking for one team's board legitimately see
   different card sets — which is why nothing built on it presents a team total
 - Configurable handling of retries versus genuinely distinct runs when results are collapsed
+
+## Boards and the Backlog
+
+**A board is a view, not a copy.** It owns no issue: it is a grouping and a mapping from the
+project's statuses onto columns, so a project can carry several boards over the same work and
+deleting one loses nothing. That single property is what the rest of this section is a consequence
+of, and it is written on the settings screen itself because it is the answer to the only word on
+that screen anybody hesitates over.
+
+- **Several boards per project, each a different fold of the same statuses.** A per-status board for
+  the team and a three-column board for a stakeholder are two rows in the same table over one
+  workflow. Move a card on one and it is in the matching column on the other, because the move
+  changes the *issue's status* and every board is a mapping of statuses
+- **Every status is claimed by exactly one column, on every board** — refused when a status would be
+  claimed twice or left unclaimed, and the settings screen renders that check as a status × board
+  table so a person watches it hold, and sees it fail by name, before the save is attempted rather
+  than as an error afterwards
+- **A column claiming more than one status has a default**, and a card dropped into it takes that
+  one. A coarser board never invents a status the workflow does not have
+- **A status added to the workflow after a board exists is claimed automatically**, into the column
+  holding the default status of the same kind, and shows up there so it can be moved. An unclaimed
+  status is not a state the data can be in
+- **Swimlanes by epic, assignee, label or priority**, collapsible, with a completion roll-up on the
+  lane header
+- **WIP limits report a breach, they do not refuse the drop.** A limit that blocked work is one
+  people route around by not using the board, so the column header carries the count and the move
+  still lands, saying so
+- **Every drag has a keyboard twin.** Cards carry a `⋮ Move to…` listing every column, with the
+  illegal ones disabled and the reason on them; backlog rows carry `↑ ↓`. WCAG 2.2 *Dragging
+  Movements*, and the standing rule that dragging is never the only way
+- **A ranked backlog** — one project-wide order over every story-level issue that is not done,
+  held as a fractional rank, so inserting a row between two others rewrites no other row
+- **One filter, across every view.** Label, assignee, epic, level, priority and unparented live in
+  the URL, so a filter set on the board is still applied after switching to the backlog or the
+  table — and every view shows a chip for every filter its own endpoint applies, whether or not that
+  view offers a picker for it
+- **Labels** — the informal, fast-moving axis, many per card, ten colours, and deliberately not the
+  classification vocabulary, which is controlled and lives on its own screen
+
+Not yet, and named rather than implied: the backlog does not group by release and has no *Move to
+release* action, because releases arrive in a later module; there is no AI-eligibility tag and no
+pull-request badge on a card, for the same reason. **And none of this has been operated in a
+browser** — see the module plan's built-and-unverified list, which is deliberately long.
 
 ## Results From CI
 
@@ -272,8 +322,9 @@ What replaces it:
 - **A link from an issue to a specification block**, kept as a projection that marks itself stale
   when the linked page changed after the issue last did
 - **A work table** with five views over one project's issues, and a one-field quick add
-- **Settings per project** — the issue types the project holds, and the workflow screen where
-  statuses are reordered with ↑ / ↓ as well as by drag, because dragging is never the only way
+- **Settings per project** — the issue types the project holds, the workflow screen where statuses
+  are reordered with ↑ / ↓ as well as by drag (because dragging is never the only way), and the
+  boards screen where a project's boards, their columns and its labels are defined
 
 ## Teams and People
 
@@ -301,30 +352,57 @@ What replaces it:
 
 ## Command-Line Tool
 
-`tcms`, driven by `TCMS_URL` and `TCMS_TOKEN`. **27 commands:**
+`tcms`, driven by `TCMS_URL` and `TCMS_TOKEN`. ~~**27 commands**~~ → **35**, the eight added by the
+board module being the difference. The authority is the registry and
+`docs/specs/2026-08-08-mcp-tool-and-command-surface.md` §6; this list agrees with it rather than
+re-deriving it, and the in-app guide is compared to the registry by a test in both client packages.
 
-*Reading* — `whoami` · `project list` · `case list` · `case show` · `library list` (the condition
-library) · `suite list` · `suite show` · `plan list` · `run list` · `doc list` · `doc show`
+*Reading* — `whoami` · `format` (what a payload must look like, reaching no instance) ·
+`project list` · `case list` · `case show` · `library list` (the condition library) · `suite list` ·
+`suite show` · `plan list` · `run list` · `doc list` · `doc show` · `proposal list` ·
+`proposal show` · `issue list` · `issue show` · **`board list`** · **`board show`** ·
+**`backlog`** · **`label list`**
 
 *Writing* — `case edit` · `case propose` · `suite create` · `suite edit` · `suite status` ·
 `plan create` · `plan edit` · `plan status` · `run create` · `run status` · `result record` ·
-`doc create` · `doc edit` · `doc link` · `doc unlink` · `review comment`
+`doc create` · `doc edit` · `doc link` · `doc unlink` · `issue create` · `issue move` ·
+`issue comment` · **`board move`** · **`rank`** · **`label add`** · **`label set`** ·
+`review comment`
+
+**`board move` and `rank` take a board or a neighbour by name and refuse before sending** when the
+argument is ambiguous — `board move` names every board when a project has more than one and none was
+given, and `rank` requires exactly one of `--after` / `--before`, because both and neither are the
+two payloads the server answers 400 for.
+
+**Not one of these has been run against a running instance.** They are checked against the API
+contract, which is the contract's shape and not a handler's answer.
 
 ## AI Agent Access (MCP Server)
 
-An MCP server exposing **26 tools**, over stdio or HTTP, so an AI assistant can work with TCMS
-directly.
+An MCP server exposing ~~**26 tools**~~ → **28**, over stdio or HTTP, so an AI assistant can work
+with TCMS directly.
 
 *Orientation (3)* — `tcms_whoami` · `tcms_orient` (project summary with vocabularies and
 capabilities) · `tcms_shape` (what a payload of a given kind must look like, reaching no instance)
 
-*Reading (12)* — `tcms_search_cases` · `tcms_open_case` · `tcms_list_suites` · `tcms_list_library` ·
+*Reading (13)* — `tcms_search_cases` · `tcms_open_case` · `tcms_list_suites` · `tcms_list_library` ·
 `tcms_list_artifacts` · `tcms_doc_tree` · `tcms_open_doc_page` · `tcms_list_plans` · `tcms_open_run` ·
-`tcms_read_issue` · `tcms_list_proposals` · `tcms_triage`
+`tcms_read_issue` · **`tcms_read_board`** · `tcms_list_proposals` · `tcms_triage`
 
-*Writing (11)* — `tcms_write_case` · `tcms_write_suite` · `tcms_write_doc_page` · `tcms_write_plan` ·
+*Writing (12)* — `tcms_write_case` · `tcms_write_suite` · `tcms_write_doc_page` · `tcms_write_plan` ·
 `tcms_write_run` · `tcms_record_result` · `tcms_review_comment` · `tcms_review_verdict` ·
-`tcms_write_issue` · `tcms_write_artifact` · `tcms_report`
+`tcms_write_issue` · **`tcms_write_backlog`** · `tcms_write_artifact` · `tcms_report`
+
+**Defining a board is not on this surface**, and neither is creating or deleting one: composing a
+column array blind against a rule the server enforces in a 422 spends an agent's turns on the
+refusal. Moving a card and setting an issue's labels are arms of `tcms_write_issue` because they
+cost `issue:edit`; ranking and the three label writes are `tcms_write_backlog` because they cost
+keys only a Project Manager and up hold — one write tool over both would be listed to a caller who
+is refused two thirds of it.
+
+**Neither board tool has been called against a running instance.** `tcms_write_backlog` in
+particular is invisible to the fixed `Agent` credential the server is usually pointed at, by
+design.
 
 What makes it safe to point at real data:
 

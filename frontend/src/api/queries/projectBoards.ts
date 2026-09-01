@@ -23,7 +23,13 @@
  * snaps back saying why. `tcmsFaults.rank('conflict')` is the switch that proves the snap-back, and
  * it landed in the same task as this file, before the screen that uses it.
  */
-import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+  type UseQueryResult,
+} from '@tanstack/react-query';
 import { TIMEOUTS, api, qs } from '../client';
 import type {
   BacklogRow,
@@ -39,6 +45,7 @@ import type {
   RankResult,
   WipBreach,
 } from '../types';
+import type { DataRegionState } from '../../components/DataRegion';
 import { toast } from '../../notifications/toast';
 import { keys } from './keys';
 
@@ -64,11 +71,55 @@ export function useBoards(projectId: string): UseQueryResult<BoardSummary[]> {
  * board relayout under the reader's hand.
  */
 export function useBoardConfig(boardId: string): UseQueryResult<BoardConfig> {
-  return useQuery({
+  return useQuery(boardConfigQuery(boardId));
+}
+
+/**
+ * The options object behind both readers, so the two share a cache entry rather than sitting beside
+ * each other under one key with two shapes.
+ */
+function boardConfigQuery(boardId: string) {
+  return {
     queryKey: keys.board(boardId),
-    queryFn: ({ signal }) =>
+    queryFn: ({ signal }: { signal: AbortSignal }) =>
       api.get<BoardConfig>(`/boards/${boardId}`, { signal, timeoutMs: TIMEOUTS.interactive }),
     enabled: boardId !== '',
+  };
+}
+
+/**
+ * **Every** named board's configuration, as one `DataRegion` state — the board settings screen's
+ * read, and the only caller that wants all of them at once.
+ *
+ * `BoardSummary` carries a column *count* and not the columns, deliberately (the picker renders
+ * "4 columns" and shipping the layout there would make switching boards a second read of something
+ * already fetched). The coverage check on `settings-boards.html` is a status × board grid, so it
+ * needs every board's claims in one place, and `useQueries` is what turns a list whose length is
+ * data into a fixed number of hooks.
+ *
+ * **`data` is `undefined` until every board has answered**, rather than a partial array. A coverage
+ * table drawn over three of four boards would report a status as claimed exactly once when the
+ * fourth board is where it is claimed twice — the invariant is over the set, so a partial answer to
+ * it is a wrong answer rather than an incomplete one.
+ */
+export function useBoardConfigs(boardIds: readonly string[]): DataRegionState<BoardConfig[]> {
+  return useQueries({
+    queries: boardIds.map(boardConfigQuery),
+    combine: (results) => ({
+      data: results.every((result) => result.data !== undefined)
+        ? results.map((result) => result.data as BoardConfig)
+        : undefined,
+      isPending: results.some((result) => result.isPending),
+      isError: results.some((result) => result.isError),
+      error: results.find((result) => result.isError)?.error,
+      isFetching: results.some((result) => result.isFetching),
+      dataUpdatedAt: results.length === 0
+        ? 0
+        : Math.min(...results.map((result) => result.dataUpdatedAt)),
+      refetch: () => {
+        for (const result of results) void result.refetch();
+      },
+    }),
   });
 }
 

@@ -162,6 +162,11 @@ const WorkflowSettingsPage = lazy(() =>
     default: m.WorkflowSettingsPage,
   })),
 );
+const BoardSettingsPage = lazy(() =>
+  import('../features/settings/BoardSettingsPage').then((m) => ({
+    default: m.BoardSettingsPage,
+  })),
+);
 const ReviewSettingsPage = lazy(() =>
   import('../features/settings/ReviewSettingsPage').then((m) => ({
     default: m.ReviewSettingsPage,
@@ -704,6 +709,22 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <WorkflowSettingsPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            012 T9's board settings — `settings-boards.html`. Routed for everybody, like General and
+            Workflow above and for their reason: `listBoards` and `getBoardConfig` cost `board:read`,
+            which every role holds, and the page renders read-only for a caller without
+            `board:configure`. It is also the screen that explains what a board IS — a lens, owning
+            no issue — which is the sentence a reader needs most when they cannot change one.
+          */}
+          <Route
+            path="/projects/:projectId/settings/boards"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <BoardSettingsPage />
               </Suspense>
             }
           />

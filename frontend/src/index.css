@@ -256,6 +256,44 @@
   --color-viz-1: #33566f;
   --color-viz-2: #6d8ba8;
 
+  /* --- labels: the tenth tier, and the one whose colour means nothing ---
+     Scope §12.2 asks for "~10 named colours, many per card, the primary scanning device", and
+     `Label.color` on the contract is a token name (`label-1` … `label-10`) rather than a hex,
+     because a stored #RRGGBB is invisible in the other colour scheme. These are those ten.
+
+     **They were deliberately absent until 012 T9**, and three files apologised for it in comments,
+     because the screen that CHOOSES a label's colour did not exist and picking a hue on a screen
+     that cannot show it is guessing. This is that screen's task, so the guess is over.
+
+     A label colour carries no meaning — it is a mnemonic a person picked, and the word is inside
+     the chip either way — so the constraint here is not the ΔE floor the outcome tier is held to
+     (§6, and `app/statusPalette.test.ts`). It is the opposite one: **a label must never read as a
+     status.** That is bought on the LIGHTNESS axis rather than by hue, which is the only axis with
+     room left once green, red, amber, blue and purple are spoken for. In this palette a status is
+     dark ink on a pale ground; a label is a PALE FILL carrying `--color-text`. In the dark palette
+     the two swap sides — status is a light hue, a label is a deep fill carrying `--color-ink` —
+     so in both schemes a label chip sits on the opposite side of the lightness axis from every
+     status colour, and no label can be mistaken for an outcome at a glance.
+
+     ~~Ten saturated hues, one per label.~~ → rejected before it was written: the viz tier's own
+     note above records that a categorical hue could not be added even ONCE without falling under
+     the ΔE 15 floor against a status, and ten of them beside a status badge on the same card face
+     is that failure ten times over. `--color-viz-*` bought its disjointness with chroma; this tier
+     buys it with lightness, for the same reason and one axis over.
+
+     Every fill clears 4.5:1 against the ink that sits on it, in both schemes — a chip is text on a
+     surface, not a swatch, so the AA text floor is the one that applies. */
+  --color-label-1: #f6d9dc;
+  --color-label-2: #f6e3c6;
+  --color-label-3: #e4ecc8;
+  --color-label-4: #cfe9d5;
+  --color-label-5: #c9e8e5;
+  --color-label-6: #cee5f2;
+  --color-label-7: #d6dff5;
+  --color-label-8: #e2dbf3;
+  --color-label-9: #f0d9ee;
+  --color-label-10: #e2e5ea;
+
   /* --- progress: a JOB's own lifecycle, never the outcome of what it ran --- */
   /* A finished run is not a passing run. `--color-passed` on a COMPLETED chip put a green
      badge on a run with a 0% pass rate, which is the outcome tier answering a question it
@@ -400,6 +438,20 @@
 
   --color-viz-1: #93abc2;
   --color-viz-2: #526e8a;
+
+  /* The ten label fills, deep rather than pale — see the light block for why the tier is separated
+     from status by lightness and not by hue. Here a status is a light hue on a dark ground, so a
+     label is the dark fill and `--color-ink` is what reads on it. */
+  --color-label-1: #5a3138;
+  --color-label-2: #5b4426;
+  --color-label-3: #47502a;
+  --color-label-4: #2c4f3a;
+  --color-label-5: #264c4c;
+  --color-label-6: #27455c;
+  --color-label-7: #333f66;
+  --color-label-8: #443a63;
+  --color-label-9: #57345a;
+  --color-label-10: #3b424c;
 
   --color-progress-done: #93a3ba;
 

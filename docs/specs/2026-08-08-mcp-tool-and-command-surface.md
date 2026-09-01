@@ -505,6 +505,20 @@ columns is a screen with a status-claim rule the server enforces in a 422 naming
 claimed twice; an agent composing that array blind would spend its turns on the refusal. The board a
 project has is what these verbs read, and §2's budget is better spent elsewhere.
 
+**That screen landed in 012 T9** — `/projects/{projectId}/settings/boards`,
+`frontend/src/features/settings/BoardSettingsPage.tsx` — and it settles the sentence above rather
+than merely deferring it. The screen renders the claim rule as a status × board table that says the
+invariant is failing, **by status name, before a save is attempted**; the three verbs are reachable
+there and nowhere else. It is also where a label's `color` is chosen, which is the one field on
+`LabelInput` an agent has no way to pick well: `tcms_write_backlog`'s `color` takes the token name a
+person has already seen on a swatch.
+
+**None of the eight commands or two tools has been run against a running instance.** Their gate is
+the packages build and the contract suites, and every exchange in those crosses a `fetch` double
+compared to `openapi.yaml` — which is the *contract's* shape and not a handler's answer. The eight
+handlers exist (012 T3, T4) and five of the ten board operations have still never been driven over
+HTTP at all.
+
 #### `tcms_read_board` — typed input
 
 Gate: `board:read`. **Three branches, not three tools**, all read-only, all the same gate.

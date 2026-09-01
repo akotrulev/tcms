@@ -271,6 +271,7 @@ export {
   useBacklog,
   useBoardCards,
   useBoardConfig,
+  useBoardConfigs,
   useBoards,
   useCreateBoard,
   useCreateLabel,

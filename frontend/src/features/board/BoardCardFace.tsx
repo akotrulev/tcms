@@ -5,6 +5,7 @@ import type { BoardIssueCard } from '../../api/types';
 import { Identifier } from '../../components/Identifier';
 import { Badge } from '../../components/kit';
 import { cn } from '../../lib/cn';
+import { labelFill } from '../../lib/statusColors';
 import { TypeIcon } from '../tracker/TypeIcon';
 import { MoveToMenu } from './MoveToMenu';
 import type { ServerColumn } from './cardMove';
@@ -39,11 +40,13 @@ import type { ServerColumn } from './cardMove';
  * link and a menu, and making the whole card draggable turns every attempt to press one into the
  * start of a drag.
  *
- * **Label chips carry no colour.** `Label.color` is a design-token name (`label-1` … `label-10`) and
- * **those ten tokens are not declared in `index.css`** — the palette is a stylesheet decision that
- * arrives with the screen that creates labels. Inventing a hue here is the one thing the contract's
- * own comment forbids ("status and label colour is data the palette owns"), and a chip with the
- * wrong colour is worse than one with none, because the word is the thing being scanned either way.
+ * ~~**Label chips carry no colour.** `Label.color` is a design-token name (`label-1` … `label-10`)
+ * and **those ten tokens are not declared in `index.css`** — the palette is a stylesheet decision
+ * that arrives with the screen that creates labels.~~ → **012 T9 declared them**, on the screen
+ * where a label's colour is chosen, so the chips are filled from `labelFill`. The caution the old
+ * sentence carried still holds and is why the fill is a token rather than a hue picked here: a chip
+ * with the wrong colour is worse than one with none, because the word is what is being scanned
+ * either way, and an unrecognised token falls back to the plain chip rather than to nothing.
  */
 export function BoardCardFace({
   card,
@@ -143,7 +146,12 @@ export function BoardCardFace({
         className="flex flex-wrap items-center gap-[7px] text-[11px] text-ink-3"
       >
         {card.labels.map((label) => (
-          <Badge key={label.id} tone="plain" data-testid={`${testId}.Label.${label.name}`}>
+          <Badge
+            key={label.id}
+            tone="plain"
+            style={{ backgroundColor: labelFill(label.color), color: 'var(--color-ink)' }}
+            data-testid={`${testId}.Label.${label.name}`}
+          >
             {label.name}
           </Badge>
         ))}

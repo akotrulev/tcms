@@ -590,14 +590,18 @@ describe('the board’s own controls', () => {
     )
   })
 
-  it('disables Configure boards with its reason rather than linking to a screen that does not exist', async () => {
-    // §31 inverted the usual way: the capability is real and the screen is T9's, so the control says
-    // when it arrives. A link to a route that would 404 is worse than a button that explains itself.
+  it('links Configure boards at the settings screen 012 T9 landed', async () => {
+    /*
+      ~~It was disabled with *"arrives with the board settings screen"* on it, because the route did
+      not exist and a link to a 404 is worse than a control that explains itself.~~ → T9 built the
+      route, so the sentence became false and the assertion had to move with it. The `href` is what
+      is asserted rather than the absence of `disabled`: a `<span>` styled as a link would satisfy
+      the weaker claim, and in-app navigation has to be a real `<Link>`.
+    */
     renderView(boardContents({ lanes: [aBoardLane({ cards: [] })] }))
 
     const configure = await screen.findByTestId('ProjectBoard.Configure')
-    expect(configure).toBeDisabled()
-    expect(configure).toHaveAttribute('title', expect.stringContaining('board settings screen'))
+    expect(configure).toHaveAttribute('href', '/projects/p1/settings/boards')
   })
 })
 

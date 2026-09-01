@@ -112,6 +112,31 @@ describe('index.css is the whole palette', () => {
   });
 
   /**
+   * The ten label slots exist in both palettes — the check `lib/statusColors.ts` says is here.
+   *
+   * `Label.color` is a free string on the wire, so nothing on the TypeScript side can be
+   * exhaustive over these; `LABEL_COLORS` is a list and a list can go stale against the stylesheet
+   * in either direction. A name in the list that `index.css` does not declare paints a chip
+   * transparent, which is the silent failure the six-token check above exists for, one tier over —
+   * and the list is read out of the module rather than restated, so a slot added in one file and
+   * not the other reddens instead of agreeing with itself.
+   */
+  const labelSlots = [
+    ...readFileSync(resolve(HERE, '../lib/statusColors.ts'), 'utf8').matchAll(
+      /^\s*'(label-\d+)',$/gm,
+    ),
+  ].map((m) => `--color-${m[1]!}`);
+
+  it('parsed the label slot list at all', () => {
+    expect(labelSlots).toHaveLength(10);
+  });
+
+  it.each(labelSlots)('%s is declared in both palettes', (token) => {
+    expect(light.get(token), `${token} missing from :root`).toBeDefined();
+    expect(dark.get(token), `${token} missing from the dark palette`).toBeDefined();
+  });
+
+  /**
    * Design language rule 5: one palette serves keywords and results. `Given` is the green that
    * `Passed` is, `When` the amber that `Blocked` is, `Then` the blue that `Retest` is.
    *
