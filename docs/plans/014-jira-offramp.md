@@ -3,7 +3,10 @@
 **Date:** 2026-09-01 · **Written by:** `ep-writing-plans`
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `ep-executing-plans` to implement this plan
-> task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> task-by-task. **[Prompts — one per task](#prompts--one-per-task) is directly below the task
+> table**: one paste-ready block per task, each complete on its own. Steps use checkbox
+> (`- [ ]`) syntax, and every prompt ends by ticking its steps and writing its own row in the
+> task table — a session that stops with its cell still reading `not started` is not done.
 
 **Goal:** Module **M4** of [009-project-management-expansion-modules.md](009-project-management-expansion-modules.md).
 An admin connects their Jira (or Azure DevOps) account, previews exactly what will and will not come
@@ -33,16 +36,484 @@ renumbers — M5 will be `015`.
 
 **Tasks** — in the order they are done:
 
-| # | Task | Stack · Agent | Deliverable | Depends on |
-|---|---|---|---|---|
-| 1 | T1 — The import contract | `contract` · `be-java` | `openapi.yaml` declares five operations and eighteen schemas, every one with its `required` array; both generated clients are regenerated in the same commit; `npm run build` green in `frontend/` and `packages/` | none |
-| 2 | T2 — `V7`: `import_run`, `import_dropped_field`, `issue_comment.external_author` | `be` · `data-architect` | `V7__import.sql` applies to an empty database; both new tables carry `company_id NOT NULL` and a forced isolation policy; `SchemaConventionTest` and `SchemaCommentTest` green | T1 |
-| 3 | T3 — `tracker.imports`: the source port, the Jira client, the guard, the preview | `be` · `be-java` | `POST /imports/source-projects` and `POST /imports/preview` answer over HTTP against a Jira Cloud/DC site, and a test that snapshots the whole project before and after a preview finds it byte-identical | T2 |
-| 4 | T4 — The run, the report, and the stuck-run reaper | `be` · `be-java` | `POST /imports` imports a Jira project keeping `PROJ-4812` as `PROJ-4812`, `GET /imports/{id}` serves the report, and a test asserts the report's `droppedFields` equals the preview's element for element | T3 |
-| 5 | T5 — The Azure DevOps source | `be` · `be-java` | `provider: AZURE_DEVOPS` previews and imports an ADO project through the same port, proven against a recorded-shape fake; no other file in `imports` changes | T4 |
-| 6 | T6 — `tcms import list` and `tcms import show` | `ts` · `tooling-engineer` | Two CLI commands print a past import and its dropped-field list from a terminal; the surface document's §3.7 records that MCP deliberately gets nothing | T4 |
-| 7 | T7 — The wizard: connect → preview → map → run | `fe` · `fe-react` | `/projects/:projectId/imports/new` walks the three steps, refuses to confirm while one status is unmapped, and starts a run; `tcmsFaults.importing()` drives every failure path | T6 |
-| 8 | T8 — The report screen, the imports list, and the close-out | `fe` · `fe-react` | `/projects/:projectId/imports` and `/projects/:projectId/imports/:importRunId` render `settings-import.html` and `import-report.html` with no call to the source system, and 009 · `features.md` · the ERD are closed out | T7 |
+| # | Task | Stack · Agent | Deliverable | Depends on | Status |
+|---|---|---|---|---|---|
+| 1 | T1 — The import contract | `contract` · `be-java` | `openapi.yaml` declares five operations and eighteen schemas, every one with its `required` array; both generated clients are regenerated in the same commit; `npm run build` green in `frontend/` and `packages/` | none | not started |
+| 2 | T2 — `V7`: `import_run`, `import_dropped_field`, `issue_comment.external_author` | `be` · `data-architect` | `V7__import.sql` applies to an empty database; both new tables carry `company_id NOT NULL` and a forced isolation policy; `SchemaConventionTest` and `SchemaCommentTest` green | T1 | not started |
+| 3 | T3 — `tracker.imports`: the source port, the Jira client, the guard, the preview | `be` · `be-java` | `POST /imports/source-projects` and `POST /imports/preview` answer over HTTP against a Jira Cloud/DC site, and a test that snapshots the whole project before and after a preview finds it byte-identical | T2 | not started |
+| 4 | T4 — The run, the report, and the stuck-run reaper | `be` · `be-java` | `POST /imports` imports a Jira project keeping `PROJ-4812` as `PROJ-4812`, `GET /imports/{id}` serves the report, and a test asserts the report's `droppedFields` equals the preview's element for element | T3 | not started |
+| 5 | T5 — The Azure DevOps source | `be` · `be-java` | `provider: AZURE_DEVOPS` previews and imports an ADO project through the same port, proven against a recorded-shape fake; no other file in `imports` changes | T4 | not started |
+| 6 | T6 — `tcms import list` and `tcms import show` | `ts` · `tooling-engineer` | Two CLI commands print a past import and its dropped-field list from a terminal; the surface document's §3.7 records that MCP deliberately gets nothing | T4 | not started |
+| 7 | T7 — The wizard: connect → preview → map → run | `fe` · `fe-react` | `/projects/:projectId/imports/new` walks the three steps, refuses to confirm while one status is unmapped, and starts a run; `tcmsFaults.importing()` drives every failure path | T6 | not started |
+| 8 | T8 — The report screen, the imports list, and the close-out | `fe` · `fe-react` | `/projects/:projectId/imports` and `/projects/:projectId/imports/:importRunId` render `settings-import.html` and `import-report.html` with no call to the source system, and 009 · `features.md` · the ERD are closed out | T7 | not started |
+
+**One paste-ready prompt per task is directly below**, in the same order. The `Status` column
+above is the only place a task's completion is recorded, and the task's own session writes it.
+
+---
+
+## Prompts — one per task
+
+Each block below is what is pasted into a fresh session, and it is complete on its own: what to
+read, in what order, the traps that specific task will hit, what to commit and which gate to run.
+**One task is one session** — do not run two of these in one context, and do not run two beside each
+other (CLAUDE.md's *Running work in parallel — don't*; every task here touches `tracker`).
+
+**The prompts are living text.** A task that lands something different from what this plan predicted
+**rewrites the prompts below it before it stops** — in place, no changelog appended. If T3 names the
+port differently, T5's prompt says the new name; if T1's paths move, T7's prompt says where.
+
+### Marking a task done — the last thing every prompt does
+
+Before the session stops, and **in the same commit as the task's own files**:
+
+1. Set the task's row in the **Tasks** table above from `not started` to
+   `done YYYY-MM-DD @ <short sha of this task's commit>`. Nothing else writes that cell.
+2. Tick every `- [ ]` step of the task you completed to `- [x]`.
+3. If the task landed something the plan predicted wrongly — a different table name, an extra
+   operation, a decision reversed — **edit the affected later tasks and their prompts in place**,
+   and say in the commit message which ones moved.
+4. If the task was cut short, the cell reads `partial — <what is missing>` and **not** `done`. The
+   next session trusts this table and its prompt and re-verifies nothing else in this file.
+
+The chicken-and-egg on the sha is resolved the way the rest of this repo does it: commit the task's
+files, then `git commit --amend` after writing the row, or write the row in a second commit named
+`docs(plan): 014 T<n> landed`. Either is fine; leaving the cell at `not started` is not.
+
+### T1 — The import contract
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/014-jira-offramp.md — the
+decisions D-a…D-m and the whole of T1. Use /be-java.
+
+Land the import contract in ONE commit: docs/specs/openapi.yaml, both generated clients
+(frontend/src/api/schema.d.ts and packages/client/src/schema.ts), and a new §3.7 of
+docs/specs/2026-08-08-mcp-tool-and-command-surface.md.
+
+Read before writing: openapi.yaml's tracker block — the paths from /board to
+/issues/{key}/doc-links, and the schemas from IssueTypeRef through IssueStatusKind and Comment —
+and the surface doc's §2 and §3.3. The five new paths go after /issues/{key}/doc-links and before
+/boards/{boardId}, so the tracker family stays contiguous.
+
+Four traps this task has:
+  * `required` DOES NOT DESCEND into inline nested objects. ImportRun.startedBy is the one that
+    will be missed. Verify by scripting a walk of the document, not by reading it — CLAUDE.md's
+    rule, and the one that found five join tables without company_id.
+  * operationId collisions. Grep for listImports/getImport/previewImport before committing to the
+    five names; a collision is not found until the generated client cannot name one of the two.
+  * Reuse, do not respell. IssueLevel and IssueStatusKind already exist and PreviewTypeRow and
+    AppliedStatusMapping must $ref them. A second spelling of one fact is what
+    noRecordOutsideApiRepeatsAnApiShape exists to catch.
+  * DroppedField is ONE schema referenced by both ImportPreview and ImportRun. Two schemas that
+    happen to match is the defect D-f exists to prevent, and the done-when — "the dropped-field
+    list in the report matches the preview's word for word" — starts here.
+
+The Comment schema gains a nullable externalAuthor. That is the only existing schema this module
+touches.
+
+contractBodies.ts is NOT edited, in either copy — both walk the document generically, so a new path
+or schema needs no entry. 012 and 013 each added ten operations and touched neither.
+
+Gate: ~/bin/tcms-remote sync, then `frontend npm run build` and
+`packages "npm run build"` (root script, NEVER --workspaces — that runs them alphabetically and cli
+would typecheck against a stale client dist). THE BACKEND IS EXPECTED TO BE RED: eighteen schemas
+have no ContractConventionTest pairing until T3 and T4. Do not add entries for records that do not
+exist yet.
+
+Commit message: the T1 step 7 text. Stage only the four files. Then mark T1 done in the plan's
+Tasks table and tick its steps, per "Marking a task done".
+````
+
+### T2 — `V7`
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/014-jira-offramp.md T2 and
+decisions D-a, D-f, D-g, D-j. Use /data-architect with data-postgresql and data-migrations.
+
+Write backend/src/main/resources/db/migration/V7__import.sql. `ls` the migration directory FIRST —
+this plan says V7 and THE DIRECTORY IS THE AUTHORITY. That column in plan 009 has now been wrong
+three times in one month, from three unrelated causes; out-of-order is unset, so a number already
+used is silently skipped, and Testcontainers builds from empty and cannot show you. If V7 is taken,
+take the next free number and correct this plan's header in the same commit.
+
+Read V6__release.sql whole before writing: its header, and especially its RLS block, which is copied
+here with two table names instead of one. The predicate must be BYTE-IDENTICAL to V1's including the
+nullif() — SchemaConventionTest.everyPolicyHasTheExactIsolationPredicate compares them — and there
+is deliberately no WITH CHECK, because a policy with USING and no WITH CHECK reuses USING as the
+insert check, so the read boundary IS the write boundary.
+
+Three things this task gets wrong if it guesses:
+  * THERE IS NO CREDENTIAL COLUMN, and the file must say so and why. That is D-a closing review
+    R14: reuse of integration.tracker's credential is a forbidden module crossing, and an encrypted
+    column here would need integration.SecretCipher — equally unreachable — so it would mean a
+    SECOND AES key user in a second module. A column absent by decision is indistinguishable from
+    one nobody thought of unless the comment is there.
+  * import_dropped_field is ROWS, not a rendered string, and it stores the reason sentence PER ROW
+    rather than looking it up at read time. Both are in the plan with their reasons; write them
+    into the COMMENT ON.
+  * tcms_seed_project_defaults is NOT touched and the file says so. Nothing about an import is a
+    per-project default. Do not reproduce the function "to be safe" — a reproduction that drops a
+    block silently stops seeding it, which is what ProjectKeySequenceSchemaTest catches.
+
+Also write §7d of docs/specs/2026-07-30-tcms-erd.md, after §7c, in §7c's shape, and put the
+no-credential-column paragraph there too — the ERD is where somebody looks for that, and finding it
+only in a migration comment is finding it late.
+
+Gate on shanks: `backend "ulimit -n 65535; ./gradlew test --tests 'com.tcms.tenancy.SchemaConventionTest' --tests 'com.tcms.schema.SchemaCommentTest' --tests 'com.tcms.tenancy.RlsIsolationTest'"`.
+Read docs/specs/shanks-runner-details.md first: BUILD FAILED with `Could not write XML test results`
+and zero assertion failures is the fd limit, not a red suite.
+
+Commit: the T2 step 4 text, staging the migration and the ERD only. Then mark T2 done in the plan's
+Tasks table and tick its steps.
+````
+
+### T3 — `tracker.imports`: the port, the Jira client, the guard, the preview
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/014-jira-offramp.md T3 and
+decisions D-a, D-b, D-c, D-d, D-f, D-k. Use /be-java with be-java-database-code,
+be-java-unit-testing and be-java-pattern-writer.
+
+Build com.tcms.tracker.imports up to and including the preview: the ImportSource port and its
+records, ImportUrlGuard, ImportHttp, JiraImportSource, FakeImportSource, DroppedFields,
+ImportPreviewService, and ImportController's two read operations. The run itself is T4 — do not
+start it.
+
+Read before writing, in this order: com/tcms/integration/OutboundUrlGuard.java (whole — you are
+copying it), com/tcms/integration/tracker/TrackerClient.java (whole — its timeout and no-redirect
+arguments are this client's too), com/tcms/integration/tracker/JiraAdapter.java (for Jira's field
+names only), com/tcms/tracker/TrackerEndpointTestBase.java, com/tcms/tracker/WorkflowService.java,
+and ArchitectureRulesTest's crossModuleDependenciesPointOnlyAtTheFoundation.
+
+FOUR TRAPS, and the first two are the ones that cost a whole rerun:
+
+  * package-info.java in tracker/imports/ must NOT carry @ApplicationModule. A sub-package is not a
+    module — ArchitectureRules.moduleOf takes the FIRST segment after com.tcms, so this package IS
+    tracker and inherits its allowed dependencies. tracker/board/ and tracker/release/ have no
+    package-info at all; follow them.
+  * com.tcms.integration is UNREACHABLE and the compiler will not tell you. OutboundUrlGuard,
+    SecretCipher, TrackerClient, TrackerProvider and TrackerUnavailableException all look like
+    exactly what you need and every one of them is forbidden. It compiles fine and fails at the end
+    of a long suite in ArchitectureRulesTest. Write ImportUrlGuard and ImportHttp FIRST.
+  * Every repository interface carries @Transactional(readOnly = true) ON THE INTERFACE. Spring
+    Data gives a transaction only to the inherited CRUD methods, so a derived or @Query method
+    otherwise runs with no company set and RLS returns ZERO ROWS, fail-closed and silent. This is
+    the single most common way a new module in this repo appears to work and does not.
+  * MockRestServiceServer binds by installing its own ClientHttpRequestFactory on the builder, so a
+    constructor that installs the real one over the top silently un-binds it and the test dials the
+    public internet. TrackerClient has a second package-private constructor for exactly this;
+    ImportHttp needs the same, and its javadoc should say why.
+
+Do these three in order, and do not skip the third:
+  1. Write ImportUrlGuard with its marked region, and add the matching markers to
+     integration/OutboundUrlGuard.java — two comment lines, no behaviour change, and the ONLY file
+     in integration this whole module touches.
+  2. Add both files to inputs.files(...) in backend/build.gradle.kts, following the block comment's
+     own instruction that "a second such read must add its own line here". Without it a
+     comment-only edit changes no bytecode, :test stays UP-TO-DATE, and the mirror rule is green by
+     cache.
+  3. PROVE THE MIRROR TEST FAILS. Delete a line from inside the marked region, run
+     `--tests "*ImportUrlGuardMirrors*"`, confirm red, restore, confirm green. §185's rules were
+     verified by deleting the fix they check and the build reported success without running them;
+     this step is why this file's rule is an observer rather than a claim.
+
+FakeImportSource lands in this task, before the importer it will be used to break — "build the fault
+switch before the feature it proves". Its failAfter(n) is what T4's mid-import failure test drives.
+
+The task's own done-when is ImportPreviewWritesNothingTest: snapshot every company-owned table
+before and after a preview and assert byte-identical. Read the table list from information_schema,
+not from a hand-kept array — a table added later is then covered without anybody remembering.
+
+Add one narrow case to ArchitectureRulesTest naming R14, alongside the general rule. The general
+rule already fails, but its message says "module 'tracker' may not depend on module 'integration'"
+to somebody a plan has just told the adapters are right there.
+
+Gate: ~/bin/tcms-remote sync then `backend "ulimit -n 65535; ./gradlew build"`. Read
+docs/specs/shanks-runner-details.md first.
+
+If the session runs long, the split seam named in the plan is JiraImportSource +
+JiraImportSourceTest as a second session, with the ImportSource port as the boundary. Take it rather
+than rushing the last third.
+
+Commit: the T3 step 12 text. Then mark T3 done in the plan's Tasks table, tick its steps, and if the
+port's shape came out different from the plan's sketch, edit T4's and T5's task text and prompts in
+place before stopping.
+````
+
+### T4 — The run, the report, and the reaper
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/014-jira-offramp.md T4 and
+decisions D-b, D-d, D-f, D-g, D-h, D-i, D-j, D-m. Use /be-java with be-java-database-code and
+be-java-unit-testing.
+
+Build the write half of com.tcms.tracker.imports: the ImportRun and ImportDroppedField entities and
+repositories, ImportRunService, ImportWriter, ImportReaper, the run views, ImportController's three
+remaining operations, and issue_comment.external_author through IssueComment and CommentView.
+
+Read before writing: T3's ImportSource and ImportPreviewService (you are consuming them),
+com/tcms/tracker/IssueService.java's create path, com/tcms/project/ProjectKeys.java (whole — its
+header is the contract you are calling under), com/tcms/tracker/board/LabelService.java,
+com/tcms/tracker/board/RankService.java, com/tcms/reporting/ReportJobRunner.java and ReportJob.java
+(the state machine and the reaper are both theirs), and com/tcms/tenancy/Outbox.java.
+
+FIVE TRAPS:
+
+  * @Async CLEARS THE COMPANY. CompanyContextTaskDecorator runs every task submitted to an
+    application executor with CompanyContext cleared, so the dispatched run starts with no company
+    and every RLS read returns zero rows SILENTLY. The entry point takes a CompanyScopedEvent-shaped
+    parameter and opens it with CompanyContext.openFor(dispatch) as its FIRST statement. That
+    parameter also carries the credential — which is why it is a method parameter and never an
+    outbox payload: the outbox is a table, and D-a's whole point is that this credential is never
+    written down.
+  * outbox.recordCoalesced(OutboxEvents.ISSUES_CHANGED) is called ONCE, inside the write
+    transaction. It throws outside a transaction, and IssueFactOnIssuesChanged is a whole-company
+    recompute that reads no payload — so 1482 events would be 1482 identical recomputes. WITHOUT
+    THE CALL, issue_fact holds not one imported issue and every board, report and percentage in the
+    product is blind to the migration.
+  * ProjectKeys.allocate joins the caller's transaction and must. ONE call for the whole run,
+    reserving n numbers; the row lock has to be held until the issues using them commit. issue_key
+    gets the SOURCE's key verbatim; key_seq gets the PROJECT's counter. Two columns, and D-d says
+    why using Jira's number for key_seq is wrong.
+  * Parents before children. issue.parent_id is a real FK with ON DELETE RESTRICT and the depth
+    rule is checked against issue_type.level. Insert EPIC, then STORY, then TASK, resolving
+    parentKey through a map built as you go.
+  * LabelService answers 409 on a duplicate name in the project. Treat it as "already there". You
+    will hit it on the second issue carrying a label and on every issue after it.
+
+The write is ONE transaction and all-or-nothing (D-b). Do not batch-commit for speed: a batched
+failure leaves PART of a Jira project in the customer's tracker at the exact moment they are being
+asked to trust the migration. The read pass runs first, with no transaction open, and is bounded by
+tcms.tracker.imports.max-issues — a source above the cap is refused BY THE PREVIEW with the number
+in the message, not by a run that dies at minute four.
+
+Three tests are the module's stated done-when and none of them is optional:
+  * PROJ-4812 is still PROJ-4812, and key_seq is 1 rather than 4812.
+  * The report's droppedFields equals the preview's, element for element INCLUDING the reason
+    strings — one derivation (DroppedFields), two responses.
+  * A run against FakeImportSource.failAfter(400) ends FAILED and leaves the project
+    byte-identical, reusing T3's snapshot helper. This is the strongest statement the module makes.
+
+Plus the two refusals: an unmapped source status is 400 naming it, and a second import of the same
+source is 409 (D-m — there is no delta import, and the company-wide uq_issue_key would refuse it
+anyway at minute four).
+
+Gate: ~/bin/tcms-remote sync then `backend "ulimit -n 65535; ./gradlew build"`.
+
+Commit: the T4 step 8 text. Then mark T4 done in the plan's Tasks table and tick its steps. If the
+endpoints landed at different paths or shapes than T1 declared, fix openapi.yaml and both clients IN
+THIS COMMIT and rewrite T6's and T7's prompts before stopping — the contract and the code disagreeing
+is the one thing this repo's tests will not catch for you until the frontend fails at runtime.
+````
+
+### T5 — The Azure DevOps source
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/014-jira-offramp.md T5 and
+decision D-k. Use /be-java with be-java-pattern-writer and be-java-unit-testing.
+
+Add AzureDevOpsImportSource behind the ImportSource port T3 built, and register it in ImportSources.
+NO FILE OUTSIDE AzureDevOpsImportSource, ImportSources and their tests changes. If you find yourself
+editing ImportPreviewService or ImportWriter, the port is wrong and that is the finding to report —
+not a reason to widen the edit.
+
+Read before writing: tracker/imports/ImportSource.java, tracker/imports/JiraImportSource.java
+(the template — same class, different vocabulary), and integration/tracker/AzureDevOpsAdapter.java
+FOR THE API SHAPES ONLY. That file is in another module and must not be imported; you are reading
+it the way you would read documentation.
+
+Three things ADO does differently and each will look like a bug:
+  * Auth is Basic base64(":" + pat) — a colon and an EMPTY username. It looks wrong; it is ADO's
+    own spelling. Write the comment saying so, or the next reader "fixes" it.
+  * There is no search-by-project endpoint. It is POST _apis/wit/wiql for the ids, then
+    GET _apis/wit/workitems?ids=…&$expand=all in batches of 200 — the batch limit is ADO's, not a
+    choice.
+  * The revision count comes from _apis/wit/workItems/{id}/revisions?$top=0 and is read for the
+    preview's historyEntries total only.
+
+The type map is by LEVEL and never by name: Epic → EPIC; Feature, User Story, Product Backlog Item
+and Bug → STORY; Task → TASK. ADO's Feature sitting at STORY is deliberate — the depth rule is about
+levels, and a fourth story-level type is a row rather than a migration (M1).
+
+Iteration Path is ADO's sprint and takes the same labelPerSprint option as Jira's Sprint (D-h): the
+row stays in the dropped list either way, with the reason adjusted to say what was kept.
+
+Bind MockRestServiceServer through ImportHttp's second constructor. Installing the real request
+factory over the top silently un-binds the double and the test then dials the public internet, where
+the failures read as parse errors rather than as "this never reached the double".
+
+Gate: ~/bin/tcms-remote sync then `backend "ulimit -n 65535; ./gradlew build"`.
+
+Commit: the T5 step 5 text. Then mark T5 done in the plan's Tasks table and tick its steps.
+````
+
+### T6 — The CLI import verbs
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/014-jira-offramp.md T6 and
+decision D-l. Use tooling:tool-cli-builder.
+
+Add `tcms import list` and `tcms import show <importRunId>` to packages/cli, and §6's rows plus the
+paragraph recording what is deliberately absent, to
+docs/specs/2026-08-08-mcp-tool-and-command-surface.md.
+
+Read before writing: packages/cli/src/commands.ts (the ten release verbs 013 T4 added are the
+template), packages/cli/src/reads.ts, and the surface doc's §4.1, §4.6 and §6.
+
+THERE IS NO MCP TOOL AND YOU MUST NOT ADD ONE. Every operation in this family costs issue:import;
+Agent is Test Engineer minus company:read (V52), and issue:import is one of the three keys on the
+Test Engineer → Test Lead line that SeedDataTest.testEngineerToTestLeadBoundary asserts exactly, in
+both directions. So no MCP token that can exist holds it and a tool would be dead schema — §3.3's
+own rule, arriving through a permission rather than through a decision. §3.7 was written in T1 and
+says this; do not re-argue it, and do not "add it for completeness".
+
+THERE IS ALSO NO `tcms import run` AND NO `tcms import preview`, and the reason is not effort:
+  * The Jira token would arrive as an argument or an environment variable, which is shell history
+    and a CI log. D-a's whole point is that this credential has the shortest possible life.
+  * The mapping step is a confirmation a person makes HAVING READ A PREVIEW. A flag file passed to a
+    command is that confirmation with the reading removed, which is the property D32 exists to
+    create.
+
+Two things about the output:
+  * `import list` takes no --project. No CLI command in this repo takes a projectId (§4.1); it comes
+    from the context.
+  * `import show`'s dropped-field table is NOT truncated at the output budget. It is the artifact
+    the whole module exists to produce, and a report that elides the thing it records is worse than
+    no command. §4.6's budget applies to the status-mapping table, which gets a "n more" line.
+
+Both commands are kind: 'read', so writeConformance.test.ts wants neither an Idempotency-Key nor an
+If-Match, and it asserts that in both directions.
+
+Gate: ~/bin/tcms-remote sync then
+`packages "npm run build && npm run lint --workspaces && npm run test:run --workspaces"`. npm run
+build at the ROOT, never --workspaces — that runs them alphabetically and cli would typecheck
+against a stale client dist.
+
+Commit: the T6 step 5 text. Then mark T6 done in the plan's Tasks table and tick its steps.
+````
+
+### T7 — The wizard
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/014-jira-offramp.md T7 and
+decisions D-a, D-e, D-h, D-i, D-k. Use /fe-react with fe-react-forms, fe-react-data-fetching,
+fe-react-component-testing and fe-react-error-handling.
+
+Walk the mockups before writing a line: docs/mockups/import-connect.html →
+docs/mockups/import-preview.html → docs/mockups/import-mapping.html. They are the source of truth
+for what the screens SHOW — layout, copy, empty states. This plan and the scope spec are the source
+of truth for what the system DOES. Every disagreement goes in the plan, not resolved silently; three
+are already recorded (D-k's provider selector, the collision state the mockup does not draw, and the
+reload warning).
+
+STEP ONE IS THE FAULT SWITCH, before any screen. Add the import arm to frontend/src/lib/devFaults.ts
+beside tracker/issue/rank/release, with tcmsFaults.importing(fault) on the console object and its
+line in the module header's example block. Both import.meta.env.DEV guards stay LITERAL — route one
+through an imported constant and the module ships to production. None of these failures can be
+reached by using the app, which is the whole reason the switch exists: "build the fault switch
+before the feature it proves".
+
+Then, and this is the one that will be got wrong: THE TOKEN NEVER BECOMES A QUERY KEY. Add exactly
+one imports family to the single keys.ts factory — never a second factory — and give it keys for
+the run and the project's list ONLY. The source-project list and the preview are POSTs carrying a
+credential, so they are useMutation and their results live in the wizard's own state. A query key is
+a cache key: the token would sit in the query cache, in the devtools panel and in any future
+persister. Write that sentence into api/queries/imports.ts, because it is exactly the kind of thing
+somebody later "simplifies".
+
+Four things the screens must get right:
+  * The connect step's token help text is the mockup's own — "The token is used for this import and
+    is not stored afterwards" — and D-a is what makes it TRUE. Add one sentence the mockup has no
+    reason to carry: reloading the page means entering it again.
+  * The preview's green "No data has been written" banner is verbatim mockup copy. Add the state the
+    mockup does not draw: blockers non-empty replaces Continue with the blocker's detail, and
+    KEY_COLLISION renders the offending keys as Identifier chips.
+  * Confirm is DISABLED with a reason on its title while any status is unmapped, and the footer
+    counts them — disable-don't-hide, §31. The mockup's own sentence is the reason text.
+  * The trip to settings-workflow.html and back is a promise about STATE: "the mapping picks it up
+    on return". Carry the wizard's state (connection included, in memory) through
+    location.state and invalidate the workflow query so the new status appears in every picker.
+
+Confirm POSTs with an Idempotency-Key and navigates to /projects/:projectId/imports/:importRunId.
+T8 builds that page; ship it here as a MINIMAL POLLING PAGE showing status and nothing else, so the
+tree builds and the flow works end to end at this boundary. It is not pretty until T8 and the plan
+says so.
+
+Tests: use createTestQueryClient — NEVER build your own QueryClient in a test, only that one has the
+caches. A render that trips an error boundary FAILS unless it calls renderingIntoAnErrorBoundary()
+and says why; likewise drivingAFailedRead() / drivingAFailedWrite().
+
+Gate: ~/bin/tcms-remote sync then `frontend "npm run build && npm run lint && npm run test:run"`.
+npm run build, NOT tsc --noEmit — the latter has reported 0 errors while the build failed with nine.
+
+Commit: the T7 step 9 text. Then mark T7 done in the plan's Tasks table and tick its steps.
+````
+
+### T8 — The report, the list, and the close-out
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/014-jira-offramp.md T8 and
+decisions D-e, D-f, D-h. Use /fe-react with fe-react-data-fetching and fe-react-component-testing.
+
+This is the LAST task of module M4, so the documentation close-out rides with it rather than taking
+a session of its own — this is the only session that knows what actually landed and what is
+built-but-unverified.
+
+Walk docs/mockups/settings-import.html and docs/mockups/import-report.html first.
+
+Build ImportsListPage and ImportReportPage, replacing T7's minimal polling body, plus
+downloadReport.ts and the rail entry.
+
+Five things:
+  * The dropped-field table is THE SAME COMPONENT the preview step uses. D-f on the wire and on the
+    screen; two components that happen to match is the drift the whole decision exists to prevent.
+  * The mockup's "Open question" panel about sprint membership is REPLACED, not ported. It says the
+    question is "undecided, and recorded as undecided rather than quietly resolved" — review R8
+    decided it on 2026-08-30. The panel becomes Sprints and says what this run did: dropped, or kept
+    as n labels. That is the mockup being out of date about a DECISION, not about a layout, which is
+    the one case where it does not win.
+  * Download renders CLIENT-SIDE from the ImportRun already in the cache — a JSON blob and a CSV of
+    the dropped fields. No server artifact. D15 says "persisted as an artifact" and artifact is the
+    repository module's table, which tracker may not write; 009's db line replaced that mechanism
+    with the two tables. Put that in a comment so a reader who knows D15 does not read it as an
+    omission.
+  * The Imports rail entry in app/AppShell.tsx is GATED on issue:import and un-listed without it —
+    the opposite of General, Workflow and Boards above it, and the same as Notifications (005 C2).
+    Those three are ungated because each renders read-only for a caller who cannot write; there is
+    no read-only view of an import, so the entry would lead to a screen whose whole content is a
+    refusal. While you are in that file, retire half of the sentence it and BoardSettingsPage have
+    both carried since 012 T9 — "Repositories is M5's and Imports is M4's". Imports has landed;
+    Repositories has not, and its half stays.
+  * The report test asserts NO OTHER FETCH than GET /imports/{id}. That is "reachable a year later
+    with the source system gone" made checkable, and it is the module's fourth done-when.
+
+Then the close-out, and none of it is optional:
+  1. docs/features.md — a new "### Moving in from Jira" subsection under ## Issues. Line 507's
+     "Bulk import/export — CSV/Excel import, TestRail/Xray migration importers" is NOT what this
+     built and stays as a gap; strike through nothing there.
+  2. docs/plans/009-project-management-expansion-modules.md, in ITS OWN COMMIT, staging only that
+     file, per the plan's "Prompt hand-off protocol":
+       - M4's row to `done YYYY-MM-DD @ <short sha>`.
+       - M4's **db** line records V7 as taken, striking through the reserved numbers rather than
+         deleting them; M5's **db** line and prompt corrected to V8. (Both edits are already made as
+         of the plan's own commit — verify rather than repeat them.)
+       - A **Built and unverified:** list under the M4 section. Everything driven only by
+         FakeImportSource belongs on it: no gate has dialled a real Jira Cloud site, the ADO source
+         has been driven only against recorded shapes, and T7's workflow round-trip is asserted in a
+         test rather than performed in a browser. The gates prove it compiles, not that it works.
+       - R14 closed in the review table with D-a's outcome and its one-line reason.
+       - NO MODULE DEPENDS ON M4, so no dependent prompt needs rewriting. Say that in the commit
+         message rather than adding a note to the document.
+  3. Mark T8 done in plan 014's Tasks table and tick its steps.
+
+Gates, all three, because this is the module's last task:
+  ~/bin/tcms-remote sync
+  ~/bin/tcms-remote frontend "npm run build && npm run lint && npm run test:run"
+  ~/bin/tcms-remote packages "npm run build && npm run test:run --workspaces"
+  ~/bin/tcms-remote backend "ulimit -n 65535; ./gradlew build"
+
+Two commits: the T8 step 8 texts. Do not stage 009 with the frontend files.
+````
 
 ---
 
