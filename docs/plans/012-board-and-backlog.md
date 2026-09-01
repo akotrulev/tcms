@@ -669,6 +669,78 @@ too, which leaves the snapshot restore as the only thing that could have moved t
 `PATCH /issues/{key}` answers with the whole `Issue` — a double returning `{}` is eleven contract
 violations, which is `contractDoubles.ts` doing its job.
 
+### D-ac — the ten label tokens are declared, and the axis they are separated on is lightness
+
+Taken by T9, which is Step 1b's either/or answered rather than deferred again. `Label.color` is a
+token name (`label-1` … `label-10`), **none of the ten was declared in `index.css`**, and three
+files — `BoardCardFace.tsx`, `BacklogView.tsx` and the contract's own column comment — carried a
+paragraph apologising for it. Step 1b's alternative was to decide the product does not want coloured
+labels and delete the promise from all three.
+
+**Declared**, because the scope spec is the authority on what the system does and §12.2 asks for
+*"~10 named colours, many per card, the primary scanning device"*. What was actually undecided was
+never *whether*, it was *how*, and the answer the deferral was waiting for is this:
+
+| | |
+|---|---|
+| The constraint on a **status** colour | §6's **ΔE 15 floor** between any two fills that can touch, measured by `app/statusPalette.test.ts` in both schemes |
+| The constraint on a **label** colour | it must never **read as** a status. A label's hue means nothing — a person picked it, and the word is inside the chip either way |
+
+Those are different constraints and they are bought on different axes. The viz tier's own note in
+`index.css` records that a categorical *hue* could not be added even once without falling under the
+ΔE floor against a status, so it bought its disjointness with **chroma**. This tier buys it with
+**lightness**, one axis over: in the light palette a status is dark ink on a pale ground and a label
+is a **pale fill** carrying `--color-text`; in the dark palette the two swap sides — a status is a
+light hue, a label is a **deep fill** carrying `--color-ink`. So in both schemes every label sits on
+the opposite side of the lightness axis from every status colour, and no chip can be mistaken for an
+outcome at a glance. Each of the twenty fills clears 4.5:1 against the ink on it, because a chip is
+text on a surface rather than a swatch.
+
+**Two consequences worth naming.** The picker is the **swatches themselves** — pressing one is
+choosing it — because a `<select>` of ten token names is precisely the blind guess the palette was
+deferred to avoid, with a dropdown around it. And `labelFill` falls back to the plain wash for a
+token this stylesheet does not know, because `PATCH /labels/{id}`, `tcms label set` and
+`tcms_write_backlog` all take a free string: an undeclared custom property resolves to **nothing**
+and paints the chip transparent, which is a chip that vanished rather than one that was not
+recognised. The fallback is `--color-overlay-2` and **not** `--color-wash-2` — same colour, but the
+wash names are Tailwind's, bridged by `@theme inline`, and `tokenSystem.test.ts`'s check at the foot
+of the file reads every `var()` in `lib/statusColors.ts` against the two *palette* blocks, where a
+bridge name is declared in neither. That check went red on the first run and is the reason this
+sentence exists.
+
+### D-ad — three departures T9's screen took from its own task block
+
+Two are the mockup, one is the lint gate.
+
+**`used by 7 people` is not drawn.** `BoardSummary` carries `id`, `name`, `columnCount` and
+`swimlaneBy`; nothing on the contract counts a board's viewers, and `board_swimlane` — the only
+per-viewer table there is — is reachable from no endpoint at all (D-z). The hint says what is on the
+wire: the column count and the grouping axis. A seventh row for D-f's table, and the first one whose
+absent field nobody has asked for.
+
+**The coverage table is read-only, and the repair is in the editor.** The mockup draws the table as
+a *check*, and the plan's own Step 2 calls it the screen's point — so unclaiming a status puts it in
+a **tray** under that board's columns, each chip with the same Move menu a claimed chip has, rather
+than turning the table's cells into controls. A reader looking at a row is asking whether the board
+is right; a reader looking at the tray is fixing it. The two questions are a scroll apart and the
+answer is in the place the question is asked.
+
+**A third file, `boardCoverage.ts`, that the task block did not name.** The plan lists two components
+and the invariant belongs to neither exclusively — the editor's banner and the page's table both ask
+it, and a module exporting a component *and* a function is oxlint's `react(only-export-components)`,
+which is a **warning** and the gate is zero warnings. So the derivation sits beside its two readers
+the way `cardMove.ts` sits beside the board's, and for the same two reasons: the lint rule, and one
+function neither reader can disagree with. This is D-t's finding again in a different stack — the
+task's file list is what the feature needs, and what a slice touches is what the repository's own
+checks demand.
+
+**And the two registers are deliberately different strings.** `coverageProblem` is the full sentence
+in the board's own banner (*"No column claims: Blocked. Every status has to be somewhere…"*);
+`coverageHeadline` is the clause beside the board's name in the table's footer (*"Blocked on no
+column"*). One derivation, two phrasings — the first cut rendered one sentence in both places, a
+scroll apart, which reads as a rendering bug rather than as two facts, and the test that caught it
+was `getByText` finding two nodes.
+
 ---
 
 ---
@@ -4461,7 +4533,7 @@ document and 009's status table are closed out.
 - Docs: `docs/features.md`, `docs/specs/2026-08-08-mcp-tool-and-command-surface.md`,
   `docs/plans/009-project-management-expansion-modules.md`, `docs/plans/012-board-and-backlog.md`
 
-- [ ] **Step 1: Add the route and the subnav entry**
+- [x] **Step 1: Add the route and the subnav entry**
 
 `settings-boards.html`'s subnav is `General · Workflow · **Boards** · Repositories · Imports`.
 Repositories is M5's and Imports is M4's — **add only Boards**, at the mockup's position.
@@ -4472,7 +4544,7 @@ screen has not arrived; once the route exists that sentence is false and the but
 for the string rather than trusting this line — §31's disable-with-a-reason pattern is used in
 several places and only this one is about T9.
 
-- [ ] **Step 1b: Declare `label-1` … `label-10` in `index.css`, or decide not to**
+- [x] **Step 1b: Declare `label-1` … `label-10` in `index.css`, or decide not to**
 
 `Label.color` is a design-token name and **none of those ten tokens is declared**, so every label
 chip in the product is plain — on the board's card face (D-z) and, since T8, on every backlog row.
@@ -4486,7 +4558,7 @@ the product does not want coloured labels, say so in `docs/features.md` and dele
 promise from the two comments — an undeclared token that three files apologise for is worse than a
 decided absence.
 
-- [ ] **Step 2: Write `ColumnEditor`**
+- [x] **Step 2: Write `ColumnEditor`**
 
 ```tsx
 /**
@@ -4505,7 +4577,7 @@ decided absence.
  */
 ```
 
-- [ ] **Step 3: Write `BoardSettingsPage`**
+- [x] **Step 3: Write `BoardSettingsPage`**
 
 Both boards, each as a panel with **Open** and **Delete**; the coverage table below. Delete asks, and
 says a board is a view — *"delete a board and no issue is lost"* — because the destructive-sounding
@@ -4514,7 +4586,7 @@ word is the one thing on this screen a person will hesitate over, and the answer
 The last board's Delete is **disabled with the reason on it**, matching the server's 422 rather than
 discovering it: `ui-rules` — never render an action the backend will always reject.
 
-- [ ] **Step 4: Test the R13 criterion**
+- [x] **Step 4: Test the R13 criterion**
 
 ```tsx
 it('shows a newly added workflow status in its auto-claimed column, and lets it move', async () => {
@@ -4541,7 +4613,7 @@ it('disables Delete on the project’s only board and says why', () => {
 })
 ```
 
-- [ ] **Step 5: Run every gate on shanks**
+- [x] **Step 5: Run every gate on shanks**
 
 All three, because this is the last task in the module:
 
@@ -4552,14 +4624,14 @@ All three, because this is the last task in the module:
 ~/bin/tcms-remote packages 'npm run build && npm run lint --workspaces && npm run test:run --workspaces'
 ```
 
-- [ ] **Step 6: Rewrite the `docs/features.md` section**
+- [x] **Step 6: Rewrite the `docs/features.md` section**
 
 Struck through and superseded, **never deleted** — CLAUDE.md: *"write superseded decisions and their
 reversal into the docs, so the next reader doesn't think the old reasoning was never considered."*
 The board section currently describes the composite board as the only board; it becomes two, with
 D-a's table saying which is which.
 
-- [ ] **Step 7: Close 009 per the hand-off protocol** — its own commit, staging only that file
+- [x] **Step 7: Close 009 per the hand-off protocol** — its own commit, staging only that file
 
 1. **Status table** — M2's row to `done 2026-08-31 @ <sha>`.
 2. **Built and unverified** — the list from the section below, as it actually stands after the gates.
@@ -4590,7 +4662,7 @@ D-a's table saying which is which.
    changelog.
 6. **Commit** — `docs(plan): M2 done`, staging only `009-project-management-expansion-modules.md`.
 
-- [ ] **Step 8: Commit the code, then the plan close-out, then 009**
+- [x] **Step 8: Commit the code, then the plan close-out, then 009**
 
 ```bash
 git add frontend/src/features/settings/BoardSettingsPage.tsx \
@@ -4641,7 +4713,12 @@ rendered nothing but the error page, all of which typechecked and linted clean.
       and that a rotation keeps every column's id through the position-parking pass (D-o), but
       `settings-boards.html` is T9 — nobody has submitted one of these bodies from a form, and the
       one thing a form does that a test fixture does not is send a column list somebody built by
-      hand.
+      hand. → **the form exists and still nobody has.** T9's screen composes all three bodies and
+      its tests assert the exact arrays against a double, including that a `PATCH` carries every
+      column back with its id — a body naming only the two that changed would DELETE the third,
+      because `columns` is a replacement. What no test can reach is the round trip: whether the
+      server keeps the ids it was sent, and whether the 422 it answers when a claim is wrong ever
+      fires, given the screen refuses the save first.
 - [ ] **A folded column's WIP limit round-tripping.** `wipLimit` is written, stored and served, and
       `null` means no limit; what nothing has done is set one and look at it. The breach arithmetic
       is T4's and the header that shows it is T7's, so the column is currently a number with no
@@ -4709,12 +4786,24 @@ rendered nothing but the error page, all of which typechecked and linted clean.
       id carried back, asserted against a mock; what nobody has seen is the round trip — whether the
       server keeps the six columns, and whether the board relayouts (D-h's whole concern) when its
       configuration key is invalidated with its cards' key untouched.
-- [ ] **A label chip with no colour, next to the ten tokens that do not exist.** D-z: `Label.color` is
+- [x] **A label chip with no colour, next to the ten tokens that do not exist.** D-z: `Label.color` is
       `label-1` … `label-10` and `index.css` declares none of them, so chips are plain. Whether a
       board whose labels are §12.2's *"primary scanning device"* still scans without them is a
-      judgement nobody has made in front of one, and the palette is T9's to add.
+      judgement nobody has made in front of one, and the palette is T9's to add. → **added** (D-ac):
+      twenty fills, ten per scheme, separated from the status tier on the **lightness** axis rather
+      than by hue, each clearing 4.5:1 against the ink on it, and pinned in both palettes by
+      `tokenSystem.test.ts` against `LABEL_COLORS` read out of the module. **The arithmetic is
+      checked and the appearance is not**: nothing has rendered a card with three chips on it in
+      either scheme, and whether ten low-chroma fills are actually *distinguishable from each other*
+      at chip size is a judgement a contrast ratio cannot make.
 - [ ] A status added on `settings-workflow` and then seen on `settings-boards` in its auto-claimed
-      column, on **both** boards.
+      column, on **both** boards. → **half of it, and the half that is asserted is the screen's.**
+      T9's R13 test hands the settings screen a board whose In Progress column already claims a new
+      `IN_PROGRESS`-kind status, asserts the chip is drawn there, moves it to In Review through the
+      menu and asserts it left the first column. What that establishes is that the screen SHOWS and
+      CORRECTS an auto-claim. What it cannot establish is that the auto-claim happens: the claim is
+      `claimNewStatus` inside the workflow write (D-g), the fixture puts the status there by hand,
+      and nothing has driven `PUT /projects/{id}/workflow` and then read `GET /boards/{id}` back.
 - [x] A rebalance actually triggered — 40+ squeezes against one neighbour — and the order seen to be
       correct after it. **Done at the service in T4**: `RankServiceTest`'s forty-squeeze method
       crosses a respace partway through and asserts the exact final key order plus no duplicate rank
@@ -4779,7 +4868,15 @@ rendered nothing but the error page, all of which typechecked and linted clean.
       a caller** (T8) and `reorder`'s renumbering is asserted through the screen. The four label hooks
       and the three board writes are still callerless; `useCreateLabel`, `useUpdateLabel`,
       `useDeleteLabel`, `useCreateBoard` and `useDeleteBoard` are **T9's**, and if T9 does not use
-      one of them that is a hook to delete rather than to leave.
+      one of them that is a hook to delete rather than to leave. → **T9 used all five**, and added a
+      sixth (`useBoardConfigs`, `useQueries` over the same options object `useBoardConfig` uses, so
+      the two share cache entries rather than sitting under one key with two shapes).
+      **`usePutIssueLabels` is the one hook in the module with no caller anywhere**, and it is not
+      T9's to delete: putting a label ON an issue costs `issue:edit` and belongs to the issue detail
+      screen, which is M1's and does not have a label control. Left, and named here so the next
+      reader knows it is waiting for a screen rather than left over from one. `useUpdateBoard` still
+      invalidates `keys.board(board.id)` from the RESPONSE's id rather than the argument's, which is
+      right and is still untested — T9 gave it a second caller and not an assertion.
 
 - [ ] **Nothing in T8's screen has been seen in a browser either.** 17 + 15 + 9 component tests,
       `npm run build`, oxlint at zero and 2435 tests green across 172 files; none of them is a
@@ -4813,6 +4910,51 @@ rendered nothing but the error page, all of which typechecked and linted clean.
       - **A Spike in the backlog.** It renders as a green `S`, not the board's amber `?`, because
         `BacklogRow` carries no `countsTowardCompletion` (D-f). Two screens now draw the same type
         two ways, and whether that reads as a bug is a judgement nobody has made in front of both.
+
+- [ ] **Nothing in T9's screen has been seen in a browser either, and it is the third in a row.**
+      11 component tests, `npm run build`, oxlint at zero, and 2458 tests green across 173 files;
+      none of them is a renderer. `settings-boards.html` is now the **third** screen this module
+      shipped that nobody has opened. Specifically unverified:
+      - **The columns row at any width.** Each column is a fixed 212px inside an `overflow-x-auto`
+        strip, and a six-column board is ~1300px of it — jsdom applies no stylesheet, so nothing has
+        established that the strip scrolls inside itself rather than the page body, which is the
+        responsive rule. A project with ten statuses is the shape to look at, and no fixture has one.
+      - **Ten label swatches, and whether they are ten.** Every fill clears its contrast floor
+        against the ink on it, computed from the hexes; what nobody has done is look at the row and
+        say whether slots 5 and 6, or 1 and 9, read as different colours at 20px. The failure mode is
+        a picker that offers ten choices and delivers six.
+      - **A label chip on a card, in either scheme.** `BoardCardFace` and `BacklogView` both paint
+        from `labelFill` now, and the board they paint on has never rendered.
+      - **The coverage table with more than two boards.** The mockup has two and every test uses one
+        or two. A project with five boards is five columns of a table that is already
+        `overflow-x-auto`, and the footer's failing list becomes five lines.
+      - **`useBoardConfigs` against a real server.** `combine` withholds `data` until every board has
+        answered, which is the right answer for an invariant over the set — a table drawn over three
+        of four boards would report a status as claimed exactly once when the fourth is where it is
+        claimed twice. What that costs is a screen that shows nothing until the slowest board lands,
+        and nobody has watched five reads resolve. It also means one board's 404 fails the whole
+        region, which is correct and looks like an outage.
+      - **A save refused by the server anyway.** The screen refuses first — `ui-rules`, and the whole
+        point of the coverage check — so the 422 the contract describes is now unreachable through
+        this UI and has therefore never been provoked from it. The client-side rule and the server's
+        have never been compared, which is D-f's `Set epic` trap one screen over.
+      - **The `+ New board` body.** One column per status, in workflow order, asserted against a
+        double. Whether the server accepts it, allocates the ids, and returns a board the picker then
+        shows is the round trip, and it is the same gap `useUpdateBoard`'s has.
+      - **Deleting the last board.** The control is disabled with the server's own reason on it, so
+        the 422 it mirrors has never been seen. If the server's rule is *"the last board"* and the
+        screen's is *"one board in the list"*, a stale board list disagrees with it and nothing here
+        would notice.
+
+- [ ] **Six backend tests are red and none of them is M2's.** `./gradlew build` on shanks:
+      **3726 tests completed, 6 failed**, all six in `com.tcms.reporting.FlakeScoreTest` —
+      `$Score` ×2 and `$Cells` ×4, each an off-by-a-few count (`expected: 9 but was: 7`,
+      `expected: 20 but was: 16`). They were red on master in the **2026-08-31 nightly, before T1**,
+      and no commit in this module touched `reporting` or anything named `flake` — checked with
+      `git log --name-only` over the whole range, not by reading. **So M2 does not leave a green
+      backend suite**, and that sentence is here rather than in a footnote so the next module's first
+      gate does not read them as inherited breakage from this one. They are inherited breakage into
+      it. Whoever owns `reporting` next owns them.
 
 ---
 
