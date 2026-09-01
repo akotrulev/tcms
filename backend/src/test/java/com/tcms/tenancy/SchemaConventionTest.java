@@ -362,7 +362,16 @@ class SchemaConventionTest extends IntegrationTestBase {
                 // NOT arrive are the point — there is no issue_release join table (D6: an issue
                 // points at one release through a nullable FK) and no sprint, sprint_issue or
                 // velocity table, because the only planning cadence in this product is the release.
-                .isEqualTo(89);
+                //
+                // 91 since V7 (plan 014, module M4) — import_run and import_dropped_field. Both are
+                // company-owned and neither is an exception, INCLUDING import_run: it is the record
+                // of a connection to somebody else's Jira site, which is the shape where "it is only
+                // a log" could argue itself out of a policy — and would be wrong twice, because the
+                // row names a client's site URL and account email, and because the report is READ by
+                // a screen a year later rather than written and forgotten. It carries NO credential
+                // column at all; V7's header says why, and that absence is a decision rather than a
+                // gap this number covers.
+                .isEqualTo(91);
     }
 
     @Test
