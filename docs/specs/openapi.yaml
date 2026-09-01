@@ -8692,6 +8692,190 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  # ----------------------------------------------------- tracker imports ----
+  # Plan 014 (M4). Three of the five are POST with a body and none of them takes the
+  # credential any other way: a token in a query string is in the access log, the proxy log
+  # and the browser history, so GET is not available for the operations that carry one.
+  /imports/source-projects:
+    post:
+      tags: [tracker]
+      summary: Which projects this connection can see
+      operationId: listSourceProjects
+      description: |
+        `issue:import` — **Project Manager, Test Lead, Company Admin and Instance Admin**
+        (roles spec §A3). Test Engineer does not hold it, which is why there is no MCP tool
+        for anything in this family: `Agent` is Test Engineer minus `company:read`.
+
+        `POST` rather than `GET` because the body carries a credential, and a credential in a
+        query string is in the access log, the proxy log and the browser history. **Nothing is
+        written** — this reads the source system and returns what it saw.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ImportConnection' }
+      responses:
+        '200':
+          description: The projects the credential can read, with their issue counts.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SourceProjectList' }
+        '400':
+          description: |
+            The site URL is refused before it is dialled — not HTTPS, or it resolves into a
+            private range. `ImportUrlGuard` in `com.tcms.tracker.imports` is the check, and it
+            is a deliberate second copy of `integration`'s outbound guard: `tracker` may not
+            import `integration`, and the two are pinned to each other as text (plan 014 D-c).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '502':
+          description: |
+            The source system rejected the credential, refused the account, or did not answer.
+            The `detail` is the source's own message and is shown only to the person whose
+            credential it is.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /imports/preview:
+    post:
+      tags: [tracker]
+      summary: What an import would and would not bring across
+      operationId: previewImport
+      description: |
+        `issue:import`. D32's dry run, and story J1: counts by type, every field that will be
+        dropped with how many values it holds, every source status with a suggested target, and
+        the keys that would collide.
+
+        **This operation writes nothing.** `ImportPreviewWritesNothingTest` snapshots every
+        company-owned table before and after and fails on any difference — the promise
+        `import-preview.html` makes in its own banner is a test, not a convention.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ImportPreviewInput' }
+      responses:
+        '200':
+          description: The preview. `blockers` non-empty means the import cannot proceed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportPreview' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '502':
+          description: The source system did not answer, or answered with something else.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /imports:
+    get:
+      tags: [tracker]
+      summary: A project's past imports
+      operationId: listImportRuns
+      description: |
+        `issue:import`. `settings-import.html`'s table. Reports are kept indefinitely and this
+        reaches them long after the source system is gone — no call leaves this server.
+      parameters:
+        - { name: projectId, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Newest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ImportRunSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [tracker]
+      summary: Import the source project
+      operationId: startImport
+      description: |
+        `issue:import`. Confirmation, after a preview and a status mapping (D32).
+
+        **`202`, not `201`.** The read pass against the source takes minutes for a real project,
+        so the run is dispatched and this returns the row to poll at
+        `GET /imports/{importRunId}`. The write is one all-or-nothing transaction after the read
+        completes: either the whole project arrived or nothing did, and a run interrupted by a
+        restart leaves the project unchanged and the row `FAILED`.
+
+        **Refused with `400`** when any source status has no mapping — the client disables
+        Confirm for the same reason and the server does not trust it to.
+        **Refused with `409`** when this project already completed an import from the same
+        `(provider, siteUrl, sourceProjectKey)`: there is no delta import, and a second run would
+        try to create a second `PROJ-4812`.
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ImportInput' }
+      responses:
+        '202':
+          description: Accepted. Poll the `Location`.
+          headers:
+            Location: { schema: { type: string }, description: The run's canonical URL. }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportRun' }
+        '200':
+          description: A replay — the `Idempotency-Key` had already started this run.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportRun' }
+        '400':
+          description: |
+            An unmapped source status, a target status that is not this project's, a source
+            project whose issue count exceeds `tcms.tracker.imports.max-issues`, or a key that
+            already exists in this company.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: This project has already imported that source project.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /imports/{importRunId}:
+    parameters:
+      - name: importRunId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [tracker]
+      summary: One import report
+      operationId: getImportRun
+      description: |
+        `issue:import`. `import-report.html`, and the poll target while `status` is `RUNNING`.
+
+        The report is self-contained: the dropped-field list, the status mapping as applied and
+        the people it matched are all stored on the run, with the names captured at the time. It
+        answers a year later, with the source system decommissioned and its statuses long since
+        renamed here.
+      responses:
+        '200':
+          description: The run.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportRun' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /projects/{projectId}/workflow:
     parameters:
       - { name: projectId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -17095,6 +17279,14 @@ components:
         id: { type: string, format: uuid }
         body: { type: string }
         author: { $ref: '#/components/schemas/UserRef' }
+        externalAuthor:
+          type: string
+          nullable: true
+          description: |
+            The source system's own author string, for a comment imported from a tracker whose
+            author matched no user here — `j.arnold@old-vendor.test`. Never set together with
+            `author`: an unmatched author is preserved as text rather than reassigned to somebody
+            who did not write it (`import-report.html`'s People panel, plan 014 D-j).
         createdAt: { type: string, format: date-time }
         editedAt: { type: string, format: date-time, nullable: true }
 
@@ -17844,6 +18036,287 @@ components:
         issues:
           type: array
           items: { $ref: '#/components/schemas/IssueRef' }
+
+    # ---------------------------------------------------- tracker imports ---
+    ImportProvider:
+      type: string
+      enum: [JIRA_CLOUD, JIRA_DATA_CENTER, AZURE_DEVOPS]
+      description: |
+        The source system. `JIRA_CLOUD` authenticates with Basic (`accountEmail` + an API token);
+        the other two with a Bearer PAT, and `accountEmail` is ignored.
+
+    ImportConnection:
+      type: object
+      description: |
+        One connection, for one operation. **The credential is never stored** — not on
+        `import_run`, not encrypted, not anywhere (plan 014 D-a, closing review R14). Reusing
+        `integration.tracker`'s per-person credential is a forbidden module crossing, and
+        encrypting a copy here would mean a second AES key user in a second module.
+      required: [provider, siteUrl, apiToken]
+      properties:
+        provider: { $ref: '#/components/schemas/ImportProvider' }
+        siteUrl:
+          type: string
+          description: |
+            `https://northwind.atlassian.net`. HTTPS only, and refused before it is dialled if it
+            resolves into a private range.
+        accountEmail:
+          type: string
+          nullable: true
+          description: Required for `JIRA_CLOUD`, ignored otherwise.
+        apiToken:
+          type: string
+          description: Read-only is enough. Held for this operation and written nowhere.
+
+    SourceProject:
+      type: object
+      required: [key, name, issueCount]
+      properties:
+        key: { type: string, description: '`PROJ` — the prefix imported issues keep (D5).' }
+        name: { type: string }
+        issueCount: { type: integer }
+
+    SourceProjectList:
+      type: object
+      required: [projects]
+      properties:
+        projects:
+          type: array
+          items: { $ref: '#/components/schemas/SourceProject' }
+
+    ImportPreviewInput:
+      type: object
+      required: [projectId, connection, sourceProjectKey]
+      properties:
+        projectId: { type: string, format: uuid, description: The TCMS project the issues arrive in. }
+        connection: { $ref: '#/components/schemas/ImportConnection' }
+        sourceProjectKey: { type: string }
+
+    DroppedField:
+      type: object
+      description: |
+        One source field that is **not** imported, and how many values it holds (D15). The same
+        shape is served by the preview and by the report, from one derivation, so the two cannot
+        disagree — `ImportReportMatchesPreviewTest` asserts they are equal element for element.
+      required: [name, fieldType, valueCount, reason]
+      properties:
+        name: { type: string, description: '`Story Points`, `Sprint`, `Custom: "Squad"`.' }
+        fieldType: { type: string, description: '`number`, `picker`, `colour` — the source''s own word.' }
+        valueCount: { type: integer }
+        reason:
+          type: string
+          description: |
+            Why, in the words the preview used. Stored per row rather than looked up at read
+            time: the sentence is part of what was said at the time, and editing the catalogue
+            must not retroactively rewrite a report.
+
+    PreviewTypeRow:
+      type: object
+      required: [sourceTypeName, targetTypeId, targetTypeName, targetLevel, countsTowardCompletion, count]
+      properties:
+        sourceTypeName: { type: string }
+        targetTypeId: { type: string, format: uuid }
+        targetTypeName: { type: string }
+        targetLevel: { $ref: '#/components/schemas/IssueLevel' }
+        countsTowardCompletion: { type: boolean }
+        count: { type: integer }
+
+    PreviewStatusRow:
+      type: object
+      description: |
+        One source status, its issue count, and the target this project would suggest. `matched`
+        is true when the names are equal ignoring case — the mockup's *name matched* badge.
+        `suggestedStatusId` null means nothing matched, and the mapping step shows it unmapped.
+      required: [sourceStatusName, count, matched]
+      properties:
+        sourceStatusName: { type: string }
+        count: { type: integer }
+        matched: { type: boolean }
+        suggestedStatusId: { type: string, format: uuid, nullable: true }
+
+    ImportPreviewTotals:
+      type: object
+      required: [issues, labels, comments, historyEntries, fixVersions, sprintValues]
+      properties:
+        issues: { type: integer }
+        labels: { type: integer }
+        comments: { type: integer }
+        historyEntries: { type: integer }
+        fixVersions: { type: integer, description: Each becomes a release. }
+        sprintValues: { type: integer, description: Dropped, or kept as one label per sprint (D-h). }
+
+    ImportBlocker:
+      type: object
+      description: |
+        A reason the import cannot proceed, computed by the preview rather than discovered at
+        minute four of the run.
+      required: [kind, detail]
+      properties:
+        kind:
+          type: string
+          enum: [KEY_COLLISION, TOO_MANY_ISSUES, ALREADY_IMPORTED]
+        detail: { type: string, description: The sentence the screen shows. }
+        keys:
+          type: array
+          description: For `KEY_COLLISION` — up to ten of the offending keys.
+          items: { type: string }
+
+    ImportPreview:
+      type: object
+      required: [projectId, sourceProjectKey, sourceKeyPrefix, projectKeyPrefix, totals, types, statuses, droppedFields, blockers]
+      properties:
+        projectId: { type: string, format: uuid }
+        sourceProjectKey: { type: string }
+        sourceKeyPrefix: { type: string, description: '`PROJ`. Imported keys keep it (D5).' }
+        projectKeyPrefix: { type: string, description: '`ACME`. Unchanged; both resolve afterwards.' }
+        totals: { $ref: '#/components/schemas/ImportPreviewTotals' }
+        types:
+          type: array
+          items: { $ref: '#/components/schemas/PreviewTypeRow' }
+        statuses:
+          type: array
+          items: { $ref: '#/components/schemas/PreviewStatusRow' }
+        droppedFields:
+          type: array
+          items: { $ref: '#/components/schemas/DroppedField' }
+        blockers:
+          type: array
+          description: Empty means the mapping step may be reached.
+          items: { $ref: '#/components/schemas/ImportBlocker' }
+
+    StatusMappingEntry:
+      type: object
+      required: [sourceStatusName, targetStatusId]
+      properties:
+        sourceStatusName: { type: string }
+        targetStatusId: { type: string, format: uuid }
+
+    ImportOptions:
+      type: object
+      required: [labelPerSprint, preserveBacklogOrder]
+      properties:
+        labelPerSprint:
+          type: boolean
+          description: |
+            One label per distinct sprint name, one assignment per issue. **Default false** — a
+            project with sixty sprints becomes sixty labels nobody chose. `Sprint` stays in the
+            dropped list either way, with its reason adjusted to say what was kept (D-h).
+        preserveBacklogOrder:
+          type: boolean
+          description: |
+            Set `issue.rank` from the source's own order instead of letting the insert trigger
+            assign `max(rank) + 1024`. False means the report says the order is arbitrary rather
+            than letting it read as imported (D-i).
+
+    ImportInput:
+      type: object
+      required: [projectId, connection, sourceProjectKey, statusMapping, options]
+      properties:
+        projectId: { type: string, format: uuid }
+        connection: { $ref: '#/components/schemas/ImportConnection' }
+        sourceProjectKey: { type: string }
+        statusMapping:
+          type: array
+          description: |
+            **Every source status the preview listed, or `400`.** An unmapped status would
+            silently become the default and put its issues in the wrong column, which is exactly
+            what `import-mapping.html`'s disabled Confirm exists to prevent.
+          items: { $ref: '#/components/schemas/StatusMappingEntry' }
+        options: { $ref: '#/components/schemas/ImportOptions' }
+
+    ImportRunStatus:
+      type: string
+      enum: [RUNNING, COMPLETED, FAILED]
+      description: |
+        Forwards only. A re-request is a new row, so the record of what was asked for and what it
+        produced stays one request per row — `report_job`'s state machine, and its argument.
+
+    AppliedStatusMapping:
+      type: object
+      description: |
+        The mapping as it was applied, with the target's **name and kind captured at the time**.
+        There is no FK: a status can be removed later, and the report has to outlive that (D-g).
+      required: [sourceStatusName, targetStatusId, targetStatusName, targetStatusKind, issueCount]
+      properties:
+        sourceStatusName: { type: string }
+        targetStatusId: { type: string, format: uuid }
+        targetStatusName: { type: string }
+        targetStatusKind: { $ref: '#/components/schemas/IssueStatusKind' }
+        issueCount: { type: integer }
+
+    ImportedPerson:
+      type: object
+      description: |
+        A source author and what became of them. `matched` false means their comments carry the
+        source's own text on `externalAuthor` rather than being reassigned to somebody who did
+        not write them.
+      required: [sourceName, matched]
+      properties:
+        sourceName: { type: string }
+        matched: { type: boolean }
+        userId: { type: string, format: uuid, nullable: true }
+        userName: { type: string, nullable: true }
+
+    ImportRunSummary:
+      type: object
+      required: [id, provider, siteUrl, sourceProjectKey, status, startedAt, issuesImported, statusesMapped, labelsCreated, droppedFieldCount]
+      properties:
+        id: { type: string, format: uuid }
+        provider: { $ref: '#/components/schemas/ImportProvider' }
+        siteUrl: { type: string }
+        sourceProjectKey: { type: string }
+        status: { $ref: '#/components/schemas/ImportRunStatus' }
+        startedAt: { type: string, format: date-time }
+        issuesImported: { type: integer }
+        statusesMapped: { type: integer }
+        labelsCreated: { type: integer }
+        droppedFieldCount: { type: integer }
+
+    ImportRun:
+      type: object
+      required:
+        [id, projectId, provider, siteUrl, sourceProjectKey, status, startedAt, startedBy,
+         issuesImported, releasesCreated, commentsImported, labelsCreated, droppedValueCount,
+         labelPerSprint, backlogOrderPreserved, droppedFields, statusMapping, people]
+      properties:
+        id: { type: string, format: uuid }
+        projectId: { type: string, format: uuid }
+        provider: { $ref: '#/components/schemas/ImportProvider' }
+        siteUrl: { type: string }
+        accountEmail: { type: string, nullable: true }
+        sourceProjectKey: { type: string }
+        status: { $ref: '#/components/schemas/ImportRunStatus' }
+        startedAt: { type: string, format: date-time }
+        finishedAt: { type: string, format: date-time, nullable: true }
+        startedBy:
+          type: object
+          # `required` DOES NOT DESCEND. Without this line every member of the nested object is
+          # optional in both generated clients, and the SPA compiles against a lie.
+          required: [id, name]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+        issuesImported: { type: integer }
+        releasesCreated: { type: integer }
+        commentsImported: { type: integer }
+        labelsCreated: { type: integer }
+        droppedValueCount: { type: integer }
+        labelPerSprint: { type: boolean }
+        backlogOrderPreserved:
+          type: boolean
+          description: |
+            False ⇒ the report says the backlog order is insertion order, chosen by nobody, rather
+            than letting it read as imported (D-i).
+        failureReason: { type: string, nullable: true }
+        droppedFields:
+          type: array
+          items: { $ref: '#/components/schemas/DroppedField' }
+        statusMapping:
+          type: array
+          items: { $ref: '#/components/schemas/AppliedStatusMapping' }
+        people:
+          type: array
+          items: { $ref: '#/components/schemas/ImportedPerson' }
 
     # ------------------------------------------------------- integration ---
     NotificationChannel:

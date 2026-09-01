@@ -10349,6 +10349,122 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/imports/source-projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Which projects this connection can see
+         * @description `issue:import` — **Project Manager, Test Lead, Company Admin and Instance Admin**
+         *     (roles spec §A3). Test Engineer does not hold it, which is why there is no MCP tool
+         *     for anything in this family: `Agent` is Test Engineer minus `company:read`.
+         *
+         *     `POST` rather than `GET` because the body carries a credential, and a credential in a
+         *     query string is in the access log, the proxy log and the browser history. **Nothing is
+         *     written** — this reads the source system and returns what it saw.
+         */
+        post: operations["listSourceProjects"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/imports/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * What an import would and would not bring across
+         * @description `issue:import`. D32's dry run, and story J1: counts by type, every field that will be
+         *     dropped with how many values it holds, every source status with a suggested target, and
+         *     the keys that would collide.
+         *
+         *     **This operation writes nothing.** `ImportPreviewWritesNothingTest` snapshots every
+         *     company-owned table before and after and fails on any difference — the promise
+         *     `import-preview.html` makes in its own banner is a test, not a convention.
+         */
+        post: operations["previewImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A project's past imports
+         * @description `issue:import`. `settings-import.html`'s table. Reports are kept indefinitely and this
+         *     reaches them long after the source system is gone — no call leaves this server.
+         */
+        get: operations["listImportRuns"];
+        put?: never;
+        /**
+         * Import the source project
+         * @description `issue:import`. Confirmation, after a preview and a status mapping (D32).
+         *
+         *     **`202`, not `201`.** The read pass against the source takes minutes for a real project,
+         *     so the run is dispatched and this returns the row to poll at
+         *     `GET /imports/{importRunId}`. The write is one all-or-nothing transaction after the read
+         *     completes: either the whole project arrived or nothing did, and a run interrupted by a
+         *     restart leaves the project unchanged and the row `FAILED`.
+         *
+         *     **Refused with `400`** when any source status has no mapping — the client disables
+         *     Confirm for the same reason and the server does not trust it to.
+         *     **Refused with `409`** when this project already completed an import from the same
+         *     `(provider, siteUrl, sourceProjectKey)`: there is no delta import, and a second run would
+         *     try to create a second `PROJ-4812`.
+         */
+        post: operations["startImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/imports/{importRunId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                importRunId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One import report
+         * @description `issue:import`. `import-report.html`, and the poll target while `status` is `RUNNING`.
+         *
+         *     The report is self-contained: the dropped-field list, the status mapping as applied and
+         *     the people it matched are all stored on the run, with the names captured at the time. It
+         *     answers a year later, with the source system decommissioned and its statuses long since
+         *     renamed here.
+         */
+        get: operations["getImportRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/workflow": {
         parameters: {
             query?: never;
@@ -16592,6 +16708,13 @@ export interface components {
             id: string;
             body: string;
             author: components["schemas"]["UserRef"];
+            /**
+             * @description The source system's own author string, for a comment imported from a tracker whose
+             *     author matched no user here — `j.arnold@old-vendor.test`. Never set together with
+             *     `author`: an unmatched author is preserved as text rather than reassigned to somebody
+             *     who did not write it (`import-report.html`'s People panel, plan 014 D-j).
+             */
+            externalAuthor?: string | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -17216,6 +17339,235 @@ export interface components {
             /** Format: uuid */
             caseId: string;
             issues: components["schemas"]["IssueRef"][];
+        };
+        /**
+         * @description The source system. `JIRA_CLOUD` authenticates with Basic (`accountEmail` + an API token);
+         *     the other two with a Bearer PAT, and `accountEmail` is ignored.
+         * @enum {string}
+         */
+        ImportProvider: "JIRA_CLOUD" | "JIRA_DATA_CENTER" | "AZURE_DEVOPS";
+        /**
+         * @description One connection, for one operation. **The credential is never stored** — not on
+         *     `import_run`, not encrypted, not anywhere (plan 014 D-a, closing review R14). Reusing
+         *     `integration.tracker`'s per-person credential is a forbidden module crossing, and
+         *     encrypting a copy here would mean a second AES key user in a second module.
+         */
+        ImportConnection: {
+            provider: components["schemas"]["ImportProvider"];
+            /**
+             * @description `https://northwind.atlassian.net`. HTTPS only, and refused before it is dialled if it
+             *     resolves into a private range.
+             */
+            siteUrl: string;
+            /** @description Required for `JIRA_CLOUD`, ignored otherwise. */
+            accountEmail?: string | null;
+            /** @description Read-only is enough. Held for this operation and written nowhere. */
+            apiToken: string;
+        };
+        SourceProject: {
+            /** @description `PROJ` — the prefix imported issues keep (D5). */
+            key: string;
+            name: string;
+            issueCount: number;
+        };
+        SourceProjectList: {
+            projects: components["schemas"]["SourceProject"][];
+        };
+        ImportPreviewInput: {
+            /**
+             * Format: uuid
+             * @description The TCMS project the issues arrive in.
+             */
+            projectId: string;
+            connection: components["schemas"]["ImportConnection"];
+            sourceProjectKey: string;
+        };
+        /**
+         * @description One source field that is **not** imported, and how many values it holds (D15). The same
+         *     shape is served by the preview and by the report, from one derivation, so the two cannot
+         *     disagree — `ImportReportMatchesPreviewTest` asserts they are equal element for element.
+         */
+        DroppedField: {
+            /** @description `Story Points`, `Sprint`, `Custom: "Squad"`. */
+            name: string;
+            /** @description `number`, `picker`, `colour` — the source's own word. */
+            fieldType: string;
+            valueCount: number;
+            /**
+             * @description Why, in the words the preview used. Stored per row rather than looked up at read
+             *     time: the sentence is part of what was said at the time, and editing the catalogue
+             *     must not retroactively rewrite a report.
+             */
+            reason: string;
+        };
+        PreviewTypeRow: {
+            sourceTypeName: string;
+            /** Format: uuid */
+            targetTypeId: string;
+            targetTypeName: string;
+            targetLevel: components["schemas"]["IssueLevel"];
+            countsTowardCompletion: boolean;
+            count: number;
+        };
+        /**
+         * @description One source status, its issue count, and the target this project would suggest. `matched`
+         *     is true when the names are equal ignoring case — the mockup's *name matched* badge.
+         *     `suggestedStatusId` null means nothing matched, and the mapping step shows it unmapped.
+         */
+        PreviewStatusRow: {
+            sourceStatusName: string;
+            count: number;
+            matched: boolean;
+            /** Format: uuid */
+            suggestedStatusId?: string | null;
+        };
+        ImportPreviewTotals: {
+            issues: number;
+            labels: number;
+            comments: number;
+            historyEntries: number;
+            /** @description Each becomes a release. */
+            fixVersions: number;
+            /** @description Dropped */
+            sprintValues: number;
+        };
+        /**
+         * @description A reason the import cannot proceed, computed by the preview rather than discovered at
+         *     minute four of the run.
+         */
+        ImportBlocker: {
+            /** @enum {string} */
+            kind: "KEY_COLLISION" | "TOO_MANY_ISSUES" | "ALREADY_IMPORTED";
+            /** @description The sentence the screen shows. */
+            detail: string;
+            /** @description For `KEY_COLLISION` — up to ten of the offending keys. */
+            keys?: string[];
+        };
+        ImportPreview: {
+            /** Format: uuid */
+            projectId: string;
+            sourceProjectKey: string;
+            /** @description `PROJ`. Imported keys keep it (D5). */
+            sourceKeyPrefix: string;
+            /** @description `ACME`. Unchanged; both resolve afterwards. */
+            projectKeyPrefix: string;
+            totals: components["schemas"]["ImportPreviewTotals"];
+            types: components["schemas"]["PreviewTypeRow"][];
+            statuses: components["schemas"]["PreviewStatusRow"][];
+            droppedFields: components["schemas"]["DroppedField"][];
+            /** @description Empty means the mapping step may be reached. */
+            blockers: components["schemas"]["ImportBlocker"][];
+        };
+        StatusMappingEntry: {
+            sourceStatusName: string;
+            /** Format: uuid */
+            targetStatusId: string;
+        };
+        ImportOptions: {
+            /**
+             * @description One label per distinct sprint name, one assignment per issue. **Default false** — a
+             *     project with sixty sprints becomes sixty labels nobody chose. `Sprint` stays in the
+             *     dropped list either way, with its reason adjusted to say what was kept (D-h).
+             */
+            labelPerSprint: boolean;
+            /**
+             * @description Set `issue.rank` from the source's own order instead of letting the insert trigger
+             *     assign `max(rank) + 1024`. False means the report says the order is arbitrary rather
+             *     than letting it read as imported (D-i).
+             */
+            preserveBacklogOrder: boolean;
+        };
+        ImportInput: {
+            /** Format: uuid */
+            projectId: string;
+            connection: components["schemas"]["ImportConnection"];
+            sourceProjectKey: string;
+            /**
+             * @description **Every source status the preview listed, or `400`.** An unmapped status would
+             *     silently become the default and put its issues in the wrong column, which is exactly
+             *     what `import-mapping.html`'s disabled Confirm exists to prevent.
+             */
+            statusMapping: components["schemas"]["StatusMappingEntry"][];
+            options: components["schemas"]["ImportOptions"];
+        };
+        /**
+         * @description Forwards only. A re-request is a new row, so the record of what was asked for and what it
+         *     produced stays one request per row — `report_job`'s state machine, and its argument.
+         * @enum {string}
+         */
+        ImportRunStatus: "RUNNING" | "COMPLETED" | "FAILED";
+        /**
+         * @description The mapping as it was applied, with the target's **name and kind captured at the time**.
+         *     There is no FK: a status can be removed later, and the report has to outlive that (D-g).
+         */
+        AppliedStatusMapping: {
+            sourceStatusName: string;
+            /** Format: uuid */
+            targetStatusId: string;
+            targetStatusName: string;
+            targetStatusKind: components["schemas"]["IssueStatusKind"];
+            issueCount: number;
+        };
+        /**
+         * @description A source author and what became of them. `matched` false means their comments carry the
+         *     source's own text on `externalAuthor` rather than being reassigned to somebody who did
+         *     not write them.
+         */
+        ImportedPerson: {
+            sourceName: string;
+            matched: boolean;
+            /** Format: uuid */
+            userId?: string | null;
+            userName?: string | null;
+        };
+        ImportRunSummary: {
+            /** Format: uuid */
+            id: string;
+            provider: components["schemas"]["ImportProvider"];
+            siteUrl: string;
+            sourceProjectKey: string;
+            status: components["schemas"]["ImportRunStatus"];
+            /** Format: date-time */
+            startedAt: string;
+            issuesImported: number;
+            statusesMapped: number;
+            labelsCreated: number;
+            droppedFieldCount: number;
+        };
+        ImportRun: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: string;
+            provider: components["schemas"]["ImportProvider"];
+            siteUrl: string;
+            accountEmail?: string | null;
+            sourceProjectKey: string;
+            status: components["schemas"]["ImportRunStatus"];
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            finishedAt?: string | null;
+            startedBy: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+            };
+            issuesImported: number;
+            releasesCreated: number;
+            commentsImported: number;
+            labelsCreated: number;
+            droppedValueCount: number;
+            labelPerSprint: boolean;
+            /**
+             * @description False ⇒ the report says the backlog order is insertion order, chosen by nobody, rather
+             *     than letting it read as imported (D-i).
+             */
+            backlogOrderPreserved: boolean;
+            failureReason?: string | null;
+            droppedFields: components["schemas"]["DroppedField"][];
+            statusMapping: components["schemas"]["AppliedStatusMapping"][];
+            people: components["schemas"]["ImportedPerson"][];
         };
         /**
          * @description Where one project sends its notices — **without its credential, and there is deliberately
@@ -21506,6 +21858,221 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listSourceProjects: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportConnection"];
+            };
+        };
+        responses: {
+            /** @description The projects the credential can read, with their issue counts. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceProjectList"];
+                };
+            };
+            /**
+             * @description The site URL is refused before it is dialled — not HTTPS, or it resolves into a
+             *     private range. `ImportUrlGuard` in `com.tcms.tracker.imports` is the check, and it
+             *     is a deliberate second copy of `integration`'s outbound guard: `tracker` may not
+             *     import `integration`, and the two are pinned to each other as text (plan 014 D-c).
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /**
+             * @description The source system rejected the credential, refused the account, or did not answer.
+             *     The `detail` is the source's own message and is shown only to the person whose
+             *     credential it is.
+             */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    previewImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportPreviewInput"];
+            };
+        };
+        responses: {
+            /** @description The preview. `blockers` non-empty means the import cannot proceed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportPreview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The source system did not answer, or answered with something else. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listImportRuns: {
+        parameters: {
+            query: {
+                projectId: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Newest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportRunSummary"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    startImport: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
+                 *     already succeeded answers **200** with the resource that intent created, instead of creating
+                 *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
+                 *     §136; the parameter has been shared by six other creates since `V14`, and by report generation since `V66`.)
+                 *
+                 *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
+                 *     it across retries. A key generated per attempt is the mistake that makes the header look
+                 *     right and do nothing.
+                 *
+                 *     Scoped to the project the request is addressed to, which is the scope the uniqueness
+                 *     constraint behind it uses. Optional: omitted, every call creates. At most 200 characters.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportInput"];
+            };
+        };
+        responses: {
+            /** @description A replay — the `Idempotency-Key` had already started this run. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportRun"];
+                };
+            };
+            /** @description Accepted. Poll the `Location`. */
+            202: {
+                headers: {
+                    /** @description The run's canonical URL. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportRun"];
+                };
+            };
+            /**
+             * @description An unmapped source status, a target status that is not this project's, a source
+             *     project whose issue count exceeds `tcms.tracker.imports.max-issues`, or a key that
+             *     already exists in this company.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description This project has already imported that source project. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getImportRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                importRunId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportRun"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };

@@ -742,6 +742,38 @@ itself targets releases by retargeting from the backlog (D-l: N `PATCH`es from a
 looking at), not at the moment a story is raised, and offering both would be two handles on one
 field.
 
+### 3.7 The import verbs (014 T1) — and why MCP gets none of them
+
+**No tool, and this follows from §3.3 rather than from taste.** Every operation in plan 014 costs
+`issue:import`. `Agent` is Test Engineer minus `company:read` (`V52`, §210), and `issue:import` is
+one of the three keys on the **Test Engineer → Test Lead** line — `SeedDataTest`'s
+`testEngineerToTestLeadBoundary` asserts that delta exactly, in both directions. So no MCP token
+that can exist holds it, and a tool would be a definition nobody's `tools/list` will ever include:
+§3.3's dead schema, arriving through a permission rather than through a decision.
+
+**The CLI gets two, both reads** — see §6. It runs on a person's token, so a Test Lead reaches
+them, and the release verbs (§3.6) already established that this surface serves operations `Agent`
+cannot. The two writes are absent on purpose: `POST /imports` takes a Jira credential, which as a
+CLI argument or an environment variable is shell history and a CI log — and the mapping step is a
+confirmation a person makes **having read a preview**, which a flag file is that confirmation with
+the reading removed. That is the property D32 exists to create.
+
+**The five operations, recorded here so the absence is legible as a decision.** Three of them are
+`POST` with a body carrying the credential — a token in a query string is in the access log, the
+proxy log and the browser history — which is a second reason none of them is a tool: this surface's
+`kind: 'read'` arms are the ones a model composes freely, and these three write to a third party.
+
+| Operation | `operationId` | Gate | MCP | CLI |
+|---|---|---|---|---|
+| `POST /imports/source-projects` | `listSourceProjects` | `issue:import` | — | — |
+| `POST /imports/preview` | `previewImport` | `issue:import` | — | — |
+| `POST /imports` | `startImport` | `issue:import` | — | — |
+| `GET /imports` | `listImportRuns` | `issue:import` | — | `tcms import list` (014 T6) |
+| `GET /imports/{importRunId}` | `getImportRun` | `issue:import` | — | `tcms import show` (014 T6) |
+
+The two CLI rows are **declared here and spelled in §6 by 014 T6**; until that lands the noun does
+not exist in `COMMANDS` and this table is what says why the other three never will.
+
 ---
 
 ## 4. Cross-cutting rules — all of them in the command core
