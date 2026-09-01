@@ -91,8 +91,20 @@ class FlakeScoreTest extends IntegrationTestBase {
     /** The person who makes the quarantine decision — {@code quarantined_by} cannot be null. */
     private static final UUID QUARANTINER = UUID.fromString("fc006000-0000-4000-8000-000000000001");
 
-    /** Oldest first. Inside the 90-day window on purpose; {@link Window} moves one case outside it. */
-    private static final Instant BASE = Instant.parse("2026-06-01T08:00:00Z");
+    /**
+     * Oldest first, and <strong>relative to now</strong>: the ten daily results run from 30 days
+     * ago to 21, so the whole fixture sits inside the shipped 90-day window with two months of
+     * slack on either side; {@link Window} moves one case outside it deliberately.
+     *
+     * <p>This was {@code Instant.parse("2026-06-01T08:00:00Z")} until 2026-09-01, and the absolute
+     * date is what broke it. An execution enters the score only if it is inside a window measured
+     * back from {@code now()}, so a fixed base is not a fixture constant at all — it is a countdown.
+     * Written on 2026-08-07 it had 23 days of margin; on 2026-08-30 the oldest three results
+     * crossed the boundary and six tests went red at once, each reporting a count three lower than
+     * it expected, on a tree whose only change was an import. A window-scoped statement can only
+     * be seeded against the clock the statement itself reads.
+     */
+    private static final Instant BASE = Instant.now().minusSeconds(86_400L * 30);
 
     @Autowired
     private ExecutionFactRefreshService refresh;

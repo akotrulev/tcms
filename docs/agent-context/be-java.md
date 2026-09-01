@@ -1,6 +1,6 @@
 # be-java — orientation cache
 
-Baseline: 012 T4 (`9df190e1`), refreshed 2026-08-31.
+Baseline: 013 T3, refreshed 2026-09-01.
 Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
 
 ## Version lane
@@ -18,9 +18,9 @@ Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
 - Flyway `backend/src/main/resources/db/migration` holds **four files** — `V1__initial_schema.sql`
   (V2–V75 were absorbed into it 2026-08-29 and deleted; it only ever runs on an empty database),
   `V2__pm_foundation.sql`, `V3__tracker_core.sql`, `V4__retire_work_item.sql`,
-  `V5__tracker_board.sql`. ~~head `V71` (B2)~~ ~~the next number is `V2`~~ ~~→ `V5`~~ → the next
-  number is **`V6`**. `out-of-order` is unset, so a lower number arriving after a higher one is
-  silently not applied — `ls` the directory before writing.
+  `V5__tracker_board.sql`, `V6__release.sql`. ~~head `V71` (B2)~~ ~~the next number is `V2`~~
+  ~~→ `V5`~~ ~~→ `V6`~~ → the next number is **`V7`**. `out-of-order` is unset, so a lower number
+  arriving after a higher one is silently not applied — `ls` the directory before writing.
 
 ## Seams to reuse
 - `ProjectService.readVisible / readGranted / writeGranted` → `GateResult` (Unreachable/Denied/Allowed).
@@ -61,6 +61,29 @@ Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
 - `project.PeopleDirectory` is the display-name seam reachable from a `tracker` sub-package;
   `tracker.TrackerPeople` is package-private and is not.
 
+- `tracker.release` (013 T3) — the release module, and **`ReleaseFacts` is the ONE file in
+  `tracker` naming `test_case`, `case_health`, `execution_fact` or `test_run`.**
+  `repository.ExecutionFacts`'s rule, applied here: one file per module names foreign tables, so
+  every crossing is findable by opening one class. Do not add a second, and do not add the
+  "just fetch these rows" convenience method its header refuses.
+- **`com.tcms.api.ReleaseSortKey`** — moved there from `com.tcms.execution` in 013 T3, public, three
+  callers (`TestRun`, `TestExecution`, `Release`). **The two `READERLESS_BY_DECISION` entries stayed**
+  against 009's prediction: the roadmap orders `release.sort_key`, a third column on a new table, so
+  `test_run.release_sort_key` and `test_execution.release_sort_key` are still ordered by nothing.
+  Removing either entry reddens `everyMappedColumnHasAReader` on a column nobody touched.
+- **Readiness matches `execution_fact.release_version` as TEXT, never `test_run.release_id`**
+  (013 D-b). D14 backfills nothing, so every pre-M3 run has a NULL FK and filtering on it would
+  report a version with three hundred executions as untested. `test_run.release_id` exists, is
+  maintained by a `BEFORE INSERT` trigger, is **not mapped** on `TestRun`, and has no reader.
+- `ReleaseVerdict` is three members and `NOT_TESTED` is not `NOT_READY` with zero failures:
+  `ReleaseTests`' counts are **boxed and null** when `hasRun` is false, because a zero drawn as a
+  meter reads as a clean release.
+- **`Map.of()` throws on `get(null)`** and it cost 013 T3 five red tests with a bare NPE from inside
+  `ImmutableCollections` naming nothing about releases. Any map a caller looks a nullable id up in
+  must be a `HashMap`. `PeopleDirectory`'s javadoc already recorded this as a 500 in §38.
+- **`IssueEdit` is pure**, so a release's existence is checked in `IssueService.checkRelease` and not
+  there. A cross-project release is a 400 on `releaseId`, never a silent null.
+
 ## Conventions observed
 - A schema pairs with a **view record**, never an entity — `Label` → `LabelView`, not `IssueLabel`.
 - Records for views/requests, sealed `Outcome` interfaces per service, exhaustive switches in
@@ -99,6 +122,28 @@ Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
   endpoints answer 400 on a blank name, which the contract does not list — invisible to every gate.
 
 ## Session log
+
+- 2026-09-01 013 T3: `be`. `com.tcms.tracker.release` — 28 files: `Release` + `VerificationLink`
+  (over `issue_link`, and **not** called `IssueLink`: `documentation.IssueLinkView` is the external
+  Jira link and two types of that name one import apart is how a wrong import survives review),
+  three repositories, four services (`ReleaseService`, `ReadinessService`, `RoadmapService`,
+  `VerificationService`), three controllers, `ReleaseFacts`, and seventeen view/input records.
+  `ReleaseSortKey` moved to `api`. `Issue`, `IssueEdit`, `IssueInput`, `IssueUpdate`, `IssueView`,
+  `IssueSummaryView` and `BacklogRowView` all gained a release; `SwimlaneBy` gained `RELEASE` and
+  `BoardCardService` its lane arm and two filter members; `IssueFactProjection` now writes
+  `release_id` and `release_assigned_at`. Three test classes, 27 tests.
+  **Gate on shanks: 3751 tests, BUILD SUCCESSFUL.** It first reported 6 failures, `FlakeScoreTest`
+  only — inherited from 012 T4, and not a baseline to carry but a countdown that had gone off:
+  `flake-window` is `P90D` measured back from `now()`, and that fixture's `BASE` was a hardcoded
+  `2026-06-01`, so on 2026-08-30 its oldest three results aged out of the window and six assertions
+  went three counts short at once. `BASE` is now relative to `now()`; the reasoning is in its
+  javadoc. `flake-window` is the only DURATION window in `application.yml`
+  (`failing-repeatedly-window` is a count of runs and `CaseHistoryService` has none), so no sibling
+  fixture carries the same bomb. Six of this task's own failures were found and fixed first, and two are
+  worth carrying: `Map.of().get(null)` throws (above), and `SchemaCommentTest` reads the *text* of
+  every `COMMENT ON` and refused `sprint_issue` in a sentence explaining that no such table exists —
+  a comment naming a thing to deny it is still a comment naming it.
+  **No screen renders any of this**; the releases screens are T5 and the overview panels T6.
 - 2026-08-31 012 T4: `be`, two commits. `com.tcms.tracker.board` gains four services
   (`RankService`, `BoardCardService`, `BoardMoveService`, `LabelService`), four controllers, two
   label entities + repositories and eleven view/input records — the nine T4 operations and the

@@ -120,17 +120,17 @@ class IssueEditTest {
 
     private static IssueInput input(IssueTypeRow type, String parentKey) {
         return new IssueInput(UUID.randomUUID(), type.id(), "A title", null, parentKey,
-                null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null);
     }
 
     private static IssueInput inputWithDates(IssueTypeRow type, LocalDate start, LocalDate target) {
         return new IssueInput(UUID.randomUUID(), type.id(), "A title", null, null,
-                null, null, null, start, target, null, null);
+                null, null, null, start, target, null, null, null);
     }
 
     private static IssueInput estimated(IssueTypeRow type, double hours) {
         return new IssueInput(UUID.randomUUID(), type.id(), "A title", null, null,
-                null, null, hours, null, null, null, null);
+                null, null, hours, null, null, null, null, null);
     }
 
     private static Map<String, List<String>> errorsOf(IssueEdit.Outcome outcome) {

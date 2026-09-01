@@ -3,6 +3,7 @@ package com.tcms.execution;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.tcms.IntegrationTestBase;
+import com.tcms.api.ReleaseSortKey;
 import com.tcms.tenancy.Company;
 import com.tcms.tenancy.CompanyRepository;
 import java.sql.Connection;
@@ -27,7 +28,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  *
  * <h2>Why this needs a real database and could not be a unit test</h2>
  *
- * <p>{@link ReleaseSortKeyTest} covers what the application <em>writes</em>, which it can only
+ * <p>{@link com.tcms.api.ReleaseSortKeyTest} covers what the application <em>writes</em>, which it can only
  * check against Java's {@code String} comparison. Two things about the column are not statements
  * about Java at all:
  *

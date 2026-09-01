@@ -51,8 +51,10 @@ public class BoardCardController {
             @RequestParam(name = "unparented", required = false, defaultValue = "false")
             boolean unparented) {
 
+        // The board takes no release filter: it groups by release through the RELEASE swimlane
+        // axis instead, which keeps every card on screen. Passed as absent rather than plumbed.
         BoardFilters.Parsed parsed = BoardFilters.parse(
-                labelIds, assigneeIds, epicKey, level, priorities, unparented);
+                labelIds, assigneeIds, epicKey, level, priorities, unparented, null, false);
         if (parsed.errors() != null) {
             return ResponseEntity.badRequest().body(Problem.validation(parsed.errors()));
         }
@@ -122,7 +124,17 @@ public class BoardCardController {
                 String epicKey,
                 String level,
                 List<String> priorities,
-                boolean unparented) {
+                boolean unparented,
+                UUID releaseId,
+                boolean unscheduled) {
+
+            if (releaseId != null && unscheduled) {
+                // A cross-field rule no schema can spell, and the two mean opposite things:
+                // "only 2.4" and "only what has no release" cannot both hold, and answering the
+                // empty intersection would look like a project with nothing left to do.
+                return new Parsed(null, Map.of("unscheduled", List.of(
+                        "Filter to a release or to the unscheduled work, not to both.")));
+            }
 
             IssueLevel parsedLevel;
             try {
@@ -152,7 +164,9 @@ public class BoardCardController {
                     epicKey,
                     parsedLevel,
                     parsedPriorities,
-                    unparented), null);
+                    unparented,
+                    releaseId,
+                    unscheduled), null);
         }
     }
 }

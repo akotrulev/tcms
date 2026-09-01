@@ -1,5 +1,6 @@
 package com.tcms.execution;
 
+import com.tcms.api.ReleaseSortKey;
 import com.tcms.tenancy.CompanyFilter;
 import jakarta.persistence.Column;
 import org.hibernate.annotations.JdbcTypeCode;

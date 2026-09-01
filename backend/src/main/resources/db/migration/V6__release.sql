@@ -94,9 +94,9 @@ CREATE TABLE release (
         (status = 'RELEASED') = (released_at IS NOT NULL))
 );
 COMMENT ON TABLE release IS
-    'The only planning cadence in this product (scope D6). There is no sprint table, no '
-    'sprint_issue, no velocity and no burndown, and a release is not a container: an issue points '
-    'AT one through a nullable FK, with no join table. It is the one object both halves of this '
+    'The only planning cadence in this product (scope D6). There are no sprints, no velocity and '
+    'no burndown, and a release is not a container: an issue points AT one through a nullable FK, '
+    'with no join table. It is the one object both halves of this '
     'product care about — delivery asks whether the stories for 2.4 are done, QA already asks '
     'whether the runs for 2.4 passed, and release readiness is those two joined, which is the '
     'question neither a tracker nor a test tool answers alone. Project-scoped per D13.';

@@ -27,6 +27,7 @@ public record IssueUpdate(
         LocalDate startDate,
         LocalDate targetDate,
         LocalDate dueDate,
+        UUID releaseId,
         List<CriterionUpdate> acceptanceCriteria) {
 
     /** One row of the checklist as the editor sends it back — no id, because the list is written whole. */

@@ -36,7 +36,8 @@ record IssueEdit(
         LocalDate startDate,
         LocalDate targetDate,
         LocalDate dueDate,
-        UUID assigneeId) {
+        UUID assigneeId,
+        UUID releaseId) {
 
     /** {@code issue.title}'s practical ceiling, and the contract's {@code maxLength}. */
     private static final int MAX_TITLE = 500;
@@ -89,7 +90,10 @@ record IssueEdit(
                 request.startDate(),
                 request.targetDate(),
                 request.dueDate(),
-                request.assigneeId()));
+                request.assigneeId(),
+                // Existence is a lookup and this class is pure, so IssueService checks that the
+                // release belongs to this project. Carried through untouched.
+                request.releaseId()));
     }
 
     /**
@@ -120,7 +124,8 @@ record IssueEdit(
                 current.startDate(),
                 current.targetDate(),
                 current.dueDate(),
-                current.assigneeId()));
+                current.assigneeId(),
+                current.releaseId()));
     }
 
     /**

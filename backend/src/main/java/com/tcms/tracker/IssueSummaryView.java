@@ -1,6 +1,7 @@
 package com.tcms.tracker;
 
 import com.tcms.api.UserRef;
+import com.tcms.tracker.release.ReleaseRefView;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -25,5 +26,6 @@ public record IssueSummaryView(
         UserRef assignee,
         LocalDate dueDate,
         boolean overdue,
-        Double estimateHours) {
+        Double estimateHours,
+        ReleaseRefView release) {
 }

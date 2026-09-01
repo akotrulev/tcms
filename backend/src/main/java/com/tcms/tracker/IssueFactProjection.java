@@ -25,11 +25,17 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>{@code done_at} — set the first time a {@code DONE}-kind status is reached, never cleared by
  *       a reopen. {@link Issue#moveTo} is what makes that true; this copies it, so the projection
  *       cannot re-introduce the defect the entity refuses.</li>
- *   <li>{@code release_assigned_at} — null until M3. It is here now because it is the one number in
- *       M9's burn-up that <strong>cannot be reconstructed after the fact</strong>: "scope added
- *       after the release was created" is the difference between this and
- *       {@code release.created_at}, and an assignment that already happened leaves no other trace
- *       (009 review R12).</li>
+ *   <li>{@code release_assigned_at} — <del>null until M3</del> → <strong>written since M3</strong>,
+ *       and it is the one number in M9's burn-up that <strong>cannot be reconstructed after the
+ *       fact</strong>: "scope added after the release was created" is the difference between this
+ *       and {@code release.created_at}, and an assignment that already happened leaves no other
+ *       trace (009 review R12).
+ *
+ *       <p>Stamped with <strong>this projection's</strong> {@code now()} rather than the moment the
+ *       assignment was made, because nothing carries that moment — {@code issue.updated_at} moves
+ *       for every edit. The delivery floor is one minute, so the value is "assigned at most one
+ *       outbox tick ago", which is the accuracy that chart needs and is why readiness reads live
+ *       {@code issue} rows for every other number it serves (013 D-f).</li>
  * </ul>
  *
  * <h2>Whole-company, upsert, and no payload — the same shape {@code execution_fact} has</h2>
@@ -71,7 +77,8 @@ public class IssueFactProjection {
                    f.type_name, f.type_level, f.counts_toward_completion,
                    COALESCE(ds.name, f.status_name), f.derived_kind,
                    f.epic_id, f.parent_id, f.assignee_id, f.estimate_hours,
-                   NULL, f.created_at, f.status_entered_at, f.done_at, NULL,
+                   f.release_id, f.created_at, f.status_entered_at, f.done_at,
+                   CASE WHEN f.release_id IS NOT NULL THEN now() END,
                    f.deleted_at
               FROM (
                     SELECT i.id, i.company_id, i.project_id, i.issue_key, i.title,
@@ -87,7 +94,7 @@ public class IssueFactProjection {
                            CASE WHEN pt.level = 'EPIC' THEN p.id
                                 WHEN gt.level = 'EPIC' THEN g.id
                            END AS epic_id,
-                           i.parent_id, i.assignee_id, i.estimate_hours,
+                           i.parent_id, i.assignee_id, i.estimate_hours, i.release_id,
                            i.created_at, i.status_entered_at, i.done_at, i.deleted_at
                       FROM issue            i
                       JOIN issue_type       t  ON t.id  = i.type_id
@@ -128,6 +135,19 @@ public class IssueFactProjection {
                    parent_id                = EXCLUDED.parent_id,
                    assignee_id              = EXCLUDED.assignee_id,
                    estimate_hours           = EXCLUDED.estimate_hours,
+                   release_id               = EXCLUDED.release_id,
+                   -- FIRST pointed at its CURRENT release, which is what M9's burn-up scope line
+                   -- measures against release.created_at. Three arms and each is load-bearing:
+                   -- a re-projection must not restamp an assignment that has not changed (or the
+                   -- scope line grows every tick); clearing the release clears the moment (a null
+                   -- release with a timestamp would claim scope was added to nothing); and a MOVE
+                   -- from 2.4 to 2.5 restamps, because it IS scope added to 2.5.
+                   release_assigned_at      = CASE
+                       WHEN EXCLUDED.release_id IS NULL                                 THEN NULL
+                       WHEN issue_fact.release_id IS DISTINCT FROM EXCLUDED.release_id
+                            THEN EXCLUDED.release_assigned_at
+                       ELSE issue_fact.release_assigned_at
+                   END,
                    status_entered_at        = EXCLUDED.status_entered_at,
                    done_at                  = EXCLUDED.done_at,
                    deleted_at               = EXCLUDED.deleted_at

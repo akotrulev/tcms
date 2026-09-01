@@ -10,12 +10,16 @@ import com.tcms.tenancy.AuditEventRepository;
 import com.tcms.tenancy.CompanyContext;
 import com.tcms.tenancy.Outbox;
 import com.tcms.tenancy.OutboxEvents;
+import com.tcms.tracker.release.Release;
+import com.tcms.tracker.release.ReleaseRefView;
+import com.tcms.tracker.release.ReleaseRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -88,6 +92,7 @@ public class IssueService {
     private final ProjectKeys keys;
     private final AuditEventRepository auditEvents;
     private final Outbox outbox;
+    private final ReleaseRepository releases;
     private final Clock clock;
 
     public IssueService(
@@ -101,6 +106,7 @@ public class IssueService {
             ProjectKeys keys,
             AuditEventRepository auditEvents,
             Outbox outbox,
+            ReleaseRepository releases,
             Clock clock) {
 
         this.projects = projects;
@@ -113,6 +119,7 @@ public class IssueService {
         this.keys = keys;
         this.auditEvents = auditEvents;
         this.outbox = outbox;
+        this.releases = releases;
         this.clock = clock;
     }
 
@@ -281,6 +288,11 @@ public class IssueService {
             return new Outcome.Invalid(assigneeErrors);
         }
 
+        Map<String, List<String>> releaseErrors = checkRelease(edit.releaseId(), project.getId());
+        if (!releaseErrors.isEmpty()) {
+            return new Outcome.Invalid(releaseErrors);
+        }
+
         IssueStatus opening = statuses.findByProjectIdOrderByPositionAsc(project.getId())
                 .stream()
                 .findFirst()
@@ -340,6 +352,11 @@ public class IssueService {
             return new Outcome.Invalid(assigneeErrors);
         }
 
+        Map<String, List<String>> releaseErrors = checkRelease(edit.releaseId(), project.getId());
+        if (!releaseErrors.isEmpty()) {
+            return new Outcome.Invalid(releaseErrors);
+        }
+
         Instant now = clock.instant();
         UUID wasAssignedTo = issue.getAssigneeId();
         issue.apply(edit, parent == null ? null : parent.getId(), userId, now);
@@ -370,7 +387,8 @@ public class IssueService {
                 patch.has("startDate") ? request.startDate() : issue.getStartDate(),
                 patch.has("targetDate") ? request.targetDate() : issue.getTargetDate(),
                 patch.has("dueDate") ? request.dueDate() : issue.getDueDate(),
-                patch.has("assigneeId") ? request.assigneeId() : issue.getAssigneeId());
+                patch.has("assigneeId") ? request.assigneeId() : issue.getAssigneeId(),
+                patch.has("releaseId") ? request.releaseId() : issue.getReleaseId());
     }
 
     /**
@@ -409,6 +427,27 @@ public class IssueService {
      * any other tab, the card renders their name perfectly, and the only person who ever sees the
      * problem is the assignee — who gets a 404 when they click it.
      */
+    /**
+     * A release from another project is a field error and never a silent null.
+     *
+     * <p>D13 keys a release on {@code (company_id, project_id, version)}, so an id from a sibling
+     * project resolves to a real row this issue may not point at — and storing it would put a story
+     * into a roadmap its project cannot see, which is the §A1 boundary crossed by an id nobody
+     * checked. The message names the constraint rather than the id, because the id came from a
+     * picker the client populated.
+     */
+    private Map<String, List<String>> checkRelease(UUID releaseId, UUID projectId) {
+        if (releaseId == null) {
+            return Map.of();
+        }
+        boolean ours = releases.findScopedById(releaseId)
+                .filter(release -> release.getProjectId().equals(projectId))
+                .isPresent();
+        return ours ? Map.of() : Map.of("releaseId", List.of(
+                "That release belongs to another project. A version shipped from two projects is "
+                        + "two releases, and an issue can only target its own project's."));
+    }
+
     private Map<String, List<String>> checkAssignee(UUID assigneeId, UUID projectId) {
         if (assigneeId == null || people.isAssignableTo(assigneeId, projectId)) {
             return Map.of();
@@ -561,9 +600,10 @@ public class IssueService {
                 issue.getDueDate(),
                 overdue(issue, status, today),
                 completion,
+                releaseRefOf(issue.getReleaseId()),
                 children.stream()
                         .map(child -> summaryOf(child, project, typesById, statusesById, refs,
-                                issue, epic, today))
+                                releaseRefsOf(children), issue, epic, today))
                         .toList(),
                 watchers.watchersOf(issue.getId()),
                 allowedTransitions(issue, type, statusesById),
@@ -659,13 +699,52 @@ public class IssueService {
         List<Issue> ordered = new ArrayList<>(matched);
         ordered.sort(sortOf(filter.sort(), statusesById));
 
+        Map<UUID, ReleaseRefView> releaseRefs = releaseRefsOf(ordered);
+
         List<IssueSummaryView> views = new ArrayList<>();
         for (Issue issue : ordered) {
             Issue parent = issue.getParentId() == null ? null : parentsById.get(issue.getParentId());
-            views.add(summaryOf(issue, project, typesById, statusesById, refs, parent,
+            views.add(summaryOf(issue, project, typesById, statusesById, refs, releaseRefs, parent,
                     epicOf(issue, parent, typesById), today));
         }
         return views;
+    }
+
+    /**
+     * One release, for the detail view — which has exactly one issue and therefore one lookup.
+     *
+     * <p>Not folded into {@link #releaseRefsOf}: that batches over a list, and calling it with a
+     * singleton to reuse it would read as though the detail path had a list.
+     */
+    private ReleaseRefView releaseRefOf(UUID releaseId) {
+        return releaseId == null ? null
+                : releases.findScopedById(releaseId).map(ReleaseRefView::of).orElse(null);
+    }
+
+    /**
+     * Every distinct release a list of issues targets, in one query.
+     *
+     * <p>The alternative is a lookup per row, which on the work table is the N+1 a reader notices
+     * first. A release the caller cannot see resolves to nothing and the row renders unscheduled,
+     * which cannot happen through the API — the write path refuses a cross-project release — and is
+     * the honest answer if a row is ever reached another way.
+     */
+    private Map<UUID, ReleaseRefView> releaseRefsOf(List<Issue> rows) {
+        Map<UUID, ReleaseRefView> refs = new HashMap<>();
+        Set<UUID> ids = new HashSet<>();
+        rows.forEach(issue -> addIfPresent(ids, issue.getReleaseId()));
+        if (ids.isEmpty()) {
+            // A HashMap and NOT Map.of(). Every caller looks up a nullable release id, and
+            // Map.of().get(null) throws by contract — the trap PeopleDirectory's own javadoc
+            // records as a 500 in §38, and the one this rule caught again here: four
+            // IssueEndpointTest tests and one IssueFactProjectionTest failed with a bare NPE from
+            // inside ImmutableCollections, naming nothing about releases at all.
+            return refs;
+        }
+        for (Release release : releases.findAllById(ids)) {
+            refs.put(release.getId(), ReleaseRefView.of(release));
+        }
+        return refs;
     }
 
     private IssueSummaryView summaryOf(
@@ -674,6 +753,7 @@ public class IssueService {
             Map<UUID, IssueType> typesById,
             Map<UUID, IssueStatus> statusesById,
             Map<UUID, UserRef> refs,
+            Map<UUID, ReleaseRefView> releaseRefs,
             Issue parent,
             Issue epic,
             LocalDate today) {
@@ -692,7 +772,8 @@ public class IssueService {
                 refs.get(issue.getAssigneeId()),
                 issue.getDueDate(),
                 overdue(issue, status, today),
-                issue.getEstimateHours());
+                issue.getEstimateHours(),
+                releaseRefs.get(issue.getReleaseId()));
     }
 
     /**

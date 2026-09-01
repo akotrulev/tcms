@@ -27,5 +27,6 @@ public record IssueInput(
         LocalDate startDate,
         LocalDate targetDate,
         LocalDate dueDate,
+        UUID releaseId,
         List<String> acceptanceCriteria) {
 }

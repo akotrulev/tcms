@@ -802,7 +802,46 @@ class ContractConventionTest {
             Map.entry("Label", List.of(com.tcms.tracker.board.LabelView.class)),
             Map.entry("LabelInput", List.of(com.tcms.tracker.board.LabelInput.class)),
             Map.entry("IssueLabelsInput",
-                    List.of(com.tcms.tracker.board.IssueLabelsInput.class)));
+                    List.of(com.tcms.tracker.board.IssueLabelsInput.class)),
+            // ---- 013 M3's release block ----
+            //
+            // Same rule again, and `Release` is where it earns its keep twice over: the ENTITY
+            // carries company_id, sort_key, created_by, updated_by and lock_version, and NONE of
+            // those is on the wire — sort_key least of all, because it is a derived collation key
+            // that would read as a second version string to anybody who saw it.
+            //
+            // ReleaseRef is a THIRD shape of the same row, beside Release and ReleaseSummary, and
+            // the three are not an accretion: a ref is what an issue carries, a summary is a list
+            // row with its readiness inline, and the full shape is what a write answers with.
+            // IssueSummary/Issue make exactly this split one table over.
+            Map.entry("Release", List.of(com.tcms.tracker.release.ReleaseView.class)),
+            Map.entry("ReleaseRef", List.of(com.tcms.tracker.release.ReleaseRefView.class)),
+            Map.entry("ReleaseSummary",
+                    List.of(com.tcms.tracker.release.ReleaseSummaryView.class)),
+            Map.entry("ReadinessSummary",
+                    List.of(com.tcms.tracker.release.ReadinessSummaryView.class)),
+            Map.entry("ReleaseStories",
+                    List.of(com.tcms.tracker.release.ReleaseStoriesView.class)),
+            Map.entry("ReleaseTests", List.of(com.tcms.tracker.release.ReleaseTestsView.class)),
+            Map.entry("ReleaseBlocker",
+                    List.of(com.tcms.tracker.release.ReleaseBlockerView.class)),
+            Map.entry("RoadmapEpic", List.of(com.tcms.tracker.release.RoadmapEpicView.class)),
+            Map.entry("ReleaseReadiness", List.of(com.tcms.tracker.release.ReadinessView.class)),
+            Map.entry("RoadmapRelease",
+                    List.of(com.tcms.tracker.release.RoadmapReleaseView.class)),
+            Map.entry("Roadmap", List.of(com.tcms.tracker.release.RoadmapView.class)),
+            Map.entry("ReleaseInput", List.of(com.tcms.tracker.release.ReleaseInput.class)),
+            Map.entry("ReleaseUpdate", List.of(com.tcms.tracker.release.ReleaseUpdate.class)),
+            // IssueRef is deliberately NOT IssueSummary. That schema is a row in a list OF issues
+            // and carries a status, an assignee, an epic and an estimate; this is an issue as it
+            // appears on something that is not one — a test case's Verifies column — and widening
+            // the first to serve the second would put six unrendered fields on every case row.
+            Map.entry("IssueRef", List.of(com.tcms.tracker.release.IssueRefView.class)),
+            Map.entry("IssueTestCase", List.of(com.tcms.tracker.release.IssueTestCaseView.class)),
+            Map.entry("IssueTestCasesInput",
+                    List.of(com.tcms.tracker.release.IssueTestCasesInput.class)),
+            Map.entry("CaseVerification",
+                    List.of(com.tcms.tracker.release.CaseVerificationView.class)));
 
     /**
      * The owners this file cannot name as class literals, because they are package-private.

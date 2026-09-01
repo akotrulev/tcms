@@ -843,11 +843,16 @@ class ArchitectureRulesTest {
             Map.entry("TestRun.releaseSortKey",
                     "§151's column, and the sharpest member of this list: written on three tables, "
                             + "indexed on three tables, and there is no WHERE and no ORDER BY over "
-                            + "it anywhere in src/main. That is not an oversight §151 missed — it "
-                            + "is §151's own finding 3, recorded and deliberately not acted on, "
-                            + "because giving it a reader is §6q's latest-release view and a "
-                            + "feature. What §151 bought was that the eventual reader is not "
-                            + "written against three tables of keys that order releases backwards"),
+                            + "it anywhere in src/main. ~~Giving it a reader is §6q's "
+                            + "latest-release view and a feature.~~ -> 013 M3 BUILT that feature "
+                            + "and this column is STILL readerless, which is the outcome worth "
+                            + "recording: the roadmap orders release.sort_key, a THIRD column on a "
+                            + "NEW table, because a release's ordering key belongs to the release "
+                            + "and not to each run that happens to mention its name. The CLASS "
+                            + "moved to com.tcms.api and has three callers now; this COLUMN has "
+                            + "none. 009's M3 section predicts this entry comes off the list in "
+                            + "that module, and it does not — removing it makes this rule red on a "
+                            + "column nobody touched"),
             Map.entry("CaseDocLink.externalProvider",
                     "004's mirror, and the three below are one decision. `repository` keeps a copy "
                             + "of doc_link so it never joins across the module boundary; 004 then "
@@ -916,7 +921,10 @@ class ArchitectureRulesTest {
                             + "propagated through a third table and consumed nowhere is still "
                             + "consumed nowhere, and this rule could not report it before §188 "
                             + "because the SELECT lives inside an INSERT and withoutWrites strips "
-                            + "the statement whole"));
+                            + "the statement whole. 013 M3 did not change that: readiness matches "
+                            + "execution_fact.release_version as TEXT and never orders by the key "
+                            + "beside it, because a no-backfill instance has a NULL release_id on "
+                            + "every existing run and the text is what CI passes"));
 
     @Test
     @DisplayName("every mapped column has a reader — the readerless tally, computed")

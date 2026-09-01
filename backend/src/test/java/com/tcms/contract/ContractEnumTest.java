@@ -194,11 +194,16 @@ class ContractEnumTest {
             // carries the owner because a bare `Status` schema would say nothing about whose.
             Map.entry("NotificationDeliveryStatus",
                     List.of("com.tcms.integration.NotificationDelivery$Status")),
-            // 012 T3. RELEASE is absent from both sides and that is the same decision twice: an
-            // axis whose column is NULL for every row groups every card into one lane called
-            // "None", which reads as a broken board rather than as an unbuilt feature. M3 adds the
-            // member to the contract and this rule is what fails until the enum follows it.
-            Map.entry("SwimlaneBy", List.of("com.tcms.tracker.board.SwimlaneBy")));
+            // 012 T3, and 013 M3 closed it. ~~RELEASE is absent from both sides~~ -> it is on
+            // both since M3, which is when issue.release_id started carrying values. The rule
+            // worked exactly as the comment predicted: the contract's member landed first and this
+            // is what failed until the enum followed it.
+            Map.entry("SwimlaneBy", List.of("com.tcms.tracker.board.SwimlaneBy")),
+            // 013 M3. Two enums, and the second is the one worth reading: ReleaseVerdict's
+            // NOT_TESTED is not NOT_READY with zero failures, and the member exists so a release
+            // nothing has run against cannot be rendered as a clean one.
+            Map.entry("ReleaseStatus", List.of("com.tcms.tracker.release.ReleaseStatus")),
+            Map.entry("ReleaseVerdict", List.of("com.tcms.tracker.release.ReleaseVerdict")));
 
     /**
      * The contract enums with no server type at all, and what checks each instead.

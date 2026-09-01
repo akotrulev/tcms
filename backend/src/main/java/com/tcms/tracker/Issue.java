@@ -116,6 +116,14 @@ public class Issue {
     @Column(name = "due_date")
     private LocalDate dueDate;
 
+    /**
+     * The target release, or null — {@code issue.release_id}, a nullable FK with no join table
+     * (scope D6). Not all work belongs to a version, and requiring one would force a junk release
+     * per stray bug, which is the same argument §4 makes for an optional epic.
+     */
+    @Column(name = "release_id")
+    private UUID releaseId;
+
     @Column(name = "assignee_id")
     private UUID assigneeId;
 
@@ -220,6 +228,7 @@ public class Issue {
         created.startDate = edit.startDate();
         created.targetDate = edit.targetDate();
         created.dueDate = edit.dueDate();
+        created.releaseId = edit.releaseId();
         created.assigneeId = edit.assigneeId();
         created.reporterId = reporterId;
         created.statusEnteredAt = now;
@@ -241,6 +250,7 @@ public class Issue {
         this.startDate = edit.startDate();
         this.targetDate = edit.targetDate();
         this.dueDate = edit.dueDate();
+        this.releaseId = edit.releaseId();
         this.assigneeId = edit.assigneeId();
         this.parentId = parentId;
         this.updatedBy = actorId;
@@ -393,6 +403,10 @@ public class Issue {
      * an edit to any of the issues in it, and moving thirty rows would otherwise mark thirty issues
      * as touched by whoever dragged one.
      */
+    public UUID getReleaseId() {
+        return releaseId;
+    }
+
     public void rankAt(java.math.BigDecimal placed) {
         this.rank = placed;
     }

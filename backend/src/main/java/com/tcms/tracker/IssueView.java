@@ -1,6 +1,7 @@
 package com.tcms.tracker;
 
 import com.tcms.api.UserRef;
+import com.tcms.tracker.release.ReleaseRefView;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -43,6 +44,7 @@ public record IssueView(
         LocalDate dueDate,
         boolean overdue,
         CompletionView completion,
+        ReleaseRefView release,
         List<IssueSummaryView> children,
         List<UserRef> watchers,
         List<IssueStatusView> allowedTransitions,

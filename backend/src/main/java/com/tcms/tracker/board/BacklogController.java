@@ -23,6 +23,13 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>Its own controller rather than a method on {@link BoardCardController}, because the path is the
  * project's rather than a board's — a backlog belongs to the project and is the same list whichever
  * board you are looking at.
+ *
+ * <p><strong>{@code releaseId} and {@code unscheduled} are declared here and not on the board's
+ * cards</strong> (013 M3). A backlog filtered to a release is still ONE order — {@code issue.rank}
+ * is project-wide, so the two sections {@code work-backlog.html} draws are two slices of one
+ * sequence and a drag between them is still one neighbour-relative rank write. A board is grouped by
+ * release through the {@code RELEASE} swimlane axis instead, which keeps every card on screen rather
+ * than dropping the ones scheduled elsewhere.
  */
 @RestController
 @RequestMapping("/api/v1/projects/{projectId}/backlog")
@@ -44,10 +51,14 @@ public class BacklogController {
             @RequestParam(name = "level", required = false) String level,
             @RequestParam(name = "priority", required = false) List<String> priorities,
             @RequestParam(name = "unparented", required = false, defaultValue = "false")
-            boolean unparented) {
+            boolean unparented,
+            @RequestParam(name = "releaseId", required = false) UUID releaseId,
+            @RequestParam(name = "unscheduled", required = false, defaultValue = "false")
+            boolean unscheduled) {
 
         BoardCardController.BoardFilters.Parsed parsed = BoardCardController.BoardFilters.parse(
-                labelIds, assigneeIds, epicKey, level, priorities, unparented);
+                labelIds, assigneeIds, epicKey, level, priorities, unparented,
+                releaseId, unscheduled);
         if (parsed.errors() != null) {
             return ResponseEntity.badRequest().body(Problem.validation(parsed.errors()));
         }

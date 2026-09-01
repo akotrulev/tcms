@@ -19,6 +19,8 @@ import com.tcms.tracker.IssueTransitionRepository;
 import com.tcms.tracker.IssueType;
 import com.tcms.tracker.IssueTypeRepository;
 import com.tcms.tracker.Priority;
+import com.tcms.tracker.release.ReleaseRefView;
+import com.tcms.tracker.release.ReleaseRepository;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -81,6 +83,7 @@ public class BoardCardService {
     private final IssueTransitionRepository transitions;
     private final IssueLabelRepository labels;
     private final IssueLabelAssignmentRepository assignments;
+    private final ReleaseRepository releases;
     private final Clock clock;
 
     public BoardCardService(
@@ -95,6 +98,7 @@ public class BoardCardService {
             IssueTransitionRepository transitions,
             IssueLabelRepository labels,
             IssueLabelAssignmentRepository assignments,
+            ReleaseRepository releases,
             Clock clock) {
 
         this.projects = projects;
@@ -108,6 +112,7 @@ public class BoardCardService {
         this.transitions = transitions;
         this.labels = labels;
         this.assignments = assignments;
+        this.releases = releases;
         this.clock = clock;
     }
 
@@ -125,10 +130,12 @@ public class BoardCardService {
             String epicKey,
             IssueLevel level,
             List<Priority> priorities,
-            boolean unparented) {
+            boolean unparented,
+            UUID releaseId,
+            boolean unscheduled) {
 
         public static Filter none() {
-            return new Filter(List.of(), List.of(), null, null, List.of(), false);
+            return new Filter(List.of(), List.of(), null, null, List.of(), false, null, false);
         }
     }
 
@@ -278,6 +285,14 @@ public class BoardCardService {
                     .toList();
             case PRIORITY -> List.of(new Group(
                     card.priority().name(), card.priority().name(), card.priority().ordinal()));
+            // 013 M3. The card face does not carry a release — `work-board.html` does not draw one
+            // — so the lane is read off the issue rather than off the card, which is why this arm
+            // takes `facts` where EPIC and ASSIGNEE take the card. A card with no release falls to
+            // the catch-all lane, exactly as one with no epic does.
+            case RELEASE -> facts.releaseOf(card.key())
+                    .map(release -> List.of(new Group(
+                            release.id().toString(), release.version(), 0)))
+                    .orElseGet(List::of);
         };
     }
 
@@ -286,6 +301,7 @@ public class BoardCardService {
             case EPIC -> "No epic";
             case ASSIGNEE -> "Unassigned";
             case LABEL -> "No label";
+            case RELEASE -> "Unscheduled";
             case NONE, PRIORITY -> "Other";
         };
     }
@@ -361,7 +377,14 @@ public class BoardCardService {
         });
         Map<UUID, UserRef> refs = people.resolve(CompanyContext.require(), peopleIds);
 
-        return new Facts(live, typesById, statusesById, labelsByIssue, refs,
+        // Every release in the project, not only the ones in use: it is one small query either way,
+        // and the alternative — collecting the distinct ids off `live` first — is a second pass
+        // over the issues to save a handful of rows.
+        Map<UUID, ReleaseRefView> releasesById = new LinkedHashMap<>();
+        releases.findByProjectIdOrderBySortKeyAsc(projectId).forEach(release ->
+                releasesById.put(release.getId(), ReleaseRefView.of(release)));
+
+        return new Facts(live, typesById, statusesById, labelsByIssue, refs, releasesById,
                 LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC));
     }
 
@@ -380,6 +403,7 @@ public class BoardCardService {
         private final Map<UUID, IssueStatus> statusesById;
         private final Map<UUID, List<LabelView>> labelsByIssue;
         private final Map<UUID, UserRef> refs;
+        private final Map<UUID, ReleaseRefView> releasesById;
         private final Map<UUID, List<Issue>> childrenByParent = new HashMap<>();
         private final LocalDate today;
 
@@ -389,6 +413,7 @@ public class BoardCardService {
                 Map<UUID, IssueStatus> statusesById,
                 Map<UUID, List<LabelView>> labelsByIssue,
                 Map<UUID, UserRef> refs,
+                Map<UUID, ReleaseRefView> releasesById,
                 LocalDate today) {
 
             this.live = live;
@@ -396,6 +421,7 @@ public class BoardCardService {
             this.statusesById = statusesById;
             this.labelsByIssue = labelsByIssue;
             this.refs = refs;
+            this.releasesById = releasesById;
             this.today = today;
             live.forEach(issue -> byId.put(issue.getId(), issue));
             live.forEach(issue -> {
@@ -498,6 +524,7 @@ public class BoardCardService {
                     refs.get(issue.getAssigneeId()),
                     issue.getEstimateHours(),
                     epic == null ? null : epic.getIssueKey(),
+                    releaseRefOf(issue),
                     labelsOf(issue));
         }
 
@@ -544,6 +571,15 @@ public class BoardCardService {
                     return false;
                 }
             }
+            // Two members rather than one nullable id, for `unparented`'s reason one field up:
+            // an absent parameter already means "do not filter", so a client cannot spell "no
+            // release" with the id alone. The controller refuses both together.
+            if (filter.releaseId() != null && !filter.releaseId().equals(issue.getReleaseId())) {
+                return false;
+            }
+            if (filter.unscheduled() && issue.getReleaseId() != null) {
+                return false;
+            }
             Issue epic = epicOf(issue);
             if (filter.unparented() && epic != null) {
                 return false;
@@ -554,6 +590,27 @@ public class BoardCardService {
 
         private List<LabelView> labelsOf(Issue issue) {
             return labelsByIssue.getOrDefault(issue.getId(), List.of());
+        }
+
+        private ReleaseRefView releaseRefOf(Issue issue) {
+            return issue.getReleaseId() == null ? null : releasesById.get(issue.getReleaseId());
+        }
+
+        /**
+         * The release behind a card, by the card's key.
+         *
+         * <p>By key and not by id because {@code BoardIssueCardView} carries neither a release nor
+         * an issue id — the card face draws no release chip ({@code work-board.html} does not have
+         * one) and 012 deliberately kept a synthesised id off it. The lane axis needs the value the
+         * face does not show, so it reads it back off the issue.
+         */
+        Optional<ReleaseRefView> releaseOf(String key) {
+            return live.stream()
+                    .filter(issue -> issue.getIssueKey().equals(key))
+                    .findFirst()
+                    .map(this::releaseRefOf)
+                    .map(Optional::of)
+                    .orElseGet(Optional::empty);
         }
 
         private List<Issue> childrenOf(Issue issue) {

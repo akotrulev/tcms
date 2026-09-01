@@ -3,6 +3,7 @@ package com.tcms.tracker.board;
 import com.tcms.api.UserRef;
 import com.tcms.tracker.IssueLevel;
 import com.tcms.tracker.IssueStatusView;
+import com.tcms.tracker.release.ReleaseRefView;
 import java.util.List;
 
 /**
@@ -23,5 +24,6 @@ public record BacklogRowView(
         UserRef assignee,
         Double estimateHours,
         String epicKey,
+        ReleaseRefView release,
         List<LabelView> labels) {
 }

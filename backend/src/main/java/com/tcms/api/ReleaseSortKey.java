@@ -1,11 +1,31 @@
-package com.tcms.execution;
+package com.tcms.api;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
  * {@code test_run.release_sort_key} — the column {@code V1} says is <em>"computed on write from
- * release_version"</em>, computed on write.
+ * release_version"</em>, computed on write. <strong>And, since 013 M3, {@code release.sort_key}
+ * too</strong>, which is the reason this class is in {@code api} rather than in {@code execution}
+ * where it was written.
+ *
+ * <h2>Why it moved, and what did NOT move with it</h2>
+ *
+ * <p>009 M3 gives {@code tracker} a {@code release} table whose {@code sort_key} is this
+ * computation's output, and <strong>{@code tracker → execution} is a forbidden crossing</strong>: a
+ * cross-module dependency may point only at the five foundation modules. This is a pure value type
+ * with no domain concept of its own, which is exactly the bar {@code api} sets, so it moved here
+ * beside {@code AutomationKeys} and {@code PatchBody} rather than being copied into {@code tracker}
+ * or wrapped behind an SPI in a foundation module for one static method. {@link
+ * com.tcms.execution.TestRun} and {@link com.tcms.execution.TestExecution} follow the import and are
+ * otherwise unchanged (009 review R6).
+ *
+ * <p><strong>This does not give {@code test_run.release_sort_key} a reader, and 009 predicted it
+ * would.</strong> The class has three callers now; the two <em>columns</em> have none, and both stay
+ * in {@code ArchitectureRulesTest.READERLESS_BY_DECISION} with their arguments rewritten to say so.
+ * A release's ordering key belongs to the release, not to each run that happens to mention its name
+ * — so the roadmap orders a third column on a new table, and the two denormalised copies are still
+ * written, still indexed, and still ordered by nothing (plan 013 D-a).
  *
  * <h2>The failure this exists to prevent is silent, which is the whole point</h2>
  *
@@ -94,7 +114,7 @@ import java.util.regex.Pattern;
  * was wrong, and a caller reading this paragraph would have expected the raw string back. Kept as it
  * behaves, described as it behaves.
  */
-final class ReleaseSortKey {
+public final class ReleaseSortKey {
 
     /**
      * Major, minor, patch, and whatever follows. Minor and patch are optional: {@code "4"} and
@@ -123,7 +143,7 @@ final class ReleaseSortKey {
      *         position in a release ordering, and inventing {@code "00000.00000.00000"} for it would
      *         file every ad-hoc run under version zero, ahead of the real ones.
      */
-    static String of(String releaseVersion) {
+    public static String of(String releaseVersion) {
         if (releaseVersion == null || releaseVersion.isBlank()) {
             return null;
         }

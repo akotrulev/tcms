@@ -162,7 +162,7 @@ class BoardCardServiceTest extends TrackerEndpointTestBase {
         put(redAndTheirs, red);
 
         BoardContentsView contents = contents(defaultBoard(), new BoardCardService.Filter(
-                List.of(red, blue), List.of(DEV), null, null, List.of(), false));
+                List.of(red, blue), List.of(DEV), null, null, List.of(), false, null, false));
 
         assertThat(keysOf(contents)).containsExactlyInAnyOrder(redAndMine, blueAndMine);
     }
@@ -240,7 +240,7 @@ class BoardCardServiceTest extends TrackerEndpointTestBase {
         put(tagged, red);
 
         BoardContentsView filtered = contents(board, new BoardCardService.Filter(
-                List.of(red), List.of(), null, null, List.of(), false));
+                List.of(red), List.of(), null, null, List.of(), false, null, false));
 
         assertThat(keysOf(filtered)).containsExactly(tagged);
         assertThat(filtered.breaches()).hasSize(1);
