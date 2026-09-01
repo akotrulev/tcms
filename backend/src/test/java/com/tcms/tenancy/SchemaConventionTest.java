@@ -354,7 +354,15 @@ class SchemaConventionTest extends IntegrationTestBase {
                 // `issue`, V4 dropped `work_item` — and `out-of-order` is unset, so a V4 written for
                 // M2 would never run on an instance that has M1 while Testcontainers, which builds
                 // every database from empty, would show nothing wrong.
-                .isEqualTo(88);
+                //
+                // 89 since V6 (plan 013, module M3) — `release`, and ONE table for the whole module.
+                // That is worth reading beside the six above rather than as a smaller number: M3
+                // adds two foreign keys and a trigger to tables that already carry their policies,
+                // and a column added to a protected table is protected by it. The tables that did
+                // NOT arrive are the point — there is no issue_release join table (D6: an issue
+                // points at one release through a nullable FK) and no sprint, sprint_issue or
+                // velocity table, because the only planning cadence in this product is the release.
+                .isEqualTo(89);
     }
 
     @Test
