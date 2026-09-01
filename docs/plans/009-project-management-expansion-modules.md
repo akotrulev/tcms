@@ -66,9 +66,9 @@ would mean eight edits to three documents that a test pins byte-for-byte. It is 
 | **M0** | Foundation | `V2` | *(nothing — see above)* | none | done 2026-08-30 @ `24f997bb` |
 | **M1** | Tracker core | `V3` | run a project's work — epics, stories, tasks, statuses, comments, spec links — and see it all on My Work | M0 | done 2026-08-31 @ `8bf37408` |
 | **M2** | Board & backlog | ~~`V4`~~ → `V5` | work the board, rank the backlog, filter once across every view | M1 | done 2026-09-01 @ `95c9960b` |
-| **M3** | Releases, roadmap & readiness | ~~`V5`~~ → `V6` | plan versions, see the roadmap, and answer "can we ship 2.4?" | M2 | not started |
-| **M4** | Jira offramp | ~~`V6`~~ → ~~`V7`~~ → `V8` | move a Jira project in, keys intact, with a preview and a report | M1 | not started |
-| **M5** | Agent execution | ~~`V7`~~ → ~~`V6`~~ → `V7` | connect their own assistant and have it work a task, but never close it | M1 | not started |
+| **M3** | Releases, roadmap & readiness | ~~`V5`~~ → `V6` | plan versions, see the roadmap, and answer "can we ship 2.4?" | M2 | done 2026-09-01 @ `55cb4bc0` |
+| **M4** | Jira offramp | ~~`V6`~~ → ~~`V7`~~ → ~~`V8`~~ → `V7` | move a Jira project in, keys intact, with a preview and a report | M1 | in progress — plan 014 |
+| **M5** | Agent execution | ~~`V7`~~ → ~~`V6`~~ → ~~`V7`~~ → `V8` | connect their own assistant and have it work a task, but never close it | M1 | not started |
 | **M6** | Time | ~~`V8`~~ → ~~`V10`~~ → `V11` | log hours, submit a period, and have a PM approve it | M1 | not started |
 | **M7** | Staffing | ~~`V9` (unchanged)~~ → `V10` | allocate people, see capacity, and find who is free | ~~M6~~ → **M0** (review R11) | not started |
 | **M8** | Billing | ~~`V10`~~ → ~~`V11`~~ → `V12` | price approved time and issue an invoice | M6 · Mc | not started |
@@ -113,6 +113,20 @@ an assumption that each module spends exactly one migration, and a module may sp
 second correction to this column in a month, from two unrelated causes, and it is why the rule below
 is not a caution but an instruction. **`backend/src/main/resources/db/migration/` is the authority.**
 `ls` it before writing the file, every time; do not derive the number from this table.
+
+**And a third time, on 2026-09-01, from the cause the paragraph above did not predict either — a
+module simply not having started.** M4 was begun before M5, against the confirmed order, so M4 takes
+**`V7`** and M5 takes **`V8`**: `ls` on that day showed `V1 … V6`, `V6__release.sql` being M3's, and
+`V7` was therefore free. The table had reserved `V8` for M4 on the assumption that M5's `V7` was
+already spent. It was not. Three corrections in a month, from three unrelated causes — a reorder, a
+module spending two versions, and a module not having run — and every one of them would have been a
+silently unapplied migration on an already-migrated database, because `out-of-order` is unset and
+Testcontainers builds each test database from scratch. **Read the directory. Every time.**
+
+**The plan numbers shifted with it.** `014` is M4's (`014-jira-offramp.md`), not M5's; the projection
+below was made in the confirmed order and a number is taken next-free at start time, never
+renumbered. So the sequence now runs `011` M1, `012` M2, `013` M3, **`014` M4**, `015` M5, then
+`016` Mc, `017` M7, `018` M6, `019` M8, `020` M9 — still projected for everything after `014`.
 
 **The order was confirmed on 2026-08-30** — `M1 → M2 → M3 → M5 → M4 → Mc → M7 → M6 → M8 → M9`, one
 lane, in [009-execution-breakdown.md](009-execution-breakdown.md) — and the `V` column above was
@@ -581,8 +595,10 @@ reopen a year later.
 **Depends on:** M1 (M2 and M3 are **not** prerequisites; an import lands issues, and a board is a
 view over them)
 
-**db** — ~~`V6__import.sql`~~ → **`V8__import.sql`** (M5 runs before M4, and the column shifted again on 2026-09-01; the directory is the authority): `import_run` and `import_dropped_field`, so the report outlives the
-migration.
+**db** — ~~`V6__import.sql`~~ → ~~`V8__import.sql`~~ → **`V7__import.sql`** (M5 had **not** run when
+M4 started, so `V7` was free and M5 takes `V8`; the directory is the authority and this is the third
+correction to that column — see the reservation section): `import_run` and `import_dropped_field`,
+so the report outlives the migration.
 
 **be** — ~~the existing Jira/ADO adapters gain an **importer** direction~~ → **superseded (review
 R7).** `integration/tracker/JiraAdapter` and `AzureDevOpsAdapter` are outbound *defect-link*
@@ -627,7 +643,10 @@ Done, with the reason.**
 first commit, absent until M3 has landed and the task's story is targeted at one (review R9) —
 M5 does not wait for M3.
 
-**db** — ~~`V7__agent.sql`~~ → **`V7__agent.sql` still, by two corrections cancelling** — M5 moved ahead of M4 (down to `V6`) and then every number below M2 moved up one (back to `V7`). Read the directory rather than this sentence: `project_repository` as reference data (D16), `issue.pr_url`,
+**db** — ~~`V7__agent.sql`~~ → ~~`V7__agent.sql` still, by two corrections cancelling~~ →
+**`V8__agent.sql`** — M5 moved ahead of M4 (down to `V6`), then every number below M2 moved up one
+(back to `V7`), and then **M4 ran first anyway and took `V7`** (2026-09-01). Read the directory
+rather than this sentence: `project_repository` as reference data (D16), `issue.pr_url`,
 `issue.agent_eligible` (D30), `review_enabled_issue` **defaulting to `false`** (D33).
 
 **be** — the legal-transition set on the wire so the caller learns what it may do; the issue tool
