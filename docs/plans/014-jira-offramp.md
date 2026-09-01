@@ -39,7 +39,7 @@ renumbers — M5 will be `015`.
 | # | Task | Stack · Agent | Deliverable | Depends on | Status |
 |---|---|---|---|---|---|
 | 1 | T1 — The import contract | `contract` · `be-java` | `openapi.yaml` declares five operations and ~~eighteen~~ **nineteen** schemas, every one with its `required` array; both generated clients are regenerated in the same commit; `npm run build` green in `packages/`, and in `frontend/` **carries one pre-existing failure this task did not cause** — see T1's step 6 | none | done 2026-09-01 @ 4ea59d2f |
-| 2 | T2 — `V7`: `import_run`, `import_dropped_field`, `issue_comment.external_author` | `be` · `data-architect` | `V7__import.sql` applies to an empty database; both new tables carry `company_id NOT NULL` and a forced isolation policy; `SchemaConventionTest` and `SchemaCommentTest` green | T1 | not started |
+| 2 | T2 — `V7`: `import_run`, `import_dropped_field`, `issue_comment.external_author` | `be` · `data-architect` | `V7__import.sql` applies to an empty database; both new tables carry `company_id NOT NULL` and a forced isolation policy; `SchemaConventionTest` and `SchemaCommentTest` green | T1 | done 2026-09-01 @ 249da7f9 |
 | 3 | T3 — `tracker.imports`: the source port, the Jira client, the guard, the preview | `be` · `be-java` | `POST /imports/source-projects` and `POST /imports/preview` answer over HTTP against a Jira Cloud/DC site, and a test that snapshots the whole project before and after a preview finds it byte-identical | T2 | not started |
 | 4 | T4 — The run, the report, and the stuck-run reaper | `be` · `be-java` | `POST /imports` imports a Jira project keeping `PROJ-4812` as `PROJ-4812`, `GET /imports/{id}` serves the report, and a test asserts the report's `droppedFields` equals the preview's element for element | T3 | not started |
 | 5 | T5 — The Azure DevOps source | `be` · `be-java` | `provider: AZURE_DEVOPS` previews and imports an ADO project through the same port, proven against a recorded-shape fake; no other file in `imports` changes | T4 | not started |
@@ -1551,13 +1551,18 @@ predicate, plus one nullable column on `issue_comment`. `SchemaConventionTest` a
 **Files:**
 - Create: `backend/src/main/resources/db/migration/V7__import.sql`
 - Modify: `docs/specs/2026-07-30-tcms-erd.md` (new §7d)
+- Modify: `backend/src/test/java/com/tcms/tenancy/SchemaConventionTest.java` — **not predicted by this plan.**
+  `everyPolicyHasTheExactIsolationPredicate` pins the policy count, and two new forced policies move
+  it 89 → 91. The pin is what makes the predicate check non-vacuous, so a table added without its
+  policy would otherwise pass by not being looked at; the number is meant to move with a migration.
+  Landed in the same commit, per the file's own comment convention of arguing each movement.
 
 **Before writing the file:** `ls backend/src/main/resources/db/migration/`. The directory is the
 authority on the number, not this plan's title and not 009's table — that column has been wrong
 three times in a month, from three unrelated causes. If `V7` is taken by the time this runs, take
 the next free number and correct this plan's header in the same commit.
 
-- [ ] **Step 1: Write the migration.**
+- [x] **Step 1: Write the migration.**
 
 ```sql
 -- V7 — the Jira offramp (plan 009 module M4, plan 014).
@@ -1748,7 +1753,7 @@ END $$;
 -- a per-project default, and there is no row a new project should have.
 ```
 
-- [ ] **Step 2: Run the schema suite.**
+- [x] **Step 2: Run the schema suite.**
 
 ```bash
 ~/bin/tcms-remote sync
@@ -1759,11 +1764,11 @@ Expected: green. `SchemaConventionTest` is what catches a missing `company_id`, 
 not lead with it, and a divergent policy predicate; `SchemaCommentTest` catches a table or column
 with no `COMMENT ON`.
 
-- [ ] **Step 3: Add ERD §7d**, in the style of §7c (releases). One paragraph per table saying what
+- [x] **Step 3: Add ERD §7d**, in the style of §7c (releases). One paragraph per table saying what
       it is for, plus the credential paragraph — the ERD is where somebody looks for *why there is
       no token column*, and finding the answer only in a migration comment is finding it late.
 
-- [ ] **Step 4: Commit.**
+- [x] **Step 4: Commit.**
 
 ```bash
 git add backend/src/main/resources/db/migration/V7__import.sql docs/specs/2026-07-30-tcms-erd.md
