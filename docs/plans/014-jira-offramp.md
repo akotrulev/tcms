@@ -38,7 +38,7 @@ renumbers — M5 will be `015`.
 
 | # | Task | Stack · Agent | Deliverable | Depends on | Status |
 |---|---|---|---|---|---|
-| 1 | T1 — The import contract | `contract` · `be-java` | `openapi.yaml` declares five operations and eighteen schemas, every one with its `required` array; both generated clients are regenerated in the same commit; `npm run build` green in `frontend/` and `packages/` | none | not started |
+| 1 | T1 — The import contract | `contract` · `be-java` | `openapi.yaml` declares five operations and ~~eighteen~~ **nineteen** schemas, every one with its `required` array; both generated clients are regenerated in the same commit; `npm run build` green in `packages/`, and in `frontend/` **carries one pre-existing failure this task did not cause** — see T1's step 6 | none | done 2026-09-01 @ 4ea59d2f |
 | 2 | T2 — `V7`: `import_run`, `import_dropped_field`, `issue_comment.external_author` | `be` · `data-architect` | `V7__import.sql` applies to an empty database; both new tables carry `company_id NOT NULL` and a forced isolation policy; `SchemaConventionTest` and `SchemaCommentTest` green | T1 | not started |
 | 3 | T3 — `tracker.imports`: the source port, the Jira client, the guard, the preview | `be` · `be-java` | `POST /imports/source-projects` and `POST /imports/preview` answer over HTTP against a Jira Cloud/DC site, and a test that snapshots the whole project before and after a preview finds it byte-identical | T2 | not started |
 | 4 | T4 — The run, the report, and the stuck-run reaper | `be` · `be-java` | `POST /imports` imports a Jira project keeping `PROJ-4812` as `PROJ-4812`, `GET /imports/{id}` serves the report, and a test asserts the report's `droppedFields` equals the preview's element for element | T3 | not started |
@@ -116,7 +116,7 @@ or schema needs no entry. 012 and 013 each added ten operations and touched neit
 
 Gate: ~/bin/tcms-remote sync, then `frontend npm run build` and
 `packages "npm run build"` (root script, NEVER --workspaces — that runs them alphabetically and cli
-would typecheck against a stale client dist). THE BACKEND IS EXPECTED TO BE RED: eighteen schemas
+would typecheck against a stale client dist). THE BACKEND IS EXPECTED TO BE RED: nineteen schemas
 have no ContractConventionTest pairing until T3 and T4. Do not add entries for records that do not
 exist yet.
 
@@ -205,6 +205,10 @@ FOUR TRAPS, and the first two are the ones that cost a whole rerun:
     ImportHttp needs the same, and its javadoc should say why.
 
 Do these three in order, and do not skip the third:
+  0. The contract already names you: `POST /imports/source-projects`'s 400 says `ImportUrlGuard` in
+     `com.tcms.tracker.imports` is the check. It is written WITHOUT the `.java` suffix on purpose —
+     citedFiles.test.ts resolves any backticked `*.java` in docs/specs/*.yaml against the disk, so
+     the spelling the plan first used would have reddened the packages job from T1 until now.
   1. Write ImportUrlGuard with its marked region, and add the matching markers to
      integration/OutboundUrlGuard.java — two comment lines, no behaviour change, and the ONLY file
      in integration this whole module touches.
@@ -250,6 +254,13 @@ be-java-unit-testing.
 Build the write half of com.tcms.tracker.imports: the ImportRun and ImportDroppedField entities and
 repositories, ImportRunService, ImportWriter, ImportReaper, the run views, ImportController's three
 remaining operations, and issue_comment.external_author through IssueComment and CommentView.
+
+FIRST, SETTLE WHAT T1 LEFT OPEN. `IssueComment.author` is `required` and NOT nullable in
+openapi.yaml, and D-j says `created_by` stays NULL when the source author matched nobody. Both
+cannot hold. Making `author` nullable is the honest answer and it is a contract change plus both
+generated clients plus every SPA site that renders a comment author — do it IN THIS COMMIT if you
+take it, and rewrite T7's and T8's prompts to say so. `externalAuthor` is already on the wire,
+optional and nullable, so nothing is blocked either way.
 
 Read before writing: T3's ImportSource and ImportPreviewService (you are consuming them),
 com/tcms/tracker/IssueService.java's create path, com/tcms/project/ProjectKeys.java (whole — its
@@ -945,7 +956,7 @@ read, the files it writes, and the build output it reads back.
 
 ## T1 — The import contract
 
-**Deliverable:** `docs/specs/openapi.yaml` declares five new operations and eighteen new schemas —
+**Deliverable:** `docs/specs/openapi.yaml` declares five new operations and ~~eighteen~~ **nineteen** new schemas —
 every schema with its `required` array, inline nested objects included — and both generated clients
 are regenerated in the same commit. `npm run build` is green in `frontend/` and in `packages/`.
 **Depends on:** none
@@ -970,7 +981,7 @@ are regenerated in the same commit. `npm run build` is green in `frontend/` and 
 token in a query string lands in an access log, a proxy log and the browser's history; `GET` is not
 available for the first three for that reason alone, and the summary text says so.
 
-- [ ] **Step 1: Add the five paths.** Insert after the `/issues/{key}/doc-links` block, before
+- [x] **Step 1: Add the five paths.** Insert after the `/issues/{key}/doc-links` block, before
       `/boards/{boardId}`, so the tracker family stays contiguous.
 
 ```yaml
@@ -1153,7 +1164,7 @@ available for the first three for that reason alone, and the summary text says s
         '404': { $ref: '#/components/responses/NotFound' }
 ```
 
-- [ ] **Step 2: Add the eighteen schemas** under `components/schemas`, beside the tracker block.
+- [x] **Step 2: Add the ~~eighteen~~ nineteen schemas** under `components/schemas`, beside the tracker block.
       **Every one carries `required`, and so does every inline nested object** — `required` does
       not descend, and without it every generated property is optional and the SPA compiles against
       a lie.
@@ -1438,7 +1449,7 @@ available for the first three for that reason alone, and the summary text says s
           items: { $ref: '#/components/schemas/ImportedPerson' }
 ```
 
-- [ ] **Step 3: Amend `Comment`** — the one existing schema this module changes. Add beside
+- [x] **Step 3: Amend ~~`Comment`~~ `IssueComment`** — the one existing schema this module changes. Add beside
       `author`:
 
 ```yaml
@@ -1452,7 +1463,16 @@ available for the first three for that reason alone, and the summary text says s
             who did not write it (`import-report.html`'s People panel, plan 014 D-j).
 ```
 
-- [ ] **Step 4: Regenerate both clients.**
+**Landed as written, and it left ONE question open for T4 — read this before writing the
+`CommentView` half.** The schema is `IssueComment`, not `Comment` — there is no `Comment` in the
+contract and never was. Its `author` is `required` **and not nullable**, and D-j says `created_by`
+stays `NULL` when the source author matched nobody. **Those two cannot both hold on the wire**, so
+T4 must either serve a placeholder `author` or make `author` nullable — the second is the honest
+one and it is a contract change plus every SPA site that renders a comment author, which is why T1
+did not take it unasked. `externalAuthor` is optional-and-nullable in both generated clients today,
+so nothing is blocked; what is undecided is what `author` carries on an unmatched row.
+
+- [x] **Step 4: Regenerate both clients.**
 
 ```bash
 cd frontend && npm run gen:api
@@ -1460,10 +1480,10 @@ cd ../packages/client && npm run gen:api
 ```
 
 Expected: `frontend/src/api/schema.d.ts` and `packages/client/src/schema.ts` both gain the five
-paths and the eighteen schemas. **Both, in this commit.** One regenerated copy is the defect
+paths and the nineteen schemas. **Both, in this commit.** One regenerated copy is the defect
 `schemaFreshness.test.ts` exists to catch.
 
-- [ ] **Step 5: Add §3.7 to the surface document**, recording that MCP gets nothing and why —
+- [x] **Step 5: Add §3.7 to the surface document**, recording that MCP gets nothing and why —
       the argument is §3.3's own and belongs beside it:
 
 ```markdown
@@ -1484,7 +1504,7 @@ confirmation a person makes **having read a preview**, which a flag file is that
 the reading removed. That is the property D32 exists to create.
 ```
 
-- [ ] **Step 6: Build both stacks.**
+- [x] **Step 6: Build both stacks.**
 
 ```bash
 ~/bin/tcms-remote sync
@@ -1492,11 +1512,24 @@ the reading removed. That is the property D32 exists to create.
 ~/bin/tcms-remote packages npm run build
 ```
 
-Expected: both green. A `required` array missed on a nested object shows up here as a property the
-SPA can compile against but the server never omits — **it does not fail the build**, which is why
-step 2 is written as a rule rather than checked by one.
+~~Expected: both green.~~ **`packages` is green. `frontend` is RED, and it was red before this task
+touched anything** — `ProjectOverviewPage.test.tsx:152` declares `Reads.permissions?: string[]` and
+hands it to `heldPermissions(keys: PermissionKey[])`. Verified by stashing this task's four files,
+re-syncing and rebuilding: byte-identical failure at `26d9b869`. It arrived with `55cb4bc0` and is a
+**one-line fix in a fifth file**, which is why T1 did not take it — T1 stages four files. **T7 and
+T8 cannot gate until somebody does**, and it is one edit: `permissions?: PermissionKey[]`.
 
-- [ ] **Step 7: Commit.**
+`tsc` reports every error in a project rather than stopping at the first, so that single line is
+also the evidence the generated `schema.d.ts` and every SPA consumer of `IssueComment` typecheck.
+
+A `required` array missed on a nested object shows up here as a property the SPA can compile against
+but the server never omits — **it does not fail the build**, which is why step 2 is written as a rule
+rather than checked by one. It was checked anyway, by script: a walk of every
+`type: object`-with-`properties` node before and after, diffed, reporting **zero** new nodes without
+`required`. `ImportRun.startedBy` is the one it was aimed at and it generates as
+`{ id: string; name: string }` — neither member optional — in both copies.
+
+- [x] **Step 7: Commit.**
 
 ```bash
 git add docs/specs/openapi.yaml frontend/src/api/schema.d.ts packages/client/src/schema.ts \
