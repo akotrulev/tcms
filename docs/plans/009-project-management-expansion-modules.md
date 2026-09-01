@@ -65,15 +65,15 @@ would mean eight edits to three documents that a test pins byte-for-byte. It is 
 |---|---|---|---|---|---|
 | **M0** | Foundation | `V2` | *(nothing — see above)* | none | done 2026-08-30 @ `24f997bb` |
 | **M1** | Tracker core | `V3` | run a project's work — epics, stories, tasks, statuses, comments, spec links — and see it all on My Work | M0 | done 2026-08-31 @ `8bf37408` |
-| **M2** | Board & backlog | `V4` | work the board, rank the backlog, filter once across every view | M1 | not started |
-| **M3** | Releases, roadmap & readiness | `V5` | plan versions, see the roadmap, and answer "can we ship 2.4?" | M2 | not started |
-| **M4** | Jira offramp | ~~`V6`~~ → `V7` | move a Jira project in, keys intact, with a preview and a report | M1 | not started |
-| **M5** | Agent execution | ~~`V7`~~ → `V6` | connect their own assistant and have it work a task, but never close it | M1 | not started |
-| **M6** | Time | ~~`V8`~~ → `V10` | log hours, submit a period, and have a PM approve it | M1 | not started |
-| **M7** | Staffing | `V9` (unchanged) | allocate people, see capacity, and find who is free | ~~M6~~ → **M0** (review R11) | not started |
-| **M8** | Billing | ~~`V10`~~ → `V11` | price approved time and issue an invoice | M6 · Mc | not started |
+| **M2** | Board & backlog | ~~`V4`~~ → `V5` | work the board, rank the backlog, filter once across every view | M1 | done 2026-09-01 @ `95c9960b` |
+| **M3** | Releases, roadmap & readiness | ~~`V5`~~ → `V6` | plan versions, see the roadmap, and answer "can we ship 2.4?" | M2 | not started |
+| **M4** | Jira offramp | ~~`V6`~~ → ~~`V7`~~ → `V8` | move a Jira project in, keys intact, with a preview and a report | M1 | not started |
+| **M5** | Agent execution | ~~`V7`~~ → ~~`V6`~~ → `V7` | connect their own assistant and have it work a task, but never close it | M1 | not started |
+| **M6** | Time | ~~`V8`~~ → ~~`V10`~~ → `V11` | log hours, submit a period, and have a PM approve it | M1 | not started |
+| **M7** | Staffing | ~~`V9` (unchanged)~~ → `V10` | allocate people, see capacity, and find who is free | ~~M6~~ → **M0** (review R11) | not started |
+| **M8** | Billing | ~~`V10`~~ → ~~`V11`~~ → `V12` | price approved time and issue an invoice | M6 · Mc | not started |
 | **M9** | Delivery analytics | none | read burn-up, cycle time and flow | M3 | not started |
-| **Mc** | Clients | `V8` | record a client and attach projects to it | M0 | not started |
+| **Mc** | Clients | ~~`V8`~~ → `V9` | record a client and attach projects to it | M0 | not started |
 
 **The `V` column was re-derived on 2026-08-30** from the confirmed landing order in
 [009-execution-breakdown.md](009-execution-breakdown.md) — `M1 → M2 → M3 → M5 → M4 → Mc → M7 → M6 → M8 → M9`.
@@ -104,6 +104,15 @@ never show you the conflict. The column above is valid *only while the order abo
 two modules, defer one, or slip `Mc` in between, and the module that starts second takes **the next
 free number at the time it starts** — not the number this table reserved for it. Re-read
 `backend/src/main/resources/db/migration/` before writing the file, every time.
+
+**And it moved a second time, on 2026-09-01, for a reason the paragraph above does not cover.** M2
+took `V5`, not the `V4` this table reserved for it, because **M1 consumed two versions rather than
+one** — `V3__tracker_core.sql` and `V4__retire_work_item.sql` — so every number below M2 shifted by
+one as well. Nothing was reordered and nothing was deferred: the column was simply arithmetic over
+an assumption that each module spends exactly one migration, and a module may spend two. That is the
+second correction to this column in a month, from two unrelated causes, and it is why the rule below
+is not a caution but an instruction. **`backend/src/main/resources/db/migration/` is the authority.**
+`ls` it before writing the file, every time; do not derive the number from this table.
 
 **The order was confirmed on 2026-08-30** — `M1 → M2 → M3 → M5 → M4 → Mc → M7 → M6 → M8 → M9`, one
 lane, in [009-execution-breakdown.md](009-execution-breakdown.md) — and the `V` column above was
@@ -433,9 +442,32 @@ Recorded here so the next agent finds the answer rather than the finding.
 keyboard, sees a WIP breach, ranks the backlog, and sets one filter that survives switching to Table.
 **Depends on:** M1
 
-**db** — `V4__tracker_board.sql`: `board`, `board_column`, `board_column_status` (every status
-claimed by exactly one column, enforced), `board_swimlane`, `issue_label`,
-`issue_label_assignment`, and `issue.rank` as a fractional rank.
+**db** — ~~`V4__tracker_board.sql`~~ → **`V5__tracker_board.sql`**, because M1 spent two versions
+(`V3__tracker_core.sql` and `V4__retire_work_item.sql`) where this table budgeted one: `board`,
+`board_column`, `board_column_status` (every status claimed by exactly one column, enforced),
+`board_swimlane`, `issue_label`, `issue_label_assignment`, and `issue.rank` as a fractional rank.
+
+**Two triggers a later module will meet, and neither was in this plan when it was written** (012
+D-k, D-l). Both sit on tables M3 and M4 write:
+
+- **`issue.rank` is filled by `tcms_issue_rank_default()`, a `BEFORE INSERT` trigger on `issue`** —
+  not by a column `DEFAULT` and not by a service. A new issue takes `max(rank) + 1024` **within its
+  project**, which a `DEFAULT` cannot express because it may not read another row, and which
+  assigning in `IssueService` would make a rule that holds only for the callers who remember. The
+  trigger stands aside whenever an explicit rank is supplied, which is how `RankService.place` works
+  without re-implementing it. **Ties are possible and accepted** — two inserts into one project in
+  the same instant read the same maximum, `created_at` breaks it, and nothing claims `rank` is
+  unique. **An importer inserting a thousand issues gets a thousand ranks and no ordering intent**,
+  which is M4's to decide about rather than discover.
+- **`tcms_board_follows_status_removal()`, a `BEFORE DELETE` trigger on `issue_status`, is what
+  keeps a board from vetoing a workflow edit.** It was found by the gate, not by reading: thirty-
+  eight tests went red on `board_column_default_status_id_fkey` the first time a status was dropped
+  from a workflow `PUT` while a seeded board's column defaulted to it — a plain `RESTRICT` makes a
+  **board** refuse a **workflow** change, which is backwards under D2, where the workflow is upstream
+  and a board is only a mapping. The trigger repoints a column at the earliest status it **still**
+  claims, and deletes the column only when the departing status was the last thing it claimed. It is
+  deliberately **not** `ON DELETE CASCADE`: a folded column claiming In Progress, In Review and
+  Blocked would vanish when In Progress was retired, taking two live statuses off the board with it.
 
 **be** — `tracker.board` package, not a module (§2). Column→status claims with a per-column default
 for the coarse board, WIP limits that **report a breach rather than refusing a drop**, rank
@@ -465,6 +497,36 @@ and both are reachable with the keyboard alone.
 
 **Not in this module:** releases, the timeline, the calendar.
 
+**Built and unverified.** The gates prove it compiles. The full list is in
+[012-board-and-backlog.md](012-board-and-backlog.md#built-and-unverified) and is deliberately long;
+what a module starting after this one needs to know is:
+
+- **The backend suite is NOT green, and six failures are inherited rather than M2's.**
+  `./gradlew build` on shanks: **3726 tests completed, 6 failed**, every one of them in
+  `com.tcms.reporting.FlakeScoreTest` — red on master in the **2026-08-31 nightly, before M2's first
+  task**, and no commit in this module touched anything under `reporting`. Do not read them as
+  breakage from here; do not report them as fixed either.
+- **Frontend and packages are green** — 2458 tests over 173 files, and 448 over 27, with
+  `npm run build`, `tsc -b` and oxlint at zero warnings on both.
+- **Three screens shipped and none of them has been opened in a browser**: the project board, the
+  backlog and the board settings page. In particular **no drag on either draggable screen has ever
+  run** — every ranking and column assertion goes through the menu or the `↑ ↓` buttons, which prove
+  the *decision* and cannot prove that `@dnd-kit` hands it the id the reader thinks they are on.
+- **Five of the ten board operations have never been driven over HTTP.** T3 drives the five
+  configuration ones through MockMvc; the cards, the move, the rank and the labels are called in
+  process, which proves the arithmetic and nothing about routing, query-string binding or status
+  codes.
+- **`V5` has never been applied to a database that already holds issues.** Testcontainers builds
+  from empty every time and structurally cannot show it, and the `rank` backfill is the one statement
+  in the file that cannot be re-run if it is wrong. It was exercised by hand against a throwaway
+  Postgres 17; that is not the lab instance's data.
+- **The eight CLI commands and two MCP tools have never reached a running instance.** Their gate
+  compares every exchange to `openapi.yaml`, which is the contract's shape and not a handler's answer.
+- **A contract gap left open**: a blank or over-long label name answers **400** with
+  `Problem.validation`, which is **not declared on any of the four label operations** (they list only
+  401/403/404/409). Nothing compares a handler's status codes to the declared set, so this is
+  invisible to every gate. Whoever next owns `openapi.yaml` owns it.
+
 ---
 
 ## M3 — Releases, roadmap & readiness
@@ -473,7 +535,7 @@ and both are reachable with the keyboard alone.
 gets one answer to "can we ship 2.4?" — stories done **and** linked test cases passing.
 **Depends on:** M2
 
-**db** — `V5__release.sql`: `release` (project-scoped per D13, with `created_at` — the burn-up's
+**db** — ~~`V5__release.sql`~~ → **`V6__release.sql`** (the column shifted on 2026-09-01; the directory is the authority): `release` (project-scoped per D13, with `created_at` — the burn-up's
 "scope added after the release was created" baseline, review R12), `issue.release_id` nullable FK —
 **no join table**, per D6 — `test_run.release_id UUID NULL REFERENCES release(id) ON DELETE SET NULL`
 beside the existing `release_version` text. **That is a real FK from an `execution` table into a
@@ -519,7 +581,7 @@ reopen a year later.
 **Depends on:** M1 (M2 and M3 are **not** prerequisites; an import lands issues, and a board is a
 view over them)
 
-**db** — `V6__import.sql`: `import_run` and `import_dropped_field`, so the report outlives the
+**db** — ~~`V6__import.sql`~~ → **`V8__import.sql`** (M5 runs before M4, and the column shifted again on 2026-09-01; the directory is the authority): `import_run` and `import_dropped_field`, so the report outlives the
 migration.
 
 **be** — ~~the existing Jira/ADO adapters gain an **importer** direction~~ → **superseded (review
@@ -565,7 +627,7 @@ Done, with the reason.**
 first commit, absent until M3 has landed and the task's story is targeted at one (review R9) —
 M5 does not wait for M3.
 
-**db** — `V7__agent.sql`: `project_repository` as reference data (D16), `issue.pr_url`,
+**db** — ~~`V7__agent.sql`~~ → **`V7__agent.sql` still, by two corrections cancelling** — M5 moved ahead of M4 (down to `V6`) and then every number below M2 moved up one (back to `V7`). Read the directory rather than this sentence: `project_repository` as reference data (D16), `issue.pr_url`,
 `issue.agent_eligible` (D30), `review_enabled_issue` **defaulting to `false`** (D33).
 
 **be** — the legal-transition set on the wire so the caller learns what it may do; the issue tool
@@ -919,7 +981,14 @@ Then:
    event names and issue_fact columns as they actually landed.
 ````
 
-### M2 — Board & backlog
+### ~~M2 — Board & backlog~~ → **done. Do not run this prompt.**
+
+**M2 landed 2026-09-01 at `95c9960b`** — `V5__tracker_board.sql`, plan
+[012-board-and-backlog.md](012-board-and-backlog.md). Its closure is written up in
+[the M2 section above](#m2--board--backlog): the V actually taken and why every number below it
+moved, the built-and-unverified list, the two triggers a later module will meet, and the six backend
+tests that are red and are not M2's. The prompt is kept, with its two false claims struck through in
+place, because the M3 and M4 prompts below were rewritten from what it actually produced.
 
 ````text
 You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
@@ -991,10 +1060,14 @@ not everywhere what this plan guessed:**
   — a *drag* is worth it, a menu press was not. `tcmsFaults.issue('conflict')` fabricates the 409
   that names the legal moves, which no ordinary session can produce because the picker only offers
   legal ones.
-- **A known regression to restore, and it is yours:** moving a *derived* card used to answer *"this
+- ~~**A known regression to restore, and it is yours:** moving a *derived* card used to answer *"this
   card mirrors a source; fix the source instead"* and now answers **404 from `/issues/{key}`**,
-  because a derived card's id is not an issue key. Put the sentence back on the board that produces
-  the drop.
+  because a derived card's id is not an issue key.~~ → **Already repaired, and it was never M2's.**
+  `immobileReason` in `frontend/src/features/board/cardMove.ts` answers *"update its source"* and
+  names **which** source, before any request is made, and
+  `frontend/src/features/board/cardMove.test.ts:204` pins it (`:162` pins the §81 defect underneath
+  it — every non-execution derived card being called a review). Nothing to restore; do not spend a
+  task looking for it.
 - **`MyWorkPage` is no longer a board** — `my-work.html` is two tables, and the personal board's
   kanban is gone (011 T7). `BoardPage` and `TeamBoardPage` still mount `Board`. If your work needs a
   personal board back, that is a disagreement with the mockup to record, not to assume.
@@ -1009,7 +1082,8 @@ boardKeyboard.ts exist and are the starting point — extend them, do not fork t
 
 Then:
 1. Write docs/plans/0NN-board-and-backlog.md with ep-writing-plans — next free NNN, next free V
-   from the migration directory (the table says V4). `tracker.board` is a sub-package, not a
+   from the migration directory (~~the table says V4~~ → **it took V5**, because M1 spent two
+   versions where the table budgeted one). `tracker.board` is a sub-package, not a
    module.
 2. Execute with ep-executing-plans. Contract first in one commit (openapi.yaml with `required`
    arrays, both generated clients, contractBodies.ts ×2, the CLI/MCP verbs and the surface doc).
@@ -1056,9 +1130,61 @@ on what a screen shows; the plan and scope spec on what the system does.
 Confirm M2 reads `done` in the status table before starting. ~~Only M6 or M7 may run beside M3.~~
 Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M3 runs THIRD; task list in docs/plans/009-execution-breakdown.md, phase 3.
 
+
+M2 landed 2026-09-01 (`V5`, plan 012-board-and-backlog.md). **What it actually built, and the five
+things that change what this module has to do:**
+
+- **Ten endpoints, as they landed.** `GET|POST /projects/{projectId}/boards` ·
+  `GET|PATCH|DELETE /boards/{boardId}` · `GET /boards/{boardId}/cards` ·
+  `POST /boards/{boardId}/cards/{key}/move` · `GET /projects/{projectId}/backlog` ·
+  `PUT /issues/{key}/rank` · `GET|POST /projects/{projectId}/labels` ·
+  `PATCH|DELETE /labels/{labelId}` · `PUT /issues/{key}/labels`. **`getBoardConfig`, not
+  `getBoard`** — `GET /board`, the composite board, has owned that operationId since M1, and a
+  duplicate is a generated client that cannot name one of them. A board's **configuration** and its
+  **cards** are two reads on purpose: columns change when somebody edits them, cards on every
+  transition in the project, and one combined read would relayout the board on every card move.
+- **`SwimlaneBy` is `NONE | EPIC | ASSIGNEE | LABEL | PRIORITY`, and `RELEASE` is yours to add.**
+  It was left out deliberately: a grouping axis whose data does not exist yields one lane called
+  "None", which reads as a broken board rather than an unbuilt feature. Adding it is one entry in
+  the contract's enum and one in **`frontend/src/lib/labels.ts`'s `swimlaneByLabels`**, which is
+  `satisfies Record<SwimlaneBy, string>` — so the new member is a **compile error until it is
+  labelled**, which is the mechanism that file exists for. `frontend/src/features/board/Swimlane.tsx`
+  renders whatever lanes the server sends and needs no change for a new axis.
+- **The backlog's release grouping and the "Move to release" bulk action are yours, and they go
+  INSIDE `frontend/src/features/board/BacklogView.tsx`** — not in a new component. M2 shipped
+  `work-backlog.html` as **one ranked list** because `release` is your table; the mockup's
+  "2.4 · target 18 Sep" and "Unscheduled" sections and its `Move to release ▾` are the two things it
+  knowingly left out (012 D-f). Three constraints on how you add them:
+    1. **`issue.rank` is ONE project-wide order**, so a release-filtered backlog is a *filter over
+       that order*, not a second order. Two sections are two slices of one sequence — put the
+       grouping inside the existing `DataRegion` and above the `<ol>`, so a drag from one section to
+       another is still one `PUT /issues/{key}/rank` against a neighbour.
+    2. **`GET /projects/{projectId}/backlog` has no `releaseId` parameter and `BacklogRow` carries no
+       release.** Story B4's second criterion — *"filter the backlog to a release and see only that
+       release's issues"* — **cannot be met at all until you add both**, and the filter chip has
+       nowhere to write today. That is contract work in your first task, not a screen decision.
+    3. **`Move to release` joins `Set epic` and `Assign` in `BulkBar`** and gets
+       `useBulkUpdateIssues`' per-item report for free — but **the bulk write is N `PATCH`es**, one
+       per issue, `Promise.allSettled`, never rejecting, because a mixed outcome is ordinary (012
+       D-ab). There is no bulk endpoint over issues. If you want a hundred-row release move to be one
+       request, that is a `be` task to plan rather than a limit to discover at the screen.
+- **`issue.rank` is filled by a `BEFORE INSERT` trigger, not by a service** (012 D-k), and
+  **`tcms_board_follows_status_removal` repairs a board when a status is retired** (012 D-l). Both
+  sit on tables you write. See the M2 section above for what each does and what it deliberately is
+  not.
+- **`board_swimlane` exists in `V5` and no endpoint reaches it.** It holds a per-viewer collapsed
+  state, and there is no `collapsed` field on `Board`, `BoardContents` or `BoardInput`. Collapse is
+  component state today; if the roadmap wants it persisted, that is a contract change to plan.
+
+**And the honest part: nothing M2 built has been operated in a browser** — not the board, not the
+backlog, not the settings screen, and no drag on any of them has ever run. Its built-and-unverified
+list is long and specific. Do not assume a screen you are extending works; the first time somebody
+opens one of them may be you.
+
 Then:
 1. Write docs/plans/0NN-releases.md with ep-writing-plans — next free NNN, next free V from the
-   migration directory (the table says V5). `release` carries created_at (M9's burn-up baseline);
+   migration directory (the table says V6, after the 2026-09-01 shift — check it). `release`
+   carries created_at (M9's burn-up baseline);
    `release_sort_key` comes off READERLESS_BY_DECISION in the commit that first reads it.
 2. Execute with ep-executing-plans. Contract first in one commit (openapi.yaml with `required`
    arrays, both generated clients, contractBodies.ts ×2, CLI/MCP verbs, the surface doc). One
@@ -1070,7 +1196,9 @@ Then:
    itself and carries the action that resolves it, because nobody has created a release yet.
 5. Close per "Prompt hand-off protocol": status table, built-and-unverified list, the V actually
    taken, and rewrite the M9 prompt (and M5's `release` field, if its shape changed) with the
-   readiness and roadmap endpoints as they landed.
+   readiness and roadmap endpoints as they landed. If `SwimlaneBy` gained `RELEASE`, say so there:
+   the enum is on the contract and in `lib/labels.ts`, and a later module adding a sixth axis needs
+   to know the second file exists.
 ````
 
 ### M4 — Jira offramp
@@ -1134,6 +1262,32 @@ not everywhere what this plan guessed:**
   **table**, and `work/package-info.java` deliberately does not name `tracker` as a dependency.
   `WorkItemController` is now `BoardController`.
 
+**M2 landed 2026-09-01 (`V5`) and gives you somewhere to put a label.** This is a courtesy edit —
+your `Depends on` is M1, not M2 — but two of its tables change what the importer can offer:
+
+- **`issue_label` and `issue_label_assignment` exist**, project-scoped, many-to-many with issues, and
+  a label is deliberately *not* a classification dimension: it is the informal, fast-moving axis
+  (scope §12.2), created and deleted without a migration plan. So **a Jira label maps to a TCMS
+  label**, one for one, and needs no new table from you. `LabelService` is the writer;
+  `POST /projects/{projectId}/labels` is the endpoint, and it answers **409 on a duplicate name in
+  the project**, which an importer will hit constantly and must treat as "already there" rather than
+  as a failure.
+- **`Label.color` is a design-token name** (`label-1` … `label-10`), never a hex value, and all ten
+  are declared in `frontend/src/index.css` since 012 T9. An importer carrying Jira's colours across
+  has to map them onto the ten, or assign round-robin and say so in the report — a stored `#RRGGBB`
+  is invisible in the other colour scheme and the column refuses one.
+- **`label-per-sprint` is now on offer as an import mapping.** Sprints are dropped-and-reported
+  (reviews R7, R8), and the thing that made that lossy was having nowhere to record which sprint an
+  issue was in. A label per sprint is not a sprint — it does not carry dates, capacity or a board —
+  but it keeps the grouping legible and it is one row per issue. **Offer it on the mapping step and
+  report it in the dropped-field list either way**, so a reader sees both what was lost and what was
+  kept in its place.
+- **`issue.rank` is filled by a `BEFORE INSERT` trigger** (012 D-k), so every issue you insert gets
+  `max(rank) + 1024` within its project and a thousand imported issues get a thousand ranks in insert
+  order. **That is an ordering nobody chose**: if Jira's backlog order matters, set `rank` explicitly
+  on the way in — the trigger stands aside when a rank is supplied — and if it does not, say in the
+  report that the backlog order is arbitrary rather than letting it read as imported.
+
 **What M1 left specifically for you:** the importer writes `issue`, `issue_type`, `issue_status`,
 `issue_transition` and `issue_comment` directly — it is a `tracker.imports` sub-package, so those are
 its own module's tables. Two constraints it inherits: **the key comes from
@@ -1150,7 +1304,8 @@ the plan's review table.
 
 Then:
 1. Write docs/plans/0NN-jira-offramp.md with ep-writing-plans — next free NNN, next free V from the
-   migration directory (the table says V6). import_run and import_dropped_field so the report
+   migration directory (the table says V8, after M5 was placed ahead of M4 and the 2026-09-01
+   shift — check it). import_run and import_dropped_field so the report
    outlives the migration.
 2. Execute with ep-executing-plans. Contract first in one commit (openapi.yaml with `required`
    arrays, both generated clients, contractBodies.ts ×2, CLI/MCP verbs, the surface doc). One
@@ -1250,7 +1405,7 @@ not everywhere what this plan guessed:**
 
 Then:
 1. Write docs/plans/0NN-agent-execution.md with ep-writing-plans — next free NNN, next free V from
-   the migration directory (the table says V7). project_repository as reference data, issue.pr_url,
+   the migration directory (the table says V7 — check it). project_repository as reference data, issue.pr_url,
    issue.agent_eligible, review_enabled_issue defaulting to false.
 2. Execute with ep-executing-plans. Contract first in one commit (openapi.yaml with `required`
    arrays, both generated clients, contractBodies.ts ×2). The legal-transition set goes on the wire
@@ -1344,7 +1499,7 @@ not everywhere what this plan guessed:**
 
 Then:
 1. Write docs/plans/0NN-time.md with ep-writing-plans — next free NNN, next free V from the
-   migration directory (the table says V8; if a second lane has landed since, it is not). New
+   migration directory (the table says V11 after the 2026-09-01 shift; if a second lane has landed since, it is not). New
    `time` module: time_entry (subject_type + subject_id — an issue, a meeting, leave),
    timesheet_period.
 2. Execute with ep-executing-plans. Contract first in one commit (openapi.yaml with `required`
@@ -1408,7 +1563,7 @@ was designed for.
 
 Then:
 1. Write docs/plans/0NN-staffing.md with ep-writing-plans — next free NNN, next free V from the
-   migration directory (the table says V9; it will not be if this lane runs early). New `staffing`
+   migration directory (the table says V10 after the 2026-09-01 shift; it will not be if this lane runs early). New `staffing`
    module: person_profile, skill, person_skill, allocation, absence.
 2. Execute with ep-executing-plans. Contract first in one commit (openapi.yaml with `required`
    arrays, both generated clients, contractBodies.ts ×2, CLI/MCP verbs, the surface doc). One
@@ -1444,7 +1599,7 @@ slot as they actually landed — trust that rewrite over anything this block say
 
 Then:
 1. Write docs/plans/0NN-billing.md with ep-writing-plans — next free NNN, next free V from the
-   migration directory (the table says V10; the directory is the authority). New `billing` module:
+   migration directory (the table says V12 after the 2026-09-01 shift; the directory is the authority). New `billing` module:
    rate_card, rate_card_entry, budget, invoice, invoice_line, expense. Time and materials only
    (D24); AI-assistant usage is a cost, never a line.
 2. Execute with ep-executing-plans. Contract first in one commit (openapi.yaml with `required`
@@ -1515,7 +1670,8 @@ M0 reads `done` in the status table (2026-08-30 @ 24f997bb) — that gate is sat
 Your task list is docs/plans/009-mc-clients-execution-breakdown.md — nine tasks in four phases,
 cut against this checkout's real file paths. Read it before you plan. Two numbers in it are already
 corrected there and are worth repeating: Mc does NOT take V3 (M1 does) and does NOT take plan 011
-(M1 does); take the next free of each from disk, projected V8 and 016.
+(M1 does); take the next free of each from disk, projected ~~V8~~ → V9 (the column shifted on
+2026-09-01) and 016.
 
 Mc runs SIXTH, after M4, in one lane — not beside M1. The two-lane shape was declined on 2026-08-30;
 see "What can run in parallel" and the status table.
@@ -1605,8 +1761,8 @@ reader needs the day this is revisited.
 Conditions, all from `parallel-work-rules.md` and none of them optional: one holder of
 `openapi.yaml` and `npm run gen:api` per commit (two regenerations do not merge); the fixture UUID
 prefix space pre-assigned; **migration versions assigned in landing order at integration, not from
-this document's table** — the moment lane B lands anything before M3, the `V8 / V9 / V10` reserved
-for M6–M8 above are wrong, and a lower number arriving after a higher one is refused on every
+this document's table** — the moment lane B lands anything before M3, the ~~`V8 / V9 / V10`~~ →
+`V11 / V10 / V12` reserved for M6–M8 above are wrong, and a lower number arriving after a higher one is refused on every
 already-migrated database while Testcontainers stays green.
 
 **Files both lanes touch no matter what**, so a merge is expected on each: `src/api/queries/keys.ts`,
@@ -1634,9 +1790,9 @@ where it was resolved above; the two that need the owner or a module plan are na
 | R10 | M6 "roll up … via `issue_fact`" read as `time` writing `issue_fact` — the trap §3 forbids. | **Resolved** — reworded as a `time`-owned projection. |
 | R11 | M7 depended on M6 for nothing it reads. | **Resolved** — M7 depends on M0; utilisation stays out unless M6 landed. |
 | R12 | M9 "needs no migration" was only true if M1/M3 stored timestamps `issue_fact` was not sketched with. | **Resolved** — four timestamps on `issue_fact` in M1, `release.created_at` in M3. |
-| R13 | M2 did not say what happens to a workflow status added after a board exists. | **Resolved** — auto-claimed by the same-`kind` default column; unique index, not a CHECK. |
+| R13 | M2 did not say what happens to a workflow status added after a board exists. | **Resolved, and built (M2, 2026-09-01)** — auto-claimed by the same-`kind` default column; unique index, not a CHECK. The claim is a **direct call** from `WorkflowService` into `BoardConfigService.claimNewStatus`, same module and same transaction, not an event (012 D-g): an unclaimed status is not a state the data can be in, rather than one it is briefly in. `settings-boards` shows the claim where it landed and lets it be moved. **Unverified end to end** — the screen's test seeds the claim by hand; nothing has driven the workflow `PUT` and read the board back. |
 | R14 | M4: whether the importer may reuse `integration.tracker`'s per-person credential. | **Open — for M4's own plan.** Reuse is the same forbidden crossing; the alternative is the connection entered per run and stored on `import_run`. |
-| R15 | The migration numbers `V8 / V9 / V10` for M6–M8 are wrong the moment a second lane lands anything out of table order. | **Open by design** — the reservation warning already covers it; the parallel section restates it because that is where it bites. |
+| R15 | The migration numbers ~~`V8 / V9 / V10`~~ → `V11 / V10 / V12` for M6–M8 are wrong the moment a second lane lands anything out of table order. | **Open by design, and it has now bitten twice with no second lane at all** — M5 was placed ahead of M4 (2026-08-30), then M1 turned out to have spent two versions rather than one (2026-09-01), and every number below M2 moved. The reservation warning covers it; the parallel section restates it because that is where it bites hardest. |
 
 ---
 
