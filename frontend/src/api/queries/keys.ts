@@ -547,6 +547,62 @@ export const keys = {
    * because a label is the project's vocabulary and outlives every issue that wears one.
    */
   labels: (p: string) => ['projects', p, 'labels'] as const,
+
+  /*
+    Releases (013 M3).
+
+    `readiness` under `['releases', id]` is deliberate and is **the opposite of the board's D-u
+    decision above**, for a reason that is about the data rather than about consistency: a release's
+    readiness has exactly one parent and changes for the same reasons the release does, so prefix
+    eviction is what you want here. The board's cards were kept out of `['boards', id]` because a
+    *column edit* would have evicted them; nothing edits a release without changing its readiness.
+  */
+  releases: (p: string) => ['projects', p, 'releases'] as const,
+  /**
+   * One release, outside `keys.releases`' prefix for `keys.issue`'s reason: a detail read must not
+   * be swept by a list invalidation. The list is a different payload — `ReleaseSummary`, with its
+   * readiness inline — and not a narrowing of this one.
+   */
+  release: (id: string) => ['releases', id] as const,
+  /** Under {@link release}'s prefix, per the note above. */
+  readiness: (id: string) => ['releases', id, 'readiness'] as const,
+  /**
+   * Every release detail and every readiness, as a prefix — what a write that changes readiness
+   * **without naming a release** invalidates.
+   *
+   * `PUT /issues/{key}/test-cases` is the case, and it is the reason this root exists rather than
+   * the readiness key being spelled at the call site: the payload is a story's cases, so nothing in
+   * that response says which release the story targets, and the verdict of whichever release it
+   * targets has just moved. Sweeping `['releases']` is the only correct answer available, and it
+   * costs a refetch of a detail screen that is usually not mounted.
+   */
+  releaseRoot: ['releases'] as const,
+  /**
+   * The roadmap — the same releases the list draws, laid out against dates.
+   *
+   * A key of its own rather than a member of `releases`, because it is a different endpoint with a
+   * different payload; but **every release write invalidates both**, since a create that refreshed
+   * only the list leaves the timeline a version behind.
+   */
+  roadmap: (p: string) => ['projects', p, 'roadmap'] as const,
+  /**
+   * The cases that prove one story (H7), keyed by the issue **key** for `keys.issue`'s reason —
+   * the key is what the route carries.
+   *
+   * Under `['issues', key]`'s prefix, so a story edit refreshes it: linking a case *is* an
+   * `issue:edit`, and the story's own detail read is what the panel sits on.
+   */
+  issueTestCases: (key: string) => ['issues', key, 'test-cases'] as const,
+  /**
+   * Which stories each case verifies — `test-cases.html`'s Verifies column, read from `tracker`'s
+   * side of the same fact (D-i).
+   *
+   * Under the project rather than under `casesRoot`: it is served from `tracker` and a *case* write
+   * does not change it, while an issue's link write does. Putting it under the case list's prefix
+   * would refetch the whole grid's verifications on every case edit and still miss the write that
+   * actually moves it.
+   */
+  caseVerifications: (p: string) => ['projects', p, 'case-verifications'] as const,
   /**
    * The caller's permissions with **no project in the question** — a different answer from
    * `permissions(projectId)` and therefore a different key.

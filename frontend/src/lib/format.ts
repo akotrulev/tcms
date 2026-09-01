@@ -98,6 +98,34 @@ export function formatAge(iso: string | null | undefined, now = Date.now()): str
 }
 
 /**
+ * How far off a date in the **future** is — `in 17 days`, `today`, `tomorrow`, `3 days ago`.
+ *
+ * {@link formatAge} cannot answer this and must not be used for it: it reads a negative interval as
+ * *"just now"*, so a release targeting next month rendered as `target 18 Sep 2026 · just now`.
+ * Deliberately a separate function rather than a widened `formatAge` — a past instant and a future
+ * deadline are read for different reasons, and one function returning both would leave every
+ * existing caller's copy ambiguous.
+ *
+ * Whole days over UTC midnights rather than elapsed hours: a target date is a *date*, so "tomorrow"
+ * must not become "in 0 days" at eleven at night.
+ */
+export function formatDueIn(iso: string | null | undefined, now = Date.now()): string {
+  if (!iso) return EM_DASH;
+  const target = Date.parse(`${iso.slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(target)) return EM_DASH;
+
+  const at = new Date(now);
+  const midnight = Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate());
+  const days = Math.round((target - midnight) / 86_400_000);
+
+  if (days === 0) return 'today';
+  if (days === 1) return 'tomorrow';
+  if (days === -1) return 'yesterday';
+  if (days > 0) return `in ${plural(days, 'day')}`;
+  return `${plural(-days, 'day')} ago`;
+}
+
+/**
  * How old the *arithmetic* on a screen is — the sentence for `computedAt` (§101).
  *
  * Here rather than in the two pages that render it, per `CLAUDE.md`: new display logic goes in the
@@ -252,6 +280,10 @@ export function joinMeta(...parts: (string | null | undefined | false)[]): strin
  */
 export function pluralNoun(n: number, noun: string): string {
   if (n === 1) return noun;
+  // `story` → `stories`, and `day` → `days`. The guard is a *consonant* before the `y`, which is
+  // the whole rule: 013's release readiness is the first caller to pass a noun ending in one, and
+  // it read "4 storys" on screen until this line existed.
+  if (/[^aeiou]y$/.test(noun)) return `${noun.slice(0, -1)}ies`;
   return `${noun}${/(?:s|x|z|ch|sh)$/.test(noun) ? 'es' : 's'}`;
 }
 

@@ -24,6 +24,7 @@ import {
   Moon,
   Network,
   Package,
+  Rocket,
   Search,
   Settings,
   Shield,
@@ -277,6 +278,21 @@ function projectNav(
           names the module that folds it in. Only the rail entry is gone.
         */
         { label: 'Work', to: `${p}/work`, icon: <Kanban className="size-4" /> },
+        /*
+          013 M3's releases, immediately after Work — the mockup rail's own order
+          (*Overview · Work · Releases · Documents · …*). Execution rather than Project because a
+          release is what ships, not how the project is configured, and because the person asking
+          "can we ship 2.4?" is the person who was just looking at the work.
+
+          Ungated, like every item in this rail: `release:read` is held by every project-scoped role
+          that renders a rail at all, so a gate would hide it from nobody who can reach it while
+          teaching that rail items come and go by permission. The two writes are gated on their own
+          controls (§31).
+
+          **The Timeline and Calendar views are NOT rail entries.** They are `?view=` arms of Work
+          (D34), for the reason the comment above gives about the five views.
+        */
+        { label: 'Releases', to: `${p}/releases`, icon: <Rocket className="size-4" /> },
         /*
           §6e's reports (§89). Execution rather than Project, because what a report is *of* is
           execution results — the only one that exists today summarises a run, and every one §6e

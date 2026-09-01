@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
-import { useIssues, useProject, useProjectMembers, useProjectWorkflow } from '../../api/queries';
+import { useIssues, useProject, useProjectWorkflow } from '../../api/queries';
 import type { IssueSummary } from '../../api/types';
 import type { IssueSort } from '../../api/queries';
 import { DataRegion, GridSkeleton } from '../../components/DataRegion';
@@ -8,7 +8,6 @@ import { Identifier } from '../../components/Identifier';
 import { PermissionGate } from '../../components/PermissionGate';
 import { ScrollX } from '../../components/ScrollX';
 import {
-  Banner,
   FilterStrip,
   Table,
   TableBody,
@@ -17,7 +16,6 @@ import {
   TableHead,
   TableHeaderCell,
   TableRow,
-  type AppliedFilter,
 } from '../../components/kit';
 import {
   Button,
@@ -33,7 +31,9 @@ import { issueLevels } from '../../lib/labels';
 import { NativeSelect } from '../../components/ui/native-select';
 import { BacklogView } from '../board/BacklogView';
 import { ProjectBoardView } from '../board/ProjectBoardView';
-import { useWorkFilter } from '../board/useWorkFilter';
+import { useIssueFilterChips, useWorkFilter } from '../board/useWorkFilter';
+import { CalendarView } from '../releases/CalendarView';
+import { RoadmapView } from '../releases/RoadmapView';
 import { StatusBadge } from './StatusBadge';
 import { TypeIcon } from './TypeIcon';
 
@@ -77,31 +77,20 @@ import { TypeIcon } from './TypeIcon';
 const TEST_ID = 'WorkTable';
 
 /**
- * The five views, in the mockup's order, each with the module that builds it.
+ * The five views, in the mockup's order.
  *
- * `module` null is the one that exists. The rest carry the sentence rendered in their place — the
- * module and what the view will do — because "coming soon" names nothing a reader can plan around.
+ * ~~`module` null is the one that exists. The rest carry the sentence rendered in their place.~~ →
+ * **all five exist as of 013 T5**, so the `module` / `body` / `existing` columns are gone and so is
+ * the panel that read them. The shape is kept as a table rather than collapsed into the switcher's
+ * JSX because it is what the switcher's order and labels come from, and it is where the sixth view
+ * would be declared.
  */
 const VIEWS = [
-  { id: 'board', label: 'Board', module: null, body: '', existing: null },
-  { id: 'backlog', label: 'Backlog', module: null, body: '', existing: null },
-  { id: 'table', label: 'Table', module: null, body: '', existing: null },
-  {
-    id: 'timeline',
-    label: 'Timeline',
-    module: 'M3',
-    body: 'Epics against dates, with the release markers on it, arrives with the releases module. '
-      + 'It needs a release to draw the markers from.',
-    existing: null,
-  },
-  {
-    id: 'calendar',
-    label: 'Calendar',
-    module: 'M3',
-    body: 'Due dates and release dates on one month, arriving with the releases module for the '
-      + 'timeline’s reason.',
-    existing: null,
-  },
+  { id: 'board', label: 'Board' },
+  { id: 'backlog', label: 'Backlog' },
+  { id: 'table', label: 'Table' },
+  { id: 'timeline', label: 'Timeline' },
+  { id: 'calendar', label: 'Calendar' },
 ] as const;
 
 /**
@@ -131,20 +120,13 @@ export function WorkTablePage() {
   const [params] = useSearchParams();
 
   const project = useProject(projectId);
-  const workflow = useProjectWorkflow(projectId);
   /*
-    Gated on this strip being on screen at all: Timeline and Calendar must not fire a request whose
-    only use is a chip they do not render.
-
-    ~~The table view is the only one that reads it.~~ → the board reads it too since 012 T7 and the
-    backlog since T8, and each asks for it itself rather than through a prop: the query key is the
-    same, so TanStack serves one request to whichever of them is mounted and the gate here stays
-    about *this* strip.
+    Still read here rather than through the chips hook: the Status **picker** below is built from
+    `workflow.data.statuses`, which is a control this page offers and the calendar does not.
+    ~~`useProjectMembers`~~ moved into `useIssueFilterChips` with the chips that were its only
+    reader (013 T5).
   */
-  const members = useProjectMembers(
-    projectId,
-    params.get('view') === null || params.get('view') === 'table',
-  );
+  const workflow = useProjectWorkflow(projectId);
 
   const view = params.get('view') ?? 'table';
   const sort = (params.get('sort') ?? 'key') as IssueSort;
@@ -158,8 +140,17 @@ export function WorkTablePage() {
     THIS endpoint declares — `IssueFilters`, which differs from the board's `BoardFilters` in both
     directions (D-v).
   */
-  const { filters: work, setParam, clearFilters } = useWorkFilter();
+  const { filters: work, setParam, dropOne, clearFilters } = useWorkFilter();
   const filters = work.issue;
+
+  /*
+    ~~Six chip entries spelled here.~~ → **`useIssueFilterChips`**, beside the board's own
+    (013 T5). The calendar reads the same six parameters off the same URL, so a second copy would
+    have regrown exactly the drift T8's extraction removed — and the first thing to drift between
+    two such lists is *which* filters get a chip at all, which is how `epicKey` and `parentKey` came
+    to have neither for a release.
+  */
+  const applied = useIssueFilterChips(projectId, filters, { setParam, dropOne });
 
   const visible = useMemo<ColumnId[]>(() => {
     const requested = params.get('cols');
@@ -172,72 +163,6 @@ export function WorkTablePage() {
   }, [params]);
 
   const issues = useIssues(projectId, filters, sort);
-
-  const applied: AppliedFilter[] = [
-    ...(filters.level
-      ? [
-          {
-            key: `level:${filters.level}`,
-            label: `Level · ${issueLevels[filters.level]}`,
-            onRemove: () => setParam((next) => next.delete('level')),
-          },
-        ]
-      : []),
-    ...(filters.statusId ?? []).map((id) => ({
-      key: `status:${id}`,
-      label: `Status · ${workflow.data?.statuses.find((s) => s.id === id)?.name ?? id}`,
-      onRemove: () =>
-        setParam((next) => {
-          const kept = next.getAll('statusId').filter((value) => value !== id);
-          next.delete('statusId');
-          for (const value of kept) next.append('statusId', value);
-        }),
-    })),
-    ...(filters.assigneeId ?? []).map((id) => ({
-      key: `assignee:${id}`,
-      label: `Assignee · ${members.data?.find((m) => m.id === id)?.displayName ?? id}`,
-      onRemove: () =>
-        setParam((next) => {
-          const kept = next.getAll('assigneeId').filter((value) => value !== id);
-          next.delete('assigneeId');
-          for (const value of kept) next.append('assigneeId', value);
-        }),
-    })),
-    /*
-      `epicKey` and `parentKey` get a chip and no picker, and that asymmetry is D34's (012 T8).
-      `GET /issues` takes both, so a reader who narrowed to one epic on the Board and switched here
-      is looking at a narrowed table — and until this chip existed, at one with nothing on screen
-      saying so. What they do not need is a second place to *apply* them: an epic is picked by
-      opening it, and a parent by opening the story.
-    */
-    ...(filters.epicKey
-      ? [
-          {
-            key: `epic:${filters.epicKey}`,
-            label: `Epic · ${filters.epicKey}`,
-            onRemove: () => setParam((next) => next.delete('epicKey')),
-          },
-        ]
-      : []),
-    ...(filters.parentKey
-      ? [
-          {
-            key: `parent:${filters.parentKey}`,
-            label: `Parent · ${filters.parentKey}`,
-            onRemove: () => setParam((next) => next.delete('parentKey')),
-          },
-        ]
-      : []),
-    ...(filters.unparented
-      ? [
-          {
-            key: 'unparented',
-            label: 'No epic',
-            onRemove: () => setParam((next) => next.delete('unparented')),
-          },
-        ]
-      : []),
-  ];
 
   const current = VIEWS.find((entry) => entry.id === view) ?? VIEWS[2];
 
@@ -331,28 +256,16 @@ export function WorkTablePage() {
         <ProjectBoardView projectId={projectId} />
       ) : current.id === 'backlog' ? (
         <BacklogView projectId={projectId} />
-      ) : current.module !== null ? (
-        <section data-testid={`${TEST_ID}.NotYet.${current.id}`}>
-          <Banner tone="steel">
-            <div className="min-w-0">
-              <p className="m-0 text-[13px] font-semibold text-ink">
-                {current.label} arrives in {current.module}
-              </p>
-              <p className="mt-1 mb-0">{current.body}</p>
-              {current.existing && (
-                <p className="mt-2 mb-0">
-                  <RouterLink
-                    to={`/projects/${projectId}/${current.existing}`}
-                    className="text-steel underline-offset-4 hover:underline"
-                    data-testid={`${TEST_ID}.NotYet.${current.id}.Existing`}
-                  >
-                    Open the board that exists today
-                  </RouterLink>
-                </p>
-              )}
-            </div>
-          </Banner>
-        </section>
+      ) : current.id === 'timeline' ? (
+        /*
+          013 T5. **The roadmap has no filter strip and that is not an omission** — `GET
+          /projects/{id}/roadmap` declares no filter parameters, so a strip here would narrow
+          nothing. `RoadmapView`'s own header says so; the Calendar beside it does carry the strip,
+          because `GET /issues` does take the filter.
+        */
+        <RoadmapView projectId={projectId} />
+      ) : current.id === 'calendar' ? (
+        <CalendarView projectId={projectId} />
       ) : (
         <>
           <FilterStrip

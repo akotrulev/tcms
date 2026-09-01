@@ -1,6 +1,6 @@
 # fe-react — orientation cache
 
-**Baseline commit:** `aeea6b25` · **Last verified:** 2026-08-31 · **Verdict this run:** TRUST (the only delta since `fc173ba8` was this file; nothing in `frontend/` or the contract had moved, so nothing needed re-deriving. The seams below moved because 012 T8 built the backlog and extracted the shared filter)
+**Baseline commit:** `71d7fce1` · **Last verified:** 2026-09-01 · **Verdict this run:** DELTA (013 T1–T4 moved the contract, `schema.d.ts`, `labels.ts`, `router.tsx`, `AppShell.tsx`, `index.css`, `tokenSystem.test.ts` and the board files; 012 T9 had landed the board-settings screen and the label palette. No `package.json` / lockfile / `tsconfig` change, so the version lane held. Four sections refreshed, and the seams below moved because T5 built the release screens)
 
 Per `ep-agent-orientation-cache`: validate this against a git delta before trusting it. A changed
 `frontend/package.json`, `package-lock.json`, `tsconfig*.json` or `vite.config.ts` invalidates the
@@ -15,7 +15,7 @@ version lane and everything keyed to it.
 | TypeScript | ~6.0, strict |
 | Package manager | **npm** (`package-lock.json`) |
 | Compiler | off |
-| Routing | React Router 7 (`react-router-dom`), 9 `<Route>` in `src/app/router.tsx` |
+| Routing | React Router 7 (`react-router-dom`), one flat `<Route>` list in `src/app/router.tsx`, every page `lazy()` |
 
 The RSC lane of every skill **does not apply here**. A skill's `'use client'` guidance is a no-op;
 do not add the directive and do not report its absence as a finding.
@@ -54,7 +54,7 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 | The move decision, two boards, one file | `features/board/cardMove.ts` — `columnsFor` + `resolveCardMove` + `refusalFor` + `immobileReason` for the composite board; `serverColumnsOf` + `resolveColumnMove` + `columnRefusalFor` at the **foot** of the file for the project board. `serverColumnsOf` exists because `statusIds: readonly string[]` and a status *name* is a string too, so the wrong map typechecks and then refuses every legal drop (012 D-x) |
 | Keyboard drag | `features/board/boardKeyboard.ts` — `boardKeyboardCoordinates(columnOrder, laneOrder = [])`. Left/right steps a column; up/down steps a **swimlane** when `laneOrder` is non-empty and otherwise falls through to `@dnd-kit`'s 25px nudge. One `stepAlongAxis` behind both, so the nearest-centre and edge rules exist once. ~~`ColumnRect`~~ → `BandRect` |
 | The board's filter | **`BoardFilters` in `api/types.ts`, and it is NOT `IssueFilters`** — they differ in both directions (`statusId`/`parentKey` vs `labelId`/`priority`), so neither widens to cover the other (012 D-v) |
-| **One filter, three views, one file** | **`features/board/useWorkFilter.ts`** (012 T8) — reads the URL once and returns `{ filters: { issue, board }, setParam, appendOnce, dropOne, clearFilters }`. `filters.issue` is what `GET /issues` declares, `filters.board` what `/boards/{id}/cards` and `/projects/{id}/backlog` declare; the mapping is D-v's and is **not** a cast. `clearFilters` keeps `view`, `board`, `sort` and `cols` — none of them is a filter. The applied chips for the board's six live beside it as **`useBoardFilterChips`**, hook rather than function because two labels are names it looks up. `WorkTablePage` keeps its own `IssueFilters` chip list (different six) and its own Level/Status pickers |
+| **One filter, three views, one file** | **`features/board/useWorkFilter.ts`** (012 T8) — reads the URL once and returns `{ filters: { issue, board }, setParam, appendOnce, dropOne, clearFilters }`. `filters.issue` is what `GET /issues` declares, `filters.board` what `/boards/{id}/cards` and `/projects/{id}/backlog` declare; the mapping is D-v's and is **not** a cast. `clearFilters` keeps `view`, `board`, `sort`, `cols` and — since 013 T5 — **`month`**, none of them a filter. **TWO chip hooks live beside it, one per parameter set**: `useBoardFilterChips` (board, backlog) and `useIssueFilterChips` (table, calendar, added in T5 when the calendar became the second `IssueFilters` reader). Hooks rather than functions because some labels are names they look up. ~~`WorkTablePage` keeps its own chip list~~ → it lost it to the second hook, and `useProjectMembers` went with it: the chips were that read's only consumer |
 | The two picker sets are NOT the same | Table offers **Level + Status**; board and backlog offer **Label + Assignee + Priority**. `useWorkFilter` unifies how the URL is *read*, never what a view *offers*: a status picker on a board would empty the columns it is drawn from, and the table has no label column in M1. Every view chips **every filter its own endpoint applies**, picker or not — which is how T8 found `epicKey`/`parentKey` had neither on the table |
 | Client state | Session in Context; **filter state lives in the URL** (`useSearchParams`) |
 | Component library | **shadcn/ui over Radix** in `components/ui/` (18 files) + the house kit in `components/kit/` (16). ~~MUI v9~~ → gone in T16; `@mui/*`, `@emotion/*`, `notistack` are in no import and no `package.json` |
@@ -65,12 +65,14 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 | Errors | `lib/describeError.ts` is the one place an error becomes user-facing copy (owns `isTransient()`); `app/queryClient.ts` is the one place a failure raises a notification; `components/ErrorBoundaries.tsx` has the root/route/region tiers |
 | Data states | `components/DataRegion.tsx` — loading/loaded/failed/empty/stale |
 | Display logic | **Shared layer, never the page**: `lib/labels.ts` (each `satisfies Record<Union, string>`, so a new enum member is a compile error until labeled), `lib/format.ts`, `lib/results.ts`, `lib/permissions.ts`, `components/Identifier` for anything monospace |
+| Two `lib/format.ts` traps 013 T5 paid for | **`formatAge` cannot answer a future date** — it reads a negative interval as *"just now"*, so a release target rendered as `target 18 Sep 2026 · just now`. **`formatDueIn`** is the one for a deadline (`in 17 days` / `today` / `3 days ago`), and it counts whole UTC days so "tomorrow" does not become "in 0 days" at eleven at night. And `pluralNoun` gained a consonant-`y` → `ies` rule: the readiness tile read **"4 storys"** until it did |
 | `TypeIcon` takes name + level, and `countsTowardCompletion` is OPTIONAL | `Pick<IssueTypeRef, 'name' \| 'level'> & { countsTowardCompletion?: boolean }`. Widened in T7 off the whole `IssueTypeRef` (`BoardIssueCard` has no type id, and a synthesised one is a value the component never read); widened again in T8 to make the field optional, because **`BacklogRow` does not carry it at all**. The spike test is `=== false`, never `!` — absent means the payload does not answer, so a backlog Spike renders as the level's green `S` rather than the board's amber `?`. `iconCode` is on both payloads and deliberately unused |
-| `label-1` … `label-10` DO NOT EXIST | `Label.color` is a design-token name and `index.css` declares none of them, so **board label chips are plain** (D-z). Adding the palette is a stylesheet decision that belongs with the screen that creates labels — T9's |
+| ~~`label-1` … `label-10` DO NOT EXIST~~ | → **they exist**, added by 012 T9 with the board-settings screen, exactly where that row predicted the decision belonged. Both palettes declare all ten, `lib/statusColors.ts::LABEL_COLORS` is the list, and `app/tokenSystem.test.ts` now **reads that list out of the module** and fails if a slot is in one file and not the other |
 | `data-testid` | ~1470 (676 literal + 794 composed), `Domain.Thing` PascalCase, per-file `TestIdPrefix` const. `ClassificationPicker.tsx:150` documents `Classification.Value.<id>` as a **locator contract QA page objects key on** — do not rename it here |
 | Field ↔ error wiring | `components/kit/Field.tsx` clones its child to add `aria-describedby` pointing at `${htmlFor}-message`. Callers pass nothing; do not re-add per-call-site ids |
-| Dev fault switches | `lib/devFaults.ts` behind `src/api/client.ts`; `tcmsFaults.{status,hang,expire,drift,only,tracker,issue,rank,wip,off}()` in the console. Both guards are a **literal** `import.meta.env.DEV` so Rollup drops the module — routing that check through an imported constant ships it. `issue('conflict')` fabricates the 409 that names the legal moves (and since 012 T6 answers the board's move endpoint too, which its own comment had always promised); `rank('conflict')` is the 409 that proves the rank rollback, `rank('rebalance')` the 200 that must **drop** the patch, and `wip()` the breach on a move that still lands. Every arm's path test is **anchored** — an unanchored `startsWith('/issues')` would fault the detail read |
+| Dev fault switches | `lib/devFaults.ts` behind `src/api/client.ts`; `tcmsFaults.{status,hang,expire,drift,only,tracker,issue,rank,wip,release,off}()` in the console. Both guards are a **literal** `import.meta.env.DEV` so Rollup drops the module — routing that check through an imported constant ships it. `issue('conflict')` fabricates the 409 that names the legal moves (and since 012 T6 answers the board's move endpoint too, which its own comment had always promised); `rank('conflict')` is the 409 that proves the rank rollback, `rank('rebalance')` the 200 that must **drop** the patch, and `wip()` the breach on a move that still lands. `release('untested')` answers readiness with `hasRun: false` and **null** counts — the state no seeded instance can reach once anything has run, and the one a `?? 0` turns into "nothing failed"; `release('empty')` answers the roadmap `{ releases: [], unscheduled: [] }`, which is **merge day** and an acceptance criterion rather than an edge case. Every arm's path test is **anchored** — an unanchored `startsWith('/issues')` would fault the detail read, and `/releases/{id}` vs `/releases/{id}/readiness` is the same collision one module over |
 | Issue screens | `features/tracker/` — `WorkTablePage` (`/projects/:id/work`, five views on `?view=`), `IssueNewPage` (`/work/new`), `IssueDetailPage` (**`/issues/:key`, outside the project segment**, dispatching on `type.level` to `EpicPanels`/`StoryPanels`/`TaskPanels`). `TypeIcon` derives its colour from `level` + `countsTowardCompletion`, never from the type's name |
+| The rail's Releases entry | `AppShell.tsx`, in the **Execution** group immediately after Work — `settings-boards.html`'s neighbour order from the mockup rail. **Ungated**, like every item in that rail. The Timeline and Calendar views are deliberately NOT rail entries: they are `?view=` arms of Work (D34) |
 | Project front door | `/projects/:projectId` is **`features/projects/ProjectOverviewPage.tsx`** (011 T7). ~~`features/dashboard/DashboardPage.tsx`~~ no longer exports a page — it exports `DashboardBody` and `HealthPanel`, the repository-dashboard **regions**, which the overview mounts below its delivery half. **The file keeps its name deliberately**: `DashboardPage.tsx` is cited from `lib/statusColors.ts`, from `HealthTileOrderTest.java` in the backend suite, and from `renders/06-analytics.html` |
 | The project board's screen | **`features/board/ProjectBoardView.tsx`** (012 T7) — five files beside the composite board's, not a directory of their own, because `cardMove.ts` and `boardKeyboard.ts` are shared: `ProjectBoardView` (picker · grouping · `DndContext` · three nested `DataRegion`s) · `Swimlane` (+ a private `LaneCell`) · `BoardCardFace` · `ColumnHeader` · `MoveToMenu`. Mounted as the `board` arm of `WorkTablePage`'s view switch, **not routed**: `?view=board` under `/projects/:id/work` |
 | The droppable is a CELL, and this is where the plan was wrong | `` `${columnId}\|${laneId}` ``, spelled ONLY in `ProjectBoardView` (`cellId` / `columnIdOf`). A column has one rect per lane once a full-width lane header sits between the bands, so it cannot be one droppable — the plan's *"register `column.id`"* holds only for a one-lane board (012 D-z). **Both keyboard axes come out of that one flat cell set**: `columnOrder` = the first EXPANDED lane's cells (x is the same in every lane), `laneOrder` = the first column's cell down the expanded lanes (y). A collapsed lane registers nothing and is a stop on neither |
@@ -78,6 +80,13 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 | The WIP cell's two numerators | `ColumnHeader`: no limit → `—`; **breach** → `breach.count / breach.limit ⚠` **as sent** (project-wide, does not shrink under a filter); **under** → cards-drawn `/ limit`, because `breaches` lists only the columns that are over and there is no project-wide count on the wire for the rest. Each state carries a `title` saying which it is. **No `>` in the file** — the comparison is the server's |
 | Empty is a state only under a FILTER | **The board's rule; the backlog ports the reason, not the mechanism.** A board with no cards and no filter still draws its columns — that is the board's shape and what a freshly configured one looks like. A *list's* shape IS its rows, so `BacklogView` gives both empties a region and branches the **copy**: `no-filter-match` with the way out when a filter emptied it, `no-records` saying the backlog is finished when nothing did. The filter strip and the panel head sit **above** the region on both, so a failed read never unmounts the controls that would let a reader retry |
 | The backlog's screen | **`features/board/BacklogView.tsx`** (012 T8) — one file, two module-private components (`BacklogListRow`, `BulkBar`) and a `MoveButton`. Mounted as the `backlog` arm of `WorkTablePage`'s view switch, **not routed**: `?view=backlog`. **No release sections and no "Move to release"** (D-f) — `release` is M3's table, so the grouping would be one section called "Unscheduled" containing everything |
+| The release module | **`features/releases/`** (013 T5) — `ReleaseListPage` (`/projects/:id/releases`) · `ReleaseNewPage` (`/releases/new`) · `ReleaseDetailPage` (`/releases/:releaseId`) · `ReadinessPanels` (the tiles, blockers, epics, evidence) · `RoadmapView` and `CalendarView`, which are the `?view=timeline` / `?view=calendar` **arms of `WorkTablePage`** and not routes · plus two pure modules, `timelineScale.ts` and `releaseBadge.ts`. `api/queries/releases.ts` holds all eleven hooks |
+| The release keys, and `readiness` is the OPPOSITE of the board's decision | `['projects', p, 'releases']` (the list) · `['releases', id]` (detail) · **`['releases', id, 'readiness']`** · `['releases']` as `keys.releaseRoot` · `['projects', p, 'roadmap']` · `['issues', key, 'test-cases']` · `['projects', p, 'case-verifications']`. Readiness sits **under** the release's prefix on purpose: it has exactly one parent and changes for the same reasons the release does, so prefix eviction is wanted — unlike the board's cards, which were kept out of `['boards', id]` because a *column edit* would have evicted them. **Every release write invalidates the list AND the roadmap** (`invalidateReleaseReaders`), because they are two renderings of the same rows |
+| `keys.releaseRoot` exists for one writer | `PUT /issues/{key}/test-cases` changes a release's verdict **without naming a release** — the payload is a story's cases — so `['releases']` is the only correct sweep available |
+| The badge's vocabulary DIVERGES from `releases.html`, deliberately | **`features/releases/releaseBadge.ts`** — `releaseBadge(status, verdict)` returns Released / Ready / Not tested / Not ready. The mockup's Readiness column mixes a status a person set with a verdict the server computed, so the same badge would mean "nobody started" on one row and "somebody did, and it failed" on the next (013 D-e). `doneButFailing` and `blockerVerdict` are in **that** file rather than beside the components, because oxlint's `react(only-export-components)` forbids a module exporting both |
+| `hasRun` gates, a count never does | `ReleaseTests.passed/failed/blocked/untested/withResult` are **null** when `hasRun` is false, and the list's Tests cell renders the literal words **`no run yet`** while the detail page renders the *"If nothing had run"* panel. A `?? 0` appears only *inside* a `hasRun` branch. `tcmsFaults.release('untested')` is what makes the state reachable |
+| The roadmap's arithmetic is a pure module | **`timelineScale.ts`** — `spanOf` / `spanOfEpic` / `windowOf` / `monthsIn` / `todayAt`, with its own `.test.ts` and no `render()`. A release has a target and no start, so its bar is `min(epic.startDate) … targetDate`, a **point marker** when no epic under it has a start, and **`null`** when it has no target (`2.10`'s row). Month labels are **`en-US`**, not the app's `en-GB`, because `en-GB`'s short September is `Sept` |
+| The roadmap has NO filter strip, and that is not an omission | `GET /projects/{id}/roadmap` declares no filter parameters, so a strip would narrow nothing — worse than none. `CalendarView` beside it **does** carry one, because `GET /issues` takes the filter |
 | Both reorder affordances end in ONE expression | `BacklogView`'s `place(fromIndex, toIndex)`: `toIndex < fromIndex ? { beforeKey } : { afterKey }` over the row at `toIndex`. The `↑ ↓` buttons and `onDragEnd` both call it, so a drag and an arrow cannot disagree about where a row lands. **There is no `KeyboardSensor`** and that is the design (D-ab): the arrows are the keyboard path, not a fallback |
 | Bulk writes over issues are N calls | **`useBulkUpdateIssues(projectId)`** in `api/queries/issues.ts` — `Promise.allSettled` over one `PATCH /issues/{key}` each, returning `{ applied, failed }` and **never rejecting**, because a mixed outcome is ordinary. There is no bulk endpoint over issues (`/cases/bulk` and `/executions/bulk` exist and are not it). The caller names the failures and keeps them selected |
 | `Set epic` is refused over a TASK before the request | The contract's depth rule is 400 for *"a parent more than one level above the child"*, so a Task's parent is a Story. `typeLevel` is on every backlog row, so the picker is disabled with that sentence rather than rendered and rejected |
@@ -190,11 +199,68 @@ CLAUDE.md. Targeted tests may run locally for debugging.
   label/board writes typecheck against the contract and are unexercised until T7–T9. `useUpdateBoard`
   is the one whose behaviour is worth doubting: it invalidates `keys.board(board.id)` from the
   *response's* id rather than the argument's, which is right and untested.
-- **Nothing in 012 M2 renders.** `?view=board` still shows M1's placeholder panel until T7, and the
-  three new fault arms have been driven through mocked `api.*` calls but never armed in a browser
-  against a real backend.
+- ~~**Nothing in 012 M2 renders.**~~ → T7, T8 and T9 landed the board, the backlog and the board
+  settings. **`?view=board` and `?view=backlog` no longer show a placeholder, and neither do
+  `?view=timeline` and `?view=calendar` since 013 T5** — the `WorkTable.NotYet.*` panel and the
+  `module` / `body` / `existing` columns of `VIEWS` are gone, because all five views exist.
+- **Nothing in 013 M3 has been seen in a browser.** 41 component tests, `npm run build` and oxlint at
+  zero; none of them is a renderer. Specifically unverified, and each is something jsdom structurally
+  cannot answer:
+  - **Every bar on the roadmap is absolutely positioned inside a percentage-width track**, and jsdom
+    applies no stylesheet, so `left` and `width` have been asserted as *numbers out of
+    `timelineScale`* and never as geometry. A window whose `from` and `to` collapse, a release bar
+    that overruns its track, and the `MIN_WIDTH` floor's effect on a two-day span are all unseen.
+  - **The month scale and the tracks are two independent grids** — `repeat(n, 1fr)` above,
+    percentage offsets below — aligned only because both span the same box. Nothing checks that they
+    line up, which is the same class of assumption 012 T7's fixed-272px column headers made.
+  - **The calendar's 42-cell grid at 1280px**, and a day cell holding four events.
+  - **`tcmsFaults.release('untested')` and `release('empty')` have never been armed in a browser.**
+    Both are driven through mocked `api.*` calls in the suite; the seam itself is the one thing the
+    tests do not exercise, and the `empty` arm's whole purpose is a state that only exists before
+    somebody types a release.
+  - **The publish confirmation's copy against a real 409-free server**, and whether the idempotent
+    second press reads as a no-op on screen.
+- **`useReleases` is read by three screens and `useRelease` by one.** `useUpdateRelease`,
+  `useDeleteRelease`, `useIssueTestCases`, `usePutIssueTestCases` and `useCaseVerifications` have
+  **no caller yet** — they typecheck against the contract and are exercised only by T6's screens. The
+  one worth doubting is `usePutIssueTestCases`: it sweeps `keys.releaseRoot`, which is right and
+  untested, because nothing writes a `TEST_CASE` link until `LinkedCasesPanel` lands.
+- **The calendar fetches every filtered issue to draw thirty days.** `GET /issues` has no date-range
+  parameter, so the month is applied in the client. It shares the Table view's cache key, so
+  switching between them costs no second read — which is what makes it acceptable today and what
+  would have to change first on a project with tens of thousands of issues.
 
 ## Session log
+
+- **2026-09-01** — 013 T5, `fe` (plan `71d7fce1`). The release list, the new-release form, the
+  readiness screen, the roadmap and the calendar — and the empty roadmap, which is the module's
+  acceptance criterion rather than its edge case. Five things worth carrying.
+  **The fault switch found the defect it was built for, before the screen did.** `release('untested')`
+  landed at step 3, and writing it forced the question the whole module turns on into the code: what
+  does the meter draw when `casesPassed` is `null`? Every branch in the two screens is on
+  `tests.hasRun`, never on a count, and the `?? 0`s live *inside* those branches — which is a shape
+  that is easy to get right once stated and near-impossible to notice going wrong.
+  **`plural(4, 'story')` rendered "4 storys" on the scope tile**, in the one sentence taken verbatim
+  from the mockup. `pluralNoun` had no `y → ies` rule because no caller in the tree had ever passed
+  such a noun; the fix is in the shared layer, which is where the next one will find it. Its sibling:
+  **`formatAge` reads a future date as "just now"**, so `target 18 Sep 2026 · in 17 days` shipped as
+  `· just now` until `formatDueIn` existed. Both were caught by a test asserting the mockup's own
+  words rather than a selector.
+  **`doneButFailing` could not live where the plan put it.** oxlint's
+  `react(only-export-components)` is a warning and the lint gate is zero, so `ReadinessPanels.tsx`
+  cannot export a function beside its components — the same constraint `features/board/cardLink.ts`
+  was created for. It went into `releaseBadge.ts` with `blockerVerdict`.
+  **The calendar being the second `IssueFilters` reader forced T8's extraction to happen again**, one
+  parameter set over: two chip lists would have regrown exactly the drift `useBoardFilterChips`
+  removed, so `useIssueFilterChips` sits beside it and `WorkTablePage` lost its inline copy —
+  and `useProjectMembers` with it, since the chips were that read's only consumer. `month` joined
+  `CARRIED` for the same reason `board` did in T7: it looks like a filter because fewer things are on
+  screen after you press it, and it is *which month you are looking at*.
+  **One mockup element the payload cannot support, and it is in the unscheduled lane.**
+  `work-timeline.html` draws *"Loyalty tie-in — no dates"* at a `left` and a `width`, both invented.
+  So the lane bars the epics that have dates (and no release) and lists the dateless ones as links
+  under the track — two shapes, because the data is two shapes, and D-o's rule that nothing
+  disappears from the roadmap is met either way.
 
 - **2026-08-31** — 012 T8, `fe` (`8dc709e3`; plan `aeea6b25`). The ranked backlog, and one filter
   across every view — the task that makes D34 true on screen. Five things worth carrying.
@@ -356,11 +422,3 @@ CLAUDE.md. Targeted tests may run locally for debugging.
   it. **The full local suite is red and it is not this change** — a nondeterministic 4/16/8 failures
   across a moving set of files, all `Failed to parse URL from /api/v1/…`, present with the change
   stashed; the tree also carried an uncommitted T9 lane. See 007's T6 Step 3.
-- **2026-08-29** — FULL orientation, no code written. Compared `CaseEditorPage`'s New-case state
-  against `assets/case-authoring-redesign.html` frame B; found the IA implemented and the design
-  not, in seven places. Measured the MUI footprint (156 files, but only 8 coupled to internals; X
-  packages in 3 files; `x-date-pickers` unused). Verified the design-language spec's claim that the
-  render kit is the app's dark theme — true: `--steel` **is** `--color-action-primary`, and the port
-  is two token additions, one split, three hue changes. Wrote
-  `docs/plans/007-render-design-implementation.md` (17 tasks, Tailwind v4 + shadcn/ui). Cache
-  created.

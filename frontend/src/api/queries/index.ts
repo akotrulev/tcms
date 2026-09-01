@@ -285,6 +285,23 @@ export {
   useUpdateLabel,
   type RankPlacement,
 } from './projectBoards';
+/*
+  Releases (013 M3). The QA-link hooks are here rather than in `issues.ts` because they read and
+  write the edge readiness is computed over — the file that owns readiness owns them.
+*/
+export {
+  useCaseVerifications,
+  useCreateRelease,
+  useDeleteRelease,
+  useIssueTestCases,
+  usePublishRelease,
+  usePutIssueTestCases,
+  useReadiness,
+  useRelease,
+  useReleases,
+  useRoadmap,
+  useUpdateRelease,
+} from './releases';
 export {
   EPIC_COMPLETION_LIMIT,
   useBulkUpdateIssues,

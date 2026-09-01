@@ -19,6 +19,7 @@
  *     tcmsFaults.issue('conflict')// the workflow refuses a move — see below
  *     tcmsFaults.rank('conflict') // the rank write loses a race — see below
  *     tcmsFaults.wip()            // every card move lands the column over its limit — see below
+ *     tcmsFaults.release('empty') // the roadmap is empty — merge day, see below
  *     tcmsFaults.off()
  *
  * ## Why this lives here and not in a mock transport
@@ -94,6 +95,26 @@
  *     that the breach is reported rather than enforced (story B3), which a real WIP limit only
  *     reaches after somebody drags three cards into one column.
  *
+ * ## The release module's two switches, and both are states a healthy instance grows out of (013 T5)
+ *
+ * These land **before the screens that prove them**, for the same working agreement.
+ *
+ *   - `release('untested')` — every readiness read answers `hasRun: false` with **null** counts. It
+ *     is the state no seeded instance can reach once anybody has run anything, and the one the
+ *     screen most easily gets wrong: a `?? 0` anywhere in the meter turns "nothing has run" into
+ *     "nothing failed", which is the distinction `ReleaseVerdict` exists to hold. The list's Tests
+ *     cell must read the literal words *no run yet* and the detail page must show its *"If nothing
+ *     had run"* panel, and neither is reachable from a demo instance with a green run on it.
+ *   - `release('empty')` — the roadmap answers `{ releases: [], unscheduled: [] }`. **This is an
+ *     acceptance criterion of the module rather than an edge case**: D14 migrates nothing into
+ *     `release`, so on the day M3 merges the roadmap and the release list are empty for every user
+ *     in every instance, and the screen has to say why and offer to create the first one. After
+ *     somebody does, the state is unreachable again without a fresh database.
+ *
+ * Both path tests are **anchored** (`/^\/releases\/[^/]+\/readiness$/`), so `untested` cannot
+ * catch the release detail read one segment above it and fabricate a `ReleaseReadiness` where a
+ * `Release` was expected — the drifted-body failure, injected by accident.
+ *
  * `wip()` fabricates a whole `CardMoveResult`, and its `card` is therefore **not the card that
  * moved** — the seam sits in front of `fetch` and never sees the request body, so there is no
  * `toColumnId` to answer with. Nothing reads it: the move's success invalidates the board and the
@@ -131,6 +152,8 @@ export interface FaultState {
   rank: RankFault | null;
   /** Every card move reports the target column over its WIP limit. */
   wip: boolean;
+  /** How the release module's reads misbehave, or `null` for an instance with releases in it. */
+  release: ReleaseFault | null;
 }
 
 /** The five ways somebody else's tracker fails us. See this module's header. */
@@ -151,6 +174,14 @@ export type IssueFault = 'conflict' | 'drift';
  */
 export type RankFault = 'conflict' | 'rebalance';
 
+/**
+ * The two release states a working instance grows out of. See this module's header.
+ *
+ * **Neither is a failure.** Both are 200s carrying a state the screen has to word correctly, which
+ * is why they are arms here rather than something `status()` could approximate.
+ */
+export type ReleaseFault = 'untested' | 'empty';
+
 const faults: FaultState = {
   status: null,
   retryAfter: null,
@@ -162,6 +193,7 @@ const faults: FaultState = {
   issue: null,
   rank: null,
   wip: false,
+  release: null,
 };
 
 /**
@@ -202,6 +234,22 @@ function isRankWrite(path: string, method: string): boolean {
 /** `POST /boards/{boardId}/cards/{key}/move`, anchored for {@link isRankWrite}'s reason. */
 function isCardMove(path: string, method: string): boolean {
   return method === 'POST' && /^\/boards\/[^/]+\/cards\/[^/]+\/move$/.test(path);
+}
+
+/**
+ * `GET /releases/{releaseId}/readiness`, and only that.
+ *
+ * Anchored for {@link isRankWrite}'s reason, one segment tighter: `/releases/{id}` is the same
+ * prefix, and a readiness fault answering it would serve a `ReleaseReadiness` where a `Release` was
+ * expected.
+ */
+function isReadinessRead(path: string, method: string): boolean {
+  return method === 'GET' && /^\/releases\/[^/]+\/readiness$/.test(path);
+}
+
+/** `GET /projects/{projectId}/roadmap`, anchored for {@link isReadinessRead}'s reason. */
+function isRoadmapRead(path: string, method: string): boolean {
+  return method === 'GET' && /^\/projects\/[^/]+\/roadmap$/.test(path);
 }
 
 /** The issue key a path names, decoded — the fabricated bodies have to answer about the right one. */
@@ -264,6 +312,16 @@ export function verdictFor(path: string, method = 'GET'): FaultVerdict {
 
   if (faults.wip && isCardMove(path, method) && applies(path)) {
     return breachedMoveVerdict(path);
+  }
+
+  /*
+    The release arm, fifth, and scoped by path for every arm above's reason. Each of its two states
+    fabricates the shape of one specific operation, so a substring match would serve a roadmap where
+    a release list was expected.
+  */
+  if (faults.release !== null && applies(path)) {
+    const verdict = releaseVerdict(faults.release, path, method);
+    if (verdict.kind !== 'none') return verdict;
   }
 
   if (!applies(path)) return { kind: 'none' };
@@ -443,6 +501,55 @@ function rankVerdict(fault: RankFault, path: string): FaultVerdict {
   }
 
   return { kind: 'body', status: 200, body: { key, rank: '2048', rebalanced: true } };
+}
+
+/**
+ * The two release states a healthy instance grows out of, in the contract's own vocabulary.
+ *
+ * `'untested'` answers **readiness only**, and it answers with `hasRun: false` and every count under
+ * it `null` — which is the contract's own rule and the whole point of the arm. A fabricated `0`
+ * would arm nothing: the screen the fault exists to check is the one that must not draw a zero as a
+ * clean release, so serving one would make the fault agree with the defect.
+ *
+ * `'empty'` answers **the roadmap only**. The release *list* is left alone deliberately: a fresh
+ * instance has an empty list too, and that state is already reachable by looking at a project nobody
+ * has typed a release into — while an empty roadmap over a project that *has* releases is the
+ * merge-day shape and cannot be reached any other way once one exists.
+ */
+function releaseVerdict(fault: ReleaseFault, path: string, method: string): FaultVerdict {
+  if (fault === 'untested') {
+    if (!isReadinessRead(path, method)) return { kind: 'none' };
+    return {
+      kind: 'body',
+      status: 200,
+      body: {
+        releaseId: keyIn(path, 2),
+        version: '2.5',
+        status: 'PLANNED',
+        verdict: 'NOT_TESTED',
+        stories: { done: 0, total: 6, inProgress: 0, notStarted: 6, excludedSpikes: 0 },
+        tests: {
+          hasRun: false,
+          linkedCases: 4,
+          withResult: null,
+          passed: null,
+          failed: null,
+          blocked: null,
+          untested: null,
+          latestExecutedAt: null,
+          latestRunId: null,
+          latestRunName: null,
+          executedBy: null,
+        },
+        blockers: [],
+        epics: [],
+        scopeAddedAfterCreation: 0,
+      },
+    };
+  }
+
+  if (!isRoadmapRead(path, method)) return { kind: 'none' };
+  return { kind: 'body', status: 200, body: { releases: [], unscheduled: [] } };
 }
 
 /**
@@ -632,6 +739,18 @@ export function installFaultConsole(): void {
           : '[tcms faults] WIP limits are respected again',
       );
     },
+    /**
+     * How the release module misbehaves. `tcmsFaults.release(null)` restores it without clearing
+     * anything else, for `tracker()`'s reason.
+     */
+    release(fault: ReleaseFault | null) {
+      faults.release = fault;
+      console.info(
+        fault === null
+          ? '[tcms faults] releases behave again'
+          : `[tcms faults] releases are now: ${fault}`,
+      );
+    },
     only(pathContains: string | null) {
       faults.pathContains = pathContains;
       console.info(`[tcms faults] scoped to paths containing ${JSON.stringify(pathContains)}`);
@@ -647,6 +766,7 @@ export function installFaultConsole(): void {
       faults.issue = null;
       faults.rank = null;
       faults.wip = false;
+      faults.release = null;
       console.info('[tcms faults] cleared');
     },
     state: () => ({ ...faults }),
@@ -655,6 +775,7 @@ export function installFaultConsole(): void {
   (window as unknown as Record<string, unknown>).tcmsFaults = api;
   console.info(
     '[tcms faults] available — try tcmsFaults.status(500), .hang(), .expire(), '
-      + ".tracker('403'), .issue('conflict'), .rank('conflict'), .wip(), .off()",
+      + ".tracker('403'), .issue('conflict'), .rank('conflict'), .wip(), "
+      + ".release('empty'), .off()",
   );
 }

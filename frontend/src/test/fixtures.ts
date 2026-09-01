@@ -96,6 +96,19 @@ import type {
   IssueCompletion,
   IssueLabel,
   RankResult,
+  CaseVerification,
+  IssueRef,
+  IssueTestCase,
+  ReadinessSummary,
+  Release,
+  ReleaseBlocker,
+  ReleaseReadiness,
+  ReleaseStories,
+  ReleaseSummary,
+  ReleaseTests,
+  Roadmap,
+  RoadmapEpic,
+  RoadmapRelease,
 } from '../api/types'
 
 /** A fixed instant, so a body carrying a timestamp does not carry a different one each run. */
@@ -562,6 +575,162 @@ export function aCardMoveResult(overrides: Partial<CardMoveResult> = {}): CardMo
 
 export function anIssueLabel(overrides: Partial<IssueLabel> = {}): IssueLabel {
   return { id: 'lab1', name: 'needs-design', color: 'label-3', ...overrides }
+}
+
+// ---------------------------------------------------------------- releases (013) ----
+
+export function aRelease(overrides: Partial<Release> = {}): Release {
+  return {
+    id: 'rel1',
+    projectId: 'p1',
+    version: '2.4',
+    description: null,
+    targetDate: null,
+    status: 'PLANNED',
+    releasedAt: null,
+    createdAt: AT,
+    updatedAt: null,
+    ...overrides,
+  }
+}
+
+/**
+ * A version nothing has run against — `hasRun: false` and both counts **null**.
+ *
+ * The one default in this file chosen for a reason beyond "least interesting": `ReleaseVerdict` says
+ * an untested version and a passing one are not the same claim, so a fixture defaulting
+ * `casesPassed` to `0` would let a `?? 0` anywhere between the wire and a rendered meter pass every
+ * test in the tree. The inert default is the one that catches the defect.
+ */
+export function aReadinessSummary(overrides: Partial<ReadinessSummary> = {}): ReadinessSummary {
+  return {
+    verdict: 'NOT_TESTED',
+    storiesDone: 0,
+    storiesTotal: 0,
+    linkedCases: 0,
+    hasRun: false,
+    casesPassed: null,
+    casesFailed: null,
+    ...overrides,
+  }
+}
+
+/** A row in `releases.html`'s table — its readiness is inline, never a second read. */
+export function aReleaseSummary(overrides: Partial<ReleaseSummary> = {}): ReleaseSummary {
+  return {
+    id: 'rel1',
+    version: '2.4',
+    description: null,
+    targetDate: null,
+    status: 'PLANNED',
+    releasedAt: null,
+    createdAt: AT,
+    readiness: aReadinessSummary(),
+    ...overrides,
+  }
+}
+
+export function aReleaseStories(overrides: Partial<ReleaseStories> = {}): ReleaseStories {
+  return { done: 0, total: 0, inProgress: 0, notStarted: 0, excludedSpikes: 0, ...overrides }
+}
+
+/** Null counts by default, for {@link aReadinessSummary}'s reason. */
+export function aReleaseTests(overrides: Partial<ReleaseTests> = {}): ReleaseTests {
+  return {
+    hasRun: false,
+    linkedCases: 0,
+    withResult: null,
+    passed: null,
+    failed: null,
+    blocked: null,
+    untested: null,
+    latestExecutedAt: null,
+    latestRunId: null,
+    latestRunName: null,
+    executedBy: null,
+    ...overrides,
+  }
+}
+
+export function aReleaseBlocker(overrides: Partial<ReleaseBlocker> = {}): ReleaseBlocker {
+  return {
+    key: 'PRJ-1',
+    title: 'An issue',
+    type: anIssueType(),
+    status: aStatusRef(),
+    casesPassed: 0,
+    casesFailed: 0,
+    casesBlocked: 0,
+    casesUntested: 0,
+    failedCaseKeys: [],
+    ...overrides,
+  }
+}
+
+export function aRoadmapEpic(overrides: Partial<RoadmapEpic> = {}): RoadmapEpic {
+  return {
+    key: 'PRJ-9',
+    title: 'An epic',
+    startDate: null,
+    targetDate: null,
+    releaseId: null,
+    statusKind: 'NOT_STARTED',
+    completionPercent: null,
+    ...overrides,
+  }
+}
+
+export function aReleaseReadiness(overrides: Partial<ReleaseReadiness> = {}): ReleaseReadiness {
+  return {
+    releaseId: 'rel1',
+    version: '2.4',
+    status: 'PLANNED',
+    verdict: 'NOT_TESTED',
+    stories: aReleaseStories(),
+    tests: aReleaseTests(),
+    blockers: [],
+    epics: [],
+    scopeAddedAfterCreation: 0,
+    ...overrides,
+  }
+}
+
+export function aRoadmapRelease(overrides: Partial<RoadmapRelease> = {}): RoadmapRelease {
+  return {
+    id: 'rel1',
+    version: '2.4',
+    targetDate: null,
+    status: 'PLANNED',
+    verdict: 'NOT_TESTED',
+    epics: [],
+    ...overrides,
+  }
+}
+
+/** Empty by default, which the contract says is the ordinary state of a fresh instance (D14). */
+export function aRoadmap(overrides: Partial<Roadmap> = {}): Roadmap {
+  return { releases: [], unscheduled: [], ...overrides }
+}
+
+export function anIssueRef(overrides: Partial<IssueRef> = {}): IssueRef {
+  return { key: 'PRJ-1', title: 'An issue', typeLevel: 'STORY', ...overrides }
+}
+
+/** The three `last*` members are required and nullable together — a case never run is three nulls. */
+export function anIssueTestCase(overrides: Partial<IssueTestCase> = {}): IssueTestCase {
+  return {
+    caseId: 'c1',
+    caseKey: 'TC-1',
+    title: 'A case',
+    lastResultKind: null,
+    lastExecutedAt: null,
+    lastReleaseVersion: null,
+    ...overrides,
+  }
+}
+
+export function aCaseVerification(overrides: Partial<CaseVerification> = {}): CaseVerification {
+  return { caseId: 'c1', issues: [], ...overrides }
 }
 
 /** A row in a list — the work table, an epic's children, a story's sub-tasks. */

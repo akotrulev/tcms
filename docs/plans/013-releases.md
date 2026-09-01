@@ -2265,7 +2265,7 @@ offers to create a release.** `npm run build`, `lint` and `test:run` green.
   caches. `drivingAFailedRead()` / `drivingAFailedWrite()` / `renderingIntoAnErrorBoundary()` take no
   arguments; the reason goes in a comment beside the call.
 
-- [ ] **Step 1: `api/types.ts` and `lib/labels.ts`**
+- [x] **Step 1: `api/types.ts` and `lib/labels.ts`**
 
 ```ts
 // api/types.ts, in the tracker.release block
@@ -2316,7 +2316,7 @@ export const releaseVerdictLabels = {
 } as const satisfies Record<ReleaseVerdict, string>;
 ```
 
-- [ ] **Step 2: `api/queries/releases.ts`**
+- [x] **Step 2: `api/queries/releases.ts`**
 
 Nine hooks — `useReleases`, `useRelease`, `useReadiness`, `useRoadmap`, `useCreateRelease`,
 `useUpdateRelease`, `useDeleteRelease`, `usePublishRelease`, `useIssueTestCases` /
@@ -2327,7 +2327,7 @@ Every read carries `timeoutMs: TIMEOUTS.interactive` and an `enabled` gate on a 
 write invalidates `keys.releases(projectId)` **and** `keys.roadmap(projectId)` — the roadmap draws
 the same rows and a create that refreshed only the list leaves the timeline a version behind.
 
-- [ ] **Step 3: The fault switch, before the screens it proves**
+- [x] **Step 3: The fault switch, before the screens it proves**
 
 *Build the fault switch before the feature it proves.* `lib/devFaults.ts` gains one arm:
 
@@ -2348,7 +2348,7 @@ Both guards stay a **literal** `import.meta.env.DEV` so Rollup drops the module 
 through an imported constant ships it. The path test is **anchored**
 (`/^\/releases\/[^/]+\/readiness$/`), so it cannot catch the release detail read.
 
-- [ ] **Step 4: `ReleaseListPage` — `releases.html`**
+- [x] **Step 4: `ReleaseListPage` — `releases.html`**
 
 Header, `+ New release` gated on `release:manage`, `On the timeline` linking to
 `?view=timeline`, then one `DataRegion` over a TanStack table: Version · Target date · Description ·
@@ -2368,7 +2368,7 @@ The panel foot carries `releases.html`'s sentence about `2.10`. The empty state 
 `DataRegion`'s `EmptyState` with `kind="by-design"`: *"No releases yet — nothing is migrated into
 releases when this module ships, so the first one is one you type."* plus the gated action.
 
-- [ ] **Step 5: `ReleaseNewPage` — `release-new.html`**
+- [x] **Step 5: `ReleaseNewPage` — `release-new.html`**
 
 Two panels: the form (version, target date, description) and the mockup's **Not in this product**
 card, verbatim — sprints, velocity and sprint burndown, a release shared between two projects. That
@@ -2377,7 +2377,7 @@ card is not decoration: it is where a person looking for a sprint field finds ou
 Field errors come off `Problem.errors` through `describeError`; the 409 renders on the version field
 as the server's sentence.
 
-- [ ] **Step 6: `ReleaseDetailPage` and `ReadinessPanels` — `release.html`**
+- [x] **Step 6: `ReleaseDetailPage` and `ReadinessPanels` — `release.html`**
 
 Header with the badge and the target chip; the red banner when a blocker is **done with a failed
 case** — derived, not sent:
@@ -2403,7 +2403,7 @@ which the same `hasRun` false branch replaces with *"No test run against 2.5"*.
 
 `Mark released` is gated on `release:publish` and confirms first.
 
-- [ ] **Step 7: `RoadmapView` and `timelineScale.ts`**
+- [x] **Step 7: `RoadmapView` and `timelineScale.ts`**
 
 ```ts
 /**
@@ -2441,7 +2441,7 @@ a div with an onClick.
 />
 ```
 
-- [ ] **Step 8: `CalendarView` — `work-calendar.html`, D-n**
+- [x] **Step 8: `CalendarView` — `work-calendar.html`, D-n**
 
 A month grid from `useIssues(projectId, filters, 'dueDate')` and `useReleases(projectId)`: due dates,
 overdue in the danger tone, release targets in the release tone. Month navigation in the header, the
@@ -2451,7 +2451,7 @@ The footer names what is not drawn and which module brings it — test runs, abs
 period ends (M6) — because *"coming soon" names nothing a reader can plan around*, which is the
 sentence `WorkTablePage`'s own `VIEWS` entries are built on.
 
-- [ ] **Step 9: Wire the routes, the rail and the two view arms**
+- [x] **Step 9: Wire the routes, the rail and the two view arms**
 
 `router.tsx` — three routes under `/projects/:projectId/releases`. `AppShell.tsx` — a **Releases**
 entry in the **Execution** group, immediately after **Work**, matching the mockup rail's order
@@ -2461,7 +2461,7 @@ entry in the **Execution** group, immediately after **Work**, matching the mocku
 `WorkTablePage.tsx` — replace the `timeline` and `calendar` entries' `module: 'M3'` panels with the
 two components, and delete the two `body` sentences that named this module as pending.
 
-- [ ] **Step 10: Tests and the gate**
+- [x] **Step 10: Tests and the gate**
 
 Per page: renders, empty state, failed read (`drivingAFailedRead()`), and the one behaviour that
 screen exists for. `ReleaseListPage` asserts `no run yet` and **not** `0/0`. `RoadmapView` asserts
@@ -2475,12 +2475,55 @@ span shapes.
 
 **Acceptance criteria**
 
-- [ ] The empty roadmap explains why it is empty and offers `create a release`, rather than reading as a bug
-- [ ] The release page shows readiness with the blocking stories named
-- [ ] A release with no run renders `no run yet` and the *"If nothing had run"* panel, never a zero meter
-- [ ] Timeline and calendar are reachable and usable from the keyboard — every bar is an `<a>`
-- [ ] `build`, `lint` and `test:run` green
+- [x] The empty roadmap explains why it is empty and offers `create a release`, rather than reading as a bug
+- [x] The release page shows readiness with the blocking stories named
+- [x] A release with no run renders `no run yet` and the *"If nothing had run"* panel, never a zero meter
+- [x] Timeline and calendar are reachable and usable from the keyboard — every bar is an `<a>`
+- [x] `build`, `lint` and `test:run` green
 
+
+### What T5 landed differently from this plan, and why
+
+Recorded in place rather than appended, per this plan's own rule about living text.
+
+1. **`doneButFailing` and `blockerVerdict` are in `releaseBadge.ts`, not `ReadinessPanels.tsx`.**
+   oxlint's `react(only-export-components)` is a warning and the lint gate is zero, so a module
+   exporting components may not also export a function. `features/board/cardLink.ts` exists for
+   exactly this reason and the comment says so.
+2. **`keys.releaseRoot` — a seventh key, not in this plan's list.** `usePutIssueTestCases`
+   changes readiness **without naming a release**: the payload is a story's cases, so nothing in
+   it says which release that story targets. Sweeping `['releases']` is the only correct answer
+   available, and it costs a refetch of a detail screen usually not mounted.
+3. **`useIssueFilterChips` was extracted into `useWorkFilter.ts`, and `month` added to its
+   `CARRIED` list.** The calendar reads the same six `IssueFilters` parameters the table does, so
+   a second chip list would have regrown exactly the drift 012 T8's extraction removed — and the
+   first thing to drift between two such lists is *which* filters get a chip at all.
+   `WorkTablePage` lost its inline copy and its `useProjectMembers` read with it, since the chips
+   were that read's only consumer. `month` is in `CARRIED` because it is *which month you are
+   looking at*, not which work: a clear that reset it would throw the reader back to today while
+   removing a label chip.
+4. **Two additions to `lib/format.ts`, which this plan's file list does not name.** `pluralNoun`
+   gained a consonant-`y` → `ies` rule — the scope tile read **"4 storys"** until it did, and this
+   module is the first caller to pass such a noun. And `formatDueIn` is new: `formatAge` reads a
+   negative interval as *"just now"*, so the header's `target 18 Sep 2026 · in 17 days` was
+   rendering as `· just now` for every release in the future.
+5. **The roadmap has NO filter strip.** `work-timeline.html` draws the shared chips with *"the
+   filter came with you from the board"*, and `GET /projects/{id}/roadmap` declares no filter
+   parameters at all — so a strip there would be chrome that narrows nothing, which is worse than
+   none: a reader who removed a chip and saw no change would learn the filter is broken. The
+   calendar does carry it, because `GET /issues` does take the filter.
+6. **The unscheduled lane renders two shapes, not one row of bars.** An epic with dates and no
+   release gets a real bar — it has a span and just nowhere else to be drawn — while one with no
+   dates at all is a link in a list under the track. That is the one thing `work-timeline.html`
+   does which the payload cannot support: it draws *"Loyalty tie-in — no dates"* at a `left` and a
+   `width`, both invented.
+7. **`timelineScale`'s month labels are `en-US`, not the `en-GB` the rest of the app formats
+   dates in.** `en-GB`'s short September is `Sept` — four characters — which breaks the mockup's
+   `Jul Aug Sep` scale and the column rhythm it sets.
+8. **`WorkTablePage`'s `VIEWS` table lost `module`, `body` and `existing`**, and the
+   `WorkTable.NotYet.*` panel with them: all five views render now, so there is nothing left for
+   those columns to say. Its test kept its place in the file and asserts the roadmap and the
+   calendar render rather than a deferral panel.
 ---
 
 ## T6 — The overview panels, the QA link on screen, and the close-out
@@ -2496,6 +2539,9 @@ surface document and 009's status table are closed out.
 **Files:**
 - Modify: `frontend/src/features/projects/ProjectOverviewPage.tsx`
 - Modify: `frontend/src/features/board/BacklogView.tsx`
+- Modify: `frontend/src/features/board/useWorkFilter.ts` and `frontend/src/api/types.ts` — the
+  release chip is a `BoardFilters` parameter, and neither `BoardFilters` nor
+  `useBoardFilterChips` carries `releaseId` / `unscheduled` yet (T5 note)
 - Modify: `frontend/src/features/tracker/StoryPanels.tsx`; create `LinkedCasesPanel.tsx` beside it
 - Modify: `frontend/src/features/cases/CaseGrid.tsx`
 - Modify: `docs/features.md`, `docs/specs/2026-08-08-mcp-tool-and-command-surface.md`,
@@ -2522,6 +2568,15 @@ Then the two KPI tiles `project-overview.html` carries and M1 left out because t
 numbers: **`2.4 complete`** (from readiness, with its basis named beneath) and **`To target date`**
 (days, from the target date). Both render `—` with a `title` when there is no next release, rather
 than disappearing — a tile that vanishes moves the three beside it.
+
+**Two functions T5 landed that this step must reuse rather than re-derive.** The red note is
+`doneButFailing`, and it lives in **`features/releases/releaseBadge.ts`**, not in
+`ReadinessPanels.tsx` as this plan first said — oxlint's `react(only-export-components)` is a
+warning and the lint gate is zero, so a module exporting components may not also export a function
+(`features/board/cardLink.ts` exists for the same reason). `blockerVerdict` is beside it. And
+**`To target date` is `lib/format.ts::formatDueIn`**, added in T5: `formatAge` reads a negative
+interval as *"just now"*, so it cannot answer a future deadline at all — every future target
+rendered as `target 18 Sep 2026 · just now` until that function existed.
 
 - [ ] **Step 2: The backlog's release sections and `Move to release` (D-k, D-l)**
 
@@ -2835,6 +2890,23 @@ Verifies column), story.html (the linked cases panel).
     because a mixed outcome is ordinary. There is no bulk endpoint over issues.
   * LinkedCasesPanel on the story is what CREATES the TEST_CASE links. Without it every release in
     every instance reads NOT_TESTED forever, and T3's readiness has nothing to read.
+
+Five things T5 landed that this task must not re-derive:
+  * doneButFailing and blockerVerdict are in features/releases/releaseBadge.ts, NOT in
+    ReadinessPanels.tsx — oxlint react(only-export-components) is a warning and the lint gate is
+    zero. The overview's red note is that function.
+  * lib/format.ts::formatDueIn is the To-target-date tile. formatAge reads a negative interval as
+    "just now" and cannot answer a future deadline.
+  * useIssueFilterChips (IssueFilters) sits beside useBoardFilterChips (BoardFilters) in
+    features/board/useWorkFilter.ts. The backlog's release chip belongs in the BOARD one — and
+    neither BoardFilters (api/types.ts) nor that hook carries releaseId / unscheduled yet, so this
+    task adds both. `month` is already in the hook's CARRIED list.
+  * keys.releaseRoot is ['releases'] and sweeps every release detail and readiness. It is what a
+    write that changes readiness WITHOUT naming a release invalidates — which is exactly
+    PUT /issues/{key}/rank's sibling, PUT /issues/{key}/test-cases, already wired in
+    usePutIssueTestCases.
+  * WorkTablePage's VIEWS table no longer has module/body/existing and there is no
+    WorkTable.NotYet.* panel. All five views render.
 
 Then close out per 009's "Prompt hand-off protocol": docs/features.md (strike the Phase 3
 "Milestones & release readiness" line, add a Releases section), the status table, a long and specific

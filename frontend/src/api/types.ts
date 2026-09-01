@@ -689,10 +689,11 @@ export type StatusRemovalInput = S['StatusRemovalInput'];
 
 // tracker.board (012 M2) — the PROJECT board, which is not the composite one above
 /**
- * Story B3's grouping axis. `RELEASE` is absent until M3, deliberately: a member whose data does
- * not exist would group every card into one lane called "None", which reads as a broken board
- * rather than an unbuilt feature. `lib/labels.ts::swimlaneByLabels` is where adding it becomes a
- * compile error.
+ * Story B3's grouping axis. ~~`RELEASE` is absent until M3, deliberately: a member whose data does
+ * not exist would group every card into one lane called "None".~~ → **it landed with 013 T1**, on
+ * the commit that added the enum rather than the one that drew a release screen, because
+ * `lib/labels.ts::swimlaneByLabels` is `satisfies Record<Union, string>` and the tree has to build
+ * at every task boundary (D-j). Six members now.
  */
 export type SwimlaneBy = S['SwimlaneBy'];
 /** A row in the board picker — `columnCount` rather than the columns, which the picker never draws. */
@@ -750,6 +751,43 @@ export type RankResult = S['RankResult'];
 export type IssueLabel = S['Label'];
 export type IssueLabelInput = S['LabelInput'];
 export type IssueLabelsInput = S['IssueLabelsInput'];
+
+// tracker.release (013 M3) — releases, readiness, the roadmap and the QA link
+export type ReleaseStatus = S['ReleaseStatus'];
+/**
+ * The one answer to "can we ship 2.4?".
+ *
+ * `NOT_TESTED` is not `NOT_READY` with no failures: it means nothing has run against this version
+ * at all. Read {@link ReleaseTests}`.hasRun` beside it, and never draw a meter from `passed` /
+ * `failed` when it is false — they are null, and a zero drawn as a bar looks like a clean release.
+ */
+export type ReleaseVerdict = S['ReleaseVerdict'];
+export type Release = S['Release'];
+export type ReleaseSummary = S['ReleaseSummary'];
+/** A release as it appears on an issue or a backlog row — never its readiness. */
+export type ReleaseRef = S['ReleaseRef'];
+/** The row-sized readiness, carried inline on every {@link ReleaseSummary}. */
+export type ReadinessSummary = S['ReadinessSummary'];
+export type ReleaseReadiness = S['ReleaseReadiness'];
+export type ReleaseStories = S['ReleaseStories'];
+/** The QA half — **the latest result per case, not the best one**, and null counts when untested. */
+export type ReleaseTests = S['ReleaseTests'];
+export type ReleaseBlocker = S['ReleaseBlocker'];
+export type Roadmap = S['Roadmap'];
+export type RoadmapRelease = S['RoadmapRelease'];
+export type RoadmapEpic = S['RoadmapEpic'];
+export type ReleaseInput = S['ReleaseInput'];
+/**
+ * Every field optional, and **`status` is not among them**: publishing is
+ * `POST /releases/{id}/publish` and costs `release:publish`, which `release:manage` does not imply
+ * (D-m). A status property here would be that state moved behind the other key.
+ */
+export type ReleaseUpdate = S['ReleaseUpdate'];
+/** A case linked to a story, with the latest result it has **anywhere** — not scoped to a release. */
+export type IssueTestCase = S['IssueTestCase'];
+export type IssueTestCasesInput = S['IssueTestCasesInput'];
+export type CaseVerification = S['CaseVerification'];
+export type IssueRef = S['IssueRef'];
 
 /**
  * The one filter the board, the backlog and the table share (D34) — and it is the board's

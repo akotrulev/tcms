@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useLabels, useProjectMembers } from '../../api/queries';
+import { useLabels, useProjectMembers, useProjectWorkflow } from '../../api/queries';
 import type { BoardFilters, IssueFilters, IssueLevel, Priority } from '../../api/types';
 import type { AppliedFilter } from '../../components/kit';
 import { issueLevels, priorityLabels } from '../../lib/labels';
@@ -64,8 +64,13 @@ export interface WorkFilter {
  * `board` is one of them since 012 T7 put a board picker on the screen, and it is the one most
  * easily missed: it looks like a filter because it narrows what is on screen, and it is not one,
  * because it names *which board* rather than *which work*.
+ *
+ * `month` joined it in 013 T5 and is the same trap one door over: the Calendar's month picker looks
+ * like a narrowing because fewer issues are on screen after you press it, and it is not one — it is
+ * *which month you are looking at*. A clear that reset it would throw the reader back to today
+ * while removing a label chip.
  */
-const CARRIED = ['view', 'board', 'sort', 'cols'] as const;
+const CARRIED = ['view', 'board', 'sort', 'cols', 'month'] as const;
 
 export function useWorkFilter(): WorkFilter {
   const [params, setParams] = useSearchParams();
@@ -178,6 +183,77 @@ export function useBoardFilterChips(
             key: `epic:${filters.epicKey}`,
             label: `Epic · ${filters.epicKey}`,
             onRemove: () => setParam((next) => next.delete('epicKey')),
+          },
+        ]
+      : []),
+    ...(filters.unparented
+      ? [
+          {
+            key: 'unparented',
+            label: 'No epic',
+            onRemove: () => setParam((next) => next.delete('unparented')),
+          },
+        ]
+      : []),
+  ];
+}
+
+/**
+ * The applied chips for an `IssueFilters` view — the table's and, since 013 T5, the calendar's.
+ *
+ * Extracted for {@link useBoardFilterChips}' reason, and it is the same reason the second time: two
+ * copies of one chip list drift, and the first thing to drift is *which* filters get a chip at all.
+ * The table had built this inline while it was the only reader; the calendar reads the same six
+ * parameters off the same URL, so a second copy would have regrown the drift the hook removes.
+ *
+ * **A chip for every filter this endpoint applies, whether or not the strip can apply it.**
+ * `epicKey` and `parentKey` have a chip and no picker on purpose: `GET /issues` takes both, so a
+ * reader who narrowed to one epic on the Board and switched here is looking at a narrowed list —
+ * and what they need is to *see* it and take it off, not a second place to apply it.
+ */
+export function useIssueFilterChips(
+  projectId: string,
+  filters: IssueFilters,
+  { setParam, dropOne }: Pick<WorkFilter, 'setParam' | 'dropOne'>,
+): AppliedFilter[] {
+  const workflow = useProjectWorkflow(projectId);
+  const members = useProjectMembers(projectId, true);
+
+  return [
+    ...(filters.level
+      ? [
+          {
+            key: `level:${filters.level}`,
+            label: `Level · ${issueLevels[filters.level]}`,
+            onRemove: () => setParam((next) => next.delete('level')),
+          },
+        ]
+      : []),
+    ...(filters.statusId ?? []).map((id) => ({
+      key: `status:${id}`,
+      label: `Status · ${workflow.data?.statuses.find((status) => status.id === id)?.name ?? id}`,
+      onRemove: () => dropOne('statusId', id),
+    })),
+    ...(filters.assigneeId ?? []).map((id) => ({
+      key: `assignee:${id}`,
+      label: `Assignee · ${members.data?.find((member) => member.id === id)?.displayName ?? id}`,
+      onRemove: () => dropOne('assigneeId', id),
+    })),
+    ...(filters.epicKey
+      ? [
+          {
+            key: `epic:${filters.epicKey}`,
+            label: `Epic · ${filters.epicKey}`,
+            onRemove: () => setParam((next) => next.delete('epicKey')),
+          },
+        ]
+      : []),
+    ...(filters.parentKey
+      ? [
+          {
+            key: `parent:${filters.parentKey}`,
+            label: `Parent · ${filters.parentKey}`,
+            onRemove: () => setParam((next) => next.delete('parentKey')),
           },
         ]
       : []),

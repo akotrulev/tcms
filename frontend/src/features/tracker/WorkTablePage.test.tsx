@@ -12,6 +12,7 @@ import {
   aBoardSummary,
   aProject,
   aProjectWorkflow,
+  aRoadmap,
   aStatusRef,
   anIssueSummary,
   anIssueType,
@@ -90,6 +91,13 @@ function mockReads(issues = [anIssueSummary({ key: 'ACME-118', title: 'Guest che
     if (/^\/projects\/[^/]+\/labels$/.test(path)) return []
     // The backlog view's own read (012 T8). Anchored for the same reason as the pair above.
     if (/^\/projects\/[^/]+\/backlog/.test(path)) return []
+    /*
+      The timeline's and the calendar's reads (013 T5). Both views are real now, so a double that
+      answered only the first three would report the fifth view as a failed region — which is what
+      `renderFailures` caught the moment the two placeholder panels were replaced.
+    */
+    if (/^\/projects\/[^/]+\/roadmap$/.test(path)) return aRoadmap()
+    if (/^\/projects\/[^/]+\/releases$/.test(path)) return []
     if (/^\/boards\/[^/]+$/.test(path)) return aBoardConfig({ id: 'b1' })
     if (/^\/boards\/[^/]+\/cards/.test(path)) return boardContents()
     if (/^\/projects\/[^/]+$/.test(path)) return aProject({ id: 'p1', name: 'Acme Storefront' })
@@ -180,15 +188,23 @@ describe('The view switcher (D34)', () => {
     })
   })
 
-  it('names the module a view it does not build arrives in, rather than hiding the tab', async () => {
-    // A tab that vanishes and reappears between releases teaches that the product is unstable;
-    // one that says when it arrives teaches the roadmap. The tab is in the switcher because D34
-    // makes Work one entry.
+  it('renders the roadmap and the calendar themselves now, rather than a panel deferring them', async () => {
+    /*
+      ~~A tab that vanishes and reappears between releases teaches that the product is unstable; one
+      that says when it arrives teaches the roadmap.~~ → **both arrived** (013 T5), so the two
+      `WorkTable.NotYet.*` panels are gone and every one of the five tabs renders its own view. The
+      test kept its place in this file because the thing it guards is unchanged: the tab is in the
+      switcher because D34 makes Work one entry, and no view may quietly fall back to the table.
+    */
     mockReads()
     renderPage('/projects/p1/work?view=timeline')
 
-    const panel = await screen.findByTestId('WorkTable.NotYet.timeline')
-    expect(panel).toHaveTextContent('M3')
+    expect(await screen.findByTestId('Roadmap.Content.Empty')).toBeInTheDocument()
+    expect(screen.queryByTestId('WorkTable.Table')).toBeNull()
+    expect(screen.queryByTestId('WorkTable.NotYet.timeline')).toBeNull()
+
+    await userEvent.click(screen.getByTestId('WorkTable.View.calendar'))
+    expect(await screen.findByTestId('Calendar.Grid')).toBeInTheDocument()
     expect(screen.queryByTestId('WorkTable.Table')).toBeNull()
   })
 

@@ -55,6 +55,8 @@ import type {
   IssueLevel,
   IssueStatusKind,
   SwimlaneBy,
+  ReleaseStatus,
+  ReleaseVerdict,
 } from '../api/types';
 
 /**
@@ -216,6 +218,40 @@ export const swimlaneByLabels = {
   PRIORITY: 'Priority',
   RELEASE: 'Release',
 } as const satisfies Record<SwimlaneBy, string>;
+
+/**
+ * `ReleaseVerdict` — and **the readiness badge's whole vocabulary**, which diverges from
+ * `releases.html` deliberately (013 D-e).
+ *
+ * The mockup's Readiness column holds `Not ready · Planned · Planned · Released · Released` — two
+ * of which are a status a person set and three a verdict the server computed, under one heading.
+ * Its row for 2.5 shows 0/6 stories done and reads "Planned" while 2.4 shows 21/27 and reads "Not
+ * ready", so the same badge would mean "nobody started" on one row and "somebody did, and it
+ * failed" on the next.
+ *
+ * Everything else on that screen is the mockup's, including the literal `no run yet` in the Tests
+ * column — which is where "says so rather than showing zero failures" is actually met.
+ * `features/releases/releaseBadge.ts` is the one function that reads this, so the list, the detail
+ * page, the roadmap and the overview cannot disagree about what 2.4 is.
+ */
+export const releaseVerdictLabels = {
+  READY: 'Ready',
+  NOT_READY: 'Not ready',
+  NOT_TESTED: 'Not tested',
+} as const satisfies Record<ReleaseVerdict, string>;
+
+/**
+ * `ReleaseStatus` — what a person set, as opposed to what the server computed.
+ *
+ * `PLANNED` is worded as the state rather than as "not released", because a release that has not
+ * shipped yet is the ordinary case and the negative form reads as a failure. Only `RELEASED`
+ * reaches the badge (D-e's table); `PLANNED` is read on the detail header's own chip, where the
+ * verdict is beside it and the two are not competing for one column.
+ */
+export const releaseStatusLabels = {
+  PLANNED: 'Planned',
+  RELEASED: 'Released',
+} as const satisfies Record<ReleaseStatus, string>;
 
 /**
  * How a status kind reads as colour — the one place a per-project status name becomes a tone.

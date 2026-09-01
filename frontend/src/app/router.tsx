@@ -167,6 +167,15 @@ const BoardSettingsPage = lazy(() =>
     default: m.BoardSettingsPage,
   })),
 );
+const ReleaseListPage = lazy(() =>
+  import('../features/releases/ReleaseListPage').then((m) => ({ default: m.ReleaseListPage })),
+);
+const ReleaseNewPage = lazy(() =>
+  import('../features/releases/ReleaseNewPage').then((m) => ({ default: m.ReleaseNewPage })),
+);
+const ReleaseDetailPage = lazy(() =>
+  import('../features/releases/ReleaseDetailPage').then((m) => ({ default: m.ReleaseDetailPage })),
+);
 const ReviewSettingsPage = lazy(() =>
   import('../features/settings/ReviewSettingsPage').then((m) => ({
     default: m.ReviewSettingsPage,
@@ -621,6 +630,46 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <IssueNewPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            Releases (013 M3). Three routes, all **routed for everybody**: `release:read` is held by
+            every project-scoped role that renders a rail at all, and the two writes are gated on the
+            controls (`release:manage` on the create, `release:publish` on Mark released) rather than
+            on the route.
+
+            `/releases/new` is declared **before** `/releases/:releaseId` — React Router 7 ranks
+            static segments above dynamic ones, so the order is not what makes this work, but reading
+            it in this order is what stops somebody "fixing" it later by adding a guard.
+
+            The roadmap and the calendar are **not** here. They are `?view=timeline` and
+            `?view=calendar` under `/projects/:projectId/work` — one entry, five views, one shared
+            filter (D34) — so a route of their own would be a second address for the same screen with
+            the filter left behind.
+          */}
+          <Route
+            path="/projects/:projectId/releases"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <ReleaseListPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/projects/:projectId/releases/new"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <ReleaseNewPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/projects/:projectId/releases/:releaseId"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <ReleaseDetailPage />
               </Suspense>
             }
           />
