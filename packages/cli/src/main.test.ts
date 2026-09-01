@@ -15,7 +15,17 @@ import {
   issueComment,
   issueStatus,
   issueSummary,
+  issueTestCase,
   permissions,
+  readinessSummary,
+  releaseReadiness,
+  releaseBlocker,
+  releaseStories,
+  releaseSummary,
+  releaseTests,
+  roadmap,
+  roadmapEpic,
+  roadmapRelease,
   suite,
 } from '../../client/src/test/fixtures.js';
 import { EXIT, main } from './main.js';
@@ -372,5 +382,179 @@ describe('reads', () => {
 
     expect(await mainWith(['case', 'show'], out, stub.fetch)).toBe(EXIT.usage);
     expect(out.stderr).toContain('tcms case show TC-42');
+  });
+});
+
+/**
+ * The release reads — and the first of these is an acceptance criterion in its own right.
+ *
+ * `casesPassed` and `casesFailed` are null on the wire when `hasRun` is false, precisely so that a
+ * terminal can print words instead of a number, and the whole module exists to stop the product
+ * saying *nothing failed* when it means *nothing has been tested*. A `?? 0` anywhere between the
+ * response and the cell reintroduces that sentence and no type in this tree would notice.
+ */
+describe('the release reads', () => {
+  it("prints 'no run yet' and never 0/0 for a version nothing has been executed against", async () => {
+    const out = recorder();
+    const stub = api({
+      '/projects': { status: 200, body: [PROJECT] },
+      'GET /releases': {
+        status: 200,
+        body: [releaseSummary({
+          version: '2.5',
+          targetDate: '2026-11-14',
+          readiness: readinessSummary({ storiesDone: 0, storiesTotal: 6, linkedCases: 4 }),
+        })],
+      },
+    });
+
+    expect(await mainWith(['release', 'list'], out, stub.fetch)).toBe(EXIT.ok);
+
+    expect(out.stdout).toContain('no run yet');
+    expect(out.stdout).not.toContain('0/0');
+    // The badge is the verdict's vocabulary, not the status's (013 D-e): the same word would mean
+    // "nobody has started" on one row and "somebody has, and it failed" on the next.
+    expect(out.stdout).toContain('Not tested');
+  });
+
+  it('prints the counts once something has run, and reads Released off the status', async () => {
+    const out = recorder();
+    const stub = api({
+      '/projects': { status: 200, body: [PROJECT] },
+      'GET /releases': {
+        status: 200,
+        body: [
+          releaseSummary({
+            version: '2.4',
+            status: 'RELEASED',
+            releasedAt: '2026-08-20T09:00:00Z',
+            readiness: readinessSummary({
+              verdict: 'READY', storiesDone: 27, storiesTotal: 27,
+              linkedCases: 9, hasRun: true, casesPassed: 9, casesFailed: 0,
+            }),
+          }),
+        ],
+      },
+    });
+
+    expect(await mainWith(['release', 'list'], out, stub.fetch)).toBe(EXIT.ok);
+    expect(out.stdout).toContain('9/9');
+    expect(out.stdout).toContain('Released');
+    expect(out.stdout).not.toContain('Ready\n');
+  });
+
+  it('names the stories that stand in the way, with the cases that failed under each', async () => {
+    const out = recorder();
+    const stub = api({
+      '/projects': { status: 200, body: [PROJECT] },
+      'GET /releases': { status: 200, body: [releaseSummary({ version: '2.4' })] },
+      'GET /releases/rl-1/readiness': {
+        status: 200,
+        body: releaseReadiness({
+          verdict: 'NOT_READY',
+          stories: releaseStories({ done: 21, total: 27, inProgress: 4, notStarted: 2, excludedSpikes: 3 }),
+          tests: releaseTests({
+            hasRun: true, linkedCases: 9, withResult: 8, passed: 7, failed: 1, blocked: 0,
+            untested: 1, latestRunName: 'Nightly 2.4',
+          }),
+          blockers: [releaseBlocker({
+            key: 'ACME-118',
+            status: issueStatus({ id: 'is-4', name: 'Done', kind: 'DONE', position: 3 }),
+            casesPassed: 1,
+            casesFailed: 1,
+            failedCaseKeys: ['TC-311'],
+          })],
+          scopeAddedAfterCreation: 4,
+        }),
+      },
+    });
+
+    expect(await mainWith(['release', 'show', '2.4'], out, stub.fetch)).toBe(EXIT.ok);
+
+    // The case this module exists for: a story that IS done, whose linked case failed. The status
+    // is printed because it is what separates that from "nobody has started".
+    expect(out.stdout).toContain('ACME-118');
+    expect(out.stdout).toContain('TC-311');
+    expect(out.stdout).toContain('Done');
+    // Served so the screen can say why the total does not match the backlog (D8).
+    expect(out.stdout).toContain('3 spikes not counted');
+  });
+
+  it('says a readiness answer has no run rather than printing nulls as zeroes', async () => {
+    const out = recorder();
+    const stub = api({
+      '/projects': { status: 200, body: [PROJECT] },
+      'GET /releases': { status: 200, body: [releaseSummary({ version: '2.5' })] },
+      'GET /releases/rl-1/readiness': {
+        status: 200,
+        body: releaseReadiness({ version: '2.5', tests: releaseTests({ linkedCases: 4 }) }),
+      },
+    });
+
+    expect(await mainWith(['release', 'show', '2.5'], out, stub.fetch)).toBe(EXIT.ok);
+    expect(out.stdout).toContain('no run yet');
+    expect(out.stdout).not.toContain('0 passed');
+  });
+
+  it('explains an empty roadmap and offers the command that resolves it', async () => {
+    const out = recorder();
+    const stub = api({
+      '/projects': { status: 200, body: [PROJECT] },
+      'GET /roadmap': { status: 200, body: roadmap() },
+    });
+
+    expect(await mainWith(['roadmap'], out, stub.fetch)).toBe(EXIT.ok);
+    // Empty is the ordinary state of a fresh instance (D14). A blank answer would read as a broken
+    // command, and a reader has no way to tell the difference.
+    expect(out.stdout).toContain('tcms release create');
+  });
+
+  it('draws the unscheduled lane last, and always, because it answers "where did my epic go"', async () => {
+    const out = recorder();
+    const stub = api({
+      '/projects': { status: 200, body: [PROJECT] },
+      'GET /roadmap': {
+        status: 200,
+        body: roadmap({
+          releases: [roadmapRelease({
+            version: '2.4',
+            targetDate: '2026-09-18',
+            epics: [roadmapEpic({ key: 'ACME-3', startDate: '2026-08-01', targetDate: '2026-09-10', completionPercent: 60 })],
+          })],
+          unscheduled: [roadmapEpic({ key: 'ACME-9', title: 'Card payments' })],
+        }),
+      },
+    });
+
+    expect(await mainWith(['roadmap'], out, stub.fetch)).toBe(EXIT.ok);
+    expect(out.stdout.indexOf('ACME-3')).toBeLessThan(out.stdout.indexOf('Unscheduled'));
+    expect(out.stdout).toContain('ACME-9');
+    expect(out.stdout).toContain('no dates');
+  });
+
+  it('lists the cases a story is proven by, and their three nulls when nothing has run one', async () => {
+    const out = recorder();
+    const stub = api({
+      '/projects': { status: 200, body: [PROJECT] },
+      'GET /issues/ACME-118/test-cases': {
+        status: 200,
+        body: [issueTestCase({ caseKey: 'TC-311', title: 'Sign-out clears the cookie' })],
+      },
+    });
+
+    expect(await mainWith(['issue', 'cases', 'ACME-118'], out, stub.fetch)).toBe(EXIT.ok);
+    expect(out.stdout).toContain('TC-311');
+    expect(out.stdout).toContain('Sign-out clears the cookie');
+  });
+
+  it('tells a story with no linked cases how to link some', async () => {
+    const out = recorder();
+    const stub = api({
+      '/projects': { status: 200, body: [PROJECT] },
+      'GET /issues/ACME-118/test-cases': { status: 200, body: [] },
+    });
+
+    expect(await mainWith(['issue', 'cases', 'ACME-118'], out, stub.fetch)).toBe(EXIT.ok);
+    expect(out.stdout).toContain('tcms issue cases set ACME-118');
   });
 });

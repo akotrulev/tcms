@@ -15,6 +15,7 @@ import { describe, expect, it } from 'vitest';
 import { TcmsApiError, TcmsTimeoutError } from '@tcms/client';
 
 import { caseDetail, casePage, caseSummary, docPage, docPageSummary } from '../../client/src/test/fixtures.js';
+import { roleMatrix } from '../../client/src/test/roleMatrix.js';
 import { failed } from './result.js';
 import { buildServer } from './server.js';
 import { isListed } from './tool.js';
@@ -95,6 +96,38 @@ describe('tools/list', () => {
     const listable = TOOLS.filter((tool) => isListed(tool, new Set(AGENT_KEYS)));
     expect(listable.length).toBeLessThan(TOOLS.length);
     expect(tools.map((tool) => tool.name).sort()).toEqual(listable.map((tool) => tool.name).sort());
+  });
+
+  /**
+   * The read half's first narrowing, driven through a real `tools/list` — surface spec §3.6.
+   *
+   * Every read tool before `tcms_read_release` is listed to every credential that can reach the
+   * project at all, so `release:read` is the first gate on this surface an **Automation Service**
+   * credential does not hold (roles spec §A3): a CI token posts results and has no business
+   * reading a delivery plan. That is correct rather than awkward, and it is asserted by NAME
+   * rather than by a tool count — a count is satisfied by any thirty tools, and a narrowing
+   * nothing tests is a narrowing that comes back.
+   *
+   * The credential's keys are read out of §A3 rather than written here, the same instrument
+   * `AGENT_KEYS` is, so the day the grant moves this test moves with the spec instead of
+   * disagreeing with it.
+   */
+  it('does not show an Automation Service credential the release reads', async () => {
+    const automation = [...roleMatrix().AS];
+    expect(automation).not.toContain('release:read');
+    // The vacuity guard: a parse that answered nothing would satisfy the assertion below by
+    // hiding every tool, which reads exactly like the narrowing under test.
+    expect(automation).toContain('result:submit');
+
+    const client = await connect(api(agentRoutes({
+      '/me/permissions': { status: 200, body: permissions(automation) },
+    })));
+    const names = (await client.listTools()).tools.map((tool) => tool.name);
+
+    expect(names).not.toContain('tcms_read_release');
+    // And it still reaches the reads a CI credential is meant to: the narrowing is one gate, not
+    // a credential that lost the surface.
+    expect(names).toContain('tcms_search_cases');
   });
 
   it('hides what this credential cannot use, and says nothing about why', async () => {

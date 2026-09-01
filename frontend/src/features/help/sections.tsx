@@ -701,7 +701,11 @@ tcms issue show ACME-1 # one issue, its children, comments and the moves it may 
 tcms board list        # the boards over this project
 tcms board show <name> # one board — its columns, its cards, and any column over its WIP limit
 tcms backlog           # every story and task that is not done, in rank order
-tcms label list        # the project's labels`}</Terminal>
+tcms label list        # the project's labels
+tcms release list      # the releases, with stories done and tests passing per row
+tcms release show 2.4  # can we ship it — and the stories that stand in the way
+tcms roadmap           # releases on a timeline, with the epics targeting each
+tcms issue cases ACME-1# the test cases a story is proven by, and their latest result`}</Terminal>
 
         <H>Writing</H>
         <Terminal>{`tcms case edit         # change a test case
@@ -715,6 +719,9 @@ tcms issue create | issue move | issue comment
 tcms board move ACME-1 --column "In flight"  # a card to a column; a WIP breach prints and exits 0
 tcms rank ACME-1 --after ACME-9              # exactly one of --after or --before
 tcms label add | label set
+tcms release create | release edit | release publish | release delete
+tcms issue release ACME-1 --release 2.4      # target a story at a version, or --none
+tcms issue cases set ACME-1 --case TC-311    # the cases that prove it; a replacement, not an addition
 tcms review comment    # a remark on an open review`}</Terminal>
 
         <H>Options that apply everywhere</H>
@@ -800,7 +807,7 @@ tcms review comment    # a remark on an open review`}</Terminal>
   {
     id: 'mcp',
     title: 'AI agent access (MCP)',
-    summary: 'Connecting an AI assistant, the 28 tools, and the limits that make it safe.',
+    summary: 'Connecting an AI assistant, the 30 tools, and the limits that make it safe.',
     body: (
       <>
         <P>
@@ -820,19 +827,19 @@ tcms review comment    # a remark on an open review`}</Terminal>
                 'tcms_whoami reports who the credential acts as and what it can reach. tcms_orient returns the project with its classification dimensions, execution statuses, suites, tags and case counts in one call — the vocabulary is per-project, so an agent that skips this guesses values that get refused. tcms_shape answers what a payload of a given kind must look like, and reaches no instance at all, so it is safe to call before anything is configured.',
             },
             {
-              term: 'Reading — 13',
+              term: 'Reading — 14',
               detail:
-                'tcms_search_cases · tcms_open_case · tcms_list_suites · tcms_list_library · tcms_list_artifacts · tcms_doc_tree · tcms_open_doc_page · tcms_list_plans · tcms_open_run · tcms_read_issue · tcms_read_board · tcms_list_proposals · tcms_triage',
+                'tcms_search_cases · tcms_open_case · tcms_list_suites · tcms_list_library · tcms_list_artifacts · tcms_doc_tree · tcms_open_doc_page · tcms_list_plans · tcms_open_run · tcms_read_issue · tcms_read_board · tcms_read_release · tcms_list_proposals · tcms_triage',
             },
             {
-              term: 'Writing — 12',
+              term: 'Writing — 13',
               detail:
-                'tcms_write_case · tcms_write_suite · tcms_write_doc_page · tcms_write_plan · tcms_write_run · tcms_record_result · tcms_review_comment · tcms_review_verdict · tcms_write_issue · tcms_write_backlog · tcms_write_artifact · tcms_report',
+                'tcms_write_case · tcms_write_suite · tcms_write_doc_page · tcms_write_plan · tcms_write_run · tcms_record_result · tcms_review_comment · tcms_review_verdict · tcms_write_issue · tcms_write_backlog · tcms_write_release · tcms_write_artifact · tcms_report',
             },
           ]}
         />
         <P>
-          The list is workflow-shaped rather than one tool per endpoint: 28 tools over roughly 88 API
+          The list is workflow-shaped rather than one tool per endpoint: 30 tools over roughly 88 API
           paths. Tool definitions cost the model context, so a mirror of the API would be a surface
           only the largest hosts could afford to load.
         </P>

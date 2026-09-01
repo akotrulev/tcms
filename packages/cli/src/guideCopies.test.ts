@@ -42,8 +42,11 @@ function listed(text: string): Set<string> {
 
     for (const alternative of body.split('|')) {
       const words = alternative.trim().split(/\s+/).filter(Boolean);
-      // A name is one or two words; anything after them is an argument or a flag.
-      for (const length of [2, 1]) {
+      // A name is one, two or three words; anything after them is an argument or a flag. Longest
+      // first, and it has to be: `issue cases set` starts with `issue cases`, which is also a
+      // command, so a shortest-first parse would resolve the write line to the read command and
+      // report the write as unlisted while the guide names it.
+      for (const length of [3, 2, 1]) {
         const candidate = words.slice(0, length).join(' ');
         if (COMMANDS.some((command) => command.name === candidate)) {
           names.add(candidate);

@@ -49,9 +49,12 @@ import {
   executionSummary,
   label,
   rankResult,
+  release as releaseFixture,
+  releaseSummary,
   userRef,
   issue,
   issueComment,
+  issueTestCase,
   plan,
   projectWorkflow,
   proposal,
@@ -79,13 +82,24 @@ const IMPLIED: Record<string, readonly string[]> = {
 const WATCHED = ['idempotency-key', 'if-match'] as const;
 
 /**
- * Create commands whose endpoint offers no `Idempotency-Key`, with what that costs.
+ * Write commands whose endpoint offers no header their `kind` implies, with what that costs.
  *
- * **Empty, and that is a measurement rather than an absence**: all five creates in this registry
- * reach one of the eleven operations that declare the parameter. The MCP's copy of this map has one
- * member, which is what the rule was written for.
+ * ~~**Empty, and that is a measurement rather than an absence**: all five creates in this registry
+ * reach one of the eleven operations that declare the parameter.~~ → **two members since 013 T4**,
+ * and both are `edit` arms with nothing to precondition on rather than creates with no key.
+ *
+ * Both are bounded by the endpoint being a **true delta**: an absent field means *leave it*, so two
+ * concurrent editors lose only the fields they both named. Closing either is a contract change on
+ * both the response and the request — a `lockVersion` on the resource and an `If-Match` on the
+ * operation — not a header this file could start sending.
  */
-const CREATE_WITHOUT_A_KEY: Record<string, string> = {};
+const CREATE_WITHOUT_A_KEY: Record<string, string> = {
+  'release edit': 'PATCH /releases/{releaseId} declares no If-Match and `Release` carries no '
+    + 'lockVersion, so two people renaming one version at once lose a rename.',
+  'issue release': 'PATCH /issues/{key} declares no If-Match and `Issue` carries no lockVersion — '
+    + 'the same wall `tcms_write_issue.update` meets. The field is one reference, so the loss is '
+    + 'bounded to two people retargeting one issue in the same moment.',
+};
 
 describe('write conformance — surface spec §8.3', () => {
   const writes = COMMANDS.filter((command) => command.write !== undefined);
@@ -178,6 +192,8 @@ const PASSED = caseStatus({ id: 'st-1', name: 'Passed', kind: 'PASSED' });
 const REVIEW = review({ subjectId: 'c-9' });
 const ISSUE = issue();
 const BOARD = board();
+const RELEASE = releaseFixture();
+const RELEASE_ROW = releaseSummary();
 
 /** The four `TestCaseInput` requires, plus the step a STRUCTURED case needs to be acceptable. */
 const PROPOSABLE = {
@@ -234,6 +250,9 @@ function scaffolding(): Record<string, Answer> {
     'GET /boards/bd-1': { status: 200, body: BOARD },
     'GET /labels': { status: 200, body: [label()] },
     'GET /members': { status: 200, body: [userRef()] },
+    // The version → id lookup four of the six release writes make, method-keyed for the reason
+    // the board routes above are: `POST` to the same path is the create arm.
+    'GET /releases': { status: 200, body: [RELEASE_ROW] },
   };
 }
 
@@ -374,5 +393,44 @@ const INVOCATIONS: Record<string, Invocation> = {
     argv: () => ['label', 'set', 'ACME-124', '--labels', 'Flaky'],
     path: '/issues/ACME-124/labels',
     routes: { 'PUT /issues/ACME-124/labels': { status: 200, body: [label()] } },
+  },
+  'release create': {
+    argv: () => ['release', 'create', '--version', '2.6'],
+    path: '/releases',
+    routes: { 'POST /projects/p-1/releases': { status: 201, body: RELEASE } },
+  },
+  'release edit': {
+    argv: () => ['release', 'edit', '2.4', '--date', '2026-11-21'],
+    path: '/releases/rl-1',
+    routes: { 'PATCH /releases/rl-1': { status: 200, body: RELEASE } },
+  },
+  'release publish': {
+    argv: () => ['release', 'publish', '2.4'],
+    path: '/releases/rl-1/publish',
+    routes: {
+      'POST /releases/rl-1/publish': {
+        status: 200,
+        body: releaseFixture({ status: 'RELEASED', releasedAt: '2026-09-01T10:00:00Z' }),
+      },
+    },
+  },
+  'release delete': {
+    // `--yes` because a `delete` kind asks first; the header conformance this file checks is
+    // downstream of the consent gate and unchanged by it.
+    argv: () => ['release', 'delete', '2.4', '--yes'],
+    path: '/releases/rl-1',
+    routes: { 'DELETE /releases/rl-1': { status: 204 } },
+  },
+  'issue release': {
+    argv: () => ['issue', 'release', 'ACME-124', '--release', '2.4'],
+    path: '/issues/ACME-124',
+    routes: { 'PATCH /issues/ACME-124': { status: 200, body: ISSUE } },
+  },
+  'issue cases set': {
+    argv: () => ['issue', 'cases', 'set', 'ACME-124', '--case', 'TC-42'],
+    path: '/issues/ACME-124/test-cases',
+    routes: {
+      'PUT /issues/ACME-124/test-cases': { status: 200, body: [issueTestCase({ caseId: 'c-9' })] },
+    },
   },
 };

@@ -57,7 +57,7 @@ import {
   type Command,
   type CommandContext,
 } from './context.js';
-import { boardOf, labelIds } from './reads.js';
+import { boardOf, labelIds, releaseOf } from './reads.js';
 import { fields, show, type Output } from './output.js';
 
 type TestCaseInput = components['schemas']['TestCaseInput'];
@@ -1572,6 +1572,239 @@ const labelSet: Command = {
   },
 };
 
+/* ----------------------------------------------------------------- releases ---- */
+
+const releaseCreate: Command = {
+  name: 'release create',
+  summary: 'Plan a version',
+  usage: 'tcms release create --version 2.6 [--date 2026-11-14] [--description TEXT]',
+  options: {
+    version: { type: 'string' },
+    date: { type: 'string' },
+    description: { type: 'string' },
+    'idempotency-key': { type: 'string' },
+  },
+  write: { kind: 'create', permission: 'release:manage' },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const projectId = await projectOf(context);
+
+    const intent = createIntent({ key: text(options['idempotency-key']) });
+    const created = await client.POST('/projects/{projectId}/releases', {
+      params: { path: { projectId } },
+      body: present({
+        version: requireOption(context, 'version'),
+        description: nullableText(options['description']),
+        // A date in the past is accepted by the contract on purpose — a release that slipped is a
+        // real state — so nothing here checks it.
+        targetDate: nullableText(options['date']),
+      }) as components['schemas']['ReleaseInput'],
+      tcms: { ...request, ...intent },
+    });
+
+    reportWrite(out, json, created, [
+      [outcome(intent, 'Created'), show(created.version)],
+      ['Target date', show(created.targetDate)],
+      ['Status', show(created.status)],
+    ]);
+  },
+};
+
+const releaseEdit: Command = {
+  name: 'release edit',
+  summary: 'Change a release\'s version, date or description',
+  usage: 'tcms release edit 2.6 [--version 2.6.1] [--date 2026-11-21] [--description TEXT]',
+  options: {
+    version: { type: 'string' },
+    date: { type: 'string' },
+    description: { type: 'string' },
+  },
+  /*
+    An `edit`, and it sends **no `If-Match`**: `PATCH /releases/{releaseId}` declares no such
+    parameter and `Release` carries no `lockVersion` on the wire, so there is nothing to
+    precondition on. Recorded in `writeConformance.test.ts`'s CREATE_WITHOUT_A_KEY with what it
+    costs — the same wall `tcms_write_issue.update` meets, and bounded the same way, because the
+    endpoint is a true delta and an absent key means *leave it*.
+  */
+  write: { kind: 'edit', permission: 'release:manage' },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const chosen = await releaseOf(context, requireArg(context, 'release', 0));
+
+    const updated = await client.PATCH('/releases/{releaseId}', {
+      params: { path: { releaseId: chosen.id } },
+      body: requireSomethingToDo(
+        present({
+          version: text(options['version']),
+          description: nullableText(options['description']),
+          targetDate: nullableText(options['date']),
+        }),
+        'Give --version, --date or --description.',
+      ) as components['schemas']['ReleaseUpdate'],
+      tcms: request,
+    });
+
+    reportWrite(out, json, updated, [
+      ['Updated', show(updated.version)],
+      ['Target date', show(updated.targetDate)],
+      // Renaming the version recomputes the ordering key, so the row moves in the list rather
+      // than staying where its old text sorted it. Worth a line because nothing else shows it.
+      ['Order', 'recomputed from the version — the row may have moved in the list'],
+    ]);
+  },
+};
+
+/**
+ * `tcms release publish 2.4` — mark a version released.
+ *
+ * A `state`, and it carries no `Idempotency-Key` because the endpoint declares none and does not
+ * need one: publishing an already-released release answers 200 with it unchanged and does **not**
+ * restamp `releasedAt`. A second press of a button is not a second shipment.
+ *
+ * **Readiness does not gate it.** A team may ship a version with a known failure and record that
+ * they did, so this command sends without reading readiness first — a client-side refusal would be
+ * asserting a release policy this product has no way to know.
+ */
+const releasePublish: Command = {
+  name: 'release publish',
+  summary: 'Mark a release released',
+  usage: 'tcms release publish 2.4',
+  write: { kind: 'state', permission: 'release:publish' },
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const chosen = await releaseOf(context, requireArg(context, 'release', 0));
+
+    const released = await client.POST('/releases/{releaseId}/publish', {
+      params: { path: { releaseId: chosen.id } },
+      tcms: request,
+    });
+
+    reportWrite(out, json, released, [
+      ['Released', show(released.version)],
+      ['At', show(released.releasedAt)],
+    ]);
+  },
+};
+
+/**
+ * `tcms release delete 2.6` — and a `delete` kind, which is what makes it ask first.
+ *
+ * The issues pointing at it keep existing and lose their target release: the foreign key is
+ * `ON DELETE SET NULL`, deliberately, because a release is a *plan* and deleting a plan must not
+ * require reassigning the work first. Said on the way out, because a caller who expected the
+ * issues to go with it has no other way to find out that they did not.
+ */
+const releaseDelete: Command = {
+  name: 'release delete',
+  summary: 'Delete a release, leaving its issues unscheduled',
+  usage: 'tcms release delete 2.6 [--yes]',
+  write: { kind: 'delete', permission: 'release:manage' },
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const chosen = await releaseOf(context, requireArg(context, 'release', 0));
+
+    await client.DELETE('/releases/{releaseId}', {
+      params: { path: { releaseId: chosen.id } },
+      tcms: request,
+    });
+
+    // A 204 has no body, so there is nothing verbatim to answer with under `--json`; saying what
+    // went beats an empty success a caller cannot tell from a no-op.
+    reportWrite(out, json, { deleted: chosen.version }, [
+      ['Deleted', show(chosen.version)],
+      ['Its issues', 'kept, and now unscheduled — the plan went, the work did not'],
+    ]);
+  },
+};
+
+/**
+ * `tcms issue release ACME-118 --release 2.4 | --none` — target a story at a version.
+ *
+ * A command of its own rather than a flag on a `tcms issue edit`, because there is no such command:
+ * §6 records that the field-by-field update stays on the MCP side, where it is composed from a read
+ * the model has already made. This is the one field of `IssueUpdate` a person reaches for at a
+ * terminal, so it gets the one verb.
+ *
+ * `--none` rather than `--release ''`: the empty-string clearing form {@link nullableText} uses is
+ * right for free text and wrong for a resolved reference, where `''` would have to be resolved
+ * against the project's list before it could be recognised as a clear.
+ */
+const issueRelease: Command = {
+  name: 'issue release',
+  summary: 'Target an issue at a release, or take it off one',
+  usage: 'tcms issue release ACME-118 --release 2.4 | --none',
+  options: { release: { type: 'string' }, none: { type: 'boolean' } },
+  write: { kind: 'edit', permission: 'issue:edit' },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const key = requireArg(context, 'issue');
+    const wanted = first(options['release']);
+    const clear = flag(options['none']);
+
+    if ((wanted === undefined) === !clear) {
+      throw new UsageError('Give exactly one of --release VERSION or --none.');
+    }
+
+    const releaseId = clear ? null : (await releaseOf(context, wanted ?? '')).id;
+
+    const updated = await client.PATCH('/issues/{key}', {
+      params: { path: { key } },
+      body: { releaseId } as components['schemas']['IssueUpdate'],
+      tcms: request,
+    });
+
+    reportWrite(out, json, updated, [
+      ['Issue', `${show(updated.key)} — ${show(updated.title)}`],
+      ['Release', updated.release === null || updated.release === undefined
+        ? '(unscheduled)'
+        : show(updated.release.version)],
+    ]);
+  },
+};
+
+/**
+ * `tcms issue cases set ACME-118 --case TC-311 --case TC-308` — the cases the story is proven by.
+ *
+ * **A replacement, not an addition**, matching the endpoint: the flags are the cases the story
+ * should carry afterwards, and `--case` given none clears them. That is `label set`'s shape and
+ * its reason — an add/remove pair over a multi-select lets a stale client unlink a case somebody
+ * else has just linked.
+ *
+ * The keys are resolved here, per §4.4: the endpoint takes `caseIds` as UUIDs and neither a person
+ * nor a script has one — `TC-311` is what a story lists and what a test plan names.
+ */
+const issueCasesSet: Command = {
+  name: 'issue cases set',
+  summary: 'Replace the test cases a story is proven by',
+  usage: 'tcms issue cases set ACME-118 --case TC-311 --case TC-308',
+  options: { case: { type: 'string', multiple: true } },
+  // `issue:edit`: linking a case to a story edits the story, and there is no `link:*` key.
+  write: { kind: 'state', permission: 'issue:edit' },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const key = requireArg(context, 'issue');
+    const projectId = await projectOf(context);
+
+    const caseIds: string[] = [];
+    for (const value of all(options['case']).flatMap((one) => one.split(','))) {
+      const trimmed = value.trim();
+      if (trimmed === '') continue;
+      caseIds.push(await resolveId({ client, projectId, value: trimmed, entity: 'CASE' }));
+    }
+
+    const after = await client.PUT('/issues/{key}/test-cases', {
+      params: { path: { key } },
+      body: { caseIds },
+      tcms: request,
+    });
+
+    reportWrite(out, json, after, [
+      ['Issue', key],
+      ['Proven by', after.map((one) => one.caseKey).join(', ') || '(nothing)'],
+    ]);
+  },
+};
+
 export const WRITES: readonly Command[] = [
   caseEdit,
   caseProposal,
@@ -1596,4 +1829,10 @@ export const WRITES: readonly Command[] = [
   rank,
   labelAdd,
   labelSet,
+  releaseCreate,
+  releaseEdit,
+  releasePublish,
+  releaseDelete,
+  issueRelease,
+  issueCasesSet,
 ];

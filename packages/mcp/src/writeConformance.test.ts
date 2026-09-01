@@ -65,7 +65,10 @@ import {
   runDetail,
   issue,
   issueComment,
+  issueTestCase,
   projectWorkflow,
+  release as releaseFixture,
+  releaseSummary,
   suite,
 } from '../../client/src/test/fixtures.js';
 import { WRITE_TOOLS } from './writes.js';
@@ -118,6 +121,18 @@ const CREATE_WITHOUT_A_KEY: Record<string, string> = {
     + 'on both the response and the request, not a header here. What it costs is bounded by what '
     + 'the edit can reach: three metadata fields, no payload and no scope, on a row whose real '
     + 'corrections go through supersede.',
+  'tcms_write_release.update':
+    'PATCH /releases/{releaseId} declares no If-Match, and `Release` carries no `lockVersion` on '
+    + 'the wire to precondition on — the same wall the three above meet, and it arrives with the '
+    + 'schema rather than after it (013 T1). Bounded by the endpoint being a true delta: two '
+    + 'people editing one release lose only the fields they both named, and the set is three — a '
+    + 'version, a date and a description.',
+  'tcms_write_issue.release':
+    'PATCH /issues/{key} again, so this shares the issue update entry above verbatim and is listed '
+    + 'separately because a by-decision map that covered an arm by implication could not report '
+    + 'the day one of them stopped needing it. What it costs here is narrower still: the arm sends '
+    + 'one field, so two callers retargeting one issue in the same moment lose a release target '
+    + 'and nothing else.',
   // ~~'tcms_report.generate' — POST …/reports/generate declares no Idempotency-Key and
   // ReportController takes no such header, so a retried 202 queues a second job.~~ → CLOSED by
   // V66 (audit E2): the endpoint declares the parameter and replays it, and the arm sends a key
@@ -288,6 +303,10 @@ const BOARDS = {
   'GET /boards/bd-1': { status: 200, body: BOARD },
 } as const;
 const LABELS = { 'GET /labels': { status: 200, body: [label()] } } as const;
+
+const RELEASE = releaseFixture();
+/** The version → id lookup every release-naming arm makes, method-keyed like the board routes. */
+const RELEASES = { 'GET /releases': { status: 200, body: [releaseSummary()] } } as const;
 
 /** The four `TestCaseInput` requires, plus the step a STRUCTURED case needs to be acceptable. */
 const PROPOSABLE = {
@@ -540,6 +559,51 @@ const INVOCATIONS: Record<string, Invocation> = {
     input: { action: 'label', issue: 'ACME-124', labels: ['Flaky'] },
     path: '/issues/ACME-124/labels',
     routes: { ...LABELS, 'PUT /issues/ACME-124/labels': { status: 200, body: [label()] } },
+  },
+  'tcms_write_issue.cases': {
+    tool: 'tcms_write_issue',
+    input: { action: 'cases', issue: 'ACME-124', cases: ['TC-42'] },
+    path: '/issues/ACME-124/test-cases',
+    routes: {
+      ...CASES,
+      'PUT /issues/ACME-124/test-cases': { status: 200, body: [issueTestCase()] },
+    },
+  },
+  'tcms_write_issue.release': {
+    tool: 'tcms_write_issue',
+    input: { action: 'release', issue: 'ACME-124', release: '2.4' },
+    path: '/issues/ACME-124',
+    routes: { ...RELEASES, 'PATCH /issues/ACME-124': { status: 200, body: ISSUE } },
+  },
+  'tcms_write_release.create': {
+    tool: 'tcms_write_release',
+    input: { action: 'create', version: '2.6' },
+    path: '/releases',
+    routes: { 'POST /projects/p-1/releases': { status: 201, body: RELEASE } },
+  },
+  'tcms_write_release.update': {
+    tool: 'tcms_write_release',
+    input: { action: 'update', release: '2.4', targetDate: '2026-11-21' },
+    path: '/releases/rl-1',
+    routes: { ...RELEASES, 'PATCH /releases/rl-1': { status: 200, body: RELEASE } },
+  },
+  'tcms_write_release.publish': {
+    tool: 'tcms_write_release',
+    input: { action: 'publish', release: '2.4' },
+    path: '/releases/rl-1/publish',
+    routes: {
+      ...RELEASES,
+      'POST /releases/rl-1/publish': {
+        status: 200,
+        body: releaseFixture({ status: 'RELEASED', releasedAt: '2026-09-01T10:00:00Z' }),
+      },
+    },
+  },
+  'tcms_write_release.delete': {
+    tool: 'tcms_write_release',
+    input: { action: 'delete', release: '2.4' },
+    path: '/releases/rl-1',
+    routes: { ...RELEASES, 'DELETE /releases/rl-1': { status: 204 } },
   },
   'tcms_write_backlog.rank': {
     tool: 'tcms_write_backlog',

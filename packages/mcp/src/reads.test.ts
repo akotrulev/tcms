@@ -34,10 +34,18 @@ import {
   issueStatus,
   issueSummary,
   issueType,
+  readinessSummary,
+  releaseReadiness,
+  releaseSummary,
+  releaseTests,
+  roadmap,
+  roadmapEpic,
+  roadmapRelease,
   suite,
 } from '../../client/src/test/fixtures.js';
+import { roleMatrix } from '../../client/src/test/roleMatrix.js';
 import { READ_TOOLS } from './reads.js';
-import type { ToolDefinition } from './tool.js';
+import { isListed, type ToolDefinition } from './tool.js';
 import { PROJECT, agentRoutes, api, sessionWith, withApi, type Api } from './test/harness.js';
 
 function tool(name: string): ToolDefinition {
@@ -431,6 +439,118 @@ describe('tcms_read_board', () => {
 
     await expect(run(stub, 'tcms_read_board', { board: 'Stakeholders' }))
       .rejects.toThrow(/It has: Team board/);
+  });
+});
+
+describe('tcms_read_release', () => {
+  const RELEASES = {
+    'GET /releases': {
+      status: 200,
+      body: [releaseSummary({ readiness: readinessSummary({ storiesTotal: 6, linkedCases: 4 }) })],
+    },
+  } as const;
+
+  it('lists the releases with their readiness inline, through the one list envelope', async () => {
+    const stub = api(agentRoutes(RELEASES));
+
+    const answer = await run(stub, 'tcms_read_release', {}) as { items: unknown[] };
+
+    // Inline, because the list draws two meters and a badge per row — resolving each id one at a
+    // time would be N+1 over a screen the server already has every answer for.
+    expect(answer.items).toMatchObject([{ version: '2.4', readiness: { hasRun: false } }]);
+  });
+
+  it('hands back null counts as null, so nothing downstream can round them to zero', async () => {
+    const stub = api(agentRoutes(RELEASES));
+
+    const answer = await run(stub, 'tcms_read_release', {}) as
+      { items: { readiness: { casesPassed: number | null; casesFailed: number | null } }[] };
+
+    /*
+      The one number a model must not round. `hasRun: false` means nothing has been executed
+      against this version, and passing 0 up in place of null turns *nothing has been tested* into
+      *nothing failed* — the sentence this whole module exists to stop the product saying. So the
+      tool is a pass-through here and this is the assertion that keeps it one.
+    */
+    expect(answer.items[0]?.readiness.casesPassed).toBe(null);
+    expect(answer.items[0]?.readiness.casesFailed).toBe(null);
+  });
+
+  it('resolves a VERSION before reading readiness, never sending it as an id', async () => {
+    const stub = api(agentRoutes({
+      ...RELEASES,
+      'GET /releases/rl-1/readiness': {
+        status: 200,
+        body: releaseReadiness({
+          verdict: 'NOT_READY',
+          tests: releaseTests({ hasRun: true, linkedCases: 4, passed: 3, failed: 1, blocked: 0, untested: 0, withResult: 4 }),
+        }),
+      },
+    }));
+
+    const answer = await run(stub, 'tcms_read_release', { release: '2.4', readiness: true }) as
+      { verdict: string };
+
+    expect(answer.verdict).toBe('NOT_READY');
+    expect(stub.sent.some((request) => request.path.endsWith('/releases/rl-1/readiness'))).toBe(true);
+  });
+
+  it('refuses a version this project does not have, and names the ones it does', async () => {
+    /*
+      `tcms_read_board`'s label-and-assignee rule, and the reason bites harder here: a version
+      passed through as a filter matching nothing reads to a model as an EMPTY RELEASE, so it
+      would report that 9.9 has no stories rather than that there is no 9.9.
+    */
+    const stub = api(agentRoutes(RELEASES));
+
+    await expect(run(stub, 'tcms_read_release', { release: '9.9' })).rejects.toThrow(/It has: 2\.4/);
+    expect(stub.sent.some((request) => request.path.includes('/readiness'))).toBe(false);
+  });
+
+  it('reads the roadmap instead of the list when asked, and answers an empty one as an answer', async () => {
+    const stub = api(agentRoutes({ 'GET /roadmap': { status: 200, body: roadmap() } }));
+
+    const answer = await run(stub, 'tcms_read_release', { roadmap: true }) as
+      { releases: unknown[]; unscheduled: unknown[] };
+
+    // Empty on the day the module merges (D14): nothing is migrated into a release, so both arrays
+    // being empty is a real answer and not a failed read.
+    expect(answer).toEqual({ releases: [], unscheduled: [] });
+    expect(stub.sent.some((request) => request.path.endsWith('/releases'))).toBe(false);
+  });
+
+  it('keeps the epics inside the release they target, rather than flattening them', async () => {
+    const stub = api(agentRoutes({
+      'GET /roadmap': {
+        status: 200,
+        body: roadmap({
+          releases: [roadmapRelease({ epics: [roadmapEpic({ releaseId: 'rl-1' })] })],
+          unscheduled: [roadmapEpic({ key: 'ACME-9' })],
+        }),
+      },
+    }));
+
+    const answer = await run(stub, 'tcms_read_release', { roadmap: true }) as
+      { releases: { epics: unknown[] }[] };
+
+    // Same rule as the board's columns: a join the model has to perform itself is a turn spent
+    // rebuilding a shape the endpoint already had.
+    expect(answer.releases[0]?.epics).toHaveLength(1);
+  });
+
+  it('is the first read tool an Automation Service credential is not shown', () => {
+    /*
+      `release:read` is held by six of the seven roles and not by Automation Service (§A3): a CI
+      token posts results and has no business reading a delivery plan. Every read tool before this
+      one is listed to every credential that can reach the project at all, so this is the first
+      narrowing on the read half — and `server.test.ts` drives the same fact through a real
+      `tools/list` rather than through `isListed` alone.
+    */
+    const automation = new Set(roleMatrix().AS);
+    expect(automation.has('release:read')).toBe(false);
+
+    const hidden = READ_TOOLS.filter((candidate) => !isListed(candidate, automation));
+    expect(hidden.map((candidate) => candidate.name)).toContain('tcms_read_release');
   });
 });
 

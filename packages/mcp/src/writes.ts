@@ -124,7 +124,7 @@ import {
   str,
   strings,
 } from './input.js';
-import { boardIn, labelIdsIn } from './reads.js';
+import { boardIn, labelIdsIn, releaseIn } from './reads.js';
 import type { Session } from './session.js';
 import type { ToolDefinition } from './tool.js';
 
@@ -1263,7 +1263,7 @@ const reviewVerdict: ToolDefinition = {
  */
 const ISSUE_ARMS: readonly { permission: string; can: string }[] = [
   { permission: 'issue:create', can: 'create' },
-  { permission: 'issue:edit', can: 'update, move, move cards and label' },
+  { permission: 'issue:edit', can: 'update, move, move cards, label, link test cases and set a release' },
   { permission: 'issue:comment', can: 'comment' },
 ];
 
@@ -1307,7 +1307,9 @@ const writeIssue: ToolDefinition = {
     + 'them off an issue\'s allowedTransitions first. An Epic cannot be moved at all — its status '
     + 'is derived from its stories. The board also shows DERIVED cards — outstanding executions, '
     + 'review requests, case-health repairs, quarantined cases — which are computed on every read '
-    + 'from their source and cannot be created or moved here; fix the source instead.',
+    + 'from their source and cannot be created or moved here; fix the source instead. `cases` '
+    + 'replaces the whole set of test cases a story is proven by, and `release` targets it at a '
+    + 'version by NAME — both cost the same key as an edit.',
   gate: { mode: 'any', permissions: ['issue:create', 'issue:edit', 'issue:comment'] },
   arms: [
     { action: 'create', kind: 'create', permission: 'issue:create' },
@@ -1329,6 +1331,18 @@ const writeIssue: ToolDefinition = {
     */
     { action: 'move-card', kind: 'state', permission: 'issue:edit' },
     { action: 'label', kind: 'state', permission: 'issue:edit' },
+    /*
+      013 T4, and the reason it is an arm here rather than an arm of `tcms_write_release` is §2's
+      rule read against the reachable intersections: `putIssueTestCases` costs `issue:edit`, and
+      `Agent ∩ Test Engineer` is a credential holding that and **neither release key**. Merging it
+      into the release tool would list that caller a tool two thirds of which 403s.
+
+      `release` is the same argument reached from the other side: targeting a story at a version is
+      a `PATCH /issues/{key}` and costs `issue:edit` too, so it sits beside `cases` rather than
+      giving the release tool an arm nobody who holds `release:manage` needs.
+    */
+    { action: 'cases', kind: 'state', permission: 'issue:edit' },
+    { action: 'release', kind: 'edit', permission: 'issue:edit' },
     // A `state`, not a `create`: `POST …/comments` declares no `Idempotency-Key`, and a create
     // kind would send a header the endpoint never reads. `review comment` is declared the same way.
     { action: 'comment', kind: 'state', permission: 'issue:comment' },
@@ -1342,7 +1356,7 @@ const writeIssue: ToolDefinition = {
     additionalProperties: false,
     required: ['action'],
     properties: {
-      action: ACTION(['create', 'update', 'move', 'move-card', 'label', 'comment'], 'What to do.'),
+      action: ACTION(['create', 'update', 'move', 'move-card', 'label', 'comment', 'cases', 'release'], 'What to do.'),
       issue: idProperty('issue to update, move or comment on — required for those, refused for create', 'ACME-124'),
       board: {
         type: 'string',
@@ -1363,6 +1377,20 @@ const writeIssue: ToolDefinition = {
         description:
           'For label: the labels the issue should have AFTERWARDS, by name — a replacement, not '
           + 'an addition. Send an empty array to take them all off.',
+      },
+      cases: {
+        type: 'array',
+        items: { type: 'string' },
+        description:
+          'For cases: the test cases this story should be proven by AFTERWARDS, by display KEY '
+          + '(`TC-311`) — a replacement, not an addition, so an empty array unlinks them all. Read '
+          + 'the current set from tcms_read_issue or link the cases tcms_search_cases found.',
+      },
+      release: {
+        type: 'string',
+        description:
+          'For release: the target release by VERSION (`2.4`), or null to take the issue off one. '
+          + 'Read the versions from tcms_read_release — an unknown one is refused with the list.',
       },
       /*
         Rendered from the catalogue rather than written out, for `tcms_write_case`'s reason: two
@@ -1480,6 +1508,34 @@ const writeIssue: ToolDefinition = {
       return session.client.PUT('/issues/{key}/labels', {
         params: { path: { key } },
         body: { labelIds: await labelIdsIn(session, names) },
+        tcms,
+      });
+    }
+
+    if (action === 'cases') {
+      /*
+        Display keys in both directions (§4.4). The endpoint takes `caseIds` as UUIDs and a model
+        has none — `TC-311` is what a story lists and what a test plan names — so the keys are
+        resolved here and an unknown one is refused by name before anything is written.
+      */
+      const caseIds = await resolveMany(session, projectId, strings(input, 'cases') ?? [], 'CASE');
+      return session.client.PUT('/issues/{key}/test-cases', {
+        params: { path: { key } },
+        body: { caseIds: caseIds ?? [] },
+        tcms,
+      });
+    }
+
+    if (action === 'release') {
+      // `null` clears it, and absent is not the same request — `nullableStr` keeps them apart, so
+      // a caller who named neither is refused here rather than silently unscheduling the issue.
+      const wanted = nullableStr(input, 'release');
+      if (wanted === undefined) {
+        throw new InputError("'release' is required for the release action — a version, or null to clear it.");
+      }
+      return session.client.PATCH('/issues/{key}', {
+        params: { path: { key } },
+        body: { releaseId: wanted === null ? null : (await releaseIn(session, wanted)).id },
         tcms,
       });
     }
@@ -1948,6 +2004,133 @@ const writeBacklog: ToolDefinition = {
   },
 };
 
+/* ----------------------------------------------------------------- releases ---- */
+
+/**
+ * Planning a version, retargeting it, and marking it released — surface spec §3.6.
+ *
+ * **`release:manage` and `release:publish`, `all` rather than `any`, and the merge is legal only
+ * because §A3 grants both to the same three roles.** §2's rule is that a tool must not be listed to
+ * a caller who 403s on part of it, and two keys with one audience cannot produce that caller. The
+ * day one of them widens this is re-checked rather than assumed — which is the failure that arrives
+ * through a merge nobody revisited.
+ *
+ * The arm that looks like it belongs here is not here: linking test cases to a story costs
+ * `issue:edit`, held by Test Engineer and up, and `Agent ∩ Test Engineer` is a reachable credential
+ * holding it and neither release key. So it is a `cases` arm of `tcms_write_issue`.
+ */
+const writeRelease: ToolDefinition = {
+  name: 'tcms_write_release',
+  title: 'Plan a version, retarget it, or mark it released',
+  description:
+    'A release is a PLAN: a version, optionally a date and a description, and the stories and '
+    + 'epics that point at it. `create` takes a version unique within this project; `update` may '
+    + 'rename it, and renaming recomputes the ordering key so the row moves in the list. `publish` '
+    + 'marks it released — it is one-way, there is no un-publish, and it is IDEMPOTENT: publishing '
+    + 'an already-released version answers it unchanged and does not restamp releasedAt. '
+    + '**Readiness does not gate publishing.** A team may ship a version with a known failure and '
+    + 'record that they did; read tcms_read_release first and say what it says rather than '
+    + 'refusing. `delete` removes the plan and NOT the work — the issues pointing at it keep '
+    + 'existing and become unscheduled. Nothing here links a story to a release or to a test case: '
+    + 'both are tcms_write_issue, because both cost issue:edit.',
+  gate: { mode: 'all', permissions: ['release:manage', 'release:publish'] },
+  arms: [
+    { action: 'create', kind: 'create', permission: 'release:manage' },
+    /*
+      An `edit` that sends no `If-Match`: `PATCH /releases/{releaseId}` declares no such parameter
+      and `Release` carries no `lockVersion` on the wire, so there is nothing to precondition on.
+      Recorded in `writeConformance.test.ts`'s CREATE_WITHOUT_A_KEY with what it costs.
+    */
+    { action: 'update', kind: 'edit', permission: 'release:manage' },
+    /*
+      A `delete`, and the kind is what makes the host prompt: `annotationsFor` reads it for
+      `destructiveHint` and `server.ts`'s consent gate refuses outright when there is no channel to
+      ask on. Declaring it `state` would have passed every header assertion in this tree — the
+      implied set is empty either way — and silently taken the prompt off the one arm here that
+      removes a row.
+    */
+    { action: 'delete', kind: 'delete', permission: 'release:manage', targets: ['release'] },
+    /*
+      Its own permission and deliberately in the same tool: `release:manage` and `release:publish`
+      are granted to the SAME three roles (§A3), so the merge cannot list an action to a caller who
+      403s on it — which is the whole of §2's rule. Two keys, one audience.
+    */
+    { action: 'publish', kind: 'state', permission: 'release:publish' },
+  ],
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['action'],
+    properties: {
+      action: ACTION(['create', 'update', 'delete', 'publish'], 'What to do.'),
+      release: {
+        type: 'string',
+        description:
+          'The release to update, publish or delete, by VERSION (`2.4`) — from tcms_read_release. '
+          + 'Refused for create, where `version` names the new one.',
+      },
+      version: {
+        type: 'string',
+        description:
+          'The version string — `2.4`, `4.3.0-rc.1`. Unique within this project, case-insensitively. '
+          + 'For create it is the new release; for update it RENAMES the one `release` names.',
+      },
+      description: { type: 'string', description: 'Free text, or null to clear it.' },
+      targetDate: {
+        type: 'string',
+        description:
+          'The date it is planned for, `YYYY-MM-DD`, or null. A date in the past is accepted — a '
+          + 'release that slipped is a real state. Without one it still appears on the roadmap.',
+      },
+    },
+  },
+  run: async (session, input) => {
+    const projectId = session.projectId();
+    const tcms = session.request;
+    const action = requireStr(input, 'action');
+
+    if (action === 'create') {
+      return session.client.POST('/projects/{projectId}/releases', {
+        params: { path: { projectId } },
+        body: present({
+          version: requireStr(input, 'version'),
+          description: nullableStr(input, 'description'),
+          targetDate: nullableStr(input, 'targetDate'),
+        }) as components['schemas']['ReleaseInput'],
+        tcms: { ...tcms, ...createIntent({ key: session.callId }) },
+      });
+    }
+
+    const found = await releaseIn(session, requireStr(input, 'release'));
+    const path = { releaseId: found.id };
+
+    if (action === 'update') {
+      // A true delta — `ReleaseUpdate` says an absent key means *leave it* — so unlike the case,
+      // suite and plan arms this one does not read the resource and lay the change on top.
+      return session.client.PATCH('/releases/{releaseId}', {
+        params: { path },
+        body: present({
+          version: str(input, 'version'),
+          description: nullableStr(input, 'description'),
+          targetDate: nullableStr(input, 'targetDate'),
+        }) as components['schemas']['ReleaseUpdate'],
+        tcms,
+      });
+    }
+
+    if (action === 'publish') {
+      return session.client.POST('/releases/{releaseId}/publish', { params: { path }, tcms });
+    }
+
+    if (action !== 'delete') throw new InputError(`Unknown action '${action}'.`);
+
+    await session.client.DELETE('/releases/{releaseId}', { params: { path }, tcms });
+    // A 204 has no body. Saying what went, and what did not, beats an empty success — a caller
+    // that expected the issues to go with the plan has no other way to learn that they did not.
+    return { deleted: found.version, issues: 'kept, and now unscheduled' };
+  },
+};
+
 export const WRITE_TOOLS: readonly ToolDefinition[] = [
   writeCase,
   writeSuite,
@@ -1959,6 +2142,7 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   reviewVerdict,
   writeIssue,
   writeBacklog,
+  writeRelease,
   writeArtifact,
   report,
 ];

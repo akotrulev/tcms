@@ -146,6 +146,14 @@ const UNOFFERED: Readonly<Record<string, string>> = {
     'A user UUID — the same wall `ownerId` and `TestRunInput.assigneeId` hit. It is the one issue '
     + 'field a person would most want and the one this surface cannot obtain a value for: /users is '
     + 'COMPANY-scope (§3.3) and `Agent` does not hold company:read.',
+  'IssueInput.releaseId':
+    'Not on CREATE, and the capability is not missing — it has its own verb. Targeting a story at a '
+    + 'version is `tcms issue release ACME-1 --release 2.4` and `tcms_write_issue {action: '
+    + '"release"}`, both reaching PATCH /issues/{key}, both taking the VERSION rather than the '
+    + 'UUID this property is. Offering it here as well would be a second handle on one field, and '
+    + 'the create one is the handle the product itself does not use: 013 D-l has the backlog '
+    + 'retarget work as N PATCHes from a list somebody is looking at, which is when a release is '
+    + 'actually chosen — a story is raised first and scheduled after.',
 
   /* ---- doc page ---- */
   'DocBlockInput.id':

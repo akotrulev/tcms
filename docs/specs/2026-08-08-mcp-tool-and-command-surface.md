@@ -156,7 +156,7 @@ The count below is the **outcome** of this rule, not a target.
 
 ---
 
-## 3. The MCP surface — ~~21~~ ~~26~~ 28 tools
+## 3. The MCP surface — ~~21~~ ~~26~~ ~~28~~ 30 tools
 
 Namespaced `tcms_*`. `projectId` and `companyId` **do not appear in any schema** (§4.1).
 
@@ -675,6 +675,73 @@ whole module exists to stop the product saying.
 person nor a model has one — `TC-311` is what a story lists and what a test plan names. Both surfaces
 resolve keys through the project's case list before the request and refuse an unknown one by name.
 
+#### `tcms_write_release` — typed input
+
+Gate: **`release:manage` + `release:publish`.** `all`, not `any`, and legal only because §A3 grants
+both to the same three roles; the day one of them widens, this merge is re-checked rather than
+assumed. `writes.test.ts` asks the question mechanically — it walks §A3 and asserts that no role
+holds one key without the other — so the re-check is a red test rather than somebody remembering.
+
+| Field | Type | Arms | Notes |
+|---|---|---|---|
+| `action` | `create` / `update` / `delete` / `publish` | all | required |
+| `release` | string — a **version** | update · delete · publish | required for those, refused for `create`; resolved against `GET /projects/{id}/releases` |
+| `version` | string | create · update | the new version on `create`, a **rename** on `update` — which recomputes the ordering key, so the row moves |
+| `description` | string or null | create · update | |
+| `targetDate` | date or null | create · update | a date in the past is accepted; a release that slipped is a real state |
+
+Arms, and the header each one's `kind` implies (§4.2/§4.3):
+
+| Arm | Kind | Permission | Writes to |
+|---|---|---|---|
+| `create` | `create` | `release:manage` | `POST /projects/{projectId}/releases` — carries `Idempotency-Key` |
+| `update` | `edit` | `release:manage` | `PATCH /releases/{releaseId}` — carries **no** `If-Match`; see below |
+| `delete` | `delete` | `release:manage` | `DELETE /releases/{releaseId}` |
+| `publish` | `state` | `release:publish` | `POST /releases/{releaseId}/publish` |
+
+**`delete` is a `delete` kind and not a `state`, and that distinction is the whole of the consent
+gate.** Both kinds imply no header, so every assertion in `writeConformance.test.ts` passes either
+way and nothing in the tree would have noticed the difference — but `annotationsFor` reads the kind
+for `destructiveHint`, and `server.ts` refuses outright when there is no channel to ask on. An arm
+that removes a row and calls itself a state transition loses its prompt silently. The CLI's
+`release delete` is declared the same way for the same reason; plan 013 T4's own step spelled both
+as `state`, and this is the correction.
+
+**`update` sends no `If-Match`, and it is a recorded shortfall rather than an oversight.**
+`PATCH /releases/{releaseId}` declares no such parameter and `Release` carries no `lockVersion` on
+the wire, so there is nothing to precondition on — the third instance of the wall
+`tcms_write_issue.update` and `tcms_write_backlog.label-update` already meet, and recorded the same
+way in `writeConformance.test.ts`'s `CREATE_WITHOUT_A_KEY` with what it costs. It is bounded by the
+endpoint being a **true delta** over three fields.
+
+**Publishing is not gated on readiness, and the tool says so.** A team may ship a version with a
+known failure and record that they did; a client that refused would be asserting a release policy
+this product has no way to know. The description tells the model to read `tcms_read_release` and
+*relay* what it says rather than withhold the call.
+
+#### The two arms `tcms_write_issue` gains — and why `release` is one of them
+
+Both are `issue:edit`, which that tool already gates on.
+
+| Arm | Kind | Permission | Writes to |
+|---|---|---|---|
+| `cases` | `state` | `issue:edit` | `PUT /issues/{key}/test-cases` |
+| `release` | `edit` | `issue:edit` | `PATCH /issues/{key}` — carries no `If-Match`, same wall as `update` |
+
+`cases` is §3.6's own conclusion. **`release` is decided by the implementation (013 T4)** and is not
+in the eleven operations above, because it is an *amendment*: `IssueUpdate` gained `releaseId`, and
+without an arm for it the MCP could create a release, read it and publish it while having no way to
+put a single story into one. It takes the **version**, resolved the same way `tcms_read_release`
+resolves it, and an explicit `null` clears the target — absent is refused rather than treated as a
+clear, because on a delta `PATCH` an absent field means *leave it* and a caller who named neither
+would otherwise silently unschedule the issue.
+
+**It is not offered on `create`, and that is recorded rather than silent**:
+`shapesContract.test.ts`'s `UNOFFERED` carries `IssueInput.releaseId` with the reason — the product
+itself targets releases by retargeting from the backlog (D-l: N `PATCH`es from a list somebody is
+looking at), not at the moment a story is raised, and offering both would be two handles on one
+field.
+
 ---
 
 ## 4. Cross-cutting rules — all of them in the command core
@@ -785,8 +852,9 @@ needing a separate decision. A bulk generation therefore decomposes per item.
 ## 6. The CLI surface
 
 `tcms <noun> <verb>`, one command per operation the `Agent` role can reach — approximately ~~45~~ ~~53~~ 61,
-against the MCP surface's ~~21~~ 28. **The registry holds 43** (`COMMANDS`, measured 012 T5, eight of
-them this slice's board verbs), and the two numbers have never met: the count above is what the
+against the MCP surface's ~~21~~ ~~28~~ 30. **The registry holds ~~43~~ 53** (`COMMANDS`, measured
+013 T4, eight of them 012's board verbs and ten this slice's release verbs), and the two numbers have
+never met: the count above is what the
 `Agent` grant *reaches*, the registry is what has been *spelled*, and §6's own struck-through
 paragraph names the families — `report` and `triage` — that are still reachable and unoffered. It is wide on purpose (§1): `--help` is paged and nobody loads all of
 it.
@@ -857,6 +925,53 @@ Three things about that table are decisions rather than spellings:
   something a CI step fails on — story B3's "a limit people route around" in its automation
   spelling. `tcms rank` does the same with a `rebalanced` answer, which is a success carrying an
   instruction to read the list again, not an error.
+**The ten release commands** (013 T4; §3.6 carries the typed inputs and the reasons). `release` is
+the fourth noun the CLI gains, and `roadmap` is a bare verb for `backlog`'s reason — it is the one
+view of the project rather than one of several things a noun has:
+
+| Command | Kind | Permission | Reaches |
+|---|---|---|---|
+| `tcms release list` | read | `release:read` | `GET /projects/{projectId}/releases` |
+| `tcms release show 2.4` | read | `release:read` | `GET /releases/{releaseId}/readiness` |
+| `tcms roadmap` | read | `release:read` | `GET /projects/{projectId}/roadmap` |
+| `tcms issue cases ACME-118` | read | `issue:read` | `GET /issues/{key}/test-cases` |
+| `tcms release create --version 2.6 [--date D] [--description T]` | `create` | `release:manage` | `POST /projects/{projectId}/releases` |
+| `tcms release edit 2.6 [--version] [--date] [--description]` | `edit` | `release:manage` | `PATCH /releases/{releaseId}` |
+| `tcms release publish 2.4` | `state` | `release:publish` | `POST /releases/{releaseId}/publish` |
+| `tcms release delete 2.6` | `delete` | `release:manage` | `DELETE /releases/{releaseId}` |
+| `tcms issue release ACME-118 --release 2.4 \| --none` | `edit` | `issue:edit` | `PATCH /issues/{key}` |
+| `tcms issue cases set ACME-118 --case TC-311` | `state` | `issue:edit` | `PUT /issues/{key}/test-cases` |
+
+**Ten, and plan 013 T4's own deliverable line said eight.** The pipe-list there names the six
+`release` verbs, `roadmap` and `issue cases`; its Step 2 then spells `issue release` and
+`issue cases set` as well, and both are the CLI's only writer for their field — there is no
+`tcms issue edit` (above), so without the first a person at a terminal can create a release and
+never put anything in it. The count in the plan is the summary being loose, not a scope decision,
+and it is corrected there.
+
+Five things about that table are decisions rather than spellings:
+
+- **The version is the handle, never the id.** `release.id` is a UUID and every one of these is
+  typed `tcms release publish 2.4`, so the version is resolved against the project's own list and an
+  unknown one is refused by printing what the project has — `boardOf`'s and `labelIds`' rule, with a
+  sharper reason: a version is *text a person typed*, so a typo is the expected input.
+- **`release list` prints `no run yet` and never `0/0`.** `ReadinessSummary.casesPassed` and
+  `casesFailed` are **null and not zero** when `hasRun` is false, and a `?? 0` anywhere between the
+  wire and the cell turns *nothing has been tested* into *nothing failed*. The badge column is the
+  **verdict's** vocabulary and not the status's (013 D-e), except for `RELEASED`, which is the one
+  state a person set.
+- **`release delete` declares a `delete` kind**, so it asks first and refuses outright with no
+  terminal to ask at. See §3.6 — the plan spelled it `state`, which passes every header assertion in
+  the tree and silently removes the prompt.
+- **`issue release` takes `--none` rather than `--release ''`.** The empty-string clearing form the
+  nullable text flags use is right for free text and wrong for a resolved reference, where `''`
+  would have to be looked up before it could be recognised as a clear. Exactly one of the two flags
+  is required, refused locally, for `rank`'s reason.
+- **`issue cases set` replaces the whole set**, matching the endpoint, and takes case **keys**
+  (§4.4). It is the surface's only three-word command name, which is why `findCommand` and
+  `guideCopies.test.ts` both try three words before two — shortest-first would read
+  `issue cases set ACME-118` as the *read* command with `set` as the issue key.
+
 - **Read commands are phase 5, writes are phase 7**, per the plan's order.
 - **`--json` on every command**, so the CLI composes in a shell. Human-readable output is the
   default and the JSON is the generated client's response verbatim.

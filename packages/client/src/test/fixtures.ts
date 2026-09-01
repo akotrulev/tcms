@@ -49,6 +49,7 @@ export const IDS = {
   plan: 'tp-1',
   page: 'dp-1',
   artifact: 'af-1',
+  release: 'rl-1',
 } as const;
 
 /** A fixed instant, so nothing here depends on when the suite runs. */
@@ -740,6 +741,184 @@ export function caseHistory(overrides: {
     entries: overrides.entries ?? [],
     versionMarkers: overrides.versionMarkers ?? [],
   };
+}
+
+/* ------------------------------------------------------- releases (013) ---- */
+
+export function releaseRef(overrides: Partial<Schemas['ReleaseRef']> = {}): Schemas['ReleaseRef'] {
+  return { id: IDS.release, version: '2.4', targetDate: null, ...overrides };
+}
+
+export function release(overrides: Partial<Schemas['Release']> = {}): Schemas['Release'] {
+  return {
+    id: IDS.release,
+    projectId: IDS.project,
+    version: '2.4',
+    description: null,
+    targetDate: null,
+    status: 'PLANNED',
+    releasedAt: null,
+    createdAt: NOW,
+    updatedAt: null,
+    ...overrides,
+  };
+}
+
+/**
+ * A version nothing has run against — `hasRun: false` and both counts **null**.
+ *
+ * The default is the untested state rather than a clean one, and it is the one default in this file
+ * chosen for a reason beyond "empty": `ReleaseVerdict` says an untested version and a passing one
+ * are not the same claim, so a fixture defaulting `casesPassed` to 0 would let a `?? 0` anywhere
+ * between the wire and a terminal pass every test in the tree.
+ */
+export function readinessSummary(
+  overrides: Partial<Schemas['ReadinessSummary']> = {},
+): Schemas['ReadinessSummary'] {
+  return {
+    verdict: 'NOT_TESTED',
+    storiesDone: 0,
+    storiesTotal: 0,
+    linkedCases: 0,
+    hasRun: false,
+    casesPassed: null,
+    casesFailed: null,
+    ...overrides,
+  };
+}
+
+export function releaseSummary(
+  overrides: Partial<Schemas['ReleaseSummary']> = {},
+): Schemas['ReleaseSummary'] {
+  return {
+    id: IDS.release,
+    version: '2.4',
+    description: null,
+    targetDate: null,
+    status: 'PLANNED',
+    releasedAt: null,
+    createdAt: NOW,
+    readiness: readinessSummary(),
+    ...overrides,
+  };
+}
+
+export function releaseStories(
+  overrides: Partial<Schemas['ReleaseStories']> = {},
+): Schemas['ReleaseStories'] {
+  return { done: 0, total: 0, inProgress: 0, notStarted: 0, excludedSpikes: 0, ...overrides };
+}
+
+export function releaseTests(
+  overrides: Partial<Schemas['ReleaseTests']> = {},
+): Schemas['ReleaseTests'] {
+  return {
+    hasRun: false,
+    linkedCases: 0,
+    withResult: null,
+    passed: null,
+    failed: null,
+    blocked: null,
+    untested: null,
+    latestExecutedAt: null,
+    latestRunId: null,
+    latestRunName: null,
+    executedBy: null,
+    ...overrides,
+  };
+}
+
+export function releaseBlocker(
+  overrides: Partial<Schemas['ReleaseBlocker']> = {},
+): Schemas['ReleaseBlocker'] {
+  return {
+    key: 'ACME-118',
+    title: 'Sign-out clears the session',
+    type: issueType(),
+    status: issueStatus(),
+    casesPassed: 0,
+    casesFailed: 0,
+    casesBlocked: 0,
+    casesUntested: 0,
+    failedCaseKeys: [],
+    ...overrides,
+  };
+}
+
+export function roadmapEpic(
+  overrides: Partial<Schemas['RoadmapEpic']> = {},
+): Schemas['RoadmapEpic'] {
+  return {
+    key: 'ACME-3',
+    title: 'Sign-out everywhere',
+    startDate: null,
+    targetDate: null,
+    releaseId: null,
+    statusKind: 'NOT_STARTED',
+    completionPercent: null,
+    ...overrides,
+  };
+}
+
+export function releaseReadiness(
+  overrides: Partial<Schemas['ReleaseReadiness']> = {},
+): Schemas['ReleaseReadiness'] {
+  return {
+    releaseId: IDS.release,
+    version: '2.4',
+    status: 'PLANNED',
+    verdict: 'NOT_TESTED',
+    stories: releaseStories(),
+    tests: releaseTests(),
+    blockers: [],
+    epics: [],
+    scopeAddedAfterCreation: 0,
+    ...overrides,
+  };
+}
+
+export function roadmapRelease(
+  overrides: Partial<Schemas['RoadmapRelease']> = {},
+): Schemas['RoadmapRelease'] {
+  return {
+    id: IDS.release,
+    version: '2.4',
+    targetDate: null,
+    status: 'PLANNED',
+    verdict: 'NOT_TESTED',
+    epics: [],
+    ...overrides,
+  };
+}
+
+/** Empty by default, which the contract says is the ordinary state of a fresh instance (D14). */
+export function roadmap(overrides: Partial<Schemas['Roadmap']> = {}): Schemas['Roadmap'] {
+  return { releases: [], unscheduled: [], ...overrides };
+}
+
+export function issueRef(overrides: Partial<Schemas['IssueRef']> = {}): Schemas['IssueRef'] {
+  return { key: 'ACME-118', title: 'Sign-out clears the session', typeLevel: 'STORY', ...overrides };
+}
+
+/** The three `last*` members are required and nullable together — a case never executed is three nulls. */
+export function issueTestCase(
+  overrides: Partial<Schemas['IssueTestCase']> = {},
+): Schemas['IssueTestCase'] {
+  return {
+    caseId: IDS.case,
+    caseKey: 'TC-42',
+    title: 'Login works',
+    lastResultKind: null,
+    lastExecutedAt: null,
+    lastReleaseVersion: null,
+    ...overrides,
+  };
+}
+
+export function caseVerification(
+  overrides: Partial<Schemas['CaseVerification']> = {},
+): Schemas['CaseVerification'] {
+  return { caseId: IDS.case, issues: [], ...overrides };
 }
 
 /**

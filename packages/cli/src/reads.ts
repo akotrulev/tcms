@@ -1104,6 +1104,266 @@ const labelList: Command = {
   },
 };
 
+/* ------------------------------------------------------------------ releases ---- */
+
+/**
+ * The badge a readiness answer is printed as — plan 013 D-e.
+ *
+ * A **released** version is reported by its status and everything else by the verdict the server
+ * computed, so the column never means "a person set this" on one row and "the server worked this
+ * out" on the next. `satisfies` is the point: a fourth verdict member is a compile error here.
+ */
+const VERDICT = {
+  READY: 'Ready',
+  NOT_READY: 'Not ready',
+  NOT_TESTED: 'Not tested',
+} satisfies Record<components['schemas']['ReleaseVerdict'], string>;
+
+/**
+ * The tests column, and the one cell in this surface that must not round.
+ *
+ * `casesPassed` and `casesFailed` are **null and not zero** when nothing has run against the
+ * version, and the words are the answer rather than a placeholder for it: `0/0` says every test
+ * passed, which is the one sentence this module exists to stop the product saying. A `?? 0`
+ * anywhere between the wire and here reintroduces it and no type would notice.
+ */
+function tests(readiness: components['schemas']['ReadinessSummary']): string {
+  return readiness.hasRun
+    ? `${show(readiness.casesPassed)}/${String(readiness.linkedCases)}`
+    : 'no run yet';
+}
+
+/** How a readiness answer reads, whether it came inline on a row or from `/readiness`. */
+function badge(
+  status: components['schemas']['ReleaseStatus'],
+  verdict: components['schemas']['ReleaseVerdict'],
+): string {
+  return status === 'RELEASED' ? 'Released' : VERDICT[verdict];
+}
+
+/**
+ * The release a command acts on, named by its **version**.
+ *
+ * `release.id` is a UUID and every command here is spelled `tcms release publish 2.4`, so the
+ * version is resolved against the project's own list and an unknown one is refused by printing
+ * what the project has. `labelIds` makes the same argument for the same reason; the sharper one
+ * here is that a version is *text a person typed*, so a typo is the expected input rather than an
+ * unlikely one.
+ *
+ * Exported because `writes.ts` resolves the same way — four of the six release writes name a
+ * version — and two copies of *which release did they mean* would be two refusals for one mistake.
+ */
+export async function releaseOf(
+  context: CommandContext,
+  requested: string,
+): Promise<components['schemas']['ReleaseSummary']> {
+  const releases = await context.client.GET('/projects/{projectId}/releases', {
+    params: { path: { projectId: await projectOf(context) } },
+    tcms: context.request,
+  });
+
+  const found = releases.find(
+    (row) => row.version.toLowerCase() === requested.toLowerCase() || row.id === requested,
+  );
+  if (!found) {
+    throw new UsageError(
+      `No release '${requested}' in this project. It has: `
+        + `${releases.map((row) => row.version).join(', ') || '(none yet — tcms release create)'}.`,
+    );
+  }
+  return found;
+}
+
+const releaseList: Command = {
+  name: 'release list',
+  summary: 'The project\'s releases, in version order',
+  usage: 'tcms release list',
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const rows = await client.GET('/projects/{projectId}/releases', {
+      params: { path: { projectId: await projectOf(context) } },
+      tcms: request,
+    });
+
+    if (json) return out.json(rows);
+
+    table(out, rows, [
+      { header: 'VERSION', value: (row) => show(row.version) },
+      { header: 'TARGET', value: (row) => show(row.targetDate) },
+      { header: 'STORIES', value: (row) => `${String(row.readiness.storiesDone)}/${String(row.readiness.storiesTotal)}` },
+      { header: 'TESTS', value: (row) => tests(row.readiness) },
+      { header: 'READINESS', value: (row) => badge(row.status, row.readiness.verdict) },
+    ]);
+
+    out.line();
+    // Said rather than implied: the order is a computed key, so a reader who expected the text
+    // order has no way to tell a sorted list from an unsorted one by looking at this one.
+    out.line('2.10 sorts after 2.5 — versions are compared segment by segment, not as text.');
+    if (rows.length === 0) {
+      // An empty list is the ordinary state of a fresh instance (D14), not a failure to read one.
+      out.line('No releases yet. Nothing is migrated into one — the first is one somebody types.');
+    }
+  },
+};
+
+const releaseShow: Command = {
+  name: 'release show',
+  summary: 'One release, and whether it can ship',
+  usage: 'tcms release show 2.4',
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const chosen = await releaseOf(context, requireArg(context, 'release', 0));
+
+    const readiness = await client.GET('/releases/{releaseId}/readiness', {
+      params: { path: { releaseId: chosen.id } },
+      tcms: request,
+    });
+
+    if (json) return out.json(readiness);
+
+    fields(out, [
+      ['Release', show(readiness.version)],
+      ['Target date', show(chosen.targetDate)],
+      ['Readiness', badge(readiness.status, readiness.verdict)],
+      [
+        'Stories',
+        `${String(readiness.stories.done)}/${String(readiness.stories.total)} done — `
+          + `${String(readiness.stories.inProgress)} in progress, `
+          + `${String(readiness.stories.notStarted)} not started`
+          // Served so the screen can say why the total does not match the backlog (D8).
+          + `, ${String(readiness.stories.excludedSpikes)} spikes not counted`,
+      ],
+      [
+        'Tests',
+        readiness.tests.hasRun
+          ? `${show(readiness.tests.passed)} passed, ${show(readiness.tests.failed)} failed, `
+            + `${show(readiness.tests.blocked)} blocked, ${show(readiness.tests.untested)} untested `
+            + `of ${String(readiness.tests.linkedCases)} linked`
+          : `no run yet — ${String(readiness.tests.linkedCases)} linked cases, none executed `
+            + 'against this version',
+      ],
+      ['Last run', readiness.tests.hasRun ? show(readiness.tests.latestRunName) : '—'],
+      // From `issue_fact`, which is event-fed, so it can lag the rest of this answer by a tick
+      // (D-f). Labelled rather than printed as a bare number beside numbers that cannot lag.
+      ['Scope added since created', `${String(readiness.scopeAddedAfterCreation)} (projected)`],
+    ]);
+
+    if (readiness.blockers.length > 0) {
+      out.line();
+      out.line('What stands between here and shipping:');
+      table(out, readiness.blockers, [
+        { header: 'KEY', value: (row) => show(row.key) },
+        { header: 'TITLE', value: (row) => show(row.title) },
+        // The status by NAME, because it is what separates "nobody has started" from "this is
+        // finished and its test says otherwise" — the case this module exists for.
+        { header: 'STATUS', value: (row) => show(row.status.name) },
+        { header: 'PASSED', value: (row) => String(row.casesPassed) },
+        { header: 'FAILED', value: (row) => String(row.casesFailed) },
+        { header: 'UNTESTED', value: (row) => String(row.casesUntested) },
+        { header: 'FAILED CASES', value: (row) => row.failedCaseKeys.join(', ') || '—' },
+      ]);
+    }
+
+    if (readiness.epics.length > 0) {
+      out.line();
+      table(out, readiness.epics, [
+        { header: 'EPIC', value: (row) => show(row.key) },
+        { header: 'TITLE', value: (row) => show(row.title) },
+        { header: 'DONE', value: (row) => (row.completionPercent === null ? '—' : `${String(row.completionPercent)}%`) },
+      ]);
+    }
+  },
+};
+
+/**
+ * `tcms roadmap` — the releases in version order with their epics under them, then the lane of
+ * epics that cannot be drawn under one.
+ *
+ * The unscheduled lane prints **last and always**, even when it is empty, because it is the answer
+ * to *where did my epic go*: an epic with no dates or no release does not disappear from the
+ * roadmap, and a lane that appeared only when it had members would leave a reader to guess that.
+ */
+const roadmap: Command = {
+  name: 'roadmap',
+  summary: 'Releases on a timeline, with the epics targeting each',
+  usage: 'tcms roadmap',
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const plan = await client.GET('/projects/{projectId}/roadmap', {
+      params: { path: { projectId: await projectOf(context) } },
+      tcms: request,
+    });
+
+    if (json) return out.json(plan);
+
+    if (plan.releases.length === 0 && plan.unscheduled.length === 0) {
+      out.line('The roadmap is empty. Nothing is migrated into a release — create one with');
+      out.line('  tcms release create --version 2.4 --date 2026-11-14');
+      return;
+    }
+
+    for (const one of plan.releases) {
+      out.line(
+        `${show(one.version)}  ${one.targetDate === null ? '(no target date)' : `target ${show(one.targetDate)}`}`
+          + `  —  ${badge(one.status, one.verdict)}`,
+      );
+      for (const epic of one.epics) out.line(`    ${epicLine(epic)}`);
+      if (one.epics.length === 0) out.line('    (no epics targeting it)');
+      out.line();
+    }
+
+    out.line(`Unscheduled — ${String(plan.unscheduled.length)} epic(s) with no dates or no release:`);
+    for (const epic of plan.unscheduled) out.line(`    ${epicLine(epic)}`);
+  },
+};
+
+function epicLine(epic: components['schemas']['RoadmapEpic']): string {
+  const dates = epic.startDate === null && epic.targetDate === null
+    ? 'no dates'
+    : `${show(epic.startDate)} → ${show(epic.targetDate)}`;
+  const done = epic.completionPercent === null ? '' : `  ${String(epic.completionPercent)}%`;
+  return `${show(epic.key)}  ${show(epic.title)}  [${dates}]  ${show(epic.statusKind)}${done}`;
+}
+
+/**
+ * `tcms issue cases ACME-118` — the test cases that prove a story, with their latest result.
+ *
+ * The result is the latest the case has **anywhere**, deliberately not scoped to a release: this
+ * answers *does this case pass*, and `release show` answers *did it pass for the version we are
+ * shipping*. The two are different questions and the contract serves them from different places.
+ */
+const issueCases: Command = {
+  name: 'issue cases',
+  summary: 'The test cases a story is proven by, with their latest result',
+  usage: 'tcms issue cases ACME-118',
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const key = requireArg(context, 'issue');
+
+    const rows = await client.GET('/issues/{key}/test-cases', {
+      params: { path: { key } },
+      tcms: request,
+    });
+
+    if (json) return out.json(rows);
+
+    table(out, rows, [
+      { header: 'CASE', value: (row) => show(row.caseKey) },
+      { header: 'TITLE', value: (row) => show(row.title) },
+      // Null for a case nothing has ever executed, and printed as such: three nulls is a real
+      // state the contract requires be distinguishable from an endpoint that serves nothing.
+      { header: 'LAST RESULT', value: (row) => show(row.lastResultKind) },
+      { header: 'EXECUTED', value: (row) => showDate(row.lastExecutedAt) },
+      { header: 'VERSION', value: (row) => show(row.lastReleaseVersion) },
+    ]);
+
+    if (rows.length === 0) {
+      out.line();
+      out.line(`${key} has no linked test cases. Link them with: tcms issue cases set ${key} --case TC-311`);
+    }
+  },
+};
+
 export const READS: readonly Command[] = [
   whoami,
   format,
@@ -1125,4 +1385,8 @@ export const READS: readonly Command[] = [
   boardShow,
   backlog,
   labelList,
+  releaseList,
+  releaseShow,
+  roadmap,
+  issueCases,
 ];

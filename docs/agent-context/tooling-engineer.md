@@ -1,6 +1,6 @@
 # tooling-engineer — orientation cache
 
-Baseline: `a7be32cc` (012 T5), refreshed 2026-08-31.
+Baseline: `1dae5308` (013 T3), refreshed 2026-09-01.
 Trust this as a lead, not evidence; `CLAUDE.md`, `docs/specs/openapi.yaml` and
 `docs/specs/2026-08-08-mcp-tool-and-command-surface.md` outrank it.
 
@@ -31,9 +31,15 @@ Trust this as a lead, not evidence; `CLAUDE.md`, `docs/specs/openapi.yaml` and
   `cli/src/commands.ts` (`READS` + `WRITES`). Everything else derives from those two lists — **and
   that is load-bearing rather than tidy**: 012 T5 added 8 commands and 2 tools, and neither
   `commands.ts` nor `server.ts` needed a line, consent prompt for the new delete arm included.
-- Sizes as of 012 T5: **28 tools** (12 read + 14 write + whoami + shape) and **43 CLI commands**.
-  Three places carry a count and all three are pinned: `writes.test.ts`'s `is 28 tools`,
-  `sections.tsx`'s `28 tools` prose, and §6/§3 of the surface document.
+- Sizes as of 013 T4: **30 tools** (13 read + 15 write + whoami + shape) and **53 CLI commands**.
+  Three places carry a count and all three are pinned: `writes.test.ts`'s `is 30 tools`,
+  `sections.tsx`'s `30 tools` prose, and §6/§3 of the surface document. `sections.tsx` also carries
+  two GROUP headings (`Reading — 14`, `Writing — 13`) that **nothing pins** — the test compares the
+  names and the total, so a heading contradicting its own list ships green. 012 did exactly that;
+  count the list items by hand every time.
+- **`findCommand` tries three words, two, then one.** `issue cases set` is the only three-word name
+  and `issue cases` is a real command, so shortest-first would resolve the write to the read with
+  `set` as the issue key. `guideCopies.test.ts`'s parse has the same ceiling and had to move with it.
 
 ## Seams to reuse
 - **One shape catalogue, five renderers**: `client/src/core/shapes.ts`. `jsonSchemaFor` (MCP),
@@ -48,6 +54,9 @@ Trust this as a lead, not evidence; `CLAUDE.md`, `docs/specs/openapi.yaml` and
   is the only place a header is generated.
 - **Paging**: `PAGING_PROPERTIES` + `clampPageSize` (default 25, max 200). Most list endpoints are
   unpaginated on the wire, so the window is client-side and bounds the *model's* context.
+- **Release version → id**: `releaseOf` (`cli/src/reads.ts`) and `releaseIn` (`mcp/src/reads.ts`),
+  same arrangement, and the refusal lists the project's versions. Every release verb but `create`
+  goes through it, because `release.id` is a UUID and every command is spelled by version.
 - **Board name → id**: `boardOf` (`cli/src/reads.ts`) and `boardIn` (`mcp/src/reads.ts`), each
   imported by its own package's `writes.ts` rather than copied. Optional — one board is defaulted,
   two or more is a refusal listing them (plan 012 D-t). Same shape for labels: `labelIds` /
@@ -70,7 +79,20 @@ Trust this as a lead, not evidence; `CLAUDE.md`, `docs/specs/openapi.yaml` and
 - A conformance table with no entry for a registry row **fails**, never skips —
   `INVOCATIONS` in both `writeConformance.test.ts` files, `TOOL_FOR` / `COMMAND_FOR`.
 - A shortfall is recorded in a named map with what it costs (`CREATE_WITHOUT_A_KEY`, `UNOFFERED`),
-  and each map is pinned both ways so a stale entry fails too.
+  and each map is pinned both ways so a stale entry fails too. **`UNOFFERED` is the one that finds
+  a contract amendment nobody wired**: `shapesContract.test.ts` fails when a property of a shape's
+  contract schema is on neither adapter, and it is what caught `IssueInput.releaseId` in 013 T4.
+- **`ToolArm.kind: 'delete'` is the consent gate and nothing else checks it.** `delete` and `state`
+  both imply no header, so `writeConformance.test.ts` passes either way; `annotationsFor` reads the
+  kind for `destructiveHint` and `server.ts` refuses when there is no channel to ask on, and the
+  CLI's `main.ts` raises its confirmation off the same field. A delete declared `state` ships with
+  no prompt and nothing red. Plan 013 T4 spelled both release deletes `state`; T4 corrected it and
+  wrote a test per surface that asserts the kind directly.
+- **`ReadinessSummary.casesPassed`/`casesFailed` are null, not zero, when `hasRun` is false**, and
+  every rendering has to keep them that way — `tcms release list` prints the words `no run yet`. A
+  `?? 0` between the wire and a cell turns *nothing has been tested* into *nothing failed*, and no
+  type in this tree would notice. The `readinessSummary()` fixture defaults to the untested state
+  for exactly that reason.
 - Superseded prose is struck through and kept. A path named in a comment must exist —
   `client/src/test/citedFiles.test.ts` scans `packages/**`, `frontend/src/**`, `docs/specs/*.yaml`
   and `backend/src/**`, so a stale citation in another stack reddens *this* job.
@@ -93,15 +115,32 @@ Trust this as a lead, not evidence; `CLAUDE.md`, `docs/specs/openapi.yaml` and
 - `#volatile`: the installed MCP SDK version; the live API's actual behaviour (every check here
   reads `openapi.yaml`, not a running server).
 - §8.1's permission check reads an operation's prose for the literal word `Requires`. Neither the
-  tracker nor the **board** operations use it, so that assertion is **skipped** for the six
-  `tcms_write_issue` arms and all four of `tcms_write_backlog`'s — recorded in the contract
-  document §3.4 and §3.5.
+  tracker nor the **board** nor the **release** operations use it, so that assertion is **skipped**
+  for the eight `tcms_write_issue` arms, all four of `tcms_write_backlog`'s and all four of
+  `tcms_write_release`'s — recorded in the contract document §3.4, §3.5 and §3.6.
 - `PATCH /labels/{labelId}` declares no `If-Match` and `Label` carries no `lockVersion`, so
-  `tcms_write_backlog.label-update` is in `CREATE_WITHOUT_A_KEY` with what it costs.
+  `tcms_write_backlog.label-update` is in `CREATE_WITHOUT_A_KEY` with what it costs. **013 T4 added
+  two more of the same shape** — `tcms_write_release.update` and `tcms_write_issue.release`, both
+  `PATCH`es with no version on the wire — so the map now has five members across the two packages
+  and the pattern is the contract's rather than any one endpoint's.
+- `writes.test.ts`'s merge rule (`ASSIGNABLE`) still lists four roles and **omits `PM`**, which `V2`
+  made assignable. It is inert today because the check intersects each role with `AGENT_KEYS` and no
+  Agent credential holds a `board:*` or `release:*` write key, so the loop skips every multi-key
+  gate. Left alone in 013 T4 rather than widened blind; it is the thing to look at first the day an
+  Agent grant reaches one of those keys.
 - Nothing in `packages/` has been exercised against a live instance in this lane; every gate is a
   double compared to the contract.
 
 ## Session log
+- 2026-09-01 · delta (contract doc + `openapi.yaml` + generated schema; no hand-written
+  `packages/*/src` file had moved) · 013 T4: the release verbs. **Ten** CLI commands
+  (`release list|show|create|edit|publish|delete`, `roadmap`, `issue cases`, `issue release`,
+  `issue cases set` — the plan's deliverable line said eight and its own Step 2 spelled ten),
+  `tcms_read_release`, `tcms_write_release`, and `cases` + `release` arms on `tcms_write_issue`.
+  Arrived **green** (500 packages tests); left green at 500. Three things the plan did not predict
+  and all three were found by an existing check rather than by reading: `findCommand`'s two-word
+  ceiling, `shapesContract.test.ts`'s `UNOFFERED` on `IssueInput.releaseId`, and that the release
+  deletes had to be `kind: 'delete'`. Nothing here has been run against a live instance.
 - 2026-08-31 · delta (contract doc + generated schema) · 012 T5: the board verbs. 8 CLI commands
   (`board list|show|move`, `backlog`, `rank`, `label list|add|set`), `tcms_read_board`,
   `tcms_write_backlog`, and `move-card` + `label` arms on `tcms_write_issue` — the three-way split

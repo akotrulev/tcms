@@ -36,8 +36,12 @@ import {
   execution,
   executionSummary,
   issue,
+  issueTestCase,
   plan,
   projectWorkflow,
+  release as releaseFixture,
+  releaseRef,
+  releaseSummary,
   proposal,
   review,
   run as runFixture,
@@ -52,7 +56,7 @@ import { roleMatrix, type Role } from '../../client/src/test/roleMatrix.js';
 import { armFor } from './server.js';
 import { TOOLS } from './tools.js';
 import { WRITE_TOOLS } from './writes.js';
-import { isListed, type ToolDefinition } from './tool.js';
+import { deletes, isListed, type ToolDefinition } from './tool.js';
 import { AGENT_KEYS, agentRoutes, api, sessionWith, withApi, type Api } from './test/harness.js';
 
 function tool(name: string): ToolDefinition {
@@ -733,6 +737,62 @@ describe('tcms_write_issue', () => {
     expect(JSON.parse(stub.write('/issues/ACME-124/labels').body ?? '{}')).toEqual({ labelIds: [] });
   });
 
+  it('resolves case KEYS and replaces the whole set a story is proven by', async () => {
+    const stub = api(agentRoutes({
+      '/cases': { status: 200, body: casePage([caseSummary()], { size: 1 }) },
+      'PUT /issues/ACME-124/test-cases': { status: 200, body: [issueTestCase()] },
+    }));
+
+    await run(stub, 'tcms_write_issue', { action: 'cases', issue: 'ACME-124', cases: ['TC-42'] });
+
+    // Display keys in both directions (§4.4): the endpoint takes UUIDs and no model has one.
+    expect(JSON.parse(stub.write('/issues/ACME-124/test-cases').body ?? '{}'))
+      .toEqual({ caseIds: ['c-1'] });
+  });
+
+  it('unlinks every case on an empty array, because the write is a replacement', async () => {
+    const stub = api(agentRoutes({ 'PUT /issues/ACME-124/test-cases': { status: 200, body: [] } }));
+
+    await run(stub, 'tcms_write_issue', { action: 'cases', issue: 'ACME-124', cases: [] });
+
+    expect(JSON.parse(stub.write('/issues/ACME-124/test-cases').body ?? '{}')).toEqual({ caseIds: [] });
+  });
+
+  it('resolves a release VERSION to the id the PATCH takes', async () => {
+    const stub = api(agentRoutes({
+      'GET /releases': { status: 200, body: [releaseSummary()] },
+      'PATCH /issues/ACME-124': { status: 200, body: issue({ release: releaseRef() }) },
+    }));
+
+    await run(stub, 'tcms_write_issue', { action: 'release', issue: 'ACME-124', release: '2.4' });
+
+    expect(JSON.parse(stub.write('/issues/ACME-124').body ?? '{}')).toEqual({ releaseId: 'rl-1' });
+  });
+
+  it('clears the release on an explicit null, and refuses the field being absent', async () => {
+    const stub = api(agentRoutes({ 'PATCH /issues/ACME-124': { status: 200, body: issue() } }));
+
+    await run(stub, 'tcms_write_issue', { action: 'release', issue: 'ACME-124', release: null });
+    expect(JSON.parse(stub.write('/issues/ACME-124').body ?? '{}')).toEqual({ releaseId: null });
+
+    /*
+      Absent is not the same request as null and must not become one: on a PATCH whose absent key
+      means *leave it*, a caller who named neither would otherwise have the issue silently taken
+      off whatever release it was on.
+    */
+    await expect(run(stub, 'tcms_write_issue', { action: 'release', issue: 'ACME-124' }))
+      .rejects.toThrow(/required/);
+  });
+
+  it('refuses a release this project does not have, and never sends the PATCH', async () => {
+    const stub = api(agentRoutes({ 'GET /releases': { status: 200, body: [releaseSummary()] } }));
+
+    await expect(run(stub, 'tcms_write_issue', {
+      action: 'release', issue: 'ACME-124', release: '9.9',
+    })).rejects.toThrow(/It has: 2\.4/);
+    expect(stub.sent.some((request) => request.method === 'PATCH')).toBe(false);
+  });
+
   it('is listed for a Viewer, and says which actions they may use', () => {
     /*
       The `any` gate, and the reason for it: Viewer holds `issue:comment` and neither of the other
@@ -807,6 +867,94 @@ describe('tcms_write_backlog', () => {
     // not shown a tool every arm of which it would be refused on.
     expect(isListed(tool('tcms_write_backlog'), new Set(AGENT_KEYS))).toBe(false);
     expect(isListed(tool('tcms_write_issue'), new Set(AGENT_KEYS))).toBe(true);
+  });
+});
+
+describe('tcms_write_release', () => {
+  const RELEASES = { 'GET /releases': { status: 200, body: [releaseSummary()] } } as const;
+
+  it('names the release by VERSION and resolves it before every arm but create', async () => {
+    const stub = api(agentRoutes({
+      ...RELEASES,
+      'POST /releases/rl-1/publish': {
+        status: 200,
+        body: releaseFixture({ status: 'RELEASED', releasedAt: '2026-09-01T10:00:00Z' }),
+      },
+    }));
+
+    await run(stub, 'tcms_write_release', { action: 'publish', release: '2.4' });
+
+    // A version passed through as an id would have reached `/releases/2.4/publish` and 404ed —
+    // which a model reads as "there is no such release" rather than as its own mistake.
+    expect(stub.write('/publish').path).toContain('/releases/rl-1/publish');
+    expect(stub.write('/publish').body).toBe(null);
+  });
+
+  it('refuses an unknown version with the list, and sends nothing', async () => {
+    const stub = api(agentRoutes(RELEASES));
+
+    await expect(run(stub, 'tcms_write_release', { action: 'delete', release: '9.9' }))
+      .rejects.toThrow(/It has: 2\.4/);
+    expect(stub.sent.some((request) => request.method === 'DELETE')).toBe(false);
+  });
+
+  it('sends only the fields an update named, because ReleaseUpdate is a true delta', async () => {
+    const stub = api(agentRoutes({ ...RELEASES, 'PATCH /releases/rl-1': { status: 200, body: releaseFixture() } }));
+
+    await run(stub, 'tcms_write_release', { action: 'update', release: '2.4', description: null });
+
+    expect(JSON.parse(stub.write('/releases/rl-1').body ?? '{}')).toEqual({ description: null });
+  });
+
+  it('says the issues survived a delete, because a 204 cannot', async () => {
+    const stub = api(agentRoutes({ ...RELEASES, 'DELETE /releases/rl-1': { status: 204 } }));
+
+    const answered = await run(stub, 'tcms_write_release', { action: 'delete', release: '2.4' }) as
+      { deleted: string; issues: string };
+
+    // The FK is ON DELETE SET NULL: the plan goes and the work does not. An empty success would
+    // leave a model to report that six stories had been deleted with it.
+    expect(answered.deleted).toBe('2.4');
+    expect(answered.issues).toContain('unscheduled');
+  });
+
+  it('declares delete as a delete, which is the only thing that makes a host prompt', () => {
+    /*
+      Both `delete` and `state` imply no header, so every assertion in `writeConformance.test.ts`
+      passes either way and nothing else in this tree would notice the difference. What the kind
+      decides is `annotationsFor`'s `destructiveHint` and `server.ts`'s consent gate — so an arm
+      that removes a row and is declared `state` loses its prompt silently.
+    */
+    const arms = tool('tcms_write_release').arms ?? [];
+    expect(arms.find((arm) => arm.action === 'delete')?.kind).toBe('delete');
+    expect(deletes(tool('tcms_write_release'))).toBe(true);
+  });
+
+  it('merges two keys on one tool, and is legal only because one audience holds both', () => {
+    /*
+      §2's rule in the direction it permits a merge. `release:manage` and `release:publish` are
+      granted to the same three roles (§A3), so there is no reachable credential holding one and
+      not the other — which is the caller a merge is forbidden from producing. `matrixCopies` and
+      `SeedDataTest` are what would notice the day that stops being true.
+    */
+    const matrix = roleMatrix();
+    for (const role of ['IA', 'CA', 'PM', 'TL', 'TE', 'AS', 'V'] as const) {
+      expect(matrix[role].has('release:manage'), role).toBe(matrix[role].has('release:publish'));
+    }
+
+    // And the tool is not shown to an Agent credential, which holds neither.
+    expect(isListed(tool('tcms_write_release'), new Set(AGENT_KEYS))).toBe(false);
+  });
+
+  it('leaves linking a story to a release or a case to tcms_write_issue', () => {
+    // Both cost `issue:edit`, and `Agent ∩ Test Engineer` holds that and neither release key — so
+    // folding them in here is exactly §2's failure rather than a tidier tool.
+    const actions = (tool('tcms_write_release').arms ?? []).map((arm) => arm.action);
+    expect(actions).toEqual(['create', 'update', 'delete', 'publish']);
+
+    const issueActions = (tool('tcms_write_issue').arms ?? []).map((arm) => arm.action);
+    expect(issueActions).toContain('cases');
+    expect(issueActions).toContain('release');
   });
 });
 
@@ -901,7 +1049,13 @@ describe('the surface as a whole — surface spec §2 and §4.1', () => {
     // is `board:rank` + `board:configure`, which is Project Manager and up. Moving a card and
     // labelling an issue are neither — they cost `issue:edit` and are arms of `tcms_write_issue`,
     // so a Test Engineer reaches them without being shown a tool two thirds of which 403s.
-    expect(TOOLS).toHaveLength(28);
+    // ~~28~~ → 30 with 013 T4's release verbs, and again TWO rather than one: `tcms_read_release`
+    // is `release:read`, which six of the seven roles hold — Automation Service is the first
+    // credential on this surface a READ tool is withheld from — and `tcms_write_release` is
+    // `release:manage` + `release:publish`, which is Project Manager and up. Linking a story to a
+    // release or to the cases that prove it is neither: both cost `issue:edit` and are arms of
+    // `tcms_write_issue`, for the same reason `move-card` and `label` are.
+    expect(TOOLS).toHaveLength(30);
   });
 
   it('names every tool in the tcms_ namespace', () => {

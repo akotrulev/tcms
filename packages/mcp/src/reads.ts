@@ -1163,6 +1163,116 @@ export async function boardIn(
   return only;
 }
 
+/* ----------------------------------------------------------------- releases ---- */
+
+/**
+ * The release a tool acts on, named by its **version**.
+ *
+ * `release.id` is a UUID and a model handed a bare UUID field invents one — `tcms_read_board`'s
+ * label-and-assignee rule, and the reason bites harder here: a version passed through as a filter
+ * matching nothing reads to a model as *an empty release* rather than as a mistake, so it would
+ * report that 2.4 has no stories rather than that there is no 2.4.
+ *
+ * Exported because `writes.ts` resolves the same way for the same reason — every arm of
+ * `tcms_write_release` names a version — and two copies of *which release did they mean* would be
+ * two refusal messages for one mistake.
+ */
+export async function releaseIn(
+  session: Session,
+  wanted: string,
+): Promise<components['schemas']['ReleaseSummary']> {
+  const releases = await session.client.GET('/projects/{projectId}/releases', {
+    params: { path: { projectId: session.projectId() } },
+    tcms: session.request,
+  });
+
+  const found = releases.find(
+    (row) => row.version.toLowerCase() === wanted.toLowerCase() || row.id === wanted,
+  );
+  if (!found) {
+    throw new InputMismatch(
+      `No release '${wanted}' in this project. It has: `
+        + `${releases.map((row) => row.version).join(', ') || '(none yet)'}.`,
+    );
+  }
+  return found;
+}
+
+/**
+ * The release reads — three branches, one gate, one tool (surface spec §3.6).
+ *
+ * **`release:read` is the first gate on this surface an Automation Service credential does not
+ * hold** (roles spec §A3), so this is the first read tool that is not listed to every credential
+ * which can reach the project at all. That is correct rather than awkward — a CI token posts
+ * results and has no business reading a delivery plan — and `server.test.ts` asserts it by name
+ * rather than by a tool count, because a narrowing nothing tests is a narrowing that comes back.
+ *
+ * The writes are elsewhere for §2's reason: `release:manage` and `release:publish` are Project
+ * Manager and up, and linking test cases to a story costs `issue:edit`.
+ */
+const readRelease: ToolDefinition = {
+  name: 'tcms_read_release',
+  title: 'Read the releases, one release\'s readiness, or the roadmap',
+  description:
+    'What is planned to ship and whether it can. Omit everything to list the releases in version '
+    + 'order with their readiness inline; name a `release` by VERSION for the same row; add '
+    + '`readiness` for the full answer — the story counts, the test counts, and the stories that '
+    + 'stand in the way with the cases that failed under each; ask for `roadmap` for the releases '
+    + 'on a timeline with their epics, plus the epics that cannot be drawn under one. '
+    + '**hasRun false means NOTHING has been executed against this version, and passed/failed are '
+    + 'then null and not zero.** Report that as "no run yet"; reading a null as 0 turns "nothing '
+    + 'has been tested" into "nothing failed". A verdict of NOT_TESTED is that state and is not '
+    + 'NOT_READY. Versions are ordered segment by segment, so 2.10 comes after 2.5. An empty list '
+    + 'is the ordinary state of a project nobody has planned a release for yet, not an error.',
+  gate: { mode: 'all', permissions: ['release:read'] },
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      release: {
+        type: 'string',
+        description: 'The release to read, by VERSION (`2.4`) — omit to list them.',
+      },
+      readiness: {
+        type: 'boolean',
+        description:
+          'With `release`: the full readiness answer rather than the row-sized summary — story '
+          + 'counts, test counts, the blocking stories and the epics targeting it.',
+      },
+      roadmap: {
+        type: 'boolean',
+        description: 'Read the timeline instead of the list: releases with their epics, then the unscheduled epics.',
+      },
+      ...PAGING_PROPERTIES,
+    },
+  },
+  run: async (session, input) => {
+    const path = { projectId: session.projectId() };
+    const tcms = session.request;
+
+    if (bool(input, 'roadmap')) {
+      return session.client.GET('/projects/{projectId}/roadmap', { params: { path }, tcms });
+    }
+
+    const wanted = str(input, 'release');
+    if (wanted === undefined) {
+      const rows = await session.client.GET('/projects/{projectId}/releases', {
+        params: { path }, tcms,
+      });
+      // Not paginated on the wire — the client-side window every other list here uses.
+      return window(rows, input);
+    }
+
+    const found = await releaseIn(session, wanted);
+    if (!bool(input, 'readiness')) return found;
+
+    return session.client.GET('/releases/{releaseId}/readiness', {
+      params: { path: { releaseId: found.id } },
+      tcms,
+    });
+  },
+};
+
 export const READ_TOOLS: readonly ToolDefinition[] = [
   orient,
   searchCases,
@@ -1176,6 +1286,7 @@ export const READ_TOOLS: readonly ToolDefinition[] = [
   openRun,
   readIssue,
   readBoard,
+  readRelease,
   listProposals,
   triage,
 ];

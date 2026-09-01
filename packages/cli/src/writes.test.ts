@@ -27,6 +27,8 @@ import {
   caseDetail,
   label,
   rankResult,
+  release as releaseFixture,
+  releaseSummary,
   userRef,
   wipBreach,
   caseStatus,
@@ -39,6 +41,8 @@ import {
   executionSummary,
   issue,
   issueComment,
+  issueTestCase,
+  releaseRef,
   plan,
   projectWorkflow,
   proposal,
@@ -261,6 +265,9 @@ function scaffolding(): Record<string, { status: number; body?: unknown }> {
     'GET /boards/bd-1': { status: 200, body: board() },
     'GET /labels': { status: 200, body: [label()] },
     'GET /members': { status: 200, body: [userRef()] },
+    // The version → id lookup every release write but `create` makes. Method-keyed, because
+    // `POST` to this same path is the create arm.
+    'GET /releases': { status: 200, body: [releaseSummary({ version: '2.4' })] },
   };
 }
 
@@ -1217,5 +1224,176 @@ describe('the board verbs', () => {
       ['label', 'set', 'ACME-124', '--labels', 'Regression'], out, stub.fetch,
     )).toBe(EXIT.usage);
     expect(out.stderr).toContain('It has: Flaky');
+  });
+});
+
+describe('the release verbs', () => {
+  it('resolves the VERSION to an id, because nobody types a release UUID', async () => {
+    const out = recorder();
+    const stub = api({
+      ...scaffolding(),
+      'PATCH /releases/rl-1': { status: 200, body: releaseFixture({ targetDate: '2026-11-21' }) },
+    });
+
+    // Case-insensitively, and by id too — the same rule `boardOf` and `labelIds` apply.
+    expect(await mainWith(
+      ['release', 'edit', '2.4', '--date', '2026-11-21'], out, stub.fetch,
+    )).toBe(EXIT.ok);
+
+    expect(stub.write('/releases/rl-1').path).toContain('/releases/rl-1');
+    expect(JSON.parse(stub.write('/releases/rl-1').body ?? '{}')).toEqual({ targetDate: '2026-11-21' });
+  });
+
+  it('refuses a version this project does not have, and sends nothing', async () => {
+    const out = recorder();
+    const stub = api(scaffolding());
+
+    expect(await mainWith(['release', 'publish', '9.9'], out, stub.fetch)).toBe(EXIT.usage);
+    expect(out.stderr).toContain('It has: 2.4');
+    expect(stub.sent.some((request) => request.method !== 'GET')).toBe(false);
+  });
+
+  it('refuses an edit that would send an empty body', async () => {
+    const out = recorder();
+    const stub = api(scaffolding());
+
+    // A PATCH with no fields is legal, answers 200 and changes nothing, so the command would
+    // report success having done nothing at all.
+    expect(await mainWith(['release', 'edit', '2.4'], out, stub.fetch)).toBe(EXIT.usage);
+    expect(out.stderr).toContain('Nothing to change');
+  });
+
+  it('publishes with no body and no idempotency key, because the endpoint declares neither', async () => {
+    const out = recorder();
+    const stub = api({
+      ...scaffolding(),
+      'POST /releases/rl-1/publish': {
+        status: 200,
+        body: releaseFixture({ status: 'RELEASED', releasedAt: '2026-09-01T10:00:00Z' }),
+      },
+    });
+
+    expect(await mainWith(['release', 'publish', '2.4'], out, stub.fetch)).toBe(EXIT.ok);
+
+    const sent = stub.write('/publish');
+    expect(sent.body).toBe(null);
+    // A second press of a button is not a second shipment: the endpoint is idempotent by itself,
+    // so a key here would be a header nothing reads.
+    expect(sent.headers.get('idempotency-key')).toBe(null);
+    expect(out.stdout).toContain('Released');
+  });
+
+  it('says the issues survive a delete, because the plan went and the work did not', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'DELETE /releases/rl-1': { status: 204 } });
+
+    expect(await mainWith(['release', 'delete', '2.4', '--yes'], out, stub.fetch)).toBe(EXIT.ok);
+    expect(out.stdout).toContain('unscheduled');
+  });
+
+  it('refuses to delete without --yes, and sends nothing', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'DELETE /releases/rl-1': { status: 204 } });
+
+    /*
+      The consent gate keys on `write.kind === 'delete'`, which is why this arm declares that and
+      not the `state` the plan's own step spelled. Both kinds imply no header, so every assertion
+      in `writeConformance.test.ts` passes either way — the prompt is the whole difference, and
+      nothing but this would have noticed it was gone.
+
+      There is no terminal here, so `askOnTty` answers no rather than proceeding: a consent gate
+      that degrades to "nobody to ask, carry on" is not a gate. That is the shipped default, and
+      it is what this drives.
+    */
+    expect(await mainWith(['release', 'delete', '2.4'], out, stub.fetch)).toBe(EXIT.cancelled);
+    expect(stub.sent.some((request) => request.method === 'DELETE')).toBe(false);
+    expect(out.stderr).toContain('--yes');
+  });
+});
+
+describe('the story-to-release and story-to-case links', () => {
+  it('sends the release id resolved from the version', async () => {
+    const out = recorder();
+    const stub = api({
+      ...scaffolding(),
+      'PATCH /issues/ACME-124': { status: 200, body: issue({ release: releaseRef() }) },
+    });
+
+    expect(await mainWith(
+      ['issue', 'release', 'ACME-124', '--release', '2.4'], out, stub.fetch,
+    )).toBe(EXIT.ok);
+
+    expect(JSON.parse(stub.write('/issues/ACME-124').body ?? '{}')).toEqual({ releaseId: 'rl-1' });
+    expect(out.stdout).toContain('2.4');
+  });
+
+  it('clears the release with --none, which is a null and not an omission', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'PATCH /issues/ACME-124': { status: 200, body: issue() } });
+
+    expect(await mainWith(['issue', 'release', 'ACME-124', '--none'], out, stub.fetch)).toBe(EXIT.ok);
+
+    // Absent would mean *leave it*, so the clear has to be an explicit null on the wire.
+    expect(JSON.parse(stub.write('/issues/ACME-124').body ?? '{}')).toEqual({ releaseId: null });
+    expect(out.stdout).toContain('(unscheduled)');
+  });
+
+  it('refuses --release with --none, and neither of them, without sending a request', async () => {
+    const out = recorder();
+    const stub = api(scaffolding());
+
+    expect(await mainWith(
+      ['issue', 'release', 'ACME-124', '--release', '2.4', '--none'], out, stub.fetch,
+    )).toBe(EXIT.usage);
+    expect(out.stderr).toContain('exactly one of --release VERSION or --none');
+
+    const bare = recorder();
+    expect(await mainWith(['issue', 'release', 'ACME-124'], bare, stub.fetch)).toBe(EXIT.usage);
+    expect(bare.stderr).toContain('exactly one of --release VERSION or --none');
+  });
+
+  it('resolves case KEYS to ids and replaces the whole set', async () => {
+    const out = recorder();
+    const stub = api({
+      ...scaffolding(),
+      'PUT /issues/ACME-124/test-cases': {
+        status: 200,
+        body: [issueTestCase({ caseId: 'c-9', caseKey: 'TC-42' })],
+      },
+    });
+
+    expect(await mainWith(
+      ['issue', 'cases', 'set', 'ACME-124', '--case', 'TC-42'], out, stub.fetch,
+    )).toBe(EXIT.ok);
+
+    // Keys in, ids out (§4.4): the endpoint takes UUIDs and `TC-42` is what a test plan names.
+    expect(JSON.parse(stub.write('/test-cases').body ?? '{}')).toEqual({ caseIds: ['c-9'] });
+    expect(out.stdout).toContain('TC-42');
+  });
+
+  it('unlinks every case when no --case is given, because the set is a replacement', async () => {
+    const out = recorder();
+    const stub = api({
+      ...scaffolding(),
+      'PUT /issues/ACME-124/test-cases': { status: 200, body: [] },
+    });
+
+    expect(await mainWith(['issue', 'cases', 'set', 'ACME-124'], out, stub.fetch)).toBe(EXIT.ok);
+
+    expect(JSON.parse(stub.write('/test-cases').body ?? '{}')).toEqual({ caseIds: [] });
+    expect(out.stdout).toContain('(nothing)');
+  });
+
+  it('dispatches the three-word name to the write, not to the two-word read', async () => {
+    const out = recorder();
+    const stub = api({
+      ...scaffolding(),
+      'PUT /issues/ACME-124/test-cases': { status: 200, body: [] },
+    });
+
+    // `findCommand` tries three words first. Shortest-first would have read this as
+    // `issue cases` with `set` as the issue key — a GET to `/issues/set/test-cases`.
+    expect(await mainWith(['issue', 'cases', 'set', 'ACME-124'], out, stub.fetch)).toBe(EXIT.ok);
+    expect(stub.sent.some((request) => request.path.includes('/issues/set/'))).toBe(false);
   });
 });

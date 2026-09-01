@@ -33,7 +33,7 @@ it agrees.
 | 1 | T1 — The release contract | `contract` | `be-java` | `openapi.yaml` declares eleven new operations, three amended ones and fifteen schemas; both generated clients regenerated; `npm run build` green in `frontend/` and `packages/` | none |
 | 2 | T2 — `V6`: release, `issue.release_id`, `test_run.release_id` | `db` | `data-architect` | `V6__release.sql` applies on an empty database; `release` is company-isolated and forced-RLS; `SchemaConventionTest` green | T1 |
 | 3 | T3 — `tracker.release`: CRUD, readiness, roadmap, the QA link | `be` | `be-java` | Every operation T1 declared answers over HTTP; a release with a done story whose linked case failed reads **not ready** and names that story; `1.10` sorts after `1.9` | T2 |
-| 4 | T4 — Release verbs on the CLI and MCP | `ts` | `tooling-engineer` | `tcms release list/show/create/edit/publish/delete`, `tcms roadmap`, `tcms issue cases`; `tcms_read_release` and `tcms_write_release` registered; the shipped guide names 30 tools | T3 |
+| 4 | T4 — Release verbs on the CLI and MCP | `ts` | `tooling-engineer` | `tcms release list/show/create/edit/publish/delete`, `tcms roadmap`, `tcms issue cases`, `tcms issue release`, `tcms issue cases set` — **ten**, not the eight this line first said; `tcms_read_release` and `tcms_write_release` registered; the shipped guide names 30 tools | T3 |
 | 5 | T5 — Releases, the roadmap and the calendar | `fe` | `fe-react` | `/projects/:id/releases`, `/releases/new`, `/releases/:releaseId`, and the Timeline and Calendar views of `/projects/:id/work`; the empty roadmap explains itself and carries the action that resolves it | T4 |
 | 6 | T6 — The overview panels, the QA link on screen, and the close-out | `fe` | `fe-react` | The overview's **Next release** panel renders real data, the backlog groups by release and bulk-moves into one, a story lists the cases that prove it, `test-cases.html` gains its **Verifies** column, and 009's status table reads `done` | T5 |
 
@@ -2025,20 +2025,38 @@ the QA link. Stage only this task's paths.
 
 ## T4 — Release verbs on the CLI and MCP
 
-**Deliverable:** `tcms release list|show|create|edit|publish|delete`, `tcms roadmap` and
-`tcms issue cases` work against a contract double; `tcms_read_release` and `tcms_write_release` are
-registered and narrowed correctly; the shipped guide names **30** tools. `npm run build`,
-`lint --workspaces` and `test:run --workspaces` green in `packages/`.
+**Deliverable:** `tcms release list|show|create|edit|publish|delete`, `tcms roadmap`,
+`tcms issue cases`, `tcms issue release` and `tcms issue cases set` work against a contract double;
+`tcms_read_release` and `tcms_write_release` are registered and narrowed correctly; the shipped guide
+names **30** tools. `npm run build`, `lint --workspaces` and `test:run --workspaces` green in
+`packages/`.
+
+**~~Eight~~ ten CLI commands.** The pipe-list above named six `release` verbs, `roadmap` and
+`issue cases`; Step 2 below then spells `issue release` and `issue cases set` as well, and both are
+the CLI's *only* writer for their field — §6 records that there is no `tcms issue edit`, so without
+the first a person can create a release at a terminal and never put a story into it. The eight was
+the summary line being loose rather than a scope decision, and every count in this task now reads
+ten. The registry holds **53** commands after this task; the surface document §6 says so.
 **Depends on:** T3
 **Stack:** `ts` · **Agent:** `tooling-engineer` · **Skills:** `tool-cli-builder`, `tool-mcp-builder`
 
 **Files:**
 - Modify: `packages/cli/src/reads.ts`, `packages/cli/src/writes.ts`, `packages/cli/src/writes.test.ts`,
-  `packages/cli/src/writeConformance.test.ts`
+  `packages/cli/src/writeConformance.test.ts`, and — not predicted here — `packages/cli/src/commands.ts`
+  (`findCommand` tried two words and `issue cases set` is three), `packages/cli/src/guideCopies.test.ts`
+  (its parse had the same ceiling) and `packages/cli/src/main.test.ts`, which is where the *read*
+  tests live and therefore where the `no run yet` criterion is actually asserted
 - Modify: `packages/mcp/src/reads.ts`, `packages/mcp/src/writes.ts`, `packages/mcp/src/reads.test.ts`,
   `packages/mcp/src/writes.test.ts`, `packages/mcp/src/server.test.ts`,
-  `packages/mcp/src/writeConformance.test.ts`, `packages/mcp/src/instructions.ts`
-- Modify: `packages/client/src/test/fixtures.ts`
+  `packages/mcp/src/writeConformance.test.ts`, ~~`packages/mcp/src/instructions.ts`~~ — **not
+  touched, and measured rather than skipped**: the capability summary carries the facts a caller
+  cannot get from a tool description, and both release facts a model could get wrong (`hasRun`
+  false means null and not zero; an empty roadmap is the ordinary state) are in
+  `tcms_read_release`'s own description. The file's header records that it already sacrifices whole
+  sections against a 2KB ceiling as the registry grows, so a paragraph repeating a tool description
+  would cost the "and here is what would let me" list, which nothing repeats
+- Modify: `packages/client/src/test/fixtures.ts`, and `packages/client/src/test/shapesContract.test.ts`
+  — its `UNOFFERED` map fails on `IssueInput.releaseId` until the create-side decision is recorded
 - Modify: `frontend/src/features/help/sections.tsx` — **an `fe` file, edited from a `ts` task, and
   that is correct**: `guideCopies.test.ts` in *both* packages reads it and fails the **packages** job
   when it names a tool the registry does not have or states the wrong count. 012 T5 did the same
@@ -2096,8 +2114,12 @@ unscheduled lane last.
 `release create --version 2.6 [--date 2026-11-14] [--description …]` with
 `write: { kind: 'create', permission: 'release:manage' }`;
 `release edit <version> [--version] [--date] [--description]` with `kind: 'edit'`;
-`release publish <version>` and `release delete <version>` with `kind: 'state'` and
-`'release:publish'` / `'release:manage'`;
+`release publish <version>` with `kind: 'state', permission: 'release:publish'`;
+`release delete <version>` with **`kind: 'delete'`**, `permission: 'release:manage'` — ~~`state`~~,
+which is what this step first said and is wrong: both kinds imply no header, so every assertion in
+`writeConformance.test.ts` passes either way, and the kind is what `main.ts` reads to raise the
+confirmation. A delete arm declared `state` loses its prompt silently, which is the one failure no
+check in this tree would have reported;
 `issue release <KEY> --release 2.4 | --none` with `kind: 'edit', permission: 'issue:edit'` — a
 `PATCH /issues/{key}` carrying `releaseId`;
 `issue cases set <KEY> --case TC-311 --case TC-308` with `kind: 'state', permission: 'issue:edit'`.
@@ -2132,7 +2154,10 @@ mistake.
   arms: [
     { action: 'create', kind: 'create', permission: 'release:manage' },
     { action: 'update', kind: 'edit',   permission: 'release:manage' },
-    { action: 'delete', kind: 'state',  permission: 'release:manage' },
+    // `delete`, NOT `state` — `annotationsFor` reads the kind for `destructiveHint` and
+    // `server.ts`'s consent gate refuses when there is no channel to ask on. Every header
+    // assertion passes either way, so nothing else would have noticed the prompt going.
+    { action: 'delete', kind: 'delete', permission: 'release:manage', targets: ['release'] },
     // Its own permission and deliberately in the same tool: release:manage and
     // release:publish are granted to the SAME three roles (§A3), so the merge
     // cannot list an action to a caller who 403s on it — which is the whole of
@@ -2145,6 +2170,15 @@ mistake.
 `putIssueTestCases` becomes a **`cases` arm on `tcms_write_issue`**, beside `label`, because it costs
 `issue:edit` — a credential holding `issue:edit` and neither release key is reachable
 (`Agent ∩ Test Engineer`), and merging it into `tcms_write_release` is exactly §2's failure.
+
+**A second arm arrives with it, and this plan did not predict it: `release`.** T1 amended
+`IssueUpdate` with `releaseId`, and §3.6's operation table lists the eleven *new* operations and not
+the amendments — so nothing here gave the MCP a way to put a story into a release, and the two
+release tools would have shipped able to plan a version, read it and publish it while no arm on the
+surface could target work at one. It costs `issue:edit`, so it is an arm of the same tool and by the
+same rule, takes the **version**, and an explicit `null` clears it while absent is refused. It is
+**not** offered on `create`: `shapesContract.test.ts`'s `UNOFFERED` carries `IssueInput.releaseId`
+with the reason, which is D-l's — the product retargets from the backlog, after a story exists.
 
 `server.test.ts` gains the assertion that an **Automation Service** credential is *not* shown
 `tcms_read_release` — the first read tool narrowed away from one, and worth an explicit test rather
@@ -2178,7 +2212,8 @@ The last one because `sections.tsx` is a frontend file.
 
 **Acceptance criteria**
 
-- [ ] Eight CLI commands and two MCP tools, every exchange compared to `openapi.yaml` by the doubles
+- [ ] ~~Eight~~ **ten** CLI commands and two MCP tools (plus two new arms on `tcms_write_issue`),
+      every exchange compared to `openapi.yaml` by the doubles
 - [ ] `tcms release list` prints **`no run yet`**, never `0/0`, for a version nothing has run against
 - [ ] An Automation Service credential is not shown `tcms_read_release`, asserted rather than assumed
 - [ ] The shipped guide names 30 tools and its group headings match its own lists
@@ -2710,7 +2745,7 @@ You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/013-rele
 §2, §3.4, §3.5 and §3.6 of docs/specs/2026-08-08-mcp-tool-and-command-surface.md. Use
 /tooling-engineer.
 
-Eight CLI commands and two MCP tools. packages/cli/src/reads.ts's `backlog` and `labelList` are the
+Ten CLI commands and two MCP tools. packages/cli/src/reads.ts's `backlog` and `labelList` are the
 read template; writes.ts's `rank` and `labelSet` are the write template; mcp/src/reads.ts's
 tcms_read_board and writes.ts's tcms_write_backlog are the tool templates.
 
@@ -2724,6 +2759,12 @@ Three specifics:
     counts are null on the wire for exactly this reason.
   * tcms_read_release is the FIRST read tool an Automation Service credential is not shown.
     server.test.ts should assert that, not count tools.
+  * `release delete` and tcms_write_release's delete arm are `kind: 'delete'`, not 'state'. Both
+    imply no header so writeConformance passes either way; the kind is what raises the consent
+    prompt, and a delete declared 'state' loses it with nothing red.
+  * tcms_write_issue needs a `release` arm as well as `cases` — T1 amended IssueUpdate with
+    releaseId and §3.6's table lists only the eleven new operations, so without it the MCP can
+    plan a version and never put a story in one.
   * frontend/src/features/help/sections.tsx must name both new tools and say "30 tools" —
     guideCopies.test.ts in BOTH packages reads that frontend file and fails the packages job. Fix
     the group headings ("Reading — N" / "Writing — N") by counting the lists; 012 shipped two
