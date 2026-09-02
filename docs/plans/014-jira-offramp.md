@@ -41,7 +41,7 @@ renumbers — M5 will be `015`.
 | 1 | T1 — The import contract | `contract` · `be-java` | `openapi.yaml` declares five operations and ~~eighteen~~ **nineteen** schemas, every one with its `required` array; both generated clients are regenerated in the same commit; `npm run build` green in `packages/`, and in `frontend/` **carries one pre-existing failure this task did not cause** — see T1's step 6 | none | done 2026-09-01 @ 4ea59d2f |
 | 2 | T2 — `V7`: `import_run`, `import_dropped_field`, `issue_comment.external_author` | `be` · `data-architect` | `V7__import.sql` applies to an empty database; both new tables carry `company_id NOT NULL` and a forced isolation policy; `SchemaConventionTest` and `SchemaCommentTest` green | T1 | done 2026-09-01 @ 249da7f9 |
 | 3 | T3 — `tracker.imports`: the source port, the Jira client, the guard, the preview | `be` · `be-java` | `POST /imports/source-projects` and `POST /imports/preview` answer over HTTP against a Jira Cloud/DC site, and a test that snapshots the whole project before and after a preview finds it byte-identical | T2 | **done 2026-09-02 @ 5016d003** — gate red on T4's four rules only, listed in T3 step 11 |
-| 4 | T4 — The run, the report, and the stuck-run reaper | `be` · `be-java` | `POST /imports` imports a Jira project keeping `PROJ-4812` as `PROJ-4812`, `GET /imports/{id}` serves the report, and a test asserts the report's `droppedFields` equals the preview's element for element | T3 | not started |
+| 4 | T4 — The run, the report, and the stuck-run reaper | `be` · `be-java` | `POST /imports` imports a Jira project keeping `PROJ-4812` as `PROJ-4812`, `GET /imports/{id}` serves the report, and a test asserts the report's `droppedFields` equals the preview's element for element | T3 | done 2026-09-02 @ 2573e482 |
 | 5 | T5 — The Azure DevOps source | `be` · `be-java` | `provider: AZURE_DEVOPS` previews and imports an ADO project through the same port, proven against a recorded-shape fake; no other file in `imports` changes | T4 | not started |
 | 6 | T6 — `tcms import list` and `tcms import show` | `ts` · `tooling-engineer` | Two CLI commands print a past import and its dropped-field list from a terminal; the surface document's §3.7 records that MCP deliberately gets nothing | T4 | not started |
 | 7 | T7 — The wizard: connect → preview → map → run | `fe` · `fe-react` | `/projects/:projectId/imports/new` walks the three steps, refuses to confirm while one status is unmapped, and starts a run; `tcmsFaults.importing()` drives every failure path | T6 | not started |
@@ -346,6 +346,13 @@ NO FILE OUTSIDE AzureDevOpsImportSource and its test changes. If you find yourse
 editing ImportPreviewService or ImportWriter, the port is wrong and that is the finding to report —
 not a reason to widen the edit.
 
+THE PORT HAS FOUR METHODS, NOT THREE. T4 added statusNames(connection, projectKey) — the
+workflow's status names, without counts — because POST /imports has to refuse an unmapped source
+status with a 400 and the snapshot takes minutes. For ADO it is
+GET _apis/wit/workitemtypes/{type}/states per type, or the project's process states; union them by
+name, insertion-ordered. Names only: a count here would be a number a screen could show, and only
+the snapshot has read the work items.
+
 Read before writing: tracker/imports/ImportSource.java, tracker/imports/JiraImportSource.java
 (the template — same class, different vocabulary), and integration/tracker/AzureDevOpsAdapter.java
 FOR THE API SHAPES ONLY. That file is in another module and must not be imported; you are reading
@@ -450,6 +457,18 @@ a cache key: the token would sit in the query cache, in the devtools panel and i
 persister. Write that sentence into api/queries/imports.ts, because it is exactly the kind of thing
 somebody later "simplifies".
 
+TWO CONTRACT FACTS T4 CHANGED THAT THE SCREENS BIND TO:
+  * `IssueComment.author` IS NULLABLE. It was declared required-and-non-nullable and the server has
+    never served that shape — CommentService has answered null for an offboarded author since the
+    endpoint landed, and D-j added a second way to reach it. Both generated clients carry the
+    nullable type now. `lib/format.ts` has `commentAuthor(comment)`, which is the ONE place the
+    three states become a string (a name, the source system's own text, or an em-dash); CommentFeed
+    already uses it. Do not re-derive it in a new component.
+  * `ImportRun.startedBy` IS A NULLABLE `UserRef`, not the inline `{id, name}` T1 declared. The
+    inline shape was api.TeamRef's under different names and
+    ArchitectureRulesTest.noRecordOutsideApiRepeatsAnApiRecordsShape refuses that; every other
+    "who did this" position in the contract is a UserRef anyway. Read `startedBy?.displayName`.
+
 Four things the screens must get right:
   * The connect step's token help text is the mockup's own — "The token is used for this import and
     is not stored afterwards" — and D-a is what makes it TRUE. Add one sentence the mockup has no
@@ -475,6 +494,13 @@ and says why; likewise drivingAFailedRead() / drivingAFailedWrite().
 Gate: ~/bin/tcms-remote sync then `frontend "npm run build && npm run lint && npm run test:run"`.
 npm run build, NOT tsc --noEmit — the latter has reported 0 errors while the build failed with nine.
 
+`npm run build` and `npm run lint` are GREEN as of T4 — the one-line `ProjectOverviewPage.test.tsx`
+type error T1 recorded and left is fixed, so a build failure here is yours. `npm run test:run` is
+NOT green and was not before this module: 4 files / 40 cases fail in board, cases, dashboard and
+projects, verified identical with this module's frontend changes stashed. One of them
+(ProjectOverviewPage's "in 17 days") is a date-dependent assertion that fails on any day but the one
+it was written on. Do not adopt them, and do not read them as this module's.
+
 Commit: the T7 step 9 text. Then mark T7 done in the plan's Tasks table and tick its steps.
 ````
 
@@ -492,6 +518,15 @@ Walk docs/mockups/settings-import.html and docs/mockups/import-report.html first
 
 Build ImportsListPage and ImportReportPage, replacing T7's minimal polling body, plus
 downloadReport.ts and the rail entry.
+
+The report's shape, as T4 actually serves it:
+  * `startedBy` is a NULLABLE `UserRef` (read `startedBy?.displayName`), not T1's inline
+    `{id, name}` — see T7's prompt for why. `accountEmail`, `finishedAt` and `failureReason` are
+    nullable too, and a FAILED run has every count at zero and an EMPTY droppedFields list, because
+    nothing was written. The report screen has to render that state, and it is the state
+    `tcmsFaults` cannot produce — drive it from a fixture.
+  * `GET /imports?projectId=…` is the list. Not `/projects/{id}/imports`, which is what this plan's
+    sketch said and T1 did not build.
 
 Five things:
   * The dropped-field table is THE SAME COMPONENT the preview step uses. D-f on the wire and on the
@@ -534,6 +569,11 @@ Then the close-out, and none of it is optional:
        - NO MODULE DEPENDS ON M4, so no dependent prompt needs rewriting. Say that in the commit
          message rather than adding a note to the document.
   3. Mark T8 done in plan 014's Tasks table and tick its steps.
+
+The frontend suite is NOT green and was not before this module — 4 files / 40 cases in board,
+cases, dashboard and projects, verified identical with 014's frontend changes stashed. `npm run
+build` and `npm run lint` ARE green (T4 fixed the one-line type error T1 recorded and left). Record
+that state in the Built and unverified list rather than adopting it.
 
 Gates, all three, because this is the module's last task:
   ~/bin/tcms-remote sync
@@ -2151,14 +2191,14 @@ asserts the report's `droppedFields` equals the preview's element for element.
 5. **`LabelService` answers 409 on a duplicate name.** Treat it as *already there*. An importer
    hits this on the second issue carrying a label and every issue after it.
 
-- [ ] **Step 1: The entities.** `ImportRun` maps every column; `status_mapping` and `people` are
+- [x] **Step 1: The entities.** `ImportRun` maps every column; `status_mapping` and `people` are
       `@JdbcTypeCode(SqlTypes.JSON)` for `ReportJob#parameters`' reason — a malformed value cannot
       commit, and Postgres will not implicitly cast `varchar` to `jsonb`. There is **no
       `lock_version`**: the row is written by one thread at two moments (`RUNNING`, then terminal),
       and `ArchitectureRulesTest.everyLockVersionColumnIsAVersion` is only about a column that
       exists — so do not add one.
 
-- [ ] **Step 2: `ImportWriter`** — the one transaction, in this order.
+- [x] **Step 2: `ImportWriter`** — the one transaction, in this order.
 
 ```java
 /**
@@ -2205,7 +2245,7 @@ if (options.preserveBacklogOrder()) {
 }
 ```
 
-- [ ] **Step 3: The test that proves the key survived.**
+- [x] **Step 3: The test that proves the key survived.**
 
 ```java
 @Test
@@ -2227,7 +2267,7 @@ void originalKeysSurvive() {
 }
 ```
 
-- [ ] **Step 4: The test the module's done-when names.**
+- [x] **Step 4: The test the module's done-when names.**
 
 ```java
 @Test
@@ -2245,27 +2285,101 @@ void theReportMatchesThePreview() {
 }
 ```
 
-- [ ] **Step 5: The refusals.** Three tests: an unmapped source status is `400` naming it; a second
+- [x] **Step 5: The refusals.** Three tests: an unmapped source status is `400` naming it; a second
       import of the same source is `409`; a run against `FakeImportSource.failAfter(400)` ends
       `FAILED` **and leaves the project byte-identical**, reusing T3's snapshot helper — which is
       the strongest statement this module can make and the reason D-b chose one transaction.
 
-- [ ] **Step 6: `ImportReaper`.** A scheduled sweep per company, `ReportJobRunner.failStuckJobs`'s
+- [x] **Step 6: `ImportReaper`.** A scheduled sweep per company, `ReportJobRunner.failStuckJobs`'s
       shape: a `RUNNING` row whose `started_at` is older than `tcms.tracker.imports.run-timeout`
       (default `PT30M`) becomes `FAILED` with *"The server restarted or lost its connection to the
       source while this import was running. Nothing was written — the project is unchanged."* It
       does **not** retry: the state machine only goes forwards, and a re-request is a new row.
 
-- [ ] **Step 7: `externalAuthor` through to the wire.** `IssueComment` gains the field,
+- [x] **Step 7: `externalAuthor` through to the wire.** `IssueComment` gains the field,
       `CommentService` sets it when the source author matched nothing, and `CommentView` carries it.
 
-- [ ] **Step 8: Gate and commit.**
+- [x] **Step 8: Gate and commit.**
 
 ```bash
 ~/bin/tcms-remote sync && ~/bin/tcms-remote backend './gradlew build'
 git add backend/src/main/java/com/tcms/tracker backend/src/test/java/com/tcms/tracker
 git commit -m "feat(tracker): the import run, the report, and the keys that survive it"
 ```
+
+---
+
+
+### What T4 landed that this plan did not predict
+
+Written here rather than appended as a changelog, because T5, T7 and T8 bind to these.
+
+- **`ImportSource` has a FOURTH method, `statusNames(connection, projectKey)`** — the source
+  workflow's status names, without counts. The contract declares an unmapped source status a
+  **400** on `POST /imports`, and there is no way to answer that from the snapshot: the snapshot is
+  the minutes-long read the 202 exists to get off the request thread. One cheap call against the
+  workflow definition is what makes the declared refusal reachable, rather than a run that answers
+  202 and then tells somebody their migration was never going to work. Names only, no counts: a
+  count is a fact about the issues and only the snapshot has read them, so returning a zero would
+  be a number a screen could show. **T5's prompt says what ADO's is.**
+
+- **`ImportSites.vet(guard, connection)` is where the connection-level URL check lives now**, not
+  `ImportPreviewService.vet`, which delegates to it. Both `ImportPreviewService` and
+  `ImportRunService` must make the check and neither may be the other's dependency; a method on
+  `ImportUrlGuard` was the other candidate and is worse, because that class is pinned to
+  `integration.OutboundUrlGuard` as text and every line added to it is a line somebody has to
+  reason about against the original.
+
+- **`ImportPreviewService.alreadyImported` is the repository now**, not the native query T3 left —
+  literally the same method `ImportRunService` refuses on, which is what T3's note permitted and
+  the one thing it forbade doing twice. `ImportPreviewService.matchType` is likewise the single
+  derivation of "which of this project's types does that source type become", called by the preview
+  and by the writer.
+
+- **`IssueComment.author` became NULLABLE in the contract**, and this task did not create the
+  disagreement — it ended it. The schema declared it required and non-nullable; `CommentService`
+  has answered `null` for an offboarded author since the comment endpoint landed, and D-j added a
+  second way to reach it. Both generated clients, `frontend/src/lib/format.ts`
+  (`commentAuthor`), `CommentFeed.tsx` and `packages/cli`'s `showAuthor` moved with it.
+
+- **`ImportRun.startedBy` is a nullable `UserRef`, not T1's inline `{id, name}`.** The inline record
+  serving it was `api.TeamRef`'s shape under different names, which
+  `ArchitectureRulesTest.noRecordOutsideApiRepeatsAnApiRecordsShape` refuses — correctly: every
+  other "who did this" position in this contract is a `UserRef`, and a bespoke person shape here
+  would have been a fifth spelling of one concept in order to withhold a colleague's email address
+  from a screen that already names the source site and the account that connected to it. Nullable
+  for `report_job.requested_by`'s reason (§66): `import_run.started_by` carries no foreign key.
+
+- **`LabelService.importLabels` / `importAssignment` and `ReleaseService.importRelease` are new,
+  public and UN-GATED**, and that is the decision rather than an oversight. The plan said "labels
+  through `LabelService`, 409 read as already there", which does not survive contact with §A3:
+  `board:configure` and `release:manage` are held by a role that does **not** hold
+  `issue:import`, and `release:manage`'s row is the same. Routing the importer through the gated
+  entry points would refuse a migration halfway through for permissions the wizard never mentions.
+  The gate is the caller's — `ImportRunService` required `issue:import` on the project — and each
+  method's header says so.
+
+- **`Issue.imported` and `IssueComment.imported` are public factories** on the two entities, because
+  `tracker.imports` is a different package from `tracker` and the existing factories are
+  package-private. `Issue.imported` takes a `releaseId`: an issue Jira had in three fix versions
+  arrives in the first one it named, because `issue.release_id` is a single nullable FK with no
+  join table. That is a loss the dropped-field list does not cover, since the field itself arrived,
+  and it is recorded on the factory instead.
+
+- **`IdempotencyKeyCapTest`'s pinned count went from eleven to twelve.** `ImportRunService` accepts
+  the header, so it caps it.
+
+- **The `frontend` build is green again.** T1 recorded a one-line `ProjectOverviewPage.test.tsx`
+  type error (`permissions?: string[]` handed to `heldPermissions(keys: PermissionKey[])`) that
+  predated 014, left it because T1 stages four files, and noted that T7 and T8 could not gate until
+  somebody took it. This task took it. `npm run test:run` is still red on 4 files / 40 cases in
+  board, cases, dashboard and projects — verified identical with this module's frontend changes
+  stashed, and one of them is a date-dependent assertion.
+
+- **A run's `202` row is committed before the source is dialled**, so it is the one row a FAILED
+  run leaves behind. `ImportRunEndpointTest.aFailedRunWritesNothing` excludes `import_run` from its
+  byte-identical comparison and nothing else — that row is what makes the operation pollable and
+  what gives `ImportReaper` something to find.
 
 ---
 
