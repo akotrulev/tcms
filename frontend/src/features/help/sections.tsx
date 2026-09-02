@@ -705,7 +705,9 @@ tcms label list        # the project's labels
 tcms release list      # the releases, with stories done and tests passing per row
 tcms release show 2.4  # can we ship it — and the stories that stand in the way
 tcms roadmap           # releases on a timeline, with the epics targeting each
-tcms issue cases ACME-1# the test cases a story is proven by, and their latest result`}</Terminal>
+tcms issue cases ACME-1# the test cases a story is proven by, and their latest result
+tcms import list       # migrations into this project, newest first
+tcms import show <id>  # one import report — the counts, the mapping, and every dropped field`}</Terminal>
 
         <H>Writing</H>
         <Terminal>{`tcms case edit         # change a test case

@@ -771,8 +771,8 @@ proxy log and the browser history — which is a second reason none of them is a
 | `GET /imports` | `listImportRuns` | `issue:import` | — | `tcms import list` (014 T6) |
 | `GET /imports/{importRunId}` | `getImportRun` | `issue:import` | — | `tcms import show` (014 T6) |
 
-The two CLI rows are **declared here and spelled in §6 by 014 T6**; until that lands the noun does
-not exist in `COMMANDS` and this table is what says why the other three never will.
+The two CLI rows were **declared here and spelled in §6 by 014 T6**, which has landed: `import` is
+in `COMMANDS` as two reads and this table is what says why the other three never will be.
 
 ---
 
@@ -884,8 +884,9 @@ needing a separate decision. A bulk generation therefore decomposes per item.
 ## 6. The CLI surface
 
 `tcms <noun> <verb>`, one command per operation the `Agent` role can reach — approximately ~~45~~ ~~53~~ 61,
-against the MCP surface's ~~21~~ ~~28~~ 30. **The registry holds ~~43~~ 53** (`COMMANDS`, measured
-013 T4, eight of them 012's board verbs and ten this slice's release verbs), and the two numbers have
+against the MCP surface's ~~21~~ ~~28~~ 30. **The registry holds ~~43~~ ~~53~~ 55** (`COMMANDS`, measured
+014 T6, eight of them 012's board verbs, ten 013's release verbs and two this slice's import reads),
+and the two numbers have
 never met: the count above is what the
 `Agent` grant *reaches*, the registry is what has been *spelled*, and §6's own struck-through
 paragraph names the families — `report` and `triage` — that are still reachable and unoffered. It is wide on purpose (§1): `--help` is paged and nobody loads all of
@@ -1003,6 +1004,45 @@ Five things about that table are decisions rather than spellings:
   (§4.4). It is the surface's only three-word command name, which is why `findCommand` and
   `guideCopies.test.ts` both try three words before two — shortest-first would read
   `issue cases set ACME-118` as the *read* command with `set` as the issue key.
+
+**The two import commands** (014 T6; §3.7 carries the operation table and the reason MCP gets
+none of them). `import` is the fifth noun the CLI gains, and it is the first that arrives **read-only
+by design** rather than because its writes have not been reached yet:
+
+| Command | Kind | Permission | Reaches |
+|---|---|---|---|
+| `tcms import list` | read | `issue:import` | `GET /imports?projectId=…` |
+| `tcms import show <importRunId>` | read | `issue:import` | `GET /imports/{importRunId}` |
+
+**There is no `tcms import run` and no `tcms import preview`, and the absence is a decision that is
+recorded here so it is not read as an unfinished slice** (plan 014 D-l). Two reasons, and neither is
+effort:
+
+- **The credential.** `POST /imports` and `POST /imports/preview` carry a Jira API token in the
+  body. At a terminal that token arrives as an argument or an environment variable, which is shell
+  history and a CI log — and 014 D-a's whole point is that this credential has the shortest possible
+  life: it is held for one operation and written nowhere, not on `import_run`, not encrypted, not
+  anywhere. A CLI flag would defeat that in the one place the rest of the design cannot reach.
+- **The confirmation.** The mapping step is a confirmation a person makes **having read a preview**.
+  A flag file passed to a command is that confirmation with the reading removed, which is precisely
+  the property D32 exists to create. `import-mapping.html`'s disabled Confirm and the endpoint's
+  `400` on an unmapped status are the same argument from the other two sides.
+
+Three things about the two that *are* here are decisions rather than spellings:
+
+- **`import list` takes no `--project`.** The endpoint's `projectId` is a query parameter rather
+  than a path segment, which makes this the easiest place on the surface to slip: no CLI command
+  takes a project id (§4.1), so it is resolved from the context like every other project-scoped
+  read and `--project` remains the one context flag.
+- **`import show`'s dropped-field table is not truncated**, alone on this surface. §4.6's budget
+  windows every other list, and the exception is the point of the module: the dropped list is the
+  artifact the whole feature exists to produce, and a report that elides the thing it records
+  answers *that field did not survive* and *it is not on screen* in the same words. The budget
+  applies instead to the **status mapping**, a listing of what did arrive, which is capped and
+  carries a *"n more"* line.
+- **A run is named by its id, not by anything friendlier.** `release show 2.4` takes text a person
+  typed; a run has no such handle, so `import list` prints the ids beside the dates that tell them
+  apart.
 
 - **Read commands are phase 5, writes are phase 7**, per the plan's order.
 - **`--json` on every command**, so the CLI composes in a shell. Human-readable output is the

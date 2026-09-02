@@ -50,6 +50,7 @@ export const IDS = {
   page: 'dp-1',
   artifact: 'af-1',
   release: 'rl-1',
+  importRun: 'ir-1',
 } as const;
 
 /** A fixed instant, so nothing here depends on when the suite runs. */
@@ -911,6 +912,92 @@ export function issueTestCase(
     lastResultKind: null,
     lastExecutedAt: null,
     lastReleaseVersion: null,
+    ...overrides,
+  };
+}
+
+/* ---------------------------------------------------------- tracker imports ---- */
+
+/**
+ * One row of `tcms import list` — a completed run with nothing dropped.
+ *
+ * `droppedFieldCount` is zero by default for the file's own rule (an *empty* resource, not a rich
+ * one), and a test that is about the dropped list says so rather than inheriting one.
+ */
+export function importRunSummary(
+  overrides: Partial<Schemas['ImportRunSummary']> = {},
+): Schemas['ImportRunSummary'] {
+  return {
+    id: IDS.importRun,
+    provider: 'JIRA_CLOUD',
+    siteUrl: 'https://northwind.atlassian.net',
+    sourceProjectKey: 'PROJ',
+    status: 'COMPLETED',
+    startedAt: NOW,
+    issuesImported: 0,
+    statusesMapped: 0,
+    labelsCreated: 0,
+    droppedFieldCount: 0,
+    ...overrides,
+  };
+}
+
+export function droppedField(
+  overrides: Partial<Schemas['DroppedField']> = {},
+): Schemas['DroppedField'] {
+  return {
+    name: 'Story Points',
+    fieldType: 'number',
+    valueCount: 0,
+    reason: 'This product has no estimate field.',
+    ...overrides,
+  };
+}
+
+export function appliedStatusMapping(
+  overrides: Partial<Schemas['AppliedStatusMapping']> = {},
+): Schemas['AppliedStatusMapping'] {
+  return {
+    sourceStatusName: 'In Progress',
+    targetStatusId: 'is-2',
+    targetStatusName: 'In Progress',
+    targetStatusKind: 'IN_PROGRESS',
+    issueCount: 0,
+    ...overrides,
+  };
+}
+
+/** Unmatched by default: `userId` and `userName` are null together, which is the pair D-j creates. */
+export function importedPerson(
+  overrides: Partial<Schemas['ImportedPerson']> = {},
+): Schemas['ImportedPerson'] {
+  return { sourceName: 'jsmith', matched: false, userId: null, userName: null, ...overrides };
+}
+
+/** The whole report. `startedBy` is a `UserRef` here; null is the run nobody still resolves for. */
+export function importRun(overrides: Partial<Schemas['ImportRun']> = {}): Schemas['ImportRun'] {
+  return {
+    id: IDS.importRun,
+    projectId: IDS.project,
+    provider: 'JIRA_CLOUD',
+    siteUrl: 'https://northwind.atlassian.net',
+    accountEmail: null,
+    sourceProjectKey: 'PROJ',
+    status: 'COMPLETED',
+    startedAt: NOW,
+    finishedAt: null,
+    startedBy: userRef(),
+    issuesImported: 0,
+    releasesCreated: 0,
+    commentsImported: 0,
+    labelsCreated: 0,
+    droppedValueCount: 0,
+    labelPerSprint: false,
+    backlogOrderPreserved: false,
+    failureReason: null,
+    droppedFields: [],
+    statusMapping: [],
+    people: [],
     ...overrides,
   };
 }

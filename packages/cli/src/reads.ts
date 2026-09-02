@@ -10,6 +10,7 @@
  * those are `@tcms/client`'s, once, which is the entire reason that package exists.
  */
 import {
+  DEFAULT_PAGE_SIZE,
   SHAPES,
   clampPageSize,
   guideFor,
@@ -1364,6 +1365,166 @@ const issueCases: Command = {
   },
 };
 
+/**
+ * `tcms import list` — the migrations this project has been through, newest first.
+ *
+ * **No `--project` flag of its own**, and the endpoint's `projectId` is a query parameter rather
+ * than a path segment, which makes that easy to get wrong: no command in this client takes a
+ * project id (surface spec §4.1), so it comes from `projectOf` like every other project-scoped
+ * read and `--project` stays the one context flag.
+ *
+ * There is no `tcms import run` and no `tcms import preview` to pair with these, and the absence is
+ * a decision rather than a gap — see §3.7 and plan 014 D-l. The credential a run needs would arrive
+ * as an argument or an environment variable, which is shell history and a CI log; and the mapping a
+ * run needs is a confirmation somebody makes **having read a preview**, which a flag file is that
+ * confirmation with the reading removed.
+ */
+const importList: Command = {
+  name: 'import list',
+  summary: 'Migrations into this project, newest first',
+  usage: 'tcms import list',
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const runs = await client.GET('/imports', {
+      params: { query: { projectId: await projectOf(context) } },
+      tcms: request,
+    });
+
+    if (json) return out.json(runs);
+
+    table(out, runs, [
+      { header: 'STARTED', value: (row) => showDate(row.startedAt) },
+      { header: 'PROVIDER', value: (row) => show(row.provider) },
+      { header: 'SOURCE', value: (row) => `${show(row.sourceProjectKey)} @ ${show(row.siteUrl)}` },
+      { header: 'STATUS', value: (row) => show(row.status) },
+      { header: 'ISSUES', value: (row) => show(row.issuesImported) },
+      { header: 'STATUSES', value: (row) => show(row.statusesMapped) },
+      { header: 'LABELS', value: (row) => show(row.labelsCreated) },
+      { header: 'DROPPED', value: (row) => show(row.droppedFieldCount) },
+      { header: 'ID', value: (row) => show(row.id) },
+    ]);
+
+    out.line();
+    if (runs.length === 0) {
+      // Never imported is the ordinary state of a project, not a failure to read one — and a
+      // reader who typed this because they expected a row needs to know where the other verb is.
+      out.line('This project has imported nothing. An import is started in the web app, at');
+      out.line('  Settings → Import — the connection is entered there and kept nowhere.');
+      return;
+    }
+    out.line(`tcms import show ${show(runs[0]?.id)} — the report, with what was not imported.`);
+  },
+};
+
+/**
+ * `tcms import show <importRunId>` — one report, a year later, with the source system gone.
+ *
+ * **The dropped-field table is never truncated.** Every other list on this surface is windowed to
+ * §4.6's budget, and this one is the exception on purpose: it is the artifact the whole module
+ * exists to produce, and a report that elides the thing it records is worse than no command —
+ * somebody reading it is deciding whether a field they remember survived, and an answer that
+ * stops at twenty-five rows answers *no* and *not shown* in the same words. The budget applies to
+ * the status mapping, which is a listing of what did arrive and carries a *"n more"* line.
+ *
+ * Taken by id and not by anything friendlier, unlike `release show 2.4`: a run has no name a
+ * person typed, and `import list` prints the ids beside the dates that distinguish them.
+ */
+const importShow: Command = {
+  name: 'import show',
+  summary: 'One import report — the counts, the mapping, and every field that was dropped',
+  usage: 'tcms import show <importRunId>',
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const report = await client.GET('/imports/{importRunId}', {
+      params: { path: { importRunId: requireArg(context, 'import run', 0) } },
+      tcms: request,
+    });
+
+    if (json) return out.json(report);
+
+    fields(out, [
+      ['Source', `${show(report.sourceProjectKey)} @ ${show(report.siteUrl)} (${show(report.provider)})`],
+      ['Account', show(report.accountEmail)],
+      ['Status', show(report.status)],
+      ['Started', `${showDate(report.startedAt)} by ${show(report.startedBy?.displayName)}`],
+      ['Finished', showDate(report.finishedAt)],
+      ['Run id', show(report.id)],
+    ]);
+
+    // Printed before anything is counted: a FAILED run wrote nothing (the whole read is one
+    // all-or-nothing transaction), so its zeroes are the transaction rolling back rather than a
+    // source project that was empty, and the two look identical in a table.
+    if (report.status === 'FAILED') {
+      out.line();
+      out.line(`This run failed and the project was left unchanged: ${show(report.failureReason)}`);
+    }
+    if (report.status === 'RUNNING') {
+      out.line();
+      out.line('This run is still going. The counts below are what has been read, not what arrived —');
+      out.line('nothing is written until it finishes.');
+    }
+
+    out.line();
+    fields(out, [
+      ['Issues', show(report.issuesImported)],
+      ['Releases', `${show(report.releasesCreated)} (one per fix version)`],
+      ['Comments', show(report.commentsImported)],
+      ['Labels', show(report.labelsCreated)],
+      ['Values dropped', show(report.droppedValueCount)],
+      ['Sprints', report.labelPerSprint ? 'one label per sprint name' : 'dropped, no label kept'],
+      [
+        'Backlog order',
+        report.backlogOrderPreserved
+          ? "the source's own order"
+          // Said rather than left blank (D-i): an unpreserved order is insertion order, which
+          // nobody chose, and a reader who is not told that reads the backlog as imported.
+          : 'insertion order — arbitrary, chosen by nobody',
+      ],
+      ['Authors', peopleLine(report.people)],
+    ]);
+
+    out.line();
+    out.line('Status mapping, as it was applied:');
+    // The names are the ones captured at the time (D-g). A status renamed or removed since is
+    // still printed as what it was called when these issues were put in it.
+    const shown = report.statusMapping.slice(0, DEFAULT_PAGE_SIZE);
+    table(out, shown, [
+      { header: 'SOURCE', value: (row) => show(row.sourceStatusName) },
+      { header: 'BECAME', value: (row) => show(row.targetStatusName) },
+      { header: 'KIND', value: (row) => show(row.targetStatusKind) },
+      { header: 'ISSUES', value: (row) => show(row.issueCount) },
+    ]);
+    const rest = report.statusMapping.length - shown.length;
+    if (rest > 0) out.line(`… ${String(rest)} more — tcms import show ${show(report.id)} --json`);
+
+    out.line();
+    out.line(`Not imported — ${String(report.droppedFields.length)} field(s):`);
+    table(out, report.droppedFields, [
+      { header: 'FIELD', value: (row) => show(row.name) },
+      { header: 'TYPE', value: (row) => show(row.fieldType) },
+      { header: 'VALUES', value: (row) => show(row.valueCount) },
+      { header: 'WHY', value: (row) => show(row.reason) },
+    ]);
+  },
+};
+
+/**
+ * The authors, as a count and then the names nobody here matched.
+ *
+ * The unmatched ones are named rather than counted, because that is the actionable half: their
+ * comments carry the source's own string on `externalAuthor` and were **not** reassigned to
+ * somebody who did not write them (D-j), and a reader deciding whether that is acceptable needs
+ * to see which people it happened to.
+ */
+function peopleLine(people: readonly components['schemas']['ImportedPerson'][]): string {
+  if (people.length === 0) return 'none';
+  const unmatched = people.filter((person) => !person.matched);
+  const matched = `${String(people.length - unmatched.length)} of ${String(people.length)} matched`;
+  return unmatched.length === 0
+    ? matched
+    : `${matched} — kept as the source's own text: ${unmatched.map((person) => person.sourceName).join(', ')}`;
+}
+
 export const READS: readonly Command[] = [
   whoami,
   format,
@@ -1389,4 +1550,6 @@ export const READS: readonly Command[] = [
   releaseShow,
   roadmap,
   issueCases,
+  importList,
+  importShow,
 ];

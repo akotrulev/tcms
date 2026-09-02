@@ -6,11 +6,16 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  appliedStatusMapping,
   caseDetail,
   casePage,
   caseSummary,
   condition,
   currentUser,
+  droppedField,
+  importRun,
+  importRunSummary,
+  importedPerson,
   issue,
   issueComment,
   issueStatus,
@@ -556,5 +561,106 @@ describe('the release reads', () => {
 
     expect(await mainWith(['issue', 'cases', 'ACME-118'], out, stub.fetch)).toBe(EXIT.ok);
     expect(out.stdout).toContain('tcms issue cases set ACME-118');
+  });
+});
+
+describe('the import reads', () => {
+  it('says a project has imported nothing, and where the run is started, rather than printing a blank', async () => {
+    const out = recorder();
+    const stub = api({
+      '/projects': { status: 200, body: [PROJECT] },
+      'GET /imports': { status: 200, body: [] },
+    });
+
+    expect(await mainWith(['import', 'list'], out, stub.fetch)).toBe(EXIT.ok);
+    // There is deliberately no `tcms import run` to offer instead (D-l), so the empty answer
+    // points at the web app rather than at a command that does not exist.
+    expect(out.stdout).toContain('Settings → Import');
+    expect(out.stdout).not.toContain('tcms import run');
+  });
+
+  it('takes the project from the context and never a projectId argument', async () => {
+    const out = recorder();
+    const stub = api({
+      '/projects': { status: 200, body: [PROJECT] },
+      'GET /imports': { status: 200, body: [importRunSummary({ issuesImported: 812, droppedFieldCount: 4 })] },
+    });
+
+    expect(await mainWith(['import', 'list'], out, stub.fetch)).toBe(EXIT.ok);
+    expect(out.stdout).toContain('812');
+    expect(out.stdout).toContain('PROJ @ https://northwind.atlassian.net');
+    // §4.1: the id is resolved from the token's project and put in the query by the command.
+    expect(stub.urls.some((url) => url.endsWith('/imports?projectId=p-1'))).toBe(true);
+  });
+
+  it('prints every dropped field, and does not stop at the page size the mapping stops at', async () => {
+    const out = recorder();
+    const dropped = Array.from({ length: 40 }, (_, index) =>
+      droppedField({ name: `Custom field ${String(index)}`, valueCount: index }));
+    const mapping = Array.from({ length: 40 }, (_, index) =>
+      appliedStatusMapping({ sourceStatusName: `Source status ${String(index)}` }));
+
+    const stub = api({
+      '/projects': { status: 200, body: [PROJECT] },
+      'GET /imports/ir-1': {
+        status: 200,
+        body: importRun({ droppedFields: dropped, statusMapping: mapping }),
+      },
+    });
+
+    expect(await mainWith(['import', 'show', 'ir-1'], out, stub.fetch)).toBe(EXIT.ok);
+
+    // The whole point of the command: a report that elides what it records is worse than none.
+    expect(out.stdout).toContain('Custom field 0');
+    expect(out.stdout).toContain('Custom field 39');
+    // The mapping is a listing of what arrived, so §4.6's budget applies to it and says so.
+    expect(out.stdout).toContain('Source status 24');
+    expect(out.stdout).not.toContain('Source status 25');
+    expect(out.stdout).toContain('… 15 more');
+  });
+
+  it('says the backlog order was chosen by nobody, and names the authors nothing matched', async () => {
+    const out = recorder();
+    const stub = api({
+      '/projects': { status: 200, body: [PROJECT] },
+      'GET /imports/ir-1': {
+        status: 200,
+        body: importRun({
+          issuesImported: 812,
+          finishedAt: '2026-08-08T09:41:00Z',
+          people: [importedPerson({ sourceName: 'jsmith' }), importedPerson({ sourceName: 'Ana', matched: true, userId: 'u-1', userName: 'Ana Engineer' })],
+        }),
+      },
+    });
+
+    expect(await mainWith(['import', 'show', 'ir-1'], out, stub.fetch)).toBe(EXIT.ok);
+    expect(out.stdout).toContain('chosen by nobody');
+    expect(out.stdout).toContain('1 of 2 matched');
+    // Named, not counted: their comments carry the source's own string rather than being
+    // reassigned to somebody who did not write them (D-j).
+    expect(out.stdout).toContain('jsmith');
+  });
+
+  it('says a failed run left the project unchanged, so its zeroes are not read as an empty source', async () => {
+    const out = recorder();
+    const stub = api({
+      '/projects': { status: 200, body: [PROJECT] },
+      'GET /imports/ir-1': {
+        status: 200,
+        body: importRun({ status: 'FAILED', failureReason: 'The site stopped answering at issue 400.' }),
+      },
+    });
+
+    expect(await mainWith(['import', 'show', 'ir-1'], out, stub.fetch)).toBe(EXIT.ok);
+    expect(out.stdout).toContain('left unchanged');
+    expect(out.stdout).toContain('stopped answering');
+  });
+
+  it('asks which run rather than fetching one when given no id', async () => {
+    const out = recorder();
+    const stub = api({ '/projects': { status: 200, body: [PROJECT] } });
+
+    expect(await mainWith(['import', 'show'], out, stub.fetch)).toBe(EXIT.usage);
+    expect(out.stderr).toContain('Which import run?');
   });
 });
