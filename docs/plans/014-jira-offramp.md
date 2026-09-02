@@ -43,7 +43,7 @@ renumbers — M5 will be `015`.
 | 3 | T3 — `tracker.imports`: the source port, the Jira client, the guard, the preview | `be` · `be-java` | `POST /imports/source-projects` and `POST /imports/preview` answer over HTTP against a Jira Cloud/DC site, and a test that snapshots the whole project before and after a preview finds it byte-identical | T2 | **done 2026-09-02 @ 5016d003** — gate red on T4's four rules only, listed in T3 step 11 |
 | 4 | T4 — The run, the report, and the stuck-run reaper | `be` · `be-java` | `POST /imports` imports a Jira project keeping `PROJ-4812` as `PROJ-4812`, `GET /imports/{id}` serves the report, and a test asserts the report's `droppedFields` equals the preview's element for element | T3 | done 2026-09-02 @ 2573e482 |
 | 5 | T5 — The Azure DevOps source | `be` · `be-java` | `provider: AZURE_DEVOPS` previews and imports an ADO project through the same port, proven against a recorded-shape fake; no other file in `imports` changes | T4 | **done 2026-09-02 @ e7d420e4** — `ImportSources` was not edited; one open finding on `DroppedFields`, in T5 step 3 |
-| 6 | T6 — `tcms import list` and `tcms import show` | `ts` · `tooling-engineer` | Two CLI commands print a past import and its dropped-field list from a terminal; the surface document's §3.7 records that MCP deliberately gets nothing | T4 | not started |
+| 6 | T6 — `tcms import list` and `tcms import show` | `ts` · `tooling-engineer` | Two CLI commands print a past import and its dropped-field list from a terminal; the surface document's §3.7 records that MCP deliberately gets nothing | T4 | **done** |
 | 7 | T7 — The wizard: connect → preview → map → run | `fe` · `fe-react` | `/projects/:projectId/imports/new` walks the three steps, refuses to confirm while one status is unmapped, and starts a run; `tcmsFaults.importing()` drives every failure path | T6 | not started |
 | 8 | T8 — The report screen, the imports list, and the close-out | `fe` · `fe-react` | `/projects/:projectId/imports` and `/projects/:projectId/imports/:importRunId` render `settings-import.html` and `import-report.html` with no call to the source system, and 009 · `features.md` · the ERD are closed out | T7 | not started |
 
@@ -2506,7 +2506,7 @@ The surface document records in §6 that MCP gets nothing and why.
 **Files:** `packages/cli/src/commands.ts`, `reads.ts`, `main.ts`, their tests;
 `docs/specs/2026-08-08-mcp-tool-and-command-surface.md` §6.
 
-- [ ] **Step 1:** Two commands in `COMMANDS`, both `kind: 'read'`, both `permission:
+- [x] **Step 1:** Two commands in `COMMANDS`, both `kind: 'read'`, both `permission:
       'issue:import'`, spelled the way the release verbs are:
 
 ```
@@ -2517,21 +2517,21 @@ tcms import show <importRunId>      → GET /imports/{importRunId}
 `import list` takes no `--project`: no CLI command in this repo takes a `projectId`
 (surface doc §4.1), it comes from the context.
 
-- [ ] **Step 2:** `import show` prints four blocks — the header line, the counts, the status
+- [x] **Step 2:** `import show` prints four blocks — the header line, the counts, the status
       mapping as applied, and the dropped-field table — with the reason column intact. **Not
       truncated at the output budget** for the dropped list specifically: it is the artifact, and a
       report that elides the thing it exists to record is worse than no command. §4.6's budget
       applies to the mapping table, which is capped with a *"n more"* line.
 
-- [ ] **Step 3:** `writeConformance.test.ts` and `format.test.ts` stay green — neither command is a
+- [x] **Step 3:** `writeConformance.test.ts` and `format.test.ts` stay green — neither command is a
       write, so neither needs an `Idempotency-Key` or an `If-Match`, and the conformance suite
       asserts that in both directions.
 
-- [ ] **Step 4:** Add the §6 row and the sentence recording the absence of the two write verbs, the
+- [x] **Step 4:** Add the §6 row and the sentence recording the absence of the two write verbs, the
       reason being D-l's — the credential in shell history, and a mapping confirmed without a
       preview being read.
 
-- [ ] **Step 5:** Gate and commit.
+- [x] **Step 5:** Gate and commit.
 
 ```bash
 ~/bin/tcms-remote sync && ~/bin/tcms-remote packages 'npm run build && npm run lint --workspaces && npm run test:run --workspaces'
