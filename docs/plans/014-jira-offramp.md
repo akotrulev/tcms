@@ -42,7 +42,7 @@ renumbers — M5 will be `015`.
 | 2 | T2 — `V7`: `import_run`, `import_dropped_field`, `issue_comment.external_author` | `be` · `data-architect` | `V7__import.sql` applies to an empty database; both new tables carry `company_id NOT NULL` and a forced isolation policy; `SchemaConventionTest` and `SchemaCommentTest` green | T1 | done 2026-09-01 @ 249da7f9 |
 | 3 | T3 — `tracker.imports`: the source port, the Jira client, the guard, the preview | `be` · `be-java` | `POST /imports/source-projects` and `POST /imports/preview` answer over HTTP against a Jira Cloud/DC site, and a test that snapshots the whole project before and after a preview finds it byte-identical | T2 | **done 2026-09-02 @ 5016d003** — gate red on T4's four rules only, listed in T3 step 11 |
 | 4 | T4 — The run, the report, and the stuck-run reaper | `be` · `be-java` | `POST /imports` imports a Jira project keeping `PROJ-4812` as `PROJ-4812`, `GET /imports/{id}` serves the report, and a test asserts the report's `droppedFields` equals the preview's element for element | T3 | done 2026-09-02 @ 2573e482 |
-| 5 | T5 — The Azure DevOps source | `be` · `be-java` | `provider: AZURE_DEVOPS` previews and imports an ADO project through the same port, proven against a recorded-shape fake; no other file in `imports` changes | T4 | not started |
+| 5 | T5 — The Azure DevOps source | `be` · `be-java` | `provider: AZURE_DEVOPS` previews and imports an ADO project through the same port, proven against a recorded-shape fake; no other file in `imports` changes | T4 | **done 2026-09-02 @ e7d420e4** — `ImportSources` was not edited; one open finding on `DroppedFields`, in T5 step 3 |
 | 6 | T6 — `tcms import list` and `tcms import show` | `ts` · `tooling-engineer` | Two CLI commands print a past import and its dropped-field list from a terminal; the surface document's §3.7 records that MCP deliberately gets nothing | T4 | not started |
 | 7 | T7 — The wizard: connect → preview → map → run | `fe` · `fe-react` | `/projects/:projectId/imports/new` walks the three steps, refuses to confirm while one status is unmapped, and starts a run; `tcmsFaults.importing()` drives every failure path | T6 | not started |
 | 8 | T8 — The report screen, the imports list, and the close-out | `fe` · `fe-react` | `/projects/:projectId/imports` and `/projects/:projectId/imports/:importRunId` render `settings-import.html` and `import-report.html` with no call to the source system, and 009 · `features.md` · the ERD are closed out | T7 | not started |
@@ -550,6 +550,21 @@ Five things:
     Repositories has not, and its half stays.
   * The report test asserts NO OTHER FETCH than GET /imports/{id}. That is "reachable a year later
     with the source system gone" made checkable, and it is the module's fourth done-when.
+
+Two things T5 could not take and left here, both one-liners:
+  * **`DroppedFields` needs `"iteration path"`.** `reasonFor` selects D-h's SPRINT_KEPT sentence on
+    `"sprint".equals(name.toLowerCase())`, and ADO's sprint field is called `Iteration Path` —
+    which `AzureDevOpsImportSource` reports under that name deliberately, because `SourceField.name`
+    is the source's own vocabulary. So an ADO import run with labelPerSprint ON currently reports
+    Iteration Path as "no equivalent in this product" while its values were in fact kept as labels,
+    which is the exact claim D-h exists to prevent. Add `"iteration path"` to the SPRINT_KEPT
+    condition and a matching REASONS entry. T5 did not do it because its brief forbade editing any
+    file but its own, and this is the finding that brief asked for rather than a reason to widen it.
+    A backend edit inside an fe task: it is two lines, and giving it a session of its own is the
+    agent switch rule 6 exists to avoid. Run the backend gate, which you are running anyway.
+  * **`settings-import.html`'s button label.** D-k says it keeps *Import from Jira* "right up until
+    T5 lands, and T5 changes it to *Start an import*". T5 is backend-only and this screen did not
+    exist yet, so the rename lands here, on ImportsListPage.
 
 Then the close-out, and none of it is optional:
   1. docs/features.md — a new "### Moving in from Jira" subsection under ## Issues. Line 507's
@@ -2387,7 +2402,8 @@ Written here rather than appended as a changelog, because T5, T7 and T8 bind to 
 
 **Deliverable:** `provider: AZURE_DEVOPS` previews and imports an Azure DevOps project through the
 same `ImportSource` port, proven against a fake built from recorded response shapes. No file outside
-`AzureDevOpsImportSource`, `ImportSources` and their tests changes.
+`AzureDevOpsImportSource` and ~~`ImportSources`~~ its test changes — T3's `supports(ImportProvider)`
+made the selector edit unnecessary, so it did not happen.
 **Depends on:** T4
 **Stack:** `be` · **Agent:** `be-java` · **Skills:** `be-java-pattern-writer`, `be-java-unit-testing`
 
@@ -2396,28 +2412,86 @@ user models in one session exceeds the budget, and the seam between them — the
 the design wants anyway. **Why it is in this module at all:** 009's `**be**` line names both
 providers, and a port with one implementation is a port nobody has tested is a port.
 
-- [ ] **Step 1:** `AzureDevOpsImportSource`. Work items through WIQL (`POST
+- [x] **Step 1:** `AzureDevOpsImportSource`. Work items through WIQL (`POST
       _apis/wit/wiql`) then `GET _apis/wit/workitems?ids=…&$expand=all` in batches of 200;
       comments through `_apis/wit/workItems/{id}/comments`; the revision count through
       `_apis/wit/workItems/{id}/revisions?$top=0`. Auth is `Basic base64(":" + pat)`, which is ADO's
       own spelling and looks wrong until you check it — a comment says so.
-- [ ] **Step 2:** The type map: `Epic` → `EPIC`; `Feature`, `User Story`, `Product Backlog Item`,
+- [x] **Step 2:** The type map: `Epic` → `EPIC`; `Feature`, `User Story`, `Product Backlog Item`,
       `Bug` → `STORY`; `Task` → `TASK`. ADO's `Feature` sits at `STORY` deliberately — the depth
       rule is about **levels**, and a fourth story-level type is a row (M1), never a migration.
-- [ ] **Step 3:** ADO's dropped fields: `Effort`/`Story Points`, `Iteration Path`,
+      **Landed as one input rather than as a table**: `ImportPreviewService.matchType` already
+      derives name-then-level, so this class supplies only `SourceType.subtask`, set from a
+      `LEAF_TYPES` set holding `Task`. A second copy of the map would be a preview promising one
+      type and a run writing another.
+- [x] **Step 3:** ADO's dropped fields: `Effort`/`Story Points`, `Iteration Path`,
       `Area Path`, `Board Column`, `Original Estimate`, plus every `Custom.*` field.
       `Iteration Path` is ADO's sprint and takes the same `labelPerSprint` option (D-h).
-- [ ] **Step 4:** `AzureDevOpsImportSourceTest` against `MockRestServiceServer`. Bind the transport
+      **Landed as a filter rather than as a list**: `$expand=all` returns every field, so the class
+      names what the run *imports* and what is ADO's own bookkeeping, and everything else holding a
+      value is a loss. The named fields above fall out of that rather than being hardcoded, so a
+      customer's field nobody predicted is reported too.
+      **OPEN FINDING — `Iteration Path` does not get D-h's adjusted reason.**
+      `DroppedFields.reasonFor` selects `SPRINT_KEPT` on `"sprint".equals(name.toLowerCase())`, and
+      ADO's field is called `Iteration Path`. So with `labelPerSprint` on, the report says
+      *"no equivalent in this product"* for a field whose values were in fact kept as labels —
+      exactly the claim D-h exists to prevent. The source reports ADO's own vocabulary because
+      `SourceField.name`'s contract says it must (*"the report is about the system being left
+      behind, so its vocabulary is the honest one"*), so **the fix belongs in `DroppedFields`, not
+      here**, and this task did not widen its edit to take it: add `"iteration path"` to the
+      `SPRINT_KEPT` condition and to `REASONS`. Two lines. **T8 owns it**, as the close-out task.
+- [x] **Step 4:** `AzureDevOpsImportSourceTest` against `MockRestServiceServer`. Bind the transport
       the way `TrackerClient`'s second constructor exists for — installing the real request factory
       over the top silently un-binds the double, and the tests then dial the public internet and
       fail as parse errors.
-- [ ] **Step 5:** Gate and commit.
+- [x] **Step 5:** Gate and commit.
 
 ```bash
 ~/bin/tcms-remote sync && ~/bin/tcms-remote backend './gradlew build'
 git add backend/src/main/java/com/tcms/tracker/imports backend/src/test/java/com/tcms/tracker/imports
 git commit -m "feat(tracker): the Azure DevOps import source, through the same port"
 ```
+
+### What T5 landed that this plan did not predict
+
+Written here rather than appended as a changelog, because T8 binds to the last of these.
+
+- **`ImportSources` was not edited, and neither was anything else.** T3's `supports(ImportProvider)`
+  did what it was built for: the provider arrived as one `@Component` and one test class. The task
+  text above said "no file outside `AzureDevOpsImportSource`, `ImportSources` and their tests"; the
+  middle one turned out to be unnecessary and is struck through.
+
+- **The type map is an input, not a table.** `ImportPreviewService.matchType` already derives
+  name-then-level, and `levelFor` reads `SourceType.subtask`. So ADO's map is expressed as a
+  `LEAF_TYPES` set holding `Task` and nothing else: `Epic` and `Task` match this project's own type
+  names, and `Feature`, `User Story`, `Product Backlog Item` and `Bug` fall through to `STORY`
+  because they are not leaves. Writing the four-row table out again in the source would have been a
+  second derivation of the thing D-f forbids having two of.
+
+- **The dropped-field list is a filter, not the plan's enumeration.** `$expand=all` is genuinely
+  every field, including ADO's own storage bookkeeping — revision counters, link tallies,
+  watermarks, the flattened `System.AreaLevel1…7` — where Jira's `*navigable` had already excluded
+  most of it. So the class names `IMPORTED_FIELDS` and `BOOKKEEPING` and reports everything else
+  holding a value. The plan's five fields fall out of that, and so does a customer's field nobody
+  predicted, which is the property the preview's promise actually needs.
+
+- **`SourceStatus.category` is blank on this provider, deliberately.** ADO carries a state's
+  category only on the per-work-item-type states document, never on the work item, so filling it
+  would be one extra call per type for a field nothing above the port reads — grep finds no caller
+  of `SourceStatus#category`. The mapping suggestion is made on the name, as it is for Jira.
+
+- **`SourceVersion` is always empty and no dropped-field row says so.** ADO has no fix versions at
+  all, so releases (D6) come from nothing on this provider. That is an absence of a *field*, not a
+  loss of one, and inventing a row for it would put a loss on the report that never happened.
+
+- **The batch response is re-ordered into the WIQL's order.** ADO does not promise
+  `GET workitems?ids=` answers in the order the ids were asked for, and that order is
+  `SourceIssue.rankPosition` — so a run under `preserveBacklogOrder` would have written a backlog
+  order nobody chose, and the report would have looked completely correct. The test's fixture
+  answers `4812` before `4811` to pin it.
+
+- **`Iteration Path` cannot reach D-h's adjusted reason, and the fix is `DroppedFields`'.** See T5
+  step 3 for the finding and T8's prompt for the two lines. This is the one thing T5 leaves behind.
 
 ---
 
