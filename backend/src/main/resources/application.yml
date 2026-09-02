@@ -473,6 +473,43 @@ tcms:
       # missing one would be a startup failure on every install that sends no notifications.
       from-address: ${TCMS_NOTIFICATION_MAIL_FROM:tcms@localhost}
 
+  tracker:
+    imports:
+      # What one import off Jira or Azure DevOps may do to this instance (plan 014 D-b).
+      #
+      # ALL THREE ARE DEFAULTED AND EACH DEFAULT IS THE SAFE ONE, so none of them is a `${VAR}`
+      # with no colon. ONE COLON: `${VAR:5000}` is Spring's default syntax and `${VAR:-5000}` is
+      # the shell's, which Spring reads as the literal default "-5000". ConfigConventionTest
+      # reads this text rather than the resolved value, because a test that supplies its own
+      # configuration cannot see a defect in the expression that ships.
+
+      # The ceiling on one source project. The read pass holds the whole snapshot in heap before
+      # the write transaction opens — batch commits were refused because a mid-import failure
+      # would leave PART of somebody's Jira project in their new tracker, at the exact moment
+      # they are being asked to trust the migration. THE PREVIEW REFUSES ABOVE THIS NAMING THE
+      # NUMBER, rather than a run dying at minute four with nothing written.
+      max-issues: ${TCMS_IMPORT_MAX_ISSUES:5000}
+
+      # How long the source system may take to answer one page. The read runs on a REQUEST
+      # THREAD, so a site that accepts the connection and never answers holds a Tomcat worker
+      # per person waiting on a preview — and the JDK client's default read timeout is
+      # indefinite. Longer than tcms.integration's case-page client, because a fifty-issue Jira
+      # page with every navigable field, its comments and its changelog count genuinely is
+      # slower than the one-issue reads that client was sized for.
+      read-timeout: ${TCMS_IMPORT_READ_TIMEOUT:30s}
+
+      # Whether ImportUrlGuard will connect to a site that RESOLVES to a private, loopback,
+      # link-local or unique-local address.
+      #
+      # FALSE by default. Deliberately this module's own switch and not
+      # tcms.integration.outbound.allow-private-hosts: that key is unreachable from tracker
+      # (D-c), and it also answers a different question — an operator who lets a self-hosted
+      # Jira Data Center be imported from has said nothing about where notification webhooks may
+      # post. A self-hosted source on a private LAN is exactly who turns this on; a hostname
+      # resolving to 169.254.169.254 is exactly who it is refused for, and here the credential
+      # it would hand over is the API token the person running the import just typed in.
+      allow-private-hosts: ${TCMS_IMPORT_ALLOW_PRIVATE_HOSTS:false}
+
   # spring.mail.host is deliberately NOT defaulted. Boot only auto-configures a
   # JavaMailSender when it is set, and MailConfiguration turns its absence into a loud
   # warning rather than a startup failure — an install with no relay still works, it just

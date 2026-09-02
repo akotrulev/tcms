@@ -123,6 +123,15 @@ tasks.withType<Test>().configureEach {
         file("../deploy"),
         file("../docs/specs"),
         file("../frontend/src/lib/permissions.ts"),
+        // The second such read, added by its own line as the paragraph above instructs — and the
+        // only two entries here that are IN SOURCE, which is why they are the ones most likely to
+        // be thought unnecessary. ImportUrlGuardMirrorsTheOutboundGuardTest compares the marked
+        // regions of these two files as TEXT (plan 014 D-c: `tracker` may not import
+        // `integration`, so the URL guard is a deliberate second copy). A COMMENT-ONLY edit to
+        // either one changes no bytecode, so without these lines the classpath is unchanged,
+        // `:test` stays UP-TO-DATE, and a copy that has started to drift reports green.
+        file("src/main/java/com/tcms/integration/OutboundUrlGuard.java"),
+        file("src/main/java/com/tcms/tracker/imports/ImportUrlGuard.java"),
     ).withPropertyName("outOfSourceArtifactsReadByTests")
         .withPathSensitivity(PathSensitivity.RELATIVE)
         .optional(true)

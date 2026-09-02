@@ -203,7 +203,17 @@ class ContractEnumTest {
             // NOT_TESTED is not NOT_READY with zero failures, and the member exists so a release
             // nothing has run against cannot be rendered as a clean one.
             Map.entry("ReleaseStatus", List.of("com.tcms.tracker.release.ReleaseStatus")),
-            Map.entry("ReleaseVerdict", List.of("com.tcms.tracker.release.ReleaseVerdict")));
+            Map.entry("ReleaseVerdict", List.of("com.tcms.tracker.release.ReleaseVerdict")),
+            // 014's two. ImportProvider is deliberately NOT integration.tracker.TrackerProvider,
+            // which spells Data Center JIRA_DC and is in a module tracker may not import: the two
+            // sets also answer different questions, one selecting an adapter for reading one issue
+            // and the other a whole-project reader with paging.
+            Map.entry("ImportProvider", List.of("com.tcms.tracker.imports.ImportProvider")),
+            // Declared in T3 with the rest of the module's wire vocabulary and first WRITTEN in T4.
+            // The type has to exist in the gap or this rule fails on a contract enum whose server
+            // type has not arrived yet, which is a red build about sequencing rather than about
+            // anything wrong.
+            Map.entry("ImportRunStatus", List.of("com.tcms.tracker.imports.ImportRunStatus")));
 
     /**
      * The contract enums with no server type at all, and what checks each instead.

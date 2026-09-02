@@ -59,6 +59,22 @@ public interface IssueRepository extends JpaRepository<Issue, UUID> {
     long countByStatusIdAndDeletedAtIsNull(UUID statusId);
 
     /**
+     * Which of these keys this company already owns — the import preview's {@code KEY_COLLISION}
+     * blocker (plan 014).
+     *
+     * <p><strong>Soft-deleted issues count.</strong> {@code uq_issue_key} is
+     * {@code (company_id, issue_key)} with no {@code deleted_at} predicate, so a deleted
+     * {@code PROJ-4812} still owns the key and an import that ignored it would be promising
+     * something the database refuses at minute four. Every other read in this interface filters
+     * deleted rows out; this one must not, and that is the reason.
+     *
+     * <p>Company-wide and with no project predicate, for {@link #findByIssueKeyAndDeletedAtIsNull}'s
+     * reason: the constraint is per company, and RLS lets a caller see no further.
+     */
+    @Query("SELECT i.issueKey FROM Issue i WHERE i.issueKey IN :keys")
+    List<String> findExistingKeys(@Param("keys") Collection<String> keys);
+
+    /**
      * A replay of {@code POST /issues} with the same {@code Idempotency-Key}.
      *
      * <p>Project-scoped as well as key-scoped because {@code issue_created_idempotency_key_idx} is,

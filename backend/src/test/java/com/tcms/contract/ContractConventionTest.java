@@ -645,6 +645,30 @@ class ContractConventionTest {
             // class literal rather than letting a shape match decide.
             Map.entry("ProjectSettingsUpdate",
                     List.of(com.tcms.project.ProjectSettingsRequest.class)),
+            // ---- 014's import block. Every one of them is a record in
+            // com.tcms.tracker.imports, and three of the pairings are not name matches because
+            // this codebase names a record for what it is (…View) where the contract names a
+            // shape for the wire.
+            Map.entry("ImportConnection",
+                    List.of(com.tcms.tracker.imports.ImportConnection.class)),
+            Map.entry("SourceProject",
+                    List.of(com.tcms.tracker.imports.SourceProjectView.class)),
+            Map.entry("SourceProjectList",
+                    List.of(com.tcms.tracker.imports.SourceProjectListView.class)),
+            Map.entry("ImportPreviewInput",
+                    List.of(com.tcms.tracker.imports.ImportPreviewInput.class)),
+            // ONE schema referenced by both ImportPreview and ImportRun, served by ONE record out
+            // of ONE derivation (DroppedFields, D-f). Two schemas that happen to match is the
+            // defect that decision exists to prevent, and the module's done-when — "the
+            // dropped-field list in the report matches the preview's word for word" — starts here.
+            Map.entry("DroppedField",
+                    List.of(com.tcms.tracker.imports.DroppedFieldView.class)),
+            Map.entry("PreviewTypeRow", List.of(com.tcms.tracker.imports.PreviewTypeRow.class)),
+            Map.entry("PreviewStatusRow", List.of(com.tcms.tracker.imports.PreviewStatusRow.class)),
+            Map.entry("ImportPreviewTotals",
+                    List.of(com.tcms.tracker.imports.ImportPreviewTotalsView.class)),
+            Map.entry("ImportBlocker", List.of(com.tcms.tracker.imports.ImportBlockerView.class)),
+            Map.entry("ImportPreview", List.of(com.tcms.tracker.imports.ImportPreviewView.class)),
             Map.entry("ProposalRejection",
                     List.of(com.tcms.repository.ProposalRejectionRequest.class)),
             // Three of its seven are required-AND-nullable (§87), which is exactly the shape this
@@ -958,12 +982,12 @@ class ContractConventionTest {
      * and the three records are {@link com.tcms.api.TeamRef}. There is no name collision left to
      * resolve, so there is no entry.
      *
-     * <p><strong>Empty is a result, not a dead map</strong>, and the two rules below are why it is
-     * worth keeping as one. {@link #everyNameMatchedRecordIsPairedOrExplained} reads it on every
-     * run: the day a second record is named for a schema it does not serve, the build fails with
-     * this map named in the message, which is the moment the sentence telling them apart is cheap
-     * to write. Deleting it would move that discovery to the first reader who is confused by the
-     * two — and the map has to exist for the staleness rule underneath it to mean anything.
+     * <p>~~<strong>Empty is a result, not a dead map</strong>~~ → <strong>and 014 is the day it
+     * predicted.</strong> The paragraph below said "the day a second record is named for a schema
+     * it does not serve, the build fails with this map named in the message, which is the moment
+     * the sentence telling them apart is cheap to write". That happened on the import module's
+     * first gate, the message named this map, and the sentence took one reading of two files. It is
+     * the cheapest evidence in this class that a map kept empty on purpose is not a dead one.
      *
      * <p>An entry means "this record does not serve the schema its <em>name</em> matches". It has
      * never meant "this record is compared to nothing" — {@link #INLINE_RECORDS} pairs anonymous
@@ -971,7 +995,15 @@ class ContractConventionTest {
      * shapes a checked fact rather than a sentence here, and therefore what made §175's collapse
      * an edit rather than an argument.
      */
-    private static final Map<String, String> HOMONYMS = Map.of();
+    private static final Map<String, String> HOMONYMS = Map.of(
+            "com.tcms.tracker.imports.SourceProject",
+            "what a PROVIDER's API handed back, not what this contract serves. The schema's server "
+                    + "type is SourceProjectView, and the two are separate for the reason that "
+                    + "record's own header gives: this one answers to whatever Jira or Azure "
+                    + "DevOps happened to return, that one answers to openapi.yaml, and "
+                    + "collapsing them would make an adapter's convenience field a wire change. "
+                    + "The three components are identical today, which is exactly when a "
+                    + "collapse looks free");
 
     /**
      * Members one side names and the other deliberately does not, with the reason each stays.

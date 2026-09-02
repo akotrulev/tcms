@@ -286,6 +286,31 @@ class ArchitectureRulesTest {
     }
 
     @Test
+    @DisplayName("the importer reaches nothing in integration — plan 014 R14's decision, as a rule")
+    void theImporterDoesNotReachIntegration() {
+        // Narrower than the general rule above, and deliberately not covered by it alone. The
+        // general rule DOES fail on this edge, and its message says "module 'tracker' may not
+        // depend on module 'integration'" — to somebody a plan has just told that OutboundUrlGuard,
+        // SecretCipher, TrackerClient, TrackerProvider and TrackerUnavailableException are each
+        // almost exactly what an importer wants and are right there. This one names the decision
+        // instead, so the answer arrives with the finding rather than after a search for it.
+        ArchRule rule = ArchRuleDefinition.noClasses()
+                .that().resideInAPackage("com.tcms.tracker.imports..")
+                .should().dependOnClassesThat().resideInAPackage("com.tcms.integration..")
+                .because("""
+                        Plan 014 closing review R14 asked whether the importer may reuse \
+                        integration.tracker's per-person credential, and the answer is no: \
+                        tracker.imports IS tracker (moduleOf takes the first segment after \
+                        com.tcms) and tracker does not declare integration. So this package \
+                        carries its own ImportUrlGuard — pinned to integration's as TEXT by \
+                        ImportUrlGuardMirrorsTheOutboundGuardTest, D-c — and its own ImportHttp, \
+                        and no credential is persisted at all rather than encrypted with a second \
+                        AES key in a second module""");
+
+        rule.check(PRODUCTION);
+    }
+
+    @Test
     @DisplayName("storage depends on tenancy alone — the property that makes it a legal fourth")
     void storageDependsOnTenancyAlone() {
         // §125 added a fourth entry to FOUNDATION_MODULES, which every module may now point

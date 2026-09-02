@@ -91,11 +91,21 @@ public class OutboundUrlGuard {
         this.properties = properties;
     }
 
+    /*
+     * The rules below are MIRRORED, byte for byte, into
+     * tracker/imports/ImportUrlGuard.java, and ImportUrlGuardMirrorsTheOutboundGuardTest reads
+     * both files as text and fails when the two marked regions differ. `tracker` may not import
+     * `integration` (ArchitectureRulesTest), and plan 014 D-c argues the copy out at length; what
+     * matters here is only that an edit to this block is an edit to two files. Both are declared
+     * in backend/build.gradle.kts's inputs.files, or a comment-only edit leaves :test UP-TO-DATE
+     * and the mirror rule is green by cache.
+     */
     /**
      * @param url what somebody typed, or what a caller is about to dial
      * @return {@link Verdict#ALLOWED}, or the first rule that refused — never a boolean, because
      *         both callers put the reason on a screen and "false" is not a sentence
      */
+    // ---- BEGIN MIRRORED SOURCE ----
     public Verdict check(String url) {
         if (url == null || url.isBlank()) {
             return Verdict.MALFORMED;
@@ -171,4 +181,5 @@ public class OutboundUrlGuard {
         // this deployment did not choose to be on.
         return (octets[0] & 0xFF) == 100 && (octets[1] & 0xC0) == 0x40;
     }
+    // ---- END MIRRORED SOURCE ----
 }
