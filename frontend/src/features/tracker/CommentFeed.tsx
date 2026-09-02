@@ -5,7 +5,7 @@ import { Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
 import { Button, Input } from '../../components/ui';
 import { describeError } from '../../lib/describeError';
-import { formatDateTime } from '../../lib/format';
+import { commentAuthor, formatDateTime } from '../../lib/format';
 
 /**
  * `story.html`'s and `task.html`'s "Comments & history" — the comments half.
@@ -64,7 +64,7 @@ export function CommentFeed({
               <li key={comment.id} data-testid={`${testId}.Item`} className="min-w-0">
                 <div className="flex flex-wrap items-baseline gap-2">
                   <strong className="text-[12.5px] font-semibold text-ink">
-                    {comment.author.displayName}
+                    {commentAuthor(comment)}
                   </strong>
                   <span className="text-[11px] text-ink-4">{formatDateTime(comment.createdAt)}</span>
                   {comment.editedAt && <span className="text-[11px] text-ink-4">edited</span>}

@@ -23,6 +23,12 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *                  read timeout is indefinite. Longer than that client's ten seconds because a
  *                  hundred-issue Jira page with comments and changelog counts genuinely is slower
  *                  than the one-issue reads it was sized for.
+ * @param runTimeout how long a run may stay {@code RUNNING} before {@link ImportReaper} calls it
+ *                  abandoned. The run is dispatched in memory and its credential is written
+ *                  nowhere (D-a), so a restart mid-run cannot resume it — and a row stuck
+ *                  {@code RUNNING} for ever is a spinner with no end and no error. Longer than
+ *                  {@code tcms.reporting.stuck-job-timeout}, because a report is this instance's
+ *                  own CPU and an import is somebody else's Jira answering a thousand pages.
  * @param allowPrivateHosts whether {@link ImportUrlGuard} accepts a destination that resolves to a
  *                  private, loopback, link-local or unique-local address. <strong>False by
  *                  default.</strong> This module's own switch and deliberately not
@@ -32,5 +38,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *                  where notification webhooks may post.
  */
 @ConfigurationProperties(prefix = "tcms.tracker.imports")
-public record ImportProperties(int maxIssues, Duration readTimeout, boolean allowPrivateHosts) {
+public record ImportProperties(
+        int maxIssues, Duration readTimeout, Duration runTimeout, boolean allowPrivateHosts) {
 }

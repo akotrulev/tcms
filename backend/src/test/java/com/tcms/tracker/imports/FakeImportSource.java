@@ -2,8 +2,10 @@ package com.tcms.tracker.imports;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.IntConsumer;
 import org.springframework.core.Ordered;
 
@@ -40,6 +42,7 @@ public final class FakeImportSource implements ImportSource, Ordered {
     private final List<SourceProject> projects = new ArrayList<>();
     private final Map<String, SourceProjectSnapshot> snapshots = new LinkedHashMap<>();
     private final List<Integer> progress = new ArrayList<>();
+    private final Set<String> extraStatuses = new LinkedHashSet<>();
 
     private int failAfter = -1;
     private int rejectingStatus;
@@ -57,6 +60,7 @@ public final class FakeImportSource implements ImportSource, Ordered {
         projects.clear();
         snapshots.clear();
         progress.clear();
+        extraStatuses.clear();
         failAfter = -1;
         rejectingStatus = 0;
         pageSize = 50;
@@ -95,6 +99,15 @@ public final class FakeImportSource implements ImportSource, Ordered {
         return this;
     }
 
+    /**
+     * A status the workflow defines that no issue is in — the case {@code POST /imports} refuses
+     * with a 400 while the snapshot alone would never produce it.
+     */
+    public FakeImportSource alsoDefining(String... statusNames) {
+        extraStatuses.addAll(List.of(statusNames));
+        return this;
+    }
+
     /** How many issues one page reports, so a test can assert progress was reported per page. */
     public FakeImportSource paging(int pageSize) {
         this.pageSize = pageSize;
@@ -120,6 +133,29 @@ public final class FakeImportSource implements ImportSource, Ordered {
     public List<SourceProject> projects(ImportConnection connection) {
         refuseIfAsked();
         return List.copyOf(projects);
+    }
+
+    /**
+     * The held snapshot's status names, plus anything {@link #alsoDefining} added.
+     *
+     * <p>Derived from the snapshot rather than stored beside it, so a test cannot set up a source
+     * whose workflow and whose issues disagree by accident. {@link #alsoDefining} is the deliberate
+     * disagreement — a status the workflow defines that no issue is currently in, which is the
+     * ordinary state of a real Jira and the case the mapping refusal has to cover.
+     */
+    @Override
+    public List<String> statusNames(ImportConnection connection, String projectKey) {
+        refuseIfAsked();
+
+        SourceProjectSnapshot held = snapshots.get(projectKey);
+        if (held == null) {
+            throw new ImportSourceUnavailableException(
+                    "That project was not found, or this account cannot read it.");
+        }
+        Set<String> names = new LinkedHashSet<>();
+        held.statuses().forEach(status -> names.add(status.name()));
+        names.addAll(extraStatuses);
+        return List.copyOf(names);
     }
 
     @Override

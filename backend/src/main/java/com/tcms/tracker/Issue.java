@@ -11,6 +11,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 import org.hibernate.annotations.Filter;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -237,6 +238,83 @@ public class Issue {
         created.updatedAt = now;
         created.updatedBy = reporterId;
         created.createdIdempotencyKey = idempotencyKey;
+        return created;
+    }
+
+    /**
+     * An issue read out of somebody else's tracker, with <strong>both</strong> of its key columns
+     * written by hand (plan 014 D-d, story J3).
+     *
+     * <p>Public because {@code tracker.imports} is the one caller and lives in a sub-package —
+     * {@code RankService}'s reason for {@link #rankAt}. It is a second factory rather than an
+     * argument on {@link #create} because almost nothing it does is that method's behaviour: the
+     * key is the source's own string instead of the allocation's, the timestamps are the source's
+     * instead of now, the reporter is somebody matched by email instead of the caller, and there is
+     * no {@link IssueEdit} because there is no form and nothing to validate against one.
+     *
+     * <h2>The two key columns, and why they disagree on purpose</h2>
+     *
+     * <p>{@code issueKey} is {@code PROJ-4812} verbatim, which is what makes J3 true and what
+     * somebody's commit messages and browser bookmarks still say. {@code keySeq} comes from
+     * <em>this project's</em> counter through {@code ProjectKeys.allocate}. Using Jira's 4 812 here
+     * would push the counter past four thousand unused values, or collide with a local
+     * {@code ACME-12} if it did not — and {@code key_seq} is the only column that may order issue
+     * keys anywhere in the product (see the class header).
+     *
+     * @param createdAt the source's own timestamp, kept: an imported backlog re-dated to the
+     *                  migration is a backlog nobody can read in age order, and every cycle-time
+     *                  figure computed from it would start at the import
+     * @param releaseId the first of the source's fix versions, as a release here (D6). The first
+     *                  and not all of them: {@code issue.release_id} is a single nullable FK with
+     *                  no join table, so an issue Jira had in three versions arrives in the
+     *                  earliest one it named and the rest are reachable only through the release
+     *                  list — recorded here because it is a loss the dropped-field list does not
+     *                  cover, the field itself having arrived.
+     * @param importedBy who ran the migration — {@code created_by}, because that is the only true
+     *                  answer this instance has. The source's reporter is carried separately in
+     *                  {@link #reporterId} when they matched somebody here.
+     */
+    public static Issue imported(
+            UUID companyId,
+            UUID projectId,
+            String key,
+            long keySeq,
+            UUID typeId,
+            UUID statusId,
+            UUID parentId,
+            String title,
+            String description,
+            UUID releaseId,
+            UUID assigneeId,
+            UUID reporterId,
+            UUID importedBy,
+            Instant createdAt,
+            Instant now) {
+
+        Issue created = new Issue();
+        created.id = UUID.randomUUID();
+        created.companyId = companyId;
+        created.projectId = projectId;
+        created.issueKey = key;
+        created.keySeq = keySeq;
+        created.typeId = typeId;
+        created.statusId = statusId;
+        created.parentId = parentId;
+        created.title = title;
+        created.description = description;
+        created.acceptanceCriteria = AcceptanceCriteria.toJson(List.of());
+        // No source this module reads has a priority vocabulary that maps onto this one without
+        // guessing, and a guessed priority is a number people plan against. MEDIUM is the value
+        // IssueEdit gives an issue somebody created without choosing one.
+        created.priority = Priority.MEDIUM;
+        created.releaseId = releaseId;
+        created.assigneeId = assigneeId;
+        created.reporterId = reporterId;
+        created.statusEnteredAt = createdAt;
+        created.createdAt = createdAt;
+        created.createdBy = importedBy;
+        created.updatedAt = now;
+        created.updatedBy = importedBy;
         return created;
     }
 

@@ -136,6 +136,73 @@ public class LabelService {
                 project -> applyIssueLabels(project, key, input));
     }
 
+    /**
+     * <strong>The importer's seam</strong> — labels by name, created if this project lacks them,
+     * reused if it has them (plan 014 D-h).
+     *
+     * <h2>Un-gated, and that is the decision rather than an oversight</h2>
+     *
+     * <p>Every other write here costs {@code board:configure}, and a caller running an import may
+     * not hold it: {@code issue:import} and {@code board:configure} are two different rows of §A3
+     * and one role holds the first without the second. Routing the importer through
+     * {@link #create} would therefore refuse a migration halfway through, for a permission about
+     * <em>configuring a board</em> that nobody was asked for and that the wizard never mentions.
+     * So the gate is the caller's — {@code ImportRunService} has already required
+     * {@code issue:import} on this project — and this method takes a {@code projectId} it trusts
+     * because the only caller obtained it from a gate.
+     *
+     * <p>Reusing an existing name rather than refusing it is D-h's <em>"409 read as already
+     * there"</em>: an importer hits a duplicate on the second issue carrying a label and on every
+     * issue after it, and a duplicate is the ordinary case rather than the failure.
+     *
+     * @param colors  cycled over in order, one per label this call creates — {@code Label.color} is
+     *                a design-token name and the column refuses {@code #RRGGBB} (012 T9), so the
+     *                source's own colours cannot come across and the report says they were assigned
+     * @return every requested name mapped to its label id, created or found, folded to lower case
+     *         the way {@code uq_issue_label_name} folds it
+     */
+    public Map<String, UUID> importLabels(
+            UUID projectId, List<String> names, List<String> colors, UUID actorId, Instant now) {
+
+        Map<String, UUID> byFoldedName = new LinkedHashMap<>();
+        labels.findByProjectIdOrderByNameAsc(projectId).forEach(label ->
+                byFoldedName.put(label.getName().toLowerCase(Locale.ROOT), label.getId()));
+
+        int created = 0;
+        for (String name : names) {
+            String trimmed = name.strip();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            // Truncated rather than refused: a source label longer than this product's limit is
+            // not a reason to fail somebody's whole migration, and MAX_NAME is a rendering bound
+            // (the chip wraps over the card face) rather than a correctness one.
+            String bounded = trimmed.length() > MAX_NAME ? trimmed.substring(0, MAX_NAME) : trimmed;
+            String folded = bounded.toLowerCase(Locale.ROOT);
+            if (byFoldedName.containsKey(folded)) {
+                continue;
+            }
+            IssueLabel label = labels.save(IssueLabel.create(
+                    UUID.randomUUID(), CompanyContext.require(), projectId, bounded,
+                    colors.get(created % colors.size()), actorId, now));
+            byFoldedName.put(folded, label.getId());
+            created++;
+        }
+        return byFoldedName;
+    }
+
+    /**
+     * Puts one label on one issue, for the importer.
+     *
+     * <p>Un-gated for {@link #importLabels}' reason, and unconditional: the importer creates the
+     * issue in the same transaction, so there is no assignment to collide with and no read to do
+     * first.
+     */
+    public void importAssignment(UUID issueId, UUID labelId, Instant now) {
+        assignments.save(
+                IssueLabelAssignment.of(CompanyContext.require(), issueId, labelId, now));
+    }
+
     // =====================================================================
 
     private GateResult<Outcome> onLabel(

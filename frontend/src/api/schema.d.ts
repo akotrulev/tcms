@@ -16707,7 +16707,20 @@ export interface components {
             /** Format: uuid */
             id: string;
             body: string;
-            author: components["schemas"]["UserRef"];
+            /**
+             * @description Null when nobody here is named for the comment, which is two states rather than one
+             *     and both are real. `issue_comment.created_by` has no foreign key and no cascade, so an
+             *     account offboarded since is a comment with no author — naming somebody would attribute
+             *     what they did not say (§66's argument, and `CommentService` has answered null here
+             *     since the endpoint landed). The second state is an import whose source author matched
+             *     no user here, where `externalAuthor` carries the source's own string instead.
+             *
+             *     **Required and nullable** (§87): the property is always present, and its absence would
+             *     be indistinguishable from a server that forgot to send it. It was declared
+             *     non-nullable until plan 014 T4 — a shape this server never served, corrected there
+             *     rather than left for the SPA to discover at runtime.
+             */
+            author: components["schemas"]["UserRef"] | null;
             /**
              * @description The source system's own author string, for a comment imported from a tracker whose
              *     author matched no user here — `j.arnold@old-vendor.test`. Never set together with
@@ -17548,11 +17561,22 @@ export interface components {
             startedAt: string;
             /** Format: date-time */
             finishedAt?: string | null;
-            startedBy: {
-                /** Format: uuid */
-                id: string;
-                name: string;
-            };
+            /**
+             * @description Who ran the migration. **Required and nullable** for `report_job.requested_by`'s
+             *     reason (§66): `import_run.started_by` carries no foreign key, so an account that no
+             *     longer resolves is a run nobody is named for — and the report outliving the people in
+             *     it is the same promise that keeps the status mapping's names on the row (D-g).
+             *
+             *     ~~An inline `{id, name}` object~~ → **`UserRef`**, taken in 014 T4. The two-component
+             *     shape was chosen so the report would not carry an email address, and it was the same
+             *     four fields as `api.TeamRef` under different names —
+             *     `ArchitectureRulesTest.noRecordOutsideApiRepeatsAnApiRecordsShape` is what said so, and
+             *     it is right: every other "who did this" position in this contract is a `UserRef`, and
+             *     a bespoke person shape here would be a fifth spelling of one concept for the sake of
+             *     withholding a colleague's address from a screen that already names the source site and
+             *     the account that connected to it.
+             */
+            startedBy: components["schemas"]["UserRef"] | null;
             issuesImported: number;
             releasesCreated: number;
             commentsImported: number;

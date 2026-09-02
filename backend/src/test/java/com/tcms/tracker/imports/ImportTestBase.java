@@ -1,12 +1,18 @@
 package com.tcms.tracker.imports;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.fasterxml.jackson.databind.JsonNode;
 import com.tcms.tracker.TrackerEndpointTestBase;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
 /**
  * The import endpoints' shared fixture — one {@link FakeImportSource}, and nothing else.
@@ -39,6 +45,42 @@ public abstract class ImportTestBase extends TrackerEndpointTestBase {
                 "https://northwind.atlassian.net",
                 "ops@northwind.test",
                 "not-a-real-token");
+    }
+
+    /**
+     * Polls the report until the run leaves {@code RUNNING}, or fails saying it never did.
+     *
+     * <p>Polling rather than a latch, because that is <strong>what a client does</strong>: the
+     * contract's 202 hands back a row and an address, and a test that reached inside the executor
+     * would be asserting about a mechanism instead of about the operation. The deadline is generous
+     * against a cold Testcontainers Postgres and short enough that a run which never terminates
+     * fails the class in twenty seconds rather than hanging the suite.
+     *
+     * @return the terminal report
+     */
+    protected JsonNode awaitTerminal(UUID actor, UUID companyId, UUID runId) throws Exception {
+        Instant deadline = Instant.now().plusSeconds(20);
+        JsonNode last = null;
+        while (Instant.now().isBefore(deadline)) {
+            last = report(actor, companyId, runId);
+            if (!"RUNNING".equals(last.path("status").asText())) {
+                return last;
+            }
+            Thread.sleep(50);
+        }
+        throw new AssertionError("the run never left RUNNING; last report was " + last);
+    }
+
+    /** {@code GET /imports/{importRunId}}, asserting 200 — the poll target and the report. */
+    protected JsonNode report(UUID actor, UUID companyId, UUID runId) throws Exception {
+        MvcResult result = mvc.perform(MockMvcRequestBuilders.get("/api/v1/imports/" + runId)
+                        .header("Authorization", "Bearer " + tokenFor(actor, companyId)))
+                .andReturn();
+
+        assertThat(result.getResponse().getStatus())
+                .as("body was: %s", result.getResponse().getContentAsString())
+                .isEqualTo(200);
+        return json.readTree(result.getResponse().getContentAsString());
     }
 
     /**

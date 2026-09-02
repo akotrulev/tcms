@@ -32,7 +32,7 @@ import {
   type Command,
   type CommandContext,
 } from './context.js';
-import { fields, show, showDate, table } from './output.js';
+import { fields, show, showAuthor, showDate, table } from './output.js';
 
 const whoami: Command = {
   name: 'whoami',
@@ -803,7 +803,7 @@ const issueShow: Command = {
 
     for (const comment of comments) {
       out.line();
-      out.line(`${show(comment.author.displayName)} — ${showDate(comment.createdAt)}`);
+      out.line(`${showAuthor(comment)} — ${showDate(comment.createdAt)}`);
       out.line(comment.body);
     }
   },

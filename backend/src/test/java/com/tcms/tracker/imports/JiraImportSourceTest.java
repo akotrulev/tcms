@@ -54,7 +54,8 @@ class JiraImportSourceTest {
         server = MockRestServiceServer.bindTo(builder).build();
         ImportHttp http = new ImportHttp(
                 builder.build(),
-                new ImportUrlGuard(new ImportProperties(5000, Duration.ofSeconds(30), false)));
+                new ImportUrlGuard(new ImportProperties(
+                        5000, Duration.ofSeconds(30), Duration.ofMinutes(30), false)));
         source = new JiraImportSource(http, new ObjectMapper());
     }
 

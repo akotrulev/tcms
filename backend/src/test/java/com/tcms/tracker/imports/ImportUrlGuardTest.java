@@ -26,7 +26,8 @@ class ImportUrlGuardTest {
 
     private static ImportUrlGuard guard(boolean allowPrivateHosts) {
         return new ImportUrlGuard(
-                new ImportProperties(5000, Duration.ofSeconds(30), allowPrivateHosts));
+                new ImportProperties(
+                        5000, Duration.ofSeconds(30), Duration.ofMinutes(30), allowPrivateHosts));
     }
 
     @Nested

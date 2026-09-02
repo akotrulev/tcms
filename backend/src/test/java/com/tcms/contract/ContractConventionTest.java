@@ -669,6 +669,23 @@ class ContractConventionTest {
                     List.of(com.tcms.tracker.imports.ImportPreviewTotalsView.class)),
             Map.entry("ImportBlocker", List.of(com.tcms.tracker.imports.ImportBlockerView.class)),
             Map.entry("ImportPreview", List.of(com.tcms.tracker.imports.ImportPreviewView.class)),
+            // T4's seven. The two `…Entry`/`…Options`/`…Input` records are name matches; the four
+            // `…View`s are not, for the reason the tracker block above gives.
+            Map.entry("StatusMappingEntry",
+                    List.of(com.tcms.tracker.imports.StatusMappingEntry.class)),
+            Map.entry("ImportOptions", List.of(com.tcms.tracker.imports.ImportOptions.class)),
+            Map.entry("ImportInput", List.of(com.tcms.tracker.imports.ImportInput.class)),
+            Map.entry("AppliedStatusMapping",
+                    List.of(com.tcms.tracker.imports.AppliedStatusMappingView.class)),
+            Map.entry("ImportedPerson",
+                    List.of(com.tcms.tracker.imports.ImportedPersonView.class)),
+            // A SEPARATE record from ImportRunView, and the separation is deliberate: the list is
+            // served for a whole project, and the detail carries three JSON documents whose size
+            // is unbounded in the number of statuses and people. Thirty rows of a table would
+            // otherwise be thirty dropped-field lists nobody asked for.
+            Map.entry("ImportRunSummary",
+                    List.of(com.tcms.tracker.imports.ImportRunSummaryView.class)),
+            Map.entry("ImportRun", List.of(com.tcms.tracker.imports.ImportRunView.class)),
             Map.entry("ProposalRejection",
                     List.of(com.tcms.repository.ProposalRejectionRequest.class)),
             // Three of its seven are required-AND-nullable (§87), which is exactly the shape this

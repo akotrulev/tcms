@@ -139,6 +139,33 @@ class JiraImportSource implements ImportSource {
         return projects;
     }
 
+    /**
+     * {@code /project/{key}/statuses} — the workflow's statuses, grouped by issue type there and
+     * unioned by name here.
+     *
+     * <p>Grouped is how Jira answers it and a union is what the mapping needs: a status reached by
+     * one issue type and not another is still a status an issue can be in, and the mapping step
+     * shows one row per name. Insertion-ordered so the refusal names them in the source's own
+     * order rather than in a hash order that changes between two runs against one site.
+     */
+    @Override
+    public List<String> statusNames(ImportConnection connection, String projectKey) {
+        String url = base(connection) + "/project/"
+                + URLEncoder.encode(projectKey, StandardCharsets.UTF_8) + "/statuses";
+        JsonNode body = get(connection, url);
+
+        Set<String> names = new LinkedHashSet<>();
+        for (JsonNode type : body) {
+            for (JsonNode status : type.path("statuses")) {
+                String name = status.path("name").asText("");
+                if (!name.isBlank()) {
+                    names.add(name);
+                }
+            }
+        }
+        return List.copyOf(names);
+    }
+
     @Override
     public SourceProjectSnapshot snapshot(
             ImportConnection connection, String projectKey, IntConsumer onProgress) {

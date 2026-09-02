@@ -171,13 +171,17 @@ public class CommentService {
     /**
      * <p>A null author is a real state rather than a defect: {@code created_by} has no foreign key
      * and no cascade, so an account offboarded since is a comment nobody is named for — and naming
-     * somebody would attribute what they did not say.
+     * somebody would attribute what they did not say. {@code externalAuthor} is the <em>other</em>
+     * way that happens — an imported comment whose source author matched nobody here (plan 014
+     * D-j) — and the two are never both set, so a reader has one string or the other and never a
+     * choice between them.
      */
     private static CommentView view(IssueComment comment, Map<UUID, UserRef> refs) {
         return new CommentView(
                 comment.getId(),
                 comment.getBody(),
                 comment.getCreatedBy() == null ? null : refs.get(comment.getCreatedBy()),
+                comment.getExternalAuthor(),
                 comment.getCreatedAt(),
                 comment.getEditedAt());
     }

@@ -9,7 +9,6 @@ import com.tcms.tracker.IssueStatus;
 import com.tcms.tracker.IssueStatusRepository;
 import com.tcms.tracker.IssueType;
 import com.tcms.tracker.IssueTypeRepository;
-import jakarta.persistence.EntityManager;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -73,7 +72,7 @@ public class ImportPreviewService {
     private final IssueTypeRepository types;
     private final IssueStatusRepository statuses;
     private final IssueRepository issues;
-    private final EntityManager entityManager;
+    private final ImportRunRepository runs;
     private final TransactionTemplate readOnly;
 
     public ImportPreviewService(
@@ -84,7 +83,7 @@ public class ImportPreviewService {
             IssueTypeRepository types,
             IssueStatusRepository statuses,
             IssueRepository issues,
-            EntityManager entityManager,
+            ImportRunRepository runs,
             PlatformTransactionManager transactionManager) {
 
         this.projects = projects;
@@ -94,7 +93,7 @@ public class ImportPreviewService {
         this.types = types;
         this.statuses = statuses;
         this.issues = issues;
-        this.entityManager = entityManager;
+        this.runs = runs;
         this.readOnly = new TransactionTemplate(transactionManager);
         this.readOnly.setReadOnly(true);
     }
@@ -160,21 +159,14 @@ public class ImportPreviewService {
     /**
      * The site, checked <strong>before a source is chosen</strong>, let alone dialled.
      *
-     * <p>{@link ImportHttp} guards every URL it composes as well, and that is not this check
-     * repeated: the guard belongs to the <em>connection</em> here — a policy about the address
-     * somebody typed, decided before any adapter sees the credential — and to the whole address
-     * there, which is the only place a site that passes and a path that goes elsewhere can be told
-     * apart. Only this one is reachable by an {@link ImportSource} that composes no URL, which is
-     * every fake and would be every future source that speaks something other than HTTP.
+     * <p>{@link ImportSites} holds the check and its whole argument, because
+     * {@link ImportRunService} makes the same one before it dispatches and the two must not become
+     * two checks.
      *
-     * @throws ImportUrlRefusedException which the controller answers 400 — the address is wrong and
-     *         the person who typed it can fix it
+     * @throws ImportUrlRefusedException which the controller answers 400
      */
     private void vet(ImportConnection connection) {
-        ImportUrlGuard.Verdict verdict = guard.check(connection.siteUrl());
-        if (verdict != ImportUrlGuard.Verdict.ALLOWED) {
-            throw ImportUrlRefusedException.forUrl(connection.siteUrl(), verdict);
-        }
+        ImportSites.vet(guard, connection);
     }
 
     /**
@@ -304,12 +296,7 @@ public class ImportPreviewService {
      * arrives as something the depth rule treats as a task (scope §4 — levels, never names).
      */
     private static PreviewTypeRow typeRow(SourceType source, List<IssueType> projectTypes) {
-        IssueType target = byName(projectTypes, source.name())
-                .or(() -> byLevel(projectTypes, levelFor(source)))
-                .orElseThrow(() -> new IllegalStateException(
-                        "the project has no issue type at level " + levelFor(source)
-                                + "; tcms_seed_project_defaults gives every project one of each, "
-                                + "so this is a project whose workflow was emptied"));
+        IssueType target = matchType(source, projectTypes);
 
         return new PreviewTypeRow(
                 source.name(),
@@ -318,6 +305,23 @@ public class ImportPreviewService {
                 target.getLevel(),
                 target.isCountsTowardCompletion(),
                 source.count());
+    }
+
+    /**
+     * <strong>The one derivation of "which of this project's types does that source type become".</strong>
+     *
+     * <p>Package-private because {@link ImportWriter} writes what {@link #typeRow} showed, and two
+     * implementations of this would be a preview that promised one type and a run that wrote
+     * another — the same argument {@link DroppedFields} makes about the dropped list, at the other
+     * end of the same screen.
+     */
+    static IssueType matchType(SourceType source, List<IssueType> projectTypes) {
+        return byName(projectTypes, source.name())
+                .or(() -> byLevel(projectTypes, levelFor(source)))
+                .orElseThrow(() -> new IllegalStateException(
+                        "the project has no issue type at level " + levelFor(source)
+                                + "; tcms_seed_project_defaults gives every project one of each, "
+                                + "so this is a project whose workflow was emptied"));
     }
 
     private static IssueLevel levelFor(SourceType source) {
@@ -412,27 +416,21 @@ public class ImportPreviewService {
     /**
      * Whether a completed run already brought this source project into this one (D-m).
      *
-     * <p>Native, and against no entity: {@code ImportRun} is T4's, and a preview that could not be
-     * written until the writer exists would be the wrong dependency between the two. The predicate
-     * is {@code uq_import_run_completed_source}'s, so this answers the same question the constraint
-     * would answer four minutes later.
+     * <p>~~Native, and against no entity: {@code ImportRun} is T4's, and a preview that could not
+     * be written until the writer exists would be the wrong dependency between the two.~~ →
+     * <strong>T4 landed the entity and this reads the repository</strong>, which is what that
+     * task's prompt permitted and the one thing it forbade doing twice. The predicate is still
+     * {@code uq_import_run_completed_source}'s, and it is now literally the same method
+     * {@code ImportRunService} refuses on, so the preview's blocker and the run's 409 cannot come
+     * to disagree about what "already imported" means.
      */
     private boolean alreadyImported(UUID projectId, ImportPreviewInput input) {
-        return !entityManager.createNativeQuery("""
-                        SELECT 1 FROM import_run
-                        WHERE project_id = :projectId
-                          AND provider = :provider
-                          AND site_url = :siteUrl
-                          AND source_project_key = :sourceProjectKey
-                          AND status = 'COMPLETED'
-                        LIMIT 1
-                        """)
-                .setParameter("projectId", projectId)
-                .setParameter("provider", input.connection().provider().name())
-                .setParameter("siteUrl", input.connection().siteUrl())
-                .setParameter("sourceProjectKey", input.sourceProjectKey())
-                .getResultList()
-                .isEmpty();
+        return runs.existsByProjectIdAndProviderAndSiteUrlAndSourceProjectKeyAndStatus(
+                projectId,
+                input.connection().provider(),
+                input.connection().siteUrl(),
+                input.sourceProjectKey(),
+                ImportRunStatus.COMPLETED);
     }
 
     boolean mayImportSomewhere(UUID userId) {

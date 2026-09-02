@@ -165,6 +165,46 @@ public class ReleaseService {
                         .orElseThrow());
     }
 
+    /**
+     * <strong>The importer's seam</strong> — a source fix version becomes a release (D6, plan 014).
+     *
+     * <h2>Un-gated, for {@code LabelService.importLabels}' reason</h2>
+     *
+     * <p>Every other write here costs {@code release:manage}, and §A3 gives {@code issue:import}
+     * to a role that does not hold it. Routing the importer through {@link #create} would refuse a
+     * migration for a permission about <em>managing releases</em> that the wizard never mentions
+     * and nobody was asked for. The gate is the caller's: {@code ImportRunService} required
+     * {@code issue:import} on this project before this is reached.
+     *
+     * <p>An existing version of the same name is <strong>reused, never renamed and never
+     * republished</strong>. Two sources can legitimately ship a {@code 1.4.0}, and a run that
+     * moved an existing release's status would be an import editing something nobody asked it to
+     * touch — {@link Release#publish}'s own argument about not restamping what already shipped.
+     *
+     * @param released whether the source considers the version shipped. Applied only to a release
+     *                 this call creates, and applied through {@link Release#publish} so
+     *                 {@code released_at} is set the one way it is ever set.
+     * @return the release's id, created or found
+     */
+    public UUID importRelease(UUID projectId, String version, boolean released, UUID actorId) {
+        String name = version == null ? "" : version.strip();
+        Optional<Release> existing = releases.findByProjectIdAndVersionIgnoreCase(projectId, name);
+        if (existing.isPresent()) {
+            return existing.get().getId();
+        }
+        Release created = Release.create(
+                UUID.randomUUID(), CompanyContext.require(), projectId,
+                // Bounded rather than refused: an over-long version name from somebody else's
+                // tracker is not a reason to fail a whole migration, and MAX_VERSION is a
+                // rendering bound rather than a correctness one.
+                name.length() > MAX_VERSION ? name.substring(0, MAX_VERSION) : name,
+                null, null, actorId, clock.instant());
+        if (released) {
+            created.publish(actorId, clock.instant());
+        }
+        return releases.save(created).getId();
+    }
+
     private Outcome applyCreate(Project project, UUID userId, ReleaseInput input) {
         String version = input == null || input.version() == null ? "" : input.version().strip();
         Optional<Outcome> refused = validate(version);

@@ -79,6 +79,25 @@ export function show(value: unknown): string {
   return JSON.stringify(value);
 }
 
+/**
+ * Who said it — the display name, the source system's own string, or an em-dash.
+ *
+ * Three states rather than two, and all three are real. A comment's `author` is null when
+ * `issue_comment.created_by` names an account that no longer resolves — naming anybody would
+ * attribute what they did not say — and when the comment was imported off a tracker whose author
+ * matched nobody here, where plan 014 D-j keeps the source's own string on `externalAuthor` as
+ * text rather than reassigning the comment or prefixing "Originally by …" onto the body.
+ *
+ * Here rather than at the two call sites, because a second copy of this is how the read command
+ * and the write command come to print an offboarded author differently.
+ */
+export function showAuthor(comment: {
+  author?: { displayName: string } | null;
+  externalAuthor?: string | null;
+}): string {
+  return show(comment.author?.displayName ?? comment.externalAuthor);
+}
+
 /** An ISO instant as a date a person reads. Kept UTC — a run's timestamps are compared, not felt. */
 export function showDate(value: unknown): string {
   if (typeof value !== 'string') return show(value);

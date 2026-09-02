@@ -5,6 +5,7 @@ import { api } from '../../api/client'
 import type {
   Issue,
   IssueSummary,
+  PermissionKey,
   ReleaseReadiness,
   ReleaseSummary,
   RepositoryDashboard,
@@ -120,7 +121,11 @@ interface Reads {
   releases?: ReleaseSummary[]
   readiness?: ReleaseReadiness
   failReadiness?: boolean
-  permissions?: string[]
+  // `PermissionKey[]` and not `string[]`: `heldPermissions` takes the union, so a bare `string[]`
+  // does not compile. Fixed in plan 014 T4, having failed `npm run build` since 55cb4bc0 — T1
+  // found it, verified it predated that task, and left it because T1 stages four files and this is
+  // a fifth. It blocked every frontend gate in between.
+  permissions?: PermissionKey[]
 }
 
 function mockReads({

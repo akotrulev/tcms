@@ -498,6 +498,17 @@ tcms:
       # slower than the one-issue reads that client was sized for.
       read-timeout: ${TCMS_IMPORT_READ_TIMEOUT:30s}
 
+      # How long a run may stay RUNNING before ImportReaper calls it abandoned and moves it to
+      # FAILED with a sentence. The run is dispatched IN MEMORY and its credential is written
+      # nowhere (D-a), so a restart mid-run cannot resume it — nothing is half-written, because
+      # the write is one transaction, but the row would otherwise stay RUNNING for ever and the
+      # client polling it would watch a spinner with no end and no error. That is exactly the
+      # state tcms.reporting.stuck-job-timeout was added for one module over.
+      #
+      # Longer than that one's PT15M: a report is this instance's own CPU, and an import is
+      # somebody else's Jira answering a thousand pages of a five-thousand-issue project.
+      run-timeout: ${TCMS_IMPORT_RUN_TIMEOUT:PT30M}
+
       # Whether ImportUrlGuard will connect to a site that RESOLVES to a private, loopback,
       # link-local or unique-local address.
       #

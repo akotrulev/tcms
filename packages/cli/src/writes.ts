@@ -58,7 +58,7 @@ import {
   type CommandContext,
 } from './context.js';
 import { boardOf, labelIds, releaseOf } from './reads.js';
-import { fields, show, type Output } from './output.js';
+import { fields, show, showAuthor, type Output } from './output.js';
 
 type TestCaseInput = components['schemas']['TestCaseInput'];
 
@@ -1378,7 +1378,7 @@ const issueComment: Command = {
 
     reportWrite(out, json, written, [
       ['Commented on', key],
-      ['Author', show(written.author.displayName)],
+      ['Author', showAuthor(written)],
       // Story H8: commenting makes you a watcher, so a person who has said something hears about
       // what happens next. Printed because it is a side effect nobody asked for by name.
       ['Watching', 'yes — you are notified of status and assignee changes'],

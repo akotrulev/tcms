@@ -30,6 +30,29 @@ public interface ImportSource {
     List<SourceProject> projects(ImportConnection connection);
 
     /**
+     * The names of every status the source project's workflow defines.
+     *
+     * <p><strong>Names only, and no counts</strong>, unlike {@link SourceStatus}: a status's issue
+     * count is a fact about the issues, which only {@link #snapshot} has read, and returning a zero
+     * here would be a number a screen could show. What this answers is the one question
+     * {@code POST /imports} has to settle <em>before</em> it accepts a run — whether the confirmed
+     * mapping covers every status the source can produce.
+     *
+     * <p>It exists because that refusal is a <strong>400</strong> in the contract and cannot be one
+     * without a cheap call. The snapshot takes minutes, so a run that discovered an unmapped status
+     * inside its own read pass would answer 202 and then fail — telling somebody their migration
+     * started before telling them it was never going to work. This is one request against a
+     * workflow definition; it is what {@link #projects} is for the issue count, asked of the other
+     * half of the same validation.
+     *
+     * <p>Added by plan 014 T4, which the port did not predict: T3 had no caller that needed the
+     * statuses without the issues.
+     *
+     * @throws ImportSourceUnavailableException on every source-side failure, as the two above
+     */
+    List<String> statusNames(ImportConnection connection, String projectKey);
+
+    /**
      * Everything one source project holds, read whole.
      *
      * <p>Whole, and not streamed, for D-b's reason: the write is one all-or-nothing transaction, so

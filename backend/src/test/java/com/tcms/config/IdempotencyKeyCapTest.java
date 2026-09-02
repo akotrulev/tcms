@@ -105,8 +105,17 @@ class IdempotencyKeyCapTest {
      * an issue in <em>somebody else's</em> tracker, filed under the caller's own credential, which
      * no migration and no operator command here can withdraw. A double-clicked "File a defect" is
      * the ordinary way to produce it.
+     *
+     * <p><strong>ELEVEN became TWELVE at 014 T4 ({@code ImportRunService}).</strong> The most
+     * expensive duplicate on the list <em>within</em> this instance: a second run reads somebody's
+     * whole Jira project again and writes a second copy of every issue in it. It would not get far
+     * — the company-wide {@code uq_issue_key} refuses a second {@code PROJ-4812}, and D-m refuses
+     * a second run of the same source before that — but a replayed key must answer with the run
+     * the first request started rather than with a 409 for a request the caller believes they are
+     * making for the first time. That is the distinction {@code Outcome.Replayed} exists for and
+     * the reason this entry is a cap rather than a refusal.
      */
-    private static final int EXPECTED_DECLARATIONS = 11;
+    private static final int EXPECTED_DECLARATIONS = 12;
 
     private static final Pattern DECLARATION = Pattern.compile(
             "\\bstatic final int MAX_IDEMPOTENCY_KEY\\s*=\\s*(\\d+)\\s*;");
@@ -126,7 +135,7 @@ class IdempotencyKeyCapTest {
     }
 
     @Test
-    @DisplayName("the declarations are exactly the eleven services known to accept the header")
+    @DisplayName("the declarations are exactly the twelve services known to accept the header")
     void theCountIsPinned() {
         assertThat(declarations())
                 .as("a create endpoint that accepts Idempotency-Key without capping it indexes "

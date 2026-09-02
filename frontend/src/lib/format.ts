@@ -322,4 +322,28 @@ export function compareCaseKeys(a: string, b: string): number {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
 }
 
+/**
+ * Who said it — the display name, the source system's own string, or neither.
+ *
+ * Three states rather than two, and all three are real:
+ *
+ * - **`author`** — somebody with an account here.
+ * - **`author` null, `externalAuthor` set** — a comment imported off a tracker whose author matched
+ *   nobody here. Plan 014 D-j keeps the source's own string as text rather than reassigning the
+ *   comment to somebody who did not write it, and rather than prefixing "Originally by …" onto the
+ *   body, which would edit somebody's words to carry metadata.
+ * - **both null** — `issue_comment.created_by` has no foreign key, so an account offboarded since
+ *   is a comment nobody is named for. Naming anybody would attribute what they did not say, so the
+ *   answer is the em dash this module uses everywhere else for "there is no value".
+ *
+ * Here rather than in `CommentFeed` because the shared layer owns display logic (CLAUDE.md), and
+ * because the report screen and the CLI reach the same three states off the same two fields.
+ */
+export function commentAuthor(comment: {
+  author?: { displayName: string } | null;
+  externalAuthor?: string | null;
+}): string {
+  return comment.author?.displayName ?? comment.externalAuthor ?? EM_DASH;
+}
+
 export { EM_DASH };
