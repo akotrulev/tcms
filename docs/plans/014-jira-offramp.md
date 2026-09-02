@@ -40,7 +40,7 @@ renumbers — M5 will be `015`.
 |---|---|---|---|---|---|
 | 1 | T1 — The import contract | `contract` · `be-java` | `openapi.yaml` declares five operations and ~~eighteen~~ **nineteen** schemas, every one with its `required` array; both generated clients are regenerated in the same commit; `npm run build` green in `packages/`, and in `frontend/` **carries one pre-existing failure this task did not cause** — see T1's step 6 | none | done 2026-09-01 @ 4ea59d2f |
 | 2 | T2 — `V7`: `import_run`, `import_dropped_field`, `issue_comment.external_author` | `be` · `data-architect` | `V7__import.sql` applies to an empty database; both new tables carry `company_id NOT NULL` and a forced isolation policy; `SchemaConventionTest` and `SchemaCommentTest` green | T1 | done 2026-09-01 @ 249da7f9 |
-| 3 | T3 — `tracker.imports`: the source port, the Jira client, the guard, the preview | `be` · `be-java` | `POST /imports/source-projects` and `POST /imports/preview` answer over HTTP against a Jira Cloud/DC site, and a test that snapshots the whole project before and after a preview finds it byte-identical | T2 | not started |
+| 3 | T3 — `tracker.imports`: the source port, the Jira client, the guard, the preview | `be` · `be-java` | `POST /imports/source-projects` and `POST /imports/preview` answer over HTTP against a Jira Cloud/DC site, and a test that snapshots the whole project before and after a preview finds it byte-identical | T2 | **done 2026-09-02 @ 5016d003** — gate red on T4's four rules only, listed in T3 step 11 |
 | 4 | T4 — The run, the report, and the stuck-run reaper | `be` · `be-java` | `POST /imports` imports a Jira project keeping `PROJ-4812` as `PROJ-4812`, `GET /imports/{id}` serves the report, and a test asserts the report's `droppedFields` equals the preview's element for element | T3 | not started |
 | 5 | T5 — The Azure DevOps source | `be` · `be-java` | `provider: AZURE_DEVOPS` previews and imports an ADO project through the same port, proven against a recorded-shape fake; no other file in `imports` changes | T4 | not started |
 | 6 | T6 — `tcms import list` and `tcms import show` | `ts` · `tooling-engineer` | Two CLI commands print a past import and its dropped-field list from a terminal; the surface document's §3.7 records that MCP deliberately gets nothing | T4 | not started |
@@ -262,6 +262,21 @@ generated clients plus every SPA site that renders a comment author — do it IN
 take it, and rewrite T7's and T8's prompts to say so. `externalAuthor` is already on the wire,
 optional and nullable, so nothing is blocked either way.
 
+READ "What T3 landed that this plan did not predict" (just below T3's steps) BEFORE THIS PROMPT.
+Five of its entries are load-bearing here: ImportSource has a third method supports(provider); the
+URL guard is applied to the CONNECTION by ImportPreviewService.vet and YOUR RUN MUST CALL IT TOO
+before dispatching; ImportPreviewService.assemble uses a read-only TransactionTemplate rather than
+@Transactional because a self-invocation is a boundary Spring's proxy does not see, and your write
+pass has the same shape and the same trap; ALREADY_IMPORTED is currently a native query you may
+repoint at ImportRunRepository but may not compute a second way; and ProjectFacts is the record that
+carries the gated project out of the gate's transaction, because an entity carried out of it is
+detached.
+
+THE BACKEND GATE IS RED WHEN YOU ARRIVE, ON EXACTLY FOUR RULES, AND CLOSING THEM IS YOUR TASK.
+They are listed in T3's step 11 with the names each one reports: seven unpaired object schemas, the
+inline ImportRun.startedBy, IssueComment.externalAuthor missing from CommentView, and the three
+operations no handler serves. Anything else red is a real failure and not the handover.
+
 Read before writing: T3's ImportSource and ImportPreviewService (you are consuming them),
 com/tcms/tracker/IssueService.java's create path, com/tcms/project/ProjectKeys.java (whole — its
 header is the contract you are calling under), com/tcms/tracker/board/LabelService.java,
@@ -323,8 +338,11 @@ is the one thing this repo's tests will not catch for you until the frontend fai
 You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/014-jira-offramp.md T5 and
 decision D-k. Use /be-java with be-java-pattern-writer and be-java-unit-testing.
 
-Add AzureDevOpsImportSource behind the ImportSource port T3 built, and register it in ImportSources.
-NO FILE OUTSIDE AzureDevOpsImportSource, ImportSources and their tests changes. If you find yourself
+Add AzureDevOpsImportSource behind the ImportSource port T3 built. IT REGISTERS ITSELF: the port
+has a third method, supports(ImportProvider), and ImportSources filters the injected list on it
+rather than switching over the provider — so a new @Component answering true for AZURE_DEVOPS is
+the whole of the registration and ImportSources is not edited at all.
+NO FILE OUTSIDE AzureDevOpsImportSource and its test changes. If you find yourself
 editing ImportPreviewService or ImportWriter, the port is wrong and that is the finding to report —
 not a reason to widen the edit.
 
@@ -1811,7 +1829,7 @@ company-owned table before and after a preview and finds the project byte-identi
    the JDK client's default read timeout is indefinite. Both timeouts, a response cap, and
    `DONT_FOLLOW` — a 3xx would relocate the credential past the guard.
 
-- [ ] **Step 1: Write `ImportUrlGuard`, and the mirror test that pins it.**
+- [x] **Step 1: Write `ImportUrlGuard`, and the mirror test that pins it.**
 
 `ImportUrlGuard` reproduces `integration.OutboundUrlGuard`'s verdicts and its private-range checks
 verbatim, between two markers:
@@ -1853,7 +1871,7 @@ void theMirroredRegionsAreIdentical() throws IOException {
 `OutboundUrlGuard` gains the two matching markers around its own rule block — the only change to
 `integration` in this whole module, and it is two comment lines that change no behaviour.
 
-- [ ] **Step 2: Declare both files as test inputs.** In `backend/build.gradle.kts`, inside the
+- [x] **Step 2: Declare both files as test inputs.** In `backend/build.gradle.kts`, inside the
       `inputs.files(...)` call, following the block comment's own instruction that *a second such
       read must add its own line here*:
 
@@ -1867,7 +1885,7 @@ as its classpath, and a **comment-only** edit to either file changes no bytecode
 lines the mirror rule is green by cache, which is the exact failure the surrounding comment was
 written about.
 
-- [ ] **Step 3: Verify the mirror test actually fails.** Delete one line from inside
+- [x] **Step 3: Verify the mirror test actually fails.** Delete one line from inside
       `ImportUrlGuard`'s marked region, run the test, confirm it is red, then restore it and confirm
       green.
 
@@ -1878,7 +1896,7 @@ written about.
 This step is not optional and it is not ceremony: §185's rules were verified by deleting the fix
 they check, and the build reported success without running them.
 
-- [ ] **Step 4: The port and its records.**
+- [x] **Step 4: The port and its records.**
 
 ```java
 /** One read pass against a source system. Nothing here writes. */
@@ -1912,13 +1930,13 @@ and `int historyEntryCount`. `SourceIssue` carries `key`, `typeName`, `statusNam
 the realistic leak is a log line or an exception message that interpolated an object somebody
 assumed was safe.
 
-- [ ] **Step 5: `JiraImportSource`** — Cloud and Data Center behind one class, because the two
+- [x] **Step 5: `JiraImportSource`** — Cloud and Data Center behind one class, because the two
       differ in the **auth header** (`Basic base64(email:token)` vs `Bearer <pat>`) and in nothing
       else this module reads. Paging is `/rest/api/3/search/jql` with `nextPageToken`, 100 at a
       time; comments come with the issue through `fields=comment`; the changelog count comes from
       `expand=changelog`. `JiraAdapter` is the reference for the field names and **is not imported**.
 
-- [ ] **Step 6: `FakeImportSource` — the backend's fault switch, and it lands before the importer.**
+- [x] **Step 6: `FakeImportSource` — the backend's fault switch, and it lands before the importer.**
       *Build the fault switch before the feature it proves.* A source that stops answering
       mid-import cannot be triggered by using the app, so:
 
@@ -1942,7 +1960,7 @@ public final class FakeImportSource implements ImportSource {
 }
 ```
 
-- [ ] **Step 7: `DroppedFields`** — D-f's single derivation.
+- [x] **Step 7: `DroppedFields`** — D-f's single derivation.
 
 ```java
 /**
@@ -1979,7 +1997,7 @@ Everything the source holds that is not in `REASONS` and not a standard field is
 `Custom: "<name>"` with *"no custom fields in this product"* — which is how the mockup's
 `Custom: "Squad"` row arises without this map naming somebody's field.
 
-- [ ] **Step 8: `ImportPreviewService`,** and it is a pure function of the snapshot plus the
+- [x] **Step 8: `ImportPreviewService`,** and it is a pure function of the snapshot plus the
       project's current types and statuses. Type mapping is by name against `issue_type`
       case-insensitively, falling back on level: a source `Sub-task` → the project's `TASK`-level
       type, `Epic` → `EPIC`, everything else → the `STORY`-level type of the same name or `Story`.
@@ -1988,7 +2006,7 @@ Everything the source holds that is not in `REASONS` and not a standard field is
       `IssueRepository.findExistingKeys(sourceKeys)`, `TOO_MANY_ISSUES` from the cap,
       `ALREADY_IMPORTED` from `import_run`.
 
-- [ ] **Step 9: `ImportPreviewWritesNothingTest`** — the test the module is judged on.
+- [x] **Step 9: `ImportPreviewWritesNothingTest`** — the test the module is judged on.
 
 ```java
 @Test
@@ -2013,7 +2031,7 @@ void aPreviewWritesNothing() {
 hand-kept array — a table added later is covered without anybody remembering — and hashes each
 table's rows ordered by primary key.
 
-- [ ] **Step 10: ArchUnit.** Add one case to `ArchitectureRulesTest`:
+- [x] **Step 10: ArchUnit.** Add one case to `ArchitectureRulesTest`:
 
 ```java
 @Test
@@ -2025,18 +2043,31 @@ It is narrower than the general cross-module rule on purpose: the general one al
 message says *"module 'tracker' may not depend on module 'integration'"*, and the person who wrote
 the import has just been told by a plan that the adapters are right there. This one names R14.
 
-- [ ] **Step 11: Run the gate.**
+- [x] **Step 11: Run the gate.**
 
 ```bash
 ~/bin/tcms-remote sync
 ~/bin/tcms-remote backend './gradlew build'
 ```
 
-Expected: green. `BUILD FAILED` with `Could not write XML test results` and **zero** assertion
-failures is the fd limit, not a red suite — `ulimit -n 65535; ./gradlew build`. Read
-`docs/specs/shanks-runner-details.md` before deciding a failure is real.
+~~Expected: green.~~ → **Expected: 3790 tests, four failures, and all four name T4's surface.**
+This step predicted green and the prediction was wrong, because T1 declared the whole family's
+schemas at once — its own prompt says so (*"nineteen schemas have no ContractConventionTest pairing
+until T3 **and T4**"*) — and T3 can only pair the ten the preview serves. The four, so the next
+session can tell them from a real failure without re-deriving the set:
 
-- [ ] **Step 12: Commit.**
+| Rule | Names |
+|---|---|
+| `everyObjectSchemaIsPairedOrExempt` | `StatusMappingEntry` · `ImportOptions` · `ImportInput` · `AppliedStatusMapping` · `ImportedPerson` · `ImportRunSummary` · `ImportRun` |
+| `everyInlineShapeIsPairedOrExempt` | `ImportRun.startedBy` |
+| `pairedSchemasAndRecordsNameTheSameMembers` | `IssueComment.externalAuthor` — the contract carries it since T1 and `CommentView` does not |
+| `everyDeclaredOperationHasAHandler` | `POST /imports` · `GET /imports/{importId}` · `GET /projects/{projectId}/imports` |
+
+**Anything else is a real failure.** `BUILD FAILED` with `Could not write XML test results` and
+**zero** assertion failures is the fd limit, not a red suite — `ulimit -n 65535; ./gradlew build`.
+Read `docs/specs/shanks-runner-details.md` before deciding a failure is real.
+
+- [x] **Step 12: Commit.**
 
 ```bash
 git add backend/src/main/java/com/tcms/tracker/imports backend/src/test/java/com/tcms/tracker/imports \
@@ -2044,6 +2075,47 @@ git add backend/src/main/java/com/tcms/tracker/imports backend/src/test/java/com
         backend/src/main/java/com/tcms/integration/OutboundUrlGuard.java
 git commit -m "feat(tracker): the import source, its own URL guard, and a preview that writes nothing"
 ```
+
+### What T3 landed that this plan did not predict
+
+Written here rather than appended as a changelog, because T4 and T5 bind to these and the sketch
+above is what they would otherwise read.
+
+- **`ImportSource` has a third method, `supports(ImportProvider)`.** `ImportSources` filters the
+  injected list on it instead of switching over the provider, so T5's `AzureDevOpsImportSource` is
+  a new file and no edit to the selector.
+- **The URL guard is applied to the CONNECTION in `ImportPreviewService.vet`, not only to each URL
+  in `ImportHttp`.** The second one cannot be the only one: it is reachable only from a source that
+  composes an HTTP URL, so a source that does not — `FakeImportSource` today, anything non-HTTP
+  later — would slip past the check entirely and the endpoint's declared 400 would be unreachable.
+  **T4's run must call the same `vet` before it dispatches**, for the same reason.
+- **`ImportBlockerKind` and `ImportBlockerView` exist** and are not in *File structure* above. The
+  contract declares `ImportBlocker.kind` as an inline enum, so `ContractEnumTest` cannot see the
+  Java type; it is an enum anyway, so the switch that words each blocker is exhaustive under
+  `-Werror`.
+- **`IssueRepository.findExistingKeys(Collection<String>)`** is the `KEY_COLLISION` query, and it
+  is the one read in that interface that **does not filter `deleted_at`**: `uq_issue_key` is
+  `(company_id, issue_key)` with no predicate, so a soft-deleted `PROJ-4812` still owns the key.
+- **`ImportPreviewService.assemble` runs through a read-only `TransactionTemplate`, not
+  `@Transactional`.** It is a self-invocation from the same bean, which Spring's proxy does not see
+  — the annotation would be a boundary that silently is not there, and every RLS-protected read
+  inside would return zero rows. `ReportJobRunner` is the precedent. **T4's write pass has the same
+  shape and the same trap**, one transaction opened explicitly around the whole write.
+- **`ALREADY_IMPORTED` is a native query against `import_run`,** not `ImportRunRepository`, which is
+  T4's. The predicate is `uq_import_run_completed_source`'s. T4 may repoint it at the repository;
+  it may not compute the condition a second way.
+- **`ProjectFacts(id, key)`** carries the gated project out of the gate's transaction. An entity
+  carried out of it is detached — the trap `TransitionService` and `RankService` each paid a round
+  trip to find.
+- **`FakeImportSource` is a `@TestConfiguration` bean in `ImportTestBase`**, ordered
+  `HIGHEST_PRECEDENCE` so it wins `ImportSources`' `findFirst`, with a `reset()` every
+  `@BeforeEach` calls — the Spring context is cached across classes, so without it one class's
+  source project is visible to the next.
+- **`ContractConventionTest.HOMONYMS` is no longer empty.** `tracker.imports.SourceProject` is
+  named for the `SourceProject` schema and does not serve it — `SourceProjectView` does. The map's
+  own javadoc predicted this day and is edited in place to say it arrived.
+- **`tcms.tracker.imports` is in `application.yml`** with all three keys defaulted
+  (`max-issues: 5000`, `read-timeout: 30s`, `allow-private-hosts: false`), each one colon.
 
 ---
 

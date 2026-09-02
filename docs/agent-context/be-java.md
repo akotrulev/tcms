@@ -1,6 +1,6 @@
 # be-java — orientation cache
 
-Baseline: 013 T3, refreshed 2026-09-01.
+Baseline: 014 T3, refreshed 2026-09-02.
 Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
 
 ## Version lane
@@ -18,8 +18,8 @@ Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
 - Flyway `backend/src/main/resources/db/migration` holds **four files** — `V1__initial_schema.sql`
   (V2–V75 were absorbed into it 2026-08-29 and deleted; it only ever runs on an empty database),
   `V2__pm_foundation.sql`, `V3__tracker_core.sql`, `V4__retire_work_item.sql`,
-  `V5__tracker_board.sql`, `V6__release.sql`. ~~head `V71` (B2)~~ ~~the next number is `V2`~~
-  ~~→ `V5`~~ ~~→ `V6`~~ → the next number is **`V7`**. `out-of-order` is unset, so a lower number
+  `V5__tracker_board.sql`, `V6__release.sql`, `V7__import.sql`. ~~head `V71` (B2)~~ ~~the next
+  number is `V2`~~ ~~→ `V5`~~ ~~→ `V6`~~ ~~→ `V7`~~ → the next number is **`V8`**. `out-of-order` is unset, so a lower number
   arriving after a higher one is silently not applied — `ls` the directory before writing.
 
 ## Seams to reuse
@@ -84,6 +84,38 @@ Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
 - **`IssueEdit` is pure**, so a release's existence is checked in `IssueService.checkRelease` and not
   there. A cross-project release is a 400 on `releaseId`, never a silent null.
 
+- `tracker.imports` (014 T3, the preview half) — the module's own copies of two `integration`
+  classes, because `tracker` may not import it and neither promoting the guard to a sixth
+  foundation module nor moving it into `api` clears those modules' own bars (D-c):
+  `ImportUrlGuard` mirrors `integration.OutboundUrlGuard`'s rules **byte-for-byte between two
+  markers**, pinned by `ImportUrlGuardMirrorsTheOutboundGuardTest` reading both files as text, and
+  **both files are declared in `build.gradle.kts`'s `inputs.files`** or a comment-only edit leaves
+  `:test` `UP-TO-DATE` and the rule green by cache. `ImportHttp` mirrors `TrackerClient` and has
+  the same second, package-private `(RestClient, ImportUrlGuard)` constructor — the ONLY way
+  `MockRestServiceServer` stays bound, since the production constructor installs the real request
+  factory over the double's.
+- **The URL guard is applied twice on purpose**: `ImportPreviewService.vet` checks the
+  *connection* before a source is chosen, `ImportHttp.exchange` checks each *URL* it composes.
+  Only the first is reachable from a source that composes no HTTP URL, which is every fake.
+- **`ImportSource` is the provider seam** — `projects()` · `snapshot()` · `supports(provider)`,
+  and `ImportSources` filters the injected list on the third, so a new source is a new
+  `@Component` and no edit. `FakeImportSource` (test tree, `Ordered.HIGHEST_PRECEDENCE`,
+  `reset()` per `@BeforeEach`) is the fault switch: `failAfter(n)`, `rejecting(status)`,
+  `paging(n)`.
+- **The preview is three passes and the middle one holds no database connection** (D-b): the gate
+  in `ProjectService.readGranted`'s transaction, the credential-carrying HTTP read with none open,
+  then `assemble` in a read-only `TransactionTemplate`. **Not `@Transactional`** — it is a
+  self-invocation the proxy does not see, and the annotation would be a boundary that silently is
+  not there; `ReportJobRunner` is the precedent for the idiom.
+- `ImportPreviewWritesNothingTest` is the module's done-when and the reusable helper: it lists
+  company-owned tables from `information_schema.columns WHERE column_name = 'company_id'`, hashes
+  each table with `md5(string_agg(t::text, '|' ORDER BY t::text))` as the **container superuser**
+  (RLS would otherwise compare zero rows to zero rows), and carries its own not-vacuous test.
+- `IssueRepository.findExistingKeys` is the one read there that **does not filter `deleted_at`** —
+  `uq_issue_key` is `(company_id, issue_key)` with no predicate, so a deleted key is still taken.
+- `ContractConventionTest.HOMONYMS` **is no longer empty**: `tracker.imports.SourceProject` is
+  named for the `SourceProject` schema and `SourceProjectView` serves it.
+
 ## Conventions observed
 - A schema pairs with a **view record**, never an entity — `Label` → `LabelView`, not `IssueLabel`.
 - Records for views/requests, sealed `Outcome` interfaces per service, exhaustive switches in
@@ -115,14 +147,27 @@ Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
 - Whether `SignInThrottle` keyed on `getRemoteAddr()` behaves behind the lab ingress (prod sets
   `forward-headers-strategy: framework`).
 - ~~`ContractConventionTest` red for T4's twelve schemas and `ContractParameterBindingTest` for its
-  nine operations~~ → **both green after 012 T4.** The measured gate is now **6 failures, all
+  nine operations~~ → **both green after 012 T4.** ~~The measured gate is now **6 failures, all
   `FlakeScoreTest`**, red on `master` since before 012 T1 and owned by no task in that plan. A
-  seventh failure is yours.
+  seventh failure is yours.~~ → **014 T3's gate: 3790 tests, 4 failures, and `FlakeScoreTest` was
+  not among them.** So those six are intermittent rather than standing red, and the rule of thumb
+  is now the other way round: the same two contract suites are red across 014 T1→T3 naming ONLY
+  T4's surface (T3 step 11 lists the four), and anything else is yours.
 - Nothing compares a handler's status codes to the ones `openapi.yaml` declares. T4's label
   endpoints answer 400 on a blank name, which the contract does not list — invisible to every gate.
 
 ## Session log
 
+
+- 2026-09-02 014 T3: `be`. `com.tcms.tracker.imports` up to the preview — the `ImportSource` port
+  and its nine records, `ImportUrlGuard` + its mirror test, `ImportHttp`, `JiraImportSource`
+  (Cloud and DC behind one class, two auth headers), `DroppedFields`, `ImportPreviewService`,
+  `ImportController`'s two read operations, `FakeImportSource`, and five test classes. One ArchUnit
+  case naming R14. `tcms.tracker.imports` added to `application.yml`, three keys, all defaulted.
+  Gate on shanks: 3790 tests, **4 failures, all naming T4's surface** — seven unpaired object
+  schemas, `ImportRun.startedBy`, `IssueComment.externalAuthor`, and the three operations no
+  handler serves. T3's step 11 predicted green and was wrong; the plan is corrected in place and
+  T4's prompt now opens with the four.
 - 2026-09-01 013 T3: `be`. `com.tcms.tracker.release` — 28 files: `Release` + `VerificationLink`
   (over `issue_link`, and **not** called `IssueLink`: `documentation.IssueLinkView` is the external
   Jira link and two types of that name one import apart is how a wrong import survives review),
