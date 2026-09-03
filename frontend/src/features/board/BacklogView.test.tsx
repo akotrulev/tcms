@@ -30,8 +30,9 @@ import { BacklogView } from './BacklogView'
  *    one neighbour — the two the server answers 400 for are unconstructible (D-q).
  * 3. **A refused rank snaps the row back.** The write is the one optimistic mutation in the
  *    product, so a test that only asserted the request would pass on a board with no rollback.
- * 4. **There is no "Move to release"** (D-f). `release` is M3's table; the bulk actions that ship
- *    are Set epic and Assign.
+ * 4. **The bulk bar's three actions.** ~~There is no "Move to release" (D-f) — `release` is M3's
+ *    table.~~ → **superseded by 013**, which landed it; the three that ship are Move to release,
+ *    Set epic and Assign.
  * 5. **Empty is two different states**, and only one of them offers a way out.
  */
 
@@ -52,6 +53,9 @@ function renderView(rows: BacklogRow[] = ROWS, route = '/projects/p1/work?view=b
     if (/^\/projects\/[^/]+\/backlog/.test(path)) return rows
     if (/^\/projects\/[^/]+\/labels$/.test(path)) return [anIssueLabel({ id: 'lab-1', name: 'checkout' })]
     if (/^\/projects\/[^/]+\/members$/.test(path)) return []
+    // The release picker 013 added to the bulk bar. Empty — this file is about the filter and the
+    // empty states — but answered rather than left to fail loudly under a `DataRegion`.
+    if (/^\/projects\/[^/]+\/releases$/.test(path)) return []
     // The bulk bar's epic picker — `GET /issues?projectId=p1&level=EPIC&sort=key`.
     if (path.startsWith('/issues')) {
       return [
@@ -191,6 +195,7 @@ describe('ranking', () => {
       }
       if (/^\/projects\/[^/]+\/labels$/.test(path)) return []
       if (/^\/projects\/[^/]+\/members$/.test(path)) return []
+      if (/^\/projects\/[^/]+\/releases$/.test(path)) return []
       throw new Error(`unmocked read: ${path}`)
     }) as never)
 
@@ -259,6 +264,7 @@ describe('ranking', () => {
       if (/^\/projects\/[^/]+\/backlog/.test(path)) return ROWS
       if (/^\/projects\/[^/]+\/labels$/.test(path)) return []
       if (/^\/projects\/[^/]+\/members$/.test(path)) return []
+      if (/^\/projects\/[^/]+\/releases$/.test(path)) return []
       throw new Error(`unmocked read: ${path}`)
     }) as never)
 
@@ -279,16 +285,21 @@ describe('ranking', () => {
 })
 
 describe('the bulk bar', () => {
-  it('does not offer Move to release, which is M3’s', async () => {
-    // D-f: `release` is M3's table and `issue_fact.release_id` is NULL until then, so the control
-    // would name a field nothing writes.
+  it('offers Move to release beside Set epic and Assign', async () => {
+    /*
+      ~~D-f: `release` is M3's table and `issue_fact.release_id` is NULL until then, so the control
+      would name a field nothing writes, and this asserted its ABSENCE.~~ → **superseded by 013**,
+      which landed the release module and put the control on this bar — `BacklogView`'s own header
+      says so. The assertion was left inverted and had been failing since; flipped here rather than
+      deleted, because "the bulk bar offers exactly these three" is still worth pinning.
+    */
     renderView()
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole('checkbox', { name: 'Select ACME-121' }))
 
     expect(await screen.findByTestId('Backlog.Bulk')).toBeInTheDocument()
-    expect(screen.queryByLabelText(/Move to release/i)).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/Move to release/i)).toBeInTheDocument()
     expect(screen.getByLabelText('Set epic')).toBeInTheDocument()
     expect(screen.getByLabelText('Assign')).toBeInTheDocument()
   })
@@ -395,6 +406,7 @@ describe('the filter and the empty states', () => {
       if (/^\/projects\/[^/]+\/backlog/.test(path)) return ROWS
       if (/^\/projects\/[^/]+\/labels$/.test(path)) return [anIssueLabel({ id: 'lab-1', name: 'checkout' })]
       if (/^\/projects\/[^/]+\/members$/.test(path)) return []
+      if (/^\/projects\/[^/]+\/releases$/.test(path)) return []
       throw new Error(`unmocked read: ${path}`)
     }) as never)
 

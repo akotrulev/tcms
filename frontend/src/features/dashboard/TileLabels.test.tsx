@@ -86,6 +86,10 @@ function renderDashboard(dashboard: RepositoryDashboard = DASHBOARD) {
     // the page renders its tables rather than three empty states — this file is about the tiles.
     if (path.startsWith('/issues?')) return path.includes('level=EPIC') ? [] : [anIssueSummary()]
     if (/^\/projects\/[^/]+\/workflow$/.test(path)) return aProjectWorkflow({ projectId: 'p1' })
+    // The release panel 013 T6 added below the delivery half. Empty, because this file is about
+    // the tiles — but answered rather than left to fail, since a failed read renders an error
+    // branch and an assertion pointed elsewhere would never see it.
+    if (/^\/projects\/[^/]+\/releases$/.test(path)) return []
     if (/^\/projects\/[^/]+$/.test(path)) return PROJECT
     throw new Error(`unmocked read: ${path}`)
   }) as never)

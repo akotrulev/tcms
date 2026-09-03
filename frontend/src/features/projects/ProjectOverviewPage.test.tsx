@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
 import type {
   Issue,
@@ -375,6 +375,18 @@ describe('A project with no releases — solo-overview.html\u2019s rendering, un
 describe('The release panel and its two tiles, with a release in them (013 T6)', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    /*
+      The clock is pinned, and it has to be: `formatDueIn` counts whole days from *now*, so the
+      target-date assertion below was true on the day it was written and one day less true every day
+      after — it read "in 17 days" against a fixture dated 2026-09-18 and started failing on
+      2026-09-02. A test whose result depends on the date it is run is not a test of this screen.
+    */
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date('2026-09-01T09:00:00Z'))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('names the next release, its badge and its target date', async () => {

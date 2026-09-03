@@ -2,6 +2,8 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
+import { api } from '../../api/client';
+
 import type { TestCaseSummary } from '../../api/types';
 import { TestProviders } from '../../test/TestProviders';
 import { aCaseSummary } from '../../test/fixtures';
@@ -54,6 +56,16 @@ function renderGrid(overrides: Partial<Parameters<typeof CaseGrid>[0]> = {}) {
     loading: false,
     ...overrides,
   };
+
+  /*
+    The Verifies column's second read (013 D-i). Answered empty — this file is about the grid's
+    contract with its caller, not about what a case proves — but answered, because without an arm
+    the query reaches the real `fetch` and the harness fails the test on the failed read.
+  */
+  vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
+    if (/^\/projects\/[^/]+\/case-verifications$/.test(path)) return [];
+    throw new Error(`unmocked read: ${path}`);
+  }) as never);
 
   render(
     <TestProviders client={createTestQueryClient()}>
@@ -162,11 +174,14 @@ describe('selection', () => {
 });
 
 describe('the kit’s Table rule (design language §5)', () => {
-  it('a failing case says what it failed on in the cell, not in a twelfth column', () => {
+  it('a failing case says what it failed on in the cell, not in a column of its own', () => {
     renderGrid();
 
     expect(screen.getByText('Last run failed on nightly-eu')).toBeInTheDocument();
-    expect(screen.getAllByRole('columnheader')).toHaveLength(11);
+    // ~~11.~~ → **12 since 013 D-i** added the Verifies column. The number is the point rather than
+    // the header list: the failure reason is a second line in the Last run cell, and this fails the
+    // day somebody gives it a column instead.
+    expect(screen.getAllByRole('columnheader')).toHaveLength(12);
   });
 
   it('a healthy case carries no second line', () => {
