@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import { CliSetup } from './CliSetup';
 import { McpSetup } from './McpSetup';
 import { Code, Definitions, H, List, Note, P, Terminal } from './prose';
@@ -819,6 +820,21 @@ tcms review comment    # a remark on an open review`}</Terminal>
           TCMS speaks <strong>MCP</strong>, so an AI assistant can read and write your test
           repository directly rather than being pasted screenshots. There are two ways to connect
           and the first needs no installation.
+        </P>
+
+        <H>Connect an AI assistant</H>
+        <P>
+          <strong>Two minutes, and it needs no administrator.</strong>{' '}
+          <RouterLink
+            to="/account/assistants/new"
+            className="text-steel no-underline hover:underline"
+          >
+            Connect an assistant
+          </RouterLink>{' '}
+          names it, scopes it to one project or all of them, and hands you a setup snippet for your
+          own tool. What it can do is exactly what <em>you</em> can do — there is no separate
+          permission list, and nothing there can grant it more than you hold. Everything below is
+          the same connection described in full, plus what a company credential is for instead.
         </P>
 
         <McpSetup />

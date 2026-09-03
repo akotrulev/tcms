@@ -1,6 +1,17 @@
 # fe-react — orientation cache
 
-**Baseline commit:** `71d7fce1` · **Last verified:** 2026-09-01 · **Verdict this run:** DELTA (013 T1–T4 moved the contract, `schema.d.ts`, `labels.ts`, `router.tsx`, `AppShell.tsx`, `index.css`, `tokenSystem.test.ts` and the board files; 012 T9 had landed the board-settings screen and the label palette. No `package.json` / lockfile / `tsconfig` change, so the version lane held. Four sections refreshed, and the seams below moved because T5 built the release screens)
+**Baseline commit:** `306a36c5` · **Last verified:** 2026-09-04 · **Verdict this run (015 T5):** DELTA
+(014 M4's import screens and 015 T1–T4's contract had moved `openapi.yaml`, `schema.d.ts`,
+`fixtures.ts` and `devFaults.ts` since the baseline below; no `package.json` / lockfile / `tsconfig`
+change, so the version lane held. T5 added the account, repositories and assistant-panel seams
+recorded below.)
+
+**Session log**
+- 2026-09-04 — 015 T5: assistant profile + connect, project repositories, the AI-eligible marker on
+  three surfaces, the task page's agent-context and pull-request panels, D33's close gate on General
+  settings, the help entry. Also repaired six suites 013 had left red (`306a36c5`).
+
+~~**Baseline commit:** `71d7fce1` · **Last verified:** 2026-09-01 · **Verdict:** DELTA (013 T1–T4 moved the contract, `schema.d.ts`, `labels.ts`, `router.tsx`, `AppShell.tsx`, `index.css`, `tokenSystem.test.ts` and the board files; 012 T9 had landed the board-settings screen and the label palette. No `package.json` / lockfile / `tsconfig` change, so the version lane held. Four sections refreshed, and the seams below moved because T5 built the release screens)~~
 
 Per `ep-agent-orientation-cache`: validate this against a git delta before trusting it. A changed
 `frontend/package.json`, `package-lock.json`, `tsconfig*.json` or `vite.config.ts` invalidates the
@@ -95,6 +106,13 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 | Project settings | `/projects/:projectId/settings/{general,workflow,classification,review,notifications,trackers}` — six screens, all **routed for everybody** and read-only for a caller without the write key (§31). `general` holds the archive button (011 T7 moved it off the overview's header, with `ArchiveProject.test.tsx`) |
 | A DELETE with a body | **`api.delWithBody(path, body, options)`** — the one in the product, for the workflow status removal. Registered in `test/contractDoubles.ts`'s `METHODS` **and** `SENDS_A_BODY`; a body smuggled into `api.del`'s options is invisible to that seam, which reads the second argument positionally |
 | Empty states | `DataRegion`'s `EmptyState` takes `kind` / `title` / `body` / `action` and, since 011 T7, an optional lucide **`icon`**. `kit/StateBlock`'s `empty` is the other one and has a fixed description — it is not the one to reach for when the panel has to say what the missing thing IS |
+
+| **015 M5's seams** | `features/account/AssistantsPage` (`/account/assistants`) + `ConnectAssistantPage` (`/account/assistants/new`) · `features/settings/RepositoriesSettingsPage` (`/projects/:id/settings/repositories`, and the rail's Repositories entry, which completes that subnav) · `features/tracker/AiEligibleMarker` — **one component on three surfaces** (task header, work-table row, board card face) · `TaskPanels` grew the agent-context and pull-request panels and now exports a second component, `AssistantRailPanel` |
+| The assistant keys | `keys.myAssistants = ['me','assistants']` — deliberately **NOT** under `keys.apiTokens`, though they are the same rows on the wire: `/api-tokens` is the company's list behind `token:issue` and `/me/assistants` is the caller's own behind authentication alone, so `['api-tokens','me']` would have an admin's revoke refetch a list most of its readers are refused. `keys.projectRepositories(p)` sits beside `statuses`; `keys.agentContext(k)` sits **under** `keys.issue`'s prefix, wanted — the payload embeds the issue with its caller-scoped `allowedTransitions`, so a move must evict it |
+| **ONE settings document, TWO screens** | `features/settings/settingsUpdate.ts::fullSettingsUpdate` — `PUT /projects/{id}/settings` is a full replacement and the server reads an absent boolean as `false`, so a form that saves one switch by sending one switch turns every other one off. Review owns §6g's six controls, **General owns D33's `reviewEnabledIssue`** (mockup + reader expectation), and the field list is written once. This had already bitten: `reviewEnabledIssue` landed on the contract and `ReviewSettingsPage`'s hand-written list was not extended, so saving the review policy silently switched the issue close gate off |
+| `allowedTransitions` is CALLER-SCOPED, and `TransitionMenu` tells the two refusals apart | Under D33 the assignee's DONE moves are dropped from `Issue.allowedTransitions` while the project's workflow still declares the edge. So `workflow.transitions` ∧ ¬`allowedTransitions` ⇒ the close guard, and the row says **needs a second person** instead of the flatly wrong *not from In Progress*. No second read: the workflow document is already on screen for the list itself |
+| The two shapes with a plaintext secret | `IssuedApiToken` (`/api-tokens`) and **`IssuedAssistant`** (`/me/assistants`). Neither may reach the query cache or a list type. `ConnectAssistantPage` is a **route, not a dialog**, deliberately: a modal invites the dismissal that loses an unrecoverable value, and its test asserts a fresh mount on the *same* `QueryClient` cannot get the secret back |
+| `openapi-typescript` types a **defaulted** property as REQUIRED | Not the contract's `required` array. `IssueInput.agentEligible` and `ProjectSettingsUpdate.reviewEnabledIssue` both carry `default: false` and are absent from `required`, and both came out non-optional — which is why `IssueNewPage` sends `agentEligible: false` on a form that offers no such control. Three call sites were left red by T1 and fixed in T5 |
 
 ## Test-harness rules the suites enforce
 
@@ -203,6 +221,28 @@ CLAUDE.md. Targeted tests may run locally for debugging.
   settings. **`?view=board` and `?view=backlog` no longer show a placeholder, and neither do
   `?view=timeline` and `?view=calendar` since 013 T5** — the `WorkTable.NotYet.*` panel and the
   `module` / `body` / `existing` columns of `VIEWS` are gone, because all five views exist.
+- **Nothing in 015 M5's frontend has been seen in a browser.** 24 component tests, `npm run build`
+  and oxlint at zero; none is a renderer. Specifically unverified: the connect flow end to end
+  against a real `/me/assistants` (the token-shown-once path is asserted through mocked `api.post`,
+  so the seam itself is what the tests do not exercise), the agent-context panel against a real
+  composite, and D33's gate biting on a live project — the last two were smoked through the CLI and
+  MCP adapters in T4, but never through this UI.
+- **Three panels the mockups draw and this build does not, each blocked by the contract rather than
+  by effort.** `profile-assistants.html`'s *"What mine did this week"* is the audit trail filtered to
+  the caller's tokens: the trail costs `audit:view`, which most people reading their own profile do
+  not hold, and `AuditFilters` carries no token or target parameter, so the question cannot be asked
+  even by somebody who does. Its *"My AI-eligible work"* needs a cross-project issue list and
+  `GET /issues` requires `projectId`. And `task.html`'s *"What the assistant was refused"* is an
+  `issue.close_refused` **audit event** — same gate, same missing target filter — so the live half
+  lands in `TransitionMenu` and the historical half does not.
+- **`settings-general.html`'s second closing-work row is wrong and was dropped.** It draws *"An
+  assistant may never close. Fixed."* and there is no token-specific rule (015 D2/A6): an assistant
+  acts as its owner, so with the gate off the same close succeeds for it. Recorded in the page's own
+  doc comment and asserted as an absence in `GeneralSettingsPage.test.tsx`.
+- **Two CaseGrid selection tests are red and were not absorbed** (`select-all reaches the page`,
+  `survives paging`): the click produces no `onSelectionChange` call at all. Either a real defect in
+  the case list's bulk-edit selection under TanStack Table v9 or a stale test — a cases-module
+  investigation, not a mock arm. Everything else 013 left red was repaired in `306a36c5`.
 - **Nothing in 013 M3 has been seen in a browser.** 41 component tests, `npm run build` and oxlint at
   zero; none of them is a renderer. Specifically unverified, and each is something jsdom structurally
   cannot answer:

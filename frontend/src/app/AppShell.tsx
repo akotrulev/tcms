@@ -1,6 +1,7 @@
 import { useColorScheme } from './useColorScheme';
 import {
   Bell,
+  Bot,
   Bug,
   ChartColumn,
   ChevronLeft,
@@ -9,6 +10,7 @@ import {
   ClipboardList,
   FileText,
   Folder,
+  FolderGit2,
   GitBranch,
   HelpCircle,
   History,
@@ -397,8 +399,8 @@ function projectNav(
           012 T9's board settings, at `settings-boards.html`'s position in the mockup's subnav —
           between Workflow and the one entry this rail still does NOT have. That row reads
           *General · Workflow · Boards · Repositories · Imports*; ~~Repositories is M5's and Imports
-          is M4's~~ → **Imports landed in 014 and is below; Repositories is still M5's**, and a rail
-          entry leading to a route that does not exist is worse than an absent one, so it stays off.
+          is M4's~~ → **both landed**: Imports in 014, Repositories in 015 T5, so that subnav row is
+          complete and this rail matches it.
 
           Ungated, like the two above it: the reads cost `board:read`, which every role holds, and
           the page renders read-only without `board:configure`.
@@ -407,6 +409,11 @@ function projectNav(
           label: 'Boards',
           to: `${p}/settings/boards`,
           icon: <Kanban className="size-4" />,
+        },
+        {
+          label: 'Repositories',
+          to: `${p}/settings/repositories`,
+          icon: <FolderGit2 className="size-4" />,
         },
         /*
           014 T8's imports, at `settings-import.html`'s position in that same subnav — and **gated**,
@@ -1171,6 +1178,18 @@ function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
             <RouterLink to="/account/trackers" data-testid="TopBar.TrackersLink">
               <Bug className="size-4" />
               <span>Tracker connections</span>
+            </RouterLink>
+          </DropdownMenuItem>
+          {/*
+            The caller's own AI assistants (015 D26) — beside Tracker connections, self-service, no
+            gate, and for the same reason: an assistant is a credential a *person* owns, and the
+            rail is scoped by the project switcher, which this is not. Connecting one costs no
+            permission at all — it grants nothing its owner does not already hold.
+          */}
+          <DropdownMenuItem asChild>
+            <RouterLink to="/account/assistants" data-testid="TopBar.AssistantsLink">
+              <Bot className="size-4" />
+              <span>AI assistants</span>
             </RouterLink>
           </DropdownMenuItem>
           {/*

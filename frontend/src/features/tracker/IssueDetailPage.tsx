@@ -14,8 +14,9 @@ import { CommentFeed } from './CommentFeed';
 import { EpicPanels } from './EpicPanels';
 import { StatusBadge } from './StatusBadge';
 import { StoryPanels, ClosingThisStory } from './StoryPanels';
-import { TaskPanels } from './TaskPanels';
+import { AssistantRailPanel, TaskPanels } from './TaskPanels';
 import { TransitionMenu } from './TransitionMenu';
+import { AiEligibleMarker } from './AiEligibleMarker';
 import { TypeIcon } from './TypeIcon';
 
 /**
@@ -110,6 +111,11 @@ function IssueBody({ issue }: { issue: ReturnType<typeof useIssue>['data'] & {} 
             <TypeIcon type={issue.type} data-testid={`${TEST_ID}.Header.Type`} />
             <Identifier variant="muted">{issue.key}</Identifier>
             <StatusBadge status={issue.status} data-testid={`${TEST_ID}.Header.Status`} />
+            <AiEligibleMarker
+              eligible={issue.agentEligible}
+              size="full"
+              data-testid={`${TEST_ID}.Header.AiEligible`}
+            />
             {issue.overdue && <Badge tone="failed">overdue</Badge>}
           </div>
 
@@ -158,6 +164,13 @@ function IssueBody({ issue }: { issue: ReturnType<typeof useIssue>['data'] & {} 
           </Panel>
 
           {issue.type.level === 'STORY' && <ClosingThisStory issue={issue} />}
+
+          {/*
+            The assistant panel is a TASK's, and it is where the flag is set as well as read: a
+            sub-task is the unit an assistant is handed, which is why the switch is not offered on
+            an epic or a story that would only ever pass it down.
+          */}
+          {issue.type.level === 'TASK' && <AssistantRailPanel issue={issue} />}
 
           <Panel title="Details" testId={`${TEST_ID}.Details`}>
             <dl className="m-0 grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] gap-x-3 gap-y-2 text-[12.5px]">

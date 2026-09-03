@@ -87,7 +87,12 @@ describe('Quick add is one field (story H3)', () => {
         '/issues',
         // No parent, no epic, no assignee, no estimate. The whole of D29: a quick add that
         // quietly attached the issue to something would be a decision nobody made.
-        { typeId: 'ty-story', title: 'Renew the cert', projectId: 'p1' },
+        //
+        // `agentEligible: false` is the one field that is sent without being asked for, and it is
+        // the server's own default spelled out: `openapi-typescript` types a defaulted property as
+        // required, and nothing on this form offers the flag — an issue is marked AI-eligible from
+        // the task page, once somebody has decided it is small enough to hand over.
+        { typeId: 'ty-story', title: 'Renew the cert', projectId: 'p1', agentEligible: false },
         expect.anything(),
       ),
     )

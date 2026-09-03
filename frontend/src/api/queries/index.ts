@@ -317,6 +317,7 @@ export {
 } from './imports';
 export {
   EPIC_COMPLETION_LIMIT,
+  useAgentTaskContext,
   useBulkUpdateIssues,
   useCreateIssue,
   useCreateIssueComment,
@@ -336,3 +337,10 @@ export {
   type EpicCompletionsState,
   type IssueSort,
 } from './issues';
+export { useConnectAssistant, useMyAssistants, useRevokeAssistant } from './account';
+export {
+  useAddRepository,
+  useDeleteRepository,
+  useProjectRepositories,
+  useUpdateRepository,
+} from './projectRepos';

@@ -147,6 +147,16 @@ const TrackerConnectionsPage = lazy(() =>
     default: m.TrackerConnectionsPage,
   })),
 );
+const AssistantsPage = lazy(() =>
+  import('../features/account/AssistantsPage').then((m) => ({
+    default: m.AssistantsPage,
+  })),
+);
+const ConnectAssistantPage = lazy(() =>
+  import('../features/account/ConnectAssistantPage').then((m) => ({
+    default: m.ConnectAssistantPage,
+  })),
+);
 const ClassificationSettingsPage = lazy(() =>
   import('../features/settings/ClassificationSettingsPage').then((m) => ({
     default: m.ClassificationSettingsPage,
@@ -165,6 +175,11 @@ const WorkflowSettingsPage = lazy(() =>
 const BoardSettingsPage = lazy(() =>
   import('../features/settings/BoardSettingsPage').then((m) => ({
     default: m.BoardSettingsPage,
+  })),
+);
+const RepositoriesSettingsPage = lazy(() =>
+  import('../features/settings/RepositoriesSettingsPage').then((m) => ({
+    default: m.RepositoriesSettingsPage,
   })),
 );
 const ReleaseListPage = lazy(() =>
@@ -365,6 +380,32 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <TrackerConnectionsPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            The caller's own AI assistants (015 D26) — beside `/account/security` and
+            `/account/trackers`, under their reasoning exactly: a credential belongs to a person,
+            not to a project, and an assistant is a credential. Scoping one to a project is a field
+            on the form, never a segment in this URL.
+
+            Connecting is a **route**, not a dialog. It hands back a secret that exists for one
+            render and cannot be recovered, and a modal invites the dismissal that loses it.
+          */}
+          <Route
+            path="/account/assistants"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <AssistantsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/account/assistants/new"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <ConnectAssistantPage />
               </Suspense>
             }
           />
@@ -825,6 +866,23 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <BoardSettingsPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            015 T5's repositories, at `settings-repositories.html`'s position in that subnav —
+            *General · Workflow · Boards · Repositories · Imports*, which is now complete.
+
+            Routed for everybody, like the three above it: the list costs `project:read` and the
+            writes cost `project:settings`, so a reader without the key still learns where the code
+            is, which is the entire purpose of the page.
+          */}
+          <Route
+            path="/projects/:projectId/settings/repositories"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <RepositoriesSettingsPage />
               </Suspense>
             }
           />

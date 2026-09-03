@@ -17,6 +17,7 @@ import { NativeSelect } from '../../components/ui/native-select';
 import { describeError } from '../../lib/describeError';
 import { formatCount, formatDateTime } from '../../lib/format';
 import { editAfterApprovalDescriptions, editAfterApprovalLabels } from '../../lib/labels';
+import { fullSettingsUpdate } from './settingsUpdate';
 
 /**
  * The project's review policy — **plan §6g's four settings, which had nowhere to live until
@@ -166,23 +167,13 @@ function ReviewSettingsForm({
         event.preventDefault();
         if (!peersInvalid) {
           /*
-            EVERY field, and the two gating ones are why this is worth a comment. The endpoint is a
-            PUT of the whole value and the server reads an absent boolean as `false` — so a field
-            listed on the type and omitted here would not fail to save, it would silently switch
-            the setting OFF on every save of this form. That is `ui-rules`' highest-severity form
-            defect (an edit that shows success and discards a value), and for a gating rule it means
-            an admin fixing a typo in the peer-review count quietly reopens the gate.
+            EVERY field, through `fullSettingsUpdate` — including `reviewEnabledIssue`, which this
+            form does not offer and General does (D33). ~~The nine fields were listed here.~~ →
+            superseded by the shared function, because the failure this comment describes had
+            already happened once: `reviewEnabledIssue` landed on the contract, this list was not
+            extended, and saving the review policy silently switched the issue close gate off.
           */
-          save.mutate({
-            reviewEnabledCase: draft.reviewEnabledCase,
-            reviewEnabledSuite: draft.reviewEnabledSuite,
-            reviewEnabledPlan: draft.reviewEnabledPlan,
-            reviewEnabledDoc: draft.reviewEnabledDoc,
-            requiredPeerReviews: draft.requiredPeerReviews,
-            authorMayApproveOwnWork: draft.authorMayApproveOwnWork,
-            editAfterApproval: draft.editAfterApproval,
-            requireApprovedCaseForRun: draft.requireApprovedCaseForRun,
-          });
+          save.mutate(fullSettingsUpdate(draft));
         }
       }}
     >

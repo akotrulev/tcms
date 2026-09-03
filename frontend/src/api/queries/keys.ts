@@ -32,6 +32,11 @@ export const keys = {
    */
   reviewImpact: (p: string) => ['projects', p, 'settings', 'review-impact'] as const,
   statuses: (p: string) => ['projects', p, 'statuses'] as const,
+  /**
+   * The project's repositories — beside `statuses` and `configurations` because it is the same kind
+   * of thing: reference data the project owns, which outlives every issue that is worked in it.
+   */
+  projectRepositories: (p: string) => ['projects', p, 'repositories'] as const,
   projectMembers: (p: string) => ['projects', p, 'members'] as const,
   /**
    * The project's environments — the vocabulary a run form picks from.
@@ -341,6 +346,14 @@ export const keys = {
   issueComments: (k: string) => ['issues', k, 'comments'] as const,
   issueDocLinks: (k: string) => ['issues', k, 'doc-links'] as const,
   /**
+   * The composite an assistant is handed for one task (015 D4).
+   *
+   * Under `keys.issue`'s prefix, and wanted: the payload embeds the issue itself with its
+   * caller-scoped `allowedTransitions`, so a move that changes what is legal must not leave a
+   * "Moves allowed" list from before the move on screen.
+   */
+  agentContext: (k: string) => ['issues', k, 'agent-context'] as const,
+  /**
    * The prefix every issue detail shares. A transition changes the issue AND its epic's
    * completion, so a move invalidates this root and `keys.issues` together — the epic's
    * percentage is on a different screen and must not be able to lag behind the status that
@@ -395,6 +408,16 @@ export const keys = {
    * entry for the whole company and nothing to key it by.
    */
   apiTokens: ['api-tokens'] as const,
+  /**
+   * The caller's **own** assistants (015 D26) — deliberately not under {@link apiTokens}.
+   *
+   * They are the same rows on the wire, and that is the trap: `/api-tokens` is the company's whole
+   * credential list behind `token:issue`, and `/me/assistants` is the caller's own Agent-role
+   * subset behind authentication alone. TanStack matches an invalidation by prefix, so the obvious
+   * `['api-tokens', 'me']` would have an administrator revoking somebody else's token refetch this
+   * list — a request most readers of this key are refused outright.
+   */
+  myAssistants: ['me', 'assistants'] as const,
   /**
    * One project's audit trail (§242).
    *

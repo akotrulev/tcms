@@ -782,6 +782,42 @@ git commit -m "feat(agent): the issue tool surface — queue, context, attach-pr
 **Deliverable:** `profile-assistants`, `assistant-connect`, `settings-repositories` and `story-proposal` are on the render kit and wired to TanStack Query; the AI-eligible toggle+marker renders on the task page, the work-table row and the board card from one shared component; the token secret shows once on creation and never again, and revoking one is reachable from the profile; the "Require review to close issues" toggle is on General settings; the help entry links to Connect-an-assistant; `frontend/npm run build && lint && test:run` green; `features.md` and the 009 status table closed.
 **Depends on:** T4
 
+**T5 landed 2026-09-04.** Five deviations, all recorded in the files themselves:
+
+1. **No `useSetAgentEligible` / `useAttachPr`.** `useUpdateIssue(key)` already PATCHes
+   `IssueUpdate`, which carries both fields — two single-caller wrappers over it are the unearned
+   abstraction the frontend rules forbid.
+2. **Step 6 was skipped**, taking the step's own sanctioned alternative: no `ProposalReviewPage`.
+   Every arm of that screen would be disabled, the issue-proposal table and endpoint do not exist,
+   and a routed dead screen is a liability rather than a preview. **A5 is deferred** and is written
+   into `features.md` as not built, in those words.
+3. **"What the assistant was refused" is not built**, and the contract is why: the refusal is an
+   `issue.close_refused` audit event, the trail costs `audit:view`, and `AuditFilters` carries no
+   target — so one issue's refusals cannot be asked for. The live half lands instead, in
+   `TransitionMenu`: the 409's own sentence beside the picker, and the DONE row captioned *needs a
+   second person* with the setting named under it. That caption is derived from
+   `workflow.transitions ∧ ¬allowedTransitions`, no second read.
+4. **Two `profile-assistants.html` panels are absent for the same class of reason** — the
+   "what mine did this week" feed (gated trail, no token filter) and "My AI-eligible work"
+   (`GET /issues` requires `projectId`, so it is one read per project). Both named in the page's
+   doc comment rather than rendered empty.
+5. **`settings-general.html`'s "An assistant may never close — always on" row was dropped.** Plan
+   D2/A6 say the opposite: with the gate off the same move succeeds for an assistant exactly as for
+   its owner. The mockup loses on behaviour.
+
+**Two defects fixed that T5 did not create.** `openapi-typescript` types a **defaulted** property as
+required — not the contract's `required` array — so T1's `IssueInput.agentEligible` and
+`ProjectSettingsUpdate.reviewEnabledIssue` left three call sites failing `tsc -b`; and
+`ReviewSettingsPage`'s hand-written save list had not been extended with `reviewEnabledIssue`, so
+saving the review policy **silently switched D33's gate off**. The field list now lives once, in
+`features/settings/settingsUpdate.ts::fullSettingsUpdate`, because two screens edit one
+full-replacement document.
+
+**Gate on shanks:** `npm run build` ✅ · `npm run lint` 0 warnings ✅ · `npm run test:run` **190 of
+191 files green**. The one red file is `CaseGrid.test.tsx` (two selection tests), pre-existing and
+unrelated — see `306a36c5`, which repaired the other six suites 013 had left red and explains why
+those two were reported rather than patched.
+
 **Files:**
 - Create: `frontend/src/features/account/AssistantsPage.tsx` (+ `.test.tsx`), `ConnectAssistantPage.tsx` (+ test)
 - Create: `frontend/src/features/settings/RepositoriesSettingsPage.tsx` (+ test); modify `GeneralSettingsPage.tsx`
@@ -793,21 +829,21 @@ git commit -m "feat(agent): the issue tool surface — queue, context, attach-pr
 
 Use **`/fe-react`** (`fe-react-forms`, `fe-react-ui-rules`, `fe-react-component-testing`). Screens are a translation of the named mockups into the kit + TanStack Query — not a redesign. One `keys` factory (`keys.ts`); never a second. No `sx`, no CSS-in-JS.
 
-- [ ] **Step 1: query hooks.** `account.ts` — `useMyAssistants()` (`GET /me/assistants`), `useConnectAssistant()` (`POST`, returns the secret — keep the plaintext in component state, never in the query cache, exactly as `AgentTokenPanel`/`useIssueApiToken` do), `useRevokeAssistant()` (`DELETE`). `projectRepos.ts` — `useProjectRepositories(projectId)`, `useAddRepository`, `useUpdateRepository`, `useDeleteRepository`. In `keys.ts` add `myAssistants` and `projectRepositories(projectId)` entries. In `issues.ts` add `useSetAgentEligible(key)` (PATCH `{agentEligible}`) and `useAttachPr(key)` (PATCH `{prUrl}`) with the right invalidations.
+- [x] **Step 1: query hooks.** `account.ts` — `useMyAssistants()` (`GET /me/assistants`), `useConnectAssistant()` (`POST`, returns the secret — keep the plaintext in component state, never in the query cache, exactly as `AgentTokenPanel`/`useIssueApiToken` do), `useRevokeAssistant()` (`DELETE`). `projectRepos.ts` — `useProjectRepositories(projectId)`, `useAddRepository`, `useUpdateRepository`, `useDeleteRepository`. In `keys.ts` add `myAssistants` and `projectRepositories(projectId)` entries. In `issues.ts` add `useSetAgentEligible(key)` (PATCH `{agentEligible}`) and `useAttachPr(key)` (PATCH `{prUrl}`) with the right invalidations.
 
-- [ ] **Step 2: `AiEligibleMarker`.** One shared component rendering the `ai-tag`/`AI-ELIGIBLE` chip (task page: `AI-ELIGIBLE`; list/card: a compact `AI` marker). Props: `{ eligible: boolean, size?: 'chip'|'tag' }`. Used by `TaskPanels`, `WorkTablePage` row, and the board card. Test: renders nothing when `eligible` is false, the marker when true.
+- [x] **Step 2: `AiEligibleMarker`.** One shared component rendering the `ai-tag`/`AI-ELIGIBLE` chip (task page: `AI-ELIGIBLE`; list/card: a compact `AI` marker). Props: `{ eligible: boolean, size?: 'chip'|'tag' }`. Used by `TaskPanels`, `WorkTablePage` row, and the board card. Test: renders nothing when `eligible` is false, the marker when true.
 
-- [ ] **Step 3: the task page assistant panels.** In `TaskPanels.tsx`, port `task.html`'s panels: "What the assistant received" (the agent-context dl — story, epic goal, release, linked spec, repository+build, **Moves allowed** from `allowedTransitions` with DONE struck through when absent), "Pull request" (from `issue.prUrl`), "What the assistant was refused" (render from the `issue.close_refused` history entry when present), the "Assistant" panel with the AI-eligible toggle (`useSetAgentEligible`) and a link to the profile, and "Where it can go" (the allowed set, DONE disabled with "needs a reviewer"). The refusal copy and the "on a project with the review gate off…" line come from the mockup verbatim.
+- [x] **Step 3: the task page assistant panels.** In `TaskPanels.tsx`, port `task.html`'s panels: "What the assistant received" (the agent-context dl — story, epic goal, release, linked spec, repository+build, **Moves allowed** from `allowedTransitions` with DONE struck through when absent), "Pull request" (from `issue.prUrl`), "What the assistant was refused" (render from the `issue.close_refused` history entry when present), the "Assistant" panel with the AI-eligible toggle (`useSetAgentEligible`) and a link to the profile, and "Where it can go" (the allowed set, DONE disabled with "needs a reviewer"). The refusal copy and the "on a project with the review gate off…" line come from the mockup verbatim.
 
-- [ ] **Step 4: `AssistantsPage` + `ConnectAssistantPage`.** Port `profile-assistants.html` (connected list with scope/reach/last-acted/revoke; the "what mine did this week" feed from the audit trail filtered to the caller's tokens; the limits panel) and `assistant-connect.html` (name + scope form → create → show the snippet once, with the `claude mcp add tcms --transport http <origin>/mcp --header "Authorization: Bearer <secret>"` block built from the returned secret and `window.location.origin`; the "shown once" warning). Reachable from the profile sub-nav ("AI assistants"). Test (required by the breakdown): the **token-shown-once** path — after create the secret renders; navigating away and back does not.
+- [x] **Step 4: `AssistantsPage` + `ConnectAssistantPage`.** Port `profile-assistants.html` (connected list with scope/reach/last-acted/revoke; the "what mine did this week" feed from the audit trail filtered to the caller's tokens; the limits panel) and `assistant-connect.html` (name + scope form → create → show the snippet once, with the `claude mcp add tcms --transport http <origin>/mcp --header "Authorization: Bearer <secret>"` block built from the returned secret and `window.location.origin`; the "shown once" warning). Reachable from the profile sub-nav ("AI assistants"). Test (required by the breakdown): the **token-shown-once** path — after create the secret renders; navigating away and back does not.
 
-- [ ] **Step 5: `RepositoriesSettingsPage` + the review-to-close toggle.** Port `settings-repositories.html` (list with primary badge on position 0, add/edit/remove dialogs, the empty state, the note that a project with none is not degraded) under the project Settings sub-nav. In `GeneralSettingsPage.tsx`, add the "Require review to close issues" toggle bound to `reviewEnabledIssue` (A6: off on a new project). Test: the toggle round-trips; the repo list renders primary on the first row.
+- [x] **Step 5: `RepositoriesSettingsPage` + the review-to-close toggle.** Port `settings-repositories.html` (list with primary badge on position 0, add/edit/remove dialogs, the empty state, the note that a project with none is not degraded) under the project Settings sub-nav. In `GeneralSettingsPage.tsx`, add the "Require review to close issues" toggle bound to `reviewEnabledIssue` (A6: off on a new project). Test: the toggle round-trips; the repo list renders primary on the first row.
 
-- [ ] **Step 6: `ProposalReviewPage` — display only, A5 flagged.** **Confirmed at plan time:** the on-wire `/projects/{id}/ai-proposals` family is `repository`'s **test-case** proposals (`ReviewSubjectType` CASE/SUITE/PLAN/DOC); there is **no issue-proposal endpoint**, and D21 calls for `tracker`'s own `issue_proposal` (its own table, "a shared row is not a shared class"), which this module does **not** build — no migration column, no endpoint for it exists here. So port `story-proposal.html` as a **static/read-only** presentation of the shape (the accept/edit/reject layout, the "a proposal is not a task" note) with the arms **disabled and labelled "coming with the assistant-proposal write loop"**, and record in `features.md` and the close-out that **A5 (propose-then-accept) is not yet wired — it needs a `tracker` `issue_proposal` table and endpoint of its own** (a follow-on module or a later M5 slice). **Do not invent a fake accept and do not point it at the test-case proposals surface** (wrong subject, wrong module). If porting a fully non-functional screen is judged not worth it, skip the page entirely and record A5 as deferred in the close-out — the module deliverable (A1–A4, A6, A7) does not depend on it.
+- [x] **Step 6: `ProposalReviewPage` — display only, A5 flagged.** **Confirmed at plan time:** the on-wire `/projects/{id}/ai-proposals` family is `repository`'s **test-case** proposals (`ReviewSubjectType` CASE/SUITE/PLAN/DOC); there is **no issue-proposal endpoint**, and D21 calls for `tracker`'s own `issue_proposal` (its own table, "a shared row is not a shared class"), which this module does **not** build — no migration column, no endpoint for it exists here. So port `story-proposal.html` as a **static/read-only** presentation of the shape (the accept/edit/reject layout, the "a proposal is not a task" note) with the arms **disabled and labelled "coming with the assistant-proposal write loop"**, and record in `features.md` and the close-out that **A5 (propose-then-accept) is not yet wired — it needs a `tracker` `issue_proposal` table and endpoint of its own** (a follow-on module or a later M5 slice). **Do not invent a fake accept and do not point it at the test-case proposals surface** (wrong subject, wrong module). If porting a fully non-functional screen is judged not worth it, skip the page entirely and record A5 as deferred in the close-out — the module deliverable (A1–A4, A6, A7) does not depend on it.
 
-- [ ] **Step 7: the help entry.** Add the "Connect an AI assistant" card to the help sections linking to the connect flow (mirrors `help.html` line 17). **The three `tcms issue queue|context|attach-pr` lines are already there** — T4 added them, because `guideCopies.test.ts` reddens `packages/` over a command the guide does not list.
+- [x] **Step 7: the help entry.** Add the "Connect an AI assistant" card to the help sections linking to the connect flow (mirrors `help.html` line 17). **The three `tcms issue queue|context|attach-pr` lines are already there** — T4 added them, because `guideCopies.test.ts` reddens `packages/` over a command the guide does not list.
 
-- [ ] **Step 8: frontend gate on shanks.**
+- [x] **Step 8: frontend gate on shanks.**
 
 ```bash
 ~/bin/tcms-remote sync
@@ -816,9 +852,9 @@ Use **`/fe-react`** (`fe-react-forms`, `fe-react-ui-rules`, `fe-react-component-
 
 Expected: PASS (`tsc -b` strict, oxlint 0, Vitest + RTL).
 
-- [ ] **Step 9: `features.md` close-out.** Rewrite the agent-execution / assistant section of `docs/features.md` to describe what landed (self-service assistants, AI-eligible tasks, the agent-context fetch, the refuse-to-close gate, project repositories) — struck-through-and-superseded, not deleted, per the working agreement.
+- [x] **Step 9: `features.md` close-out.** Rewrite the agent-execution / assistant section of `docs/features.md` to describe what landed (self-service assistants, AI-eligible tasks, the agent-context fetch, the refuse-to-close gate, project repositories) — struck-through-and-superseded, not deleted, per the working agreement.
 
-- [ ] **Step 10: Commit the frontend + features.**
+- [x] **Step 10: Commit the frontend + features.**
 
 ```bash
 git add frontend/src/features/account/ frontend/src/features/settings/ \

@@ -457,10 +457,63 @@ What makes it safe to point at real data:
 - Destructive operations prompt for consent, and **refuse outright when the host cannot ask**
 - Tools are filtered by permission, so a narrowly-scoped token sees a narrower tool list
 
-Connecting one is handed over rather than described. The guide's MCP section generates the agent
+~~Connecting one is handed over rather than described. The guide's MCP section generates the agent
 token in place — one press, for anybody who may issue one — and drops the secret straight into the
-`mcpServers` block for this instance, so setup is *copy this*. The token-issuing dialog does the
-same for an Agent token issued the long way round.
+`mcpServers` block for this instance, so setup is *copy this*.~~ → **superseded 2026-09-04 (plan
+015).** That path still exists and still costs `token:issue`, which most people do not hold; the
+one a developer uses now is **self-service** and is described below.
+
+## Assistants — a developer's own AI, working a task
+
+A person connects their own AI assistant from their profile, flags a task as AI-eligible, and the
+assistant fetches it with its whole working context, reports a pull request back and moves it to In
+Review. **This product never runs code, never holds a repository and never calls a model.** It hands
+over a task and records what comes back as *that person, via that assistant*.
+
+**An assistant is a credential, not an account.** There is no agent principal, no orchestrator, no
+runner and no model key anywhere in this system: an assistant is an API token its owner issued for
+themselves, carrying the fixed `Agent` role, and its reach is that role intersected with the
+owner's own. Connecting one therefore needs **no permission at all** — it can never grant more than
+the person already holds, and if their permissions are reduced tomorrow its reach shrinks with
+theirs the same moment. Every act it performs already carries both halves of who did it, so the
+history reads *"Dana Petrov, via claude-code"* with nothing built to make it.
+
+- **Connect, scope, revoke** — `/account/assistants`. Name it, pin it to one project or leave it as
+  wide as you are, and take a one-line setup snippet. The token is shown **once** and lives only in
+  that page's memory; leaving loses it. A revoked assistant stays on the list rather than
+  disappearing, because its acts are in every issue's history and a vanished row would read as
+  though it had never existed
+- **AI-eligible tasks** — a flag on a sub-task, set from the task page and marked on the task, the
+  work table and the board card. Only flagged tasks reach an assistant's queue; nothing else about
+  the task changes
+- **One fetch, whole context** — `GET /issues/{key}/agent-context` returns the task, its parent
+  story's acceptance criteria, the epic's goal, the target release, the linked spec excerpts and the
+  project's repositories and build commands in a single read. An assistant that has to assemble
+  context from six calls generates without it. The task page renders the **same payload**, so a
+  person can see exactly what was handed over — which is how you tell "it misread the spec" from
+  "it never received it"
+- **A pull request comes back as a link, not an integration** — `prUrl` on the issue, recorded on
+  the history. Nothing here reads the branch, the diff or the review state
+- **It cannot close its own work, where the project says so** — "Require review to close issues" is
+  a per-project switch, **off by default**, and it binds on the issue's *assignee*. An assistant
+  acts as its owner, so it is bound exactly as they would be — there is **no assistant-specific
+  rule**, which is why a one-person company with the gate off closes its own work and is not
+  dead-ended. When it does bite, the move is dropped from the caller's own legal-move set, the
+  refusal names the move to make instead, and the attempt is recorded
+- **Repositories are reference data** — a project lists where its code is, the default branch, the
+  working folder and the build command, under Settings → Repositories. Nothing is cloned, fetched or
+  run. **A project with none is not degraded in any way**; an assistant is simply told where the
+  code is by the person running it
+
+On the tool surface this is three arms rather than three tools: `tcms_read_issue` gains a **queue**
+mode (the caller's own AI-eligible tasks) and a **context** mode, and `tcms_write_issue` gains
+**attach-pr**. On the CLI: `tcms issue queue`, `tcms issue context KEY`, `tcms issue attach-pr KEY
+--pr-url URL`.
+
+**Not built, and named rather than implied:** an assistant cannot *propose* a breakdown of a story
+into sub-tasks for a person to accept. That needs an issue-proposal record of its own — the existing
+proposal surface is the test-case one, a different subject in a different module — and neither the
+table nor the endpoint exists. Nothing in the product pretends otherwise.
 
 ## Running It
 

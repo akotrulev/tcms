@@ -42,6 +42,9 @@ function settings(overrides: Partial<ProjectSettings> = {}): ProjectSettings {
     reviewEnabledCase: false,
     reviewEnabledSuite: false,
     reviewEnabledPlan: false,
+    // D33's issue close gate. Off — this form does not offer it (General does), and the point of
+    // pinning it here is that saving THIS form must not switch it off.
+    reviewEnabledIssue: false,
     // B1's fourth subject (005 S9b). Off — this file is not about doc review.
     reviewEnabledDoc: false,
     requiredPeerReviews: 0,
@@ -154,6 +157,9 @@ describe('ReviewSettingsPage', () => {
 
     await waitFor(() => expect(put).toHaveBeenCalled())
     expect(put.mock.calls[0][1]).toEqual({
+      // Carried through untouched, and that is the point of this assertion since 015 T5: this form
+      // does not offer D33's gate and General does, so a save here must not switch it off.
+      reviewEnabledIssue: false,
       reviewEnabledCase: true,
       reviewEnabledSuite: true,
       reviewEnabledPlan: true,

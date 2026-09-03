@@ -10,6 +10,7 @@ import { useRef } from 'react';
 import { TIMEOUTS, api, newIntentKey, qs } from '../client';
 import { describeError } from '../../lib/describeError';
 import type {
+  AgentTaskContext,
   Issue,
   IssueComment,
   IssueCommentInput,
@@ -167,6 +168,33 @@ export function useIssueDocLinks(key: string): UseQueryResult<IssueDocLink[]> {
         timeoutMs: TIMEOUTS.interactive,
       }),
     enabled: key !== '',
+  });
+}
+
+/**
+ * The composite an assistant is handed for one task (015 D4) — and what the task page renders to
+ * show a person exactly what was handed over.
+ *
+ * **Gated on the caller's own decision to ask**, because it is a composite: it assembles the issue,
+ * the parent story's acceptance criteria, the epic goal, the linked spec excerpts and the project's
+ * repositories. The task page fetches it only for a task actually flagged AI-eligible — a screen
+ * that pulled six reads' worth of payload for every sub-task in the product would be paying for a
+ * panel nobody had asked to see.
+ *
+ * `meta.handled` because the panel renders its own failure beside a page that is otherwise working:
+ * the assistant context is an optional region, and a screen that turns into an error because one
+ * extra read failed is `error-handling`'s scoping rule broken in the obvious way.
+ */
+export function useAgentTaskContext(key: string, enabled: boolean): UseQueryResult<AgentTaskContext> {
+  return useQuery({
+    queryKey: keys.agentContext(key),
+    queryFn: ({ signal }) =>
+      api.get<AgentTaskContext>(`/issues/${encodeURIComponent(key)}/agent-context`, {
+        signal,
+        timeoutMs: TIMEOUTS.interactive,
+      }),
+    enabled: enabled && key !== '',
+    meta: { handled: true },
   });
 }
 

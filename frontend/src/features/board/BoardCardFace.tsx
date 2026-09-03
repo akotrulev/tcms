@@ -6,6 +6,7 @@ import { Identifier } from '../../components/Identifier';
 import { Badge } from '../../components/kit';
 import { cn } from '../../lib/cn';
 import { labelFill } from '../../lib/statusColors';
+import { AiEligibleMarker } from '../tracker/AiEligibleMarker';
 import { TypeIcon } from '../tracker/TypeIcon';
 import { MoveToMenu } from './MoveToMenu';
 import type { ServerColumn } from './cardMove';
@@ -155,6 +156,11 @@ export function BoardCardFace({
             {label.name}
           </Badge>
         ))}
+
+        <AiEligibleMarker
+          eligible={card.agentEligible}
+          data-testid={`${testId}.AiEligible`}
+        />
 
         {!card.countsTowardCompletion && (
           <Badge tone="plain" data-testid={`${testId}.NotCounted`}>

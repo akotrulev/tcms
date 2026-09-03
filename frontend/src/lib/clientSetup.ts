@@ -106,6 +106,23 @@ export function mcpInstallCommand(origin: string): string {
 }
 
 /**
+ * The one line that connects a Claude Code host to this instance as an assistant (015 A1).
+ *
+ * `assistant-connect.html`'s snippet, and it is one line rather than a config block on purpose:
+ * the reader has just pressed a button and holds a secret that dies when they leave the page, so
+ * what they need is something to paste, not a file to author. {@link mcpServerConfig} stays the
+ * shape for a host that wants the JSON.
+ */
+export function assistantSetupCommand(origin: string, token: string = TOKEN_PLACEHOLDER): string {
+  const base = normalizeOrigin(origin);
+  return [
+    'claude mcp add tcms --transport http \\',
+    `  ${base}${MCP_PATH} \\`,
+    `  --header "Authorization: Bearer ${token}"`,
+  ].join('\n');
+}
+
+/**
  * Installing and configuring the CLI, as the block a reader copies whole.
  *
  * The environment is exported rather than written to a file because there is no config file and no

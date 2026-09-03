@@ -198,7 +198,15 @@ function IssueForm({
     }
     setQuickError(null);
     try {
-      const issue = await create.mutateAsync({ typeId: quickType.id, title: quickTitle.trim() });
+      const issue = await create.mutateAsync({
+        typeId: quickType.id,
+        title: quickTitle.trim(),
+        // Sent rather than left to the server's own default, because `openapi-typescript` types a
+        // defaulted property as required. Nothing here offers the flag: an issue is marked
+        // AI-eligible from the task page once somebody has decided it is small enough to hand over,
+        // which is a judgement nobody makes while typing a title.
+        agentEligible: false,
+      });
       onCreated(issue.key);
     } catch (error) {
       setQuickError(describeError(error).body);
@@ -219,6 +227,7 @@ function IssueForm({
       const issue = await create.mutateAsync({
         typeId: values.typeId,
         title: values.title,
+        agentEligible: false,
         description: values.description || null,
         parentKey: values.parentKey || null,
         assigneeId: values.assigneeId || null,

@@ -7,7 +7,7 @@ import type { PermissionKey, Project, ProjectWorkflow } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
-import { aProjectWorkflow } from '../../test/fixtures'
+import { aProjectWorkflow, projectSettings } from '../../test/fixtures'
 import { GeneralSettingsPage } from './GeneralSettingsPage'
 import { ProjectsPage } from '../projects/ProjectsPage'
 
@@ -56,6 +56,9 @@ function mockReads(permissions: PermissionKey[], project: Project = LIVE, projec
     // Anchored so `/projects/p1/workflow` is not caught by the project arm's prefix — the harness
     // rule for a path-keyed mock with a sub-resource under it.
     if (/^\/projects\/[^/]+\/workflow$/.test(path)) return WORKFLOW
+    // The settings document, read since 015 T5 put D33's close gate on this screen. Anchored for
+    // the same reason as the workflow arm above it.
+    if (/^\/projects\/[^/]+\/settings$/.test(path)) return projectSettings({ projectId: 'p1' })
     if (/^\/projects\/[^/]+$/.test(path)) return project
     throw new Error(`unmocked read: ${path}`)
   }) as never)

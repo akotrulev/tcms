@@ -1,13 +1,14 @@
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { IssueTypeRef, ProjectWorkflow } from '../../api/types'
+import type { IssueTypeRef, PermissionKey, ProjectWorkflow } from '../../api/types'
 import { issueLevels } from '../../lib/labels'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
-import { aProject } from '../../test/fixtures'
+import { aProject, projectSettings } from '../../test/fixtures'
 import { GeneralSettingsPage } from './GeneralSettingsPage'
 
 /**
@@ -43,10 +44,17 @@ const WORKFLOW: ProjectWorkflow = {
   transitions: [],
 }
 
-function mockReads(types: IssueTypeRef[] = SEEDED_TYPES) {
+function mockReads(
+  types: IssueTypeRef[] = SEEDED_TYPES,
+  permissions: PermissionKey[] = ['project:read'],
+  settings = projectSettings({ projectId: PROJECT_ID }),
+) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
-    if (path.startsWith('/me/permissions')) return heldPermissions(['project:read'])
+    if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
     if (/^\/projects\/[^/]+\/workflow$/.test(path)) return { ...WORKFLOW, types }
+    // Anchored, so the settings sub-resource is not caught by the project prefix — the collision
+    // the harness rules name explicitly.
+    if (/^\/projects\/[^/]+\/settings$/.test(path)) return settings
     if (/^\/projects\/[^/]+$/.test(path)) {
       return aProject({ id: PROJECT_ID, key: 'ACME', name: 'Acme Storefront', caseCount: 12 })
     }
@@ -193,16 +201,83 @@ describe('The panels this screen deliberately does not have', () => {
     expect(screen.queryByText(/attach a client/i)).toBeNull()
   })
 
-  it('offers no review toggles and no time panel', async () => {
-    // M5 and M6. A toggle that changes no behaviour is the no-op this repo has shipped once, and a
-    // budget panel for a module that is not installed is an advertisement.
+  it('offers no time panel, and only one of the mockup’s two closing-work rows', async () => {
+    // ~~M5 and M6.~~ → the review toggle landed in 015 T5, so what is asserted now is the row
+    // beside it: `settings-general.html` draws an uneditable "An assistant may never close —
+    // always on", and the product has no such rule. An assistant acts as its owner, so with the
+    // gate off the same close succeeds for it (A6). A row promising an unconditional block would
+    // be a claim the server contradicts.
     mockReads()
     renderPage()
 
     await screen.findByTestId('GeneralSettings.Identity.Name')
 
-    expect(screen.queryByText(/Require review to close issues/i)).toBeNull()
+    expect(screen.queryByText(/An assistant may never close/i)).toBeNull()
     expect(screen.queryByText(/Track time on this project/i)).toBeNull()
     expect(screen.queryByText(/Budget/i)).toBeNull()
+  })
+})
+
+/**
+ * D33's gate, on the screen the mockup puts it on — and the one thing that could go wrong with it.
+ *
+ * `PUT /projects/{id}/settings` is a **full replacement** and the server reads an absent boolean as
+ * `false`. Two screens now edit that document, so a toggle here that sent only its own field would
+ * switch off every review setting the Review page owns. The assertion is therefore on the *whole
+ * body*, not on the one field that changed.
+ */
+describe('Require review to close issues', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('saves the whole settings document, not just the switch that moved', async () => {
+    mockReads(
+      SEEDED_TYPES,
+      ['project:read', 'project:settings'],
+      projectSettings({
+        projectId: PROJECT_ID,
+        reviewEnabledCase: true,
+        reviewEnabledDoc: true,
+        requiredPeerReviews: 2,
+        reviewEnabledIssue: false,
+      }),
+    )
+    const put = vi.spyOn(api, 'put').mockResolvedValue(
+      projectSettings({ projectId: PROJECT_ID, reviewEnabledIssue: true }) as never,
+    )
+    renderPage()
+
+    await userEvent.click(await screen.findByTestId('GeneralSettings.reviewEnabledIssue'))
+
+    await waitFor(() =>
+      expect(put).toHaveBeenCalledWith(`/projects/${PROJECT_ID}/settings`, {
+        reviewEnabledCase: true,
+        reviewEnabledSuite: false,
+        reviewEnabledPlan: false,
+        reviewEnabledDoc: true,
+        reviewEnabledIssue: true,
+        requiredPeerReviews: 2,
+        authorMayApproveOwnWork: false,
+        editAfterApproval: 'RETAIN',
+        requireApprovedCaseForRun: false,
+      }),
+    )
+  })
+
+  it('is read-only for somebody who cannot change the project’s settings', async () => {
+    mockReads(SEEDED_TYPES, ['project:read'])
+    renderPage()
+    await waitFor(() => expect(screen.getByTestId('GeneralSettings.reviewEnabledIssue')).toBeDisabled())
+  })
+
+  it('says the gate is inert while the author-cannot-approve rule is off', async () => {
+    mockReads(
+      SEEDED_TYPES,
+      ['project:read', 'project:settings'],
+      projectSettings({ projectId: PROJECT_ID, authorMayApproveOwnWork: true }),
+    )
+    renderPage()
+    expect(await screen.findByText(/Currently inert/)).toBeInTheDocument()
   })
 })

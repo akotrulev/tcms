@@ -67,6 +67,23 @@ export type ApiTokenInput = S['ApiTokenInput'];
  */
 export type IssuedApiToken = S['IssuedApiToken'];
 /**
+ * A connected AI assistant — **an `Agent`-role `api_token` the caller owns** (015 D26).
+ *
+ * There is no agent principal and no table of its own, which is why this is an alias over a view
+ * of `api_token` rather than a shape of its own: what a person calls "my assistant" is the
+ * credential their tool presents, and every act it performs is already attributed to them through
+ * it. A revoked one **stays in the list** with `revokedAt` set, for {@link ApiToken}'s reason —
+ * its acts are in each issue's history and a vanished row would read as though it never existed.
+ */
+export type Assistant = S['Assistant'];
+export type AssistantInput = S['AssistantInput'];
+/**
+ * The connect response — **the second shape in this contract that carries a credential**, and
+ * carried for exactly one render. {@link IssuedApiToken}'s note applies verbatim: nothing that
+ * renders a list may name this type, and nothing may write it to the query cache.
+ */
+export type IssuedAssistant = S['IssuedAssistant'];
+/**
  * One recorded act (§242).
  *
  * **Both actor halves are independently nullable and are normally set together** — a token-driven
@@ -86,6 +103,18 @@ export type ClassificationDimension = S['ClassificationDimension'];
 export type ClassificationValue = S['ClassificationValue'];
 export type ClassificationValueInput = S['ClassificationValueInput'];
 export type CaseStatus = S['CaseStatus'];
+/**
+ * One repository a project spans, and how it is built — **reference data (015 D16)**.
+ *
+ * This product never holds a repository, clones one or runs a build. The row is what a new joiner,
+ * or somebody's assistant, is told to check out, and a project with none is not degraded in any
+ * way — which is why nothing else in the product reads it.
+ *
+ * `primary` is **computed from `position`, not stored**: the lowest position is the primary one, so
+ * there is no flag two rows can both claim.
+ */
+export type ProjectRepository = S['ProjectRepository'];
+export type ProjectRepositoryInput = S['ProjectRepositoryInput'];
 
 // repository
 export type Suite = S['Suite'];
@@ -683,6 +712,16 @@ export type IssueCommentInput = S['IssueCommentInput'];
  * Not to be confused with {@link IssueLink}, which is 004's link out to a *Jira or ADO* issue.
  */
 export type IssueDocLink = S['IssueDocLink'];
+/**
+ * Everything needed to work one task, assembled server-side in one read (015 D4).
+ *
+ * One composite endpoint rather than six calls, and the reason is stated as a grounding rule: an
+ * assistant that has to assemble its own context from six requests generates without it. The task
+ * page renders the same payload so a person can see exactly what was handed over — which is the
+ * only way to tell "the assistant misread the spec" from "the assistant never received it".
+ */
+export type AgentTaskContext = S['AgentTaskContext'];
+export type AgentSpecExcerpt = S['AgentSpecExcerpt'];
 export type ProjectWorkflow = S['ProjectWorkflow'];
 export type WorkflowTransition = ProjectWorkflow['transitions'][number];
 export type StatusRemovalInput = S['StatusRemovalInput'];

@@ -1,13 +1,22 @@
 import { useParams } from 'react-router-dom';
-import { useProject, useProjectWorkflow, useSetProjectArchived } from '../../api/queries';
-import type { IssueTypeRef, Project } from '../../api/types';
+import {
+  useProject,
+  useProjectSettings,
+  useProjectWorkflow,
+  useSetProjectArchived,
+  useUpdateProjectSettings,
+} from '../../api/queries';
+import type { IssueTypeRef, Project, ProjectSettings } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
 import { Badge, Banner } from '../../components/kit';
-import { Button } from '../../components/ui';
+import { SettingRow } from '../../components/kit/SettingRow';
+import { Button, Switch } from '../../components/ui';
+import { useCan } from '../../auth/useCan';
 import { issueLevels } from '../../lib/labels';
+import { fullSettingsUpdate } from './settingsUpdate';
 import { TypeIcon } from '../tracker/TypeIcon';
 
 const TEST_ID = 'GeneralSettings';
@@ -20,10 +29,19 @@ const TEST_ID = 'GeneralSettings';
  * | Mockup panel | Module | Why it is not here |
  * |---|---|---|
  * | Client select | Mc | `Project` carries no client, so the control could only ever say "None". An empty "Client: —" is exactly the nagging `solo-overview.html` rules out |
- * | "Closing work" review toggles | M5 | Nothing reads them, and a toggle that changes no behaviour is the no-op this repo has shipped once |
+ * | ~~"Closing work" review toggles~~ | ~~M5~~ | → **landed in 015 T5.** `review_enabled_issue` exists and `TransitionService` reads it, so the toggle changes behaviour |
  * | "Time" panel | M6 | There is no hours ceiling and no logged time to show a burn against |
  *
- * What lands is **Identity** and the **Issue types** list.
+ * What lands is **Identity**, **Closing work** and the **Issue types** list.
+
+ * ## Only one of the mockup's two "Closing work" rows is real
+ *
+ * `settings-general.html` draws a second, uneditable row — *"An assistant may never close. Fixed.
+ * An assistant reaches In Review at most, whatever this project sets"* — and the product does not
+ * work that way. There is **no token-specific rule** (015 D2/A6): an assistant acts as its owner,
+ * so with the gate off the same close succeeds for it exactly as it would for them. That is the
+ * criterion a one-person company depends on, and a row promising an unconditional block would be a
+ * claim the server contradicts. Dropped rather than rendered, and recorded here.
  *
  * ## Identity is read-only, and that is the contract rather than a choice
  *
@@ -57,6 +75,8 @@ export function GeneralSettingsPage() {
   const { projectId = '' } = useParams();
   const project = useProject(projectId);
   const workflow = useProjectWorkflow(projectId);
+  const settings = useProjectSettings(projectId);
+  const canEdit = useCan(projectId).can('project:settings');
 
   return (
     <div>
@@ -81,6 +101,15 @@ export function GeneralSettingsPage() {
           </DataRegion>
 
           <DataRegion
+            testId={`${TEST_ID}.Closing`}
+            state={{ ...settings, refetch: () => void settings.refetch() }}
+          >
+            {(current) => (
+              <ClosingWorkPanel projectId={projectId} settings={current} canEdit={canEdit} />
+            )}
+          </DataRegion>
+
+          <DataRegion
             testId={`${TEST_ID}.Types`}
             state={{ ...workflow, refetch: () => void workflow.refetch() }}
           >
@@ -98,6 +127,80 @@ export function GeneralSettingsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * D33's gate, on the screen the mockup and the reader both look for it on.
+ *
+ * **It saves the whole settings document**, through `fullSettingsUpdate`, and that is the only
+ * interesting thing about the panel: the endpoint is a `PUT` of the whole value and an absent
+ * boolean reads as `false`, so a form here that sent one field would switch off every review
+ * setting the Review screen owns. The two screens edit one document, and the field list is written
+ * once, beside them.
+ *
+ * **Saved on the switch rather than behind a Save button**, unlike the Review form. There is one
+ * control and no second decision to make with it — the Review page keeps a draft because six
+ * controls only make sense together, and one control does not.
+ */
+function ClosingWorkPanel({
+  projectId,
+  settings,
+  canEdit,
+}: {
+  projectId: string;
+  settings: ProjectSettings;
+  canEdit: boolean;
+}) {
+  const save = useUpdateProjectSettings(projectId);
+
+  return (
+    <section
+      className="rounded-[10px] border border-line bg-panel"
+      data-testid={`${TEST_ID}.Closing.Panel`}
+    >
+      <div className="border-b border-line px-3.5 py-2.5">
+        <h2 className="m-0 text-[13.5px] font-semibold text-ink">Closing work</h2>
+      </div>
+
+      <div className="px-3.5">
+        <SettingRow
+          label="Require review to close issues"
+          description="A second person moves an issue into a done status. Whoever is assigned to it cannot close it themselves."
+          consequence={
+            settings.authorMayApproveOwnWork
+              ? 'Currently inert: "the person who submits something cannot approve it" is off for this project, and this gate is built on that rule. Turn it on under Review for this switch to bite.'
+              : 'It binds on the assignee alone, and an assistant is bound by it exactly as the person who owns it would be — there is no separate rule for one.'
+          }
+          control={
+            <Switch
+              checked={settings.reviewEnabledIssue}
+              disabled={!canEdit || save.isPending}
+              onCheckedChange={(checked) =>
+                save.mutate(fullSettingsUpdate(settings, { reviewEnabledIssue: checked }))
+              }
+              aria-label="Require review to close issues"
+              data-testid={`${TEST_ID}.reviewEnabledIssue`}
+            />
+          }
+        />
+      </div>
+
+      {save.isError && (
+        <div className="px-3.5 pb-3">
+          <Banner tone="bad" data-testid={`${TEST_ID}.Closing.Failed`}>
+            <span role="alert">The switch did not save. It shows what the server holds.</span>
+          </Banner>
+        </div>
+      )}
+
+      <div className="border-t border-line px-3.5 py-2.5">
+        <span className="text-[11.5px] leading-[1.55] text-ink-4">
+          A new project ships with this <strong>off</strong>, so a one-person company is not
+          dead-ended by a rule written for a team.
+        </span>
+      </div>
+    </section>
   );
 }
 

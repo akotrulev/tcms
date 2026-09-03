@@ -258,6 +258,7 @@ function issueCard(partial: Partial<BoardIssueCard> = {}): BoardIssueCard {
     typeLevel: 'STORY',
     iconCode: 'story',
     countsTowardCompletion: true,
+    agentEligible: false,
     columnId: READY_COLUMN.id,
     status: READY,
     rank: '1024',

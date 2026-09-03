@@ -25,7 +25,9 @@
  * it, the dependency is invisible.
  */
 import type {
+  AgentTaskContext,
   Artifact,
+  Assistant,
   AuditEvent,
   AuthResult,
   Configuration,
@@ -44,6 +46,7 @@ import type {
   NotificationSubscription,
   PlanStatistics,
   Project,
+  ProjectRepository,
   ProjectSettings,
   ReviewImpact,
   SocialIdentity,
@@ -154,6 +157,64 @@ export function projectSettings(overrides: Partial<ProjectSettings> = {}): Proje
     authorMayApproveOwnWork: false,
     editAfterApproval: 'RETAIN',
     requireApprovedCaseForRun: false,
+    // D33's issue close gate. `false` like its siblings, and the same reason twice over: it is what
+    // a freshly provisioned project carries (A6 — a one-person company must not dead-end), and it
+    // is the state the transition menu is tested in unless a test asks for the other.
+    reviewEnabledIssue: false,
+    ...overrides,
+  }
+}
+
+/**
+ * One connected assistant (015 D26) — live, never used, scoped to every project the owner can see.
+ *
+ * `revokedAt: null` is the state the profile's list is mostly read in; pass a timestamp for the
+ * revoked row, which stays in the list rather than disappearing from it.
+ */
+export function anAssistant(overrides: Partial<Assistant> = {}): Assistant {
+  return {
+    id: 'as1',
+    name: 'claude-code',
+    projectId: null,
+    projectKey: null,
+    lastUsedAt: null,
+    revokedAt: null,
+    createdAt: AT,
+    ...overrides,
+  }
+}
+
+/** One repository a project spans. `primary` is the server's, computed from `position`. */
+export function aProjectRepository(
+  overrides: Partial<ProjectRepository> = {},
+): ProjectRepository {
+  return {
+    id: 'repo1',
+    name: 'acme-storefront',
+    url: 'git@github.com:northwind/acme-storefront.git',
+    defaultBranch: 'main',
+    subdirectory: '/',
+    buildCommand: 'npm ci && npm run build && npm test',
+    position: 0,
+    primary: true,
+    ...overrides,
+  }
+}
+
+/**
+ * The composite an assistant is handed (015 D4).
+ *
+ * `story`, `epic` and the two arrays are all **absent or empty** by default, which is the shape a
+ * task with no story parent in a project with no repositories actually has — the state the panel's
+ * every-row-optional layout exists for.
+ */
+export function anAgentTaskContext(
+  overrides: Partial<AgentTaskContext> = {},
+): AgentTaskContext {
+  return {
+    issue: anIssue({ agentEligible: true }),
+    specExcerpts: [],
+    repositories: [],
     ...overrides,
   }
 }

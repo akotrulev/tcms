@@ -35,6 +35,7 @@ import { useIssueFilterChips, useWorkFilter } from '../board/useWorkFilter';
 import { CalendarView } from '../releases/CalendarView';
 import { RoadmapView } from '../releases/RoadmapView';
 import { StatusBadge } from './StatusBadge';
+import { AiEligibleMarker } from './AiEligibleMarker';
 import { TypeIcon } from './TypeIcon';
 
 /**
@@ -474,13 +475,19 @@ function IssueRow({ issue, visible }: { issue: IssueSummary; visible: readonly C
             `/issues/:key` — no project segment, because a key is unique in the only scope RLS lets
             a caller see, and it is what a person types into a commit message.
           */}
-          <RouterLink
-            to={`/issues/${encodeURIComponent(issue.key)}`}
-            data-testid={`${TEST_ID}.Row.Title`}
-            className="text-inherit no-underline hover:text-steel hover:underline"
-          >
-            {issue.title}
-          </RouterLink>
+          <span className="flex min-w-0 items-center gap-2">
+            <RouterLink
+              to={`/issues/${encodeURIComponent(issue.key)}`}
+              data-testid={`${TEST_ID}.Row.Title`}
+              className="min-w-0 text-inherit no-underline hover:text-steel hover:underline"
+            >
+              {issue.title}
+            </RouterLink>
+            <AiEligibleMarker
+              eligible={issue.agentEligible}
+              data-testid={`${TEST_ID}.Row.AiEligible`}
+            />
+          </span>
         </TableCell>
       )}
 
