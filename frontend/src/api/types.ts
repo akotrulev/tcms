@@ -789,6 +789,67 @@ export type IssueTestCasesInput = S['IssueTestCasesInput'];
 export type CaseVerification = S['CaseVerification'];
 export type IssueRef = S['IssueRef'];
 
+// tracker.imports (014 M4) — the Jira / Azure DevOps offramp
+/**
+ * The source system. `JIRA_CLOUD` authenticates with Basic (`accountEmail` + an API token); the
+ * other two with a Bearer PAT, and `accountEmail` is ignored.
+ *
+ * **Not {@link TrackerProvider}**, which is 004's *outbound* integration and spells its middle
+ * member `JIRA_DC`. Two enums for two directions is deliberate: this one is a source read once and
+ * abandoned, that one is a per-person credential the product keeps.
+ */
+export type ImportProvider = S['ImportProvider'];
+/**
+ * One connection, for one operation — **and the credential in it is never stored** (D-a), not on
+ * the run, not encrypted, not anywhere.
+ *
+ * That is a claim about this type's lifetime as much as about the server's: an `ImportConnection`
+ * belongs in a component's `useState` and in a request body, and nowhere a value outlives the tab.
+ * It is never a query key, never `localStorage`, never a URL.
+ */
+export type ImportConnection = S['ImportConnection'];
+export type SourceProject = S['SourceProject'];
+export type SourceProjectList = S['SourceProjectList'];
+export type ImportPreviewInput = S['ImportPreviewInput'];
+/**
+ * One source field that is **not** imported, and how many values it holds.
+ *
+ * The same shape is served by the preview and by the report, from one derivation on the server
+ * (D-f), so the screen must not compute, re-order or re-word a row: the two are asserted equal
+ * element for element, and a client that rewrote one of them would break a promise it cannot see.
+ */
+export type DroppedField = S['DroppedField'];
+export type PreviewTypeRow = S['PreviewTypeRow'];
+/**
+ * One source status with the target this project would suggest.
+ *
+ * `suggestedStatusId` null means nothing matched — the mapping step shows the row **unmapped**, and
+ * a client that defaulted it to the first status would be doing precisely what the disabled Confirm
+ * exists to prevent.
+ */
+export type PreviewStatusRow = S['PreviewStatusRow'];
+export type ImportPreviewTotals = S['ImportPreviewTotals'];
+/** A reason the import cannot proceed, computed by the preview rather than at minute four. */
+export type ImportBlocker = S['ImportBlocker'];
+export type ImportBlockerKind = S['ImportBlocker']['kind'];
+export type ImportPreview = S['ImportPreview'];
+export type StatusMappingEntry = S['StatusMappingEntry'];
+export type ImportOptions = S['ImportOptions'];
+export type ImportInput = S['ImportInput'];
+export type ImportRunStatus = S['ImportRunStatus'];
+export type AppliedStatusMapping = S['AppliedStatusMapping'];
+export type ImportedPerson = S['ImportedPerson'];
+export type ImportRunSummary = S['ImportRunSummary'];
+/**
+ * One import, and the report of it.
+ *
+ * `startedBy` is a **nullable {@link UserRef}** — read `startedBy?.displayName`. It was an inline
+ * `{id, name}` when the contract first declared it and became a `UserRef` in 014 T4, because every
+ * other "who did this" position in the contract is one and a bespoke person shape here would have
+ * been a fifth spelling of one concept.
+ */
+export type ImportRun = S['ImportRun'];
+
 /**
  * The one filter the board, the backlog and the table share (D34) — and it is the board's
  * parameter set, which is **not** {@link IssueFilters}.

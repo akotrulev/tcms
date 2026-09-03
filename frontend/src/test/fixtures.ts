@@ -109,6 +109,14 @@ import type {
   Roadmap,
   RoadmapEpic,
   RoadmapRelease,
+  DroppedField,
+  ImportBlocker,
+  ImportPreview,
+  ImportRun,
+  ImportRunSummary,
+  PreviewStatusRow,
+  PreviewTypeRow,
+  SourceProject,
 } from '../api/types'
 
 /** A fixed instant, so a body carrying a timestamp does not carry a different one each run. */
@@ -1401,6 +1409,129 @@ export function anImportRow(overrides: Partial<ImportRow> = {}): ImportRow {
     reason: null,
     caseKey: null,
     preconditions: [],
+    ...overrides,
+  }
+}
+
+/**
+ * The import shapes (014 M4). Inert like every factory here, and two of them deliberately so.
+ *
+ * `anImportPreview` has **no blockers and no statuses**: a preview that could not proceed is the
+ * subject of exactly one kind of test, and a test that is about the mapping step should not inherit
+ * a collision it never asserted. `anImportRun` is `COMPLETED` with every count at zero, which is the
+ * least interesting run the contract admits — a test about the failure path names `FAILED` and its
+ * `failureReason` on purpose.
+ */
+export function aSourceProject(overrides: Partial<SourceProject> = {}): SourceProject {
+  return { key: 'PROJ', name: 'Storefront', issueCount: 0, ...overrides }
+}
+
+export function aPreviewTypeRow(overrides: Partial<PreviewTypeRow> = {}): PreviewTypeRow {
+  return {
+    sourceTypeName: 'Story',
+    targetTypeId: 'it1',
+    targetTypeName: 'Story',
+    targetLevel: 'STORY',
+    countsTowardCompletion: true,
+    count: 0,
+    ...overrides,
+  }
+}
+
+/**
+ * One source status.
+ *
+ * `matched` false and `suggestedStatusId` null is the **unmapped** row — the state the mapping step
+ * exists to refuse to skip past — so a test asking for "a status" gets the interesting one for free
+ * and a test about a pre-filled row says `matched: true` out loud.
+ */
+export function aPreviewStatusRow(overrides: Partial<PreviewStatusRow> = {}): PreviewStatusRow {
+  return {
+    sourceStatusName: 'To Do',
+    count: 0,
+    matched: false,
+    suggestedStatusId: null,
+    ...overrides,
+  }
+}
+
+export function aDroppedField(overrides: Partial<DroppedField> = {}): DroppedField {
+  return {
+    name: 'Story Points',
+    fieldType: 'number',
+    valueCount: 0,
+    reason: 'estimates here are hours; points have no conversion',
+    ...overrides,
+  }
+}
+
+export function anImportBlocker(overrides: Partial<ImportBlocker> = {}): ImportBlocker {
+  return { kind: 'KEY_COLLISION', detail: 'Some keys already exist.', keys: [], ...overrides }
+}
+
+export function anImportPreview(overrides: Partial<ImportPreview> = {}): ImportPreview {
+  return {
+    projectId: 'p1',
+    sourceProjectKey: 'PROJ',
+    sourceKeyPrefix: 'PROJ',
+    projectKeyPrefix: 'PRJ',
+    totals: {
+      issues: 0,
+      labels: 0,
+      comments: 0,
+      historyEntries: 0,
+      fixVersions: 0,
+      sprintValues: 0,
+    },
+    types: [],
+    statuses: [],
+    droppedFields: [],
+    blockers: [],
+    ...overrides,
+  }
+}
+
+export function anImportRun(overrides: Partial<ImportRun> = {}): ImportRun {
+  return {
+    id: 'ir1',
+    projectId: 'p1',
+    provider: 'JIRA_CLOUD',
+    siteUrl: 'https://northwind.atlassian.net',
+    accountEmail: 'ops@northwind.test',
+    sourceProjectKey: 'PROJ',
+    status: 'COMPLETED',
+    startedAt: AT,
+    finishedAt: AT,
+    // Nullable, and null by default: a run nobody is named for is the state the report has to
+    // survive, and a screen that read `startedBy.displayName` would only fail on it.
+    startedBy: null,
+    issuesImported: 0,
+    releasesCreated: 0,
+    commentsImported: 0,
+    labelsCreated: 0,
+    droppedValueCount: 0,
+    labelPerSprint: false,
+    backlogOrderPreserved: true,
+    failureReason: null,
+    droppedFields: [],
+    statusMapping: [],
+    people: [],
+    ...overrides,
+  }
+}
+
+export function anImportRunSummary(overrides: Partial<ImportRunSummary> = {}): ImportRunSummary {
+  return {
+    id: 'ir1',
+    provider: 'JIRA_CLOUD',
+    siteUrl: 'https://northwind.atlassian.net',
+    sourceProjectKey: 'PROJ',
+    status: 'COMPLETED',
+    startedAt: AT,
+    issuesImported: 0,
+    statusesMapped: 0,
+    labelsCreated: 0,
+    droppedFieldCount: 0,
     ...overrides,
   }
 }

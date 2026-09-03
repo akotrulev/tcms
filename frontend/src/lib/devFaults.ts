@@ -20,6 +20,7 @@
  *     tcmsFaults.rank('conflict') // the rank write loses a race — see below
  *     tcmsFaults.wip()            // every card move lands the column over its limit — see below
  *     tcmsFaults.release('empty') // the roadmap is empty — merge day, see below
+ *     tcmsFaults.importing('midway') // the source stopped answering during the run — see below
  *     tcmsFaults.off()
  *
  * ## Why this lives here and not in a mock transport
@@ -111,6 +112,43 @@
  *     in every instance, and the screen has to say why and offer to create the first one. After
  *     somebody does, the state is unreachable again without a fresh database.
  *
+ * ## The import module's six switches, and not one of them is reachable by using the app (014 T7)
+ *
+ * These land **before the screens they prove**, for the working agreement above — and here the rule
+ * is not a discipline so much as the only option available. Every failure this module has to word
+ * correctly lives inside **somebody else's Jira**: a token that was revoked this morning, an account
+ * that can list a project but not read its issues, a site that stops answering at minute four. A
+ * developer cannot produce any of them from a healthy instance, and the ones that matter most are
+ * the ones a demo instance is furthest from.
+ *
+ *   - `importing('unauthorized')` / `importing('forbidden')` — the source refuses the credential, or
+ *     refuses the account this particular project. Two arms rather than one, for `tracker()`'s
+ *     reason inverted: here the two sentences are **different advice** — a rejected token is
+ *     replaced, an account without access is granted access by somebody else — and the contract
+ *     serves the source's own message on both, so a single "the import failed" switch would prove
+ *     the screen renders a sentence and nothing about which sentence.
+ *   - `importing('down')` — the source did not answer at all. The `502` the two credential-carrying
+ *     POSTs declare.
+ *   - `importing('midway')` — **the one this module was built for**, and the only one of the six
+ *     that spans two requests. The preview answered, the mapping was confirmed, the run was accepted
+ *     with a `202` — and then the source stopped answering. Its correct rendering is a **FAILED
+ *     report saying the project is unchanged**, never a spinner that never ends and never a partial
+ *     success: the write is one all-or-nothing transaction after the read pass (D-b), so nothing was
+ *     half-written and the screen has to say so. A run stuck `RUNNING` for ever is what the reaper
+ *     exists to prevent server-side, and this is the client half of the same claim.
+ *   - `importing('collision')` — the preview answers `200` with a `KEY_COLLISION` blocker. **Not a
+ *     failure**, which is why it is an arm here: it is the state the mockup does not draw, it
+ *     replaces Continue rather than reddening the page, and reaching it for real needs a Jira
+ *     project whose keys already exist in this company.
+ *   - `importing('slow')` — the source reads never answer, proving the long budget the preview is
+ *     given rather than the interactive one. A real project takes minutes to page; a preview that
+ *     gave up after ten seconds would be indistinguishable from one that failed.
+ *
+ * **The report reads are deliberately left alone by the first three arms.** `GET /imports` and
+ * `GET /imports/{id}` are served from our own database and reach no source system — that is the
+ * promise the report makes about outliving the system it describes — so a fault that broke them
+ * would be asserting the opposite of what the module claims.
+ *
  * Both path tests are **anchored** (`/^\/releases\/[^/]+\/readiness$/`), so `untested` cannot
  * catch the release detail read one segment above it and fabricate a `ReleaseReadiness` where a
  * `Release` was expected — the drifted-body failure, injected by accident.
@@ -154,6 +192,8 @@ export interface FaultState {
   wip: boolean;
   /** How the release module's reads misbehave, or `null` for an instance with releases in it. */
   release: ReleaseFault | null;
+  /** How an import misbehaves, or `null` for a source system that answers. */
+  import: ImportFault | null;
 }
 
 /** The five ways somebody else's tracker fails us. See this module's header. */
@@ -182,6 +222,17 @@ export type RankFault = 'conflict' | 'rebalance';
  */
 export type ReleaseFault = 'untested' | 'empty';
 
+/**
+ * How an import misbehaves, or `null` for a source that answers.
+ *
+ * **None of these can be reached by using the app**, which is the whole reason they are here: the
+ * failures this module exists to word correctly all live inside somebody else's Jira. `'midway'`
+ * is the one the module was built for — a source that answered the preview and stopped answering
+ * during the run — and its correct rendering is a FAILED report saying the project is unchanged,
+ * never a spinner and never a partial success.
+ */
+export type ImportFault = 'unauthorized' | 'forbidden' | 'down' | 'midway' | 'collision' | 'slow';
+
 const faults: FaultState = {
   status: null,
   retryAfter: null,
@@ -194,6 +245,7 @@ const faults: FaultState = {
   rank: null,
   wip: false,
   release: null,
+  import: null,
 };
 
 /**
@@ -250,6 +302,47 @@ function isReadinessRead(path: string, method: string): boolean {
 /** `GET /projects/{projectId}/roadmap`, anchored for {@link isReadinessRead}'s reason. */
 function isRoadmapRead(path: string, method: string): boolean {
   return method === 'GET' && /^\/projects\/[^/]+\/roadmap$/.test(path);
+}
+
+/** A path with its query string removed — `/imports?projectId=…` is still `/imports`. */
+function withoutQuery(path: string): string {
+  return path.split('?')[0] ?? path;
+}
+
+/**
+ * The two operations that **reach the source system carrying a credential**, and only those.
+ *
+ * `POST /imports` is not among them even though it starts a run against the source: it answers
+ * `202` and dispatches, so the failure it can produce is not a failure of this request. That one is
+ * {@link isRunRead}'s, one poll later, which is what `'midway'` exists to drive.
+ */
+function isSourceCall(path: string, method: string): boolean {
+  const bare = withoutQuery(path);
+  return method === 'POST' && (bare === '/imports/source-projects' || bare === '/imports/preview');
+}
+
+/**
+ * `POST /imports` — the confirmation, anchored so it cannot catch its two POST siblings.
+ *
+ * The trailing check is on the whole path rather than a prefix, because `/imports/preview` and
+ * `/imports/source-projects` are the same prefix and a fault that answered one of them with an
+ * `ImportRun` would be the drifted-body failure, injected by accident.
+ */
+function isStartImport(path: string, method: string): boolean {
+  return method === 'POST' && withoutQuery(path) === '/imports';
+}
+
+/**
+ * `GET /imports/{importRunId}` — the poll target.
+ *
+ * **The method is what tells this apart from the two POST sub-paths**, not the shape of the
+ * segment: `/^\/imports\/[^/]+$/` matches `/imports/preview` and `/imports/source-projects` exactly
+ * as well as it matches a run id, and a run fault answering the preview would serve an `ImportRun`
+ * where an `ImportPreview` was expected. Neither of those two is ever a `GET`, so the pair of
+ * conditions is unambiguous where either alone is not.
+ */
+function isRunRead(path: string, method: string): boolean {
+  return method === 'GET' && /^\/imports\/[^/]+$/.test(withoutQuery(path));
 }
 
 /** The issue key a path names, decoded — the fabricated bodies have to answer about the right one. */
@@ -321,6 +414,16 @@ export function verdictFor(path: string, method = 'GET'): FaultVerdict {
   */
   if (faults.release !== null && applies(path)) {
     const verdict = releaseVerdict(faults.release, path, method);
+    if (verdict.kind !== 'none') return verdict;
+  }
+
+  /*
+    The import arm, sixth, and scoped by path for every arm above's reason. Four of its six states
+    fabricate the shape of one specific operation, so a substring match would serve an `ImportRun`
+    where an `ImportPreview` was expected.
+  */
+  if (faults.import !== null && applies(path)) {
+    const verdict = importVerdict(faults.import, path, method);
     if (verdict.kind !== 'none') return verdict;
   }
 
@@ -552,6 +655,152 @@ function releaseVerdict(fault: ReleaseFault, path: string, method: string): Faul
   return { kind: 'body', status: 200, body: { releases: [], unscheduled: [] } };
 }
 
+/** The source system's own message, per arm — shown only to the person whose credential it is. */
+const IMPORT_SOURCE_ERRORS: Record<'unauthorized' | 'forbidden' | 'down', string> = {
+  unauthorized:
+    'The source system rejected the credential. An API token can be revoked from the account '
+    + 'that created it, and one that has been is indistinguishable from one typed wrongly.',
+  forbidden:
+    'The credential is valid, but this account may not read that project. Someone with '
+    + 'administrator rights in the source system has to grant it browse access first.',
+  down: 'The source system did not answer.',
+};
+
+/**
+ * A run that never started, fabricated for `'midway'`.
+ *
+ * Its `projectId` is a placeholder for `breachedMoveVerdict`'s reason: the seam sits in front of
+ * `fetch` and never sees the request body, so there is no project to answer about. Nothing reads
+ * it — the wizard navigates by the id in the response and the report page reads the run — and it is
+ * said out loud here because a developer watching the network tab would otherwise read the
+ * placeholder as a defect in the endpoint.
+ *
+ * **Every count is zero and `failureReason` says the project is unchanged**, which is the whole
+ * claim: the write is one all-or-nothing transaction after the read pass (D-b), so a source that
+ * stopped answering leaves nothing behind. A fabricated partial count here would make the fault
+ * agree with the defect it exists to catch.
+ */
+function strandedRun(status: 'RUNNING' | 'FAILED'): unknown {
+  return {
+    id: '00000000-0000-4000-8000-0000000000f1',
+    projectId: '00000000-0000-4000-8000-0000000000f0',
+    provider: 'JIRA_CLOUD',
+    siteUrl: 'https://northwind.atlassian.net',
+    accountEmail: 'ops@northwind.test',
+    sourceProjectKey: 'PROJ',
+    status,
+    startedAt: new Date().toISOString(),
+    finishedAt: status === 'FAILED' ? new Date().toISOString() : null,
+    startedBy: null,
+    issuesImported: 0,
+    releasesCreated: 0,
+    commentsImported: 0,
+    labelsCreated: 0,
+    droppedValueCount: 0,
+    labelPerSprint: false,
+    backlogOrderPreserved: false,
+    failureReason:
+      status === 'FAILED'
+        ? 'The source system stopped answering while its issues were being read. '
+          + 'Nothing was written \u2014 this project is exactly as it was before the import started.'
+        : null,
+    droppedFields: [],
+    statusMapping: [],
+    people: [],
+  };
+}
+
+/**
+ * What an import does instead of working.
+ *
+ * The six arms are three different kinds of thing, and keeping them apart is the point:
+ *
+ *   - **Three refusals by the source** (`unauthorized`, `forbidden`, `down`) answer the two
+ *     credential-carrying POSTs with the contract's own `502`, each carrying the source's own
+ *     sentence. They deliberately leave `GET /imports` and `GET /imports/{id}` alone: those are
+ *     served from our database and reach no source system, which is the promise the report makes
+ *     about outliving what it describes.
+ *   - **`collision` is not a failure.** It is a `200` preview carrying a `KEY_COLLISION` blocker —
+ *     the state `import-preview.html` does not draw, which replaces Continue rather than reddening
+ *     the page.
+ *   - **`midway` spans two requests**, and is the only arm here that does. `POST /imports` is
+ *     accepted with its `202` exactly as it would be, and the poll that follows answers `FAILED`.
+ *     A fault that refused the `202` would prove the confirm button's error path, which
+ *     `unauthorized` already proves, and nothing whatever about the report the module was built to
+ *     word.
+ */
+function importVerdict(fault: ImportFault, path: string, method: string): FaultVerdict {
+  const touchesImports = withoutQuery(path).startsWith('/imports');
+  if (!touchesImports) return { kind: 'none' };
+
+  if (fault === 'slow') {
+    // The source calls only. A hung poll would be a spinner that never ends, which is the defect
+    // this module has to avoid rather than a budget it has to prove.
+    return isSourceCall(path, method) ? { kind: 'hang' } : { kind: 'none' };
+  }
+
+  if (fault === 'collision') {
+    if (withoutQuery(path) !== '/imports/preview' || method !== 'POST') return { kind: 'none' };
+    return {
+      kind: 'body',
+      status: 200,
+      body: {
+        projectId: '00000000-0000-4000-8000-0000000000f0',
+        sourceProjectKey: 'PROJ',
+        sourceKeyPrefix: 'PROJ',
+        projectKeyPrefix: 'ACME',
+        totals: {
+          issues: 1482,
+          labels: 214,
+          comments: 4892,
+          historyEntries: 11306,
+          fixVersions: 38,
+          sprintValues: 1204,
+        },
+        types: [],
+        /*
+          Empty statuses, and `suggestedStatusId` would be null in any case: the seam cannot know
+          this project's real status ids, and a fabricated one would be a uuid the mapping step
+          would send to a server that has never seen it. The mapping step is unreachable behind a
+          blocker anyway, which is the state under test.
+        */
+        statuses: [],
+        droppedFields: [],
+        blockers: [
+          {
+            kind: 'KEY_COLLISION',
+            detail:
+              'Three keys in PROJ already exist in this company. Importing them would create a '
+              + 'second issue with the same key, so the import cannot proceed.',
+            keys: ['PROJ-14', 'PROJ-802', 'PROJ-4812'],
+          },
+        ],
+      },
+    };
+  }
+
+  if (fault === 'midway') {
+    if (isStartImport(path, method)) return { kind: 'body', status: 202, body: strandedRun('RUNNING') };
+    if (isRunRead(path, method)) return { kind: 'body', status: 200, body: strandedRun('FAILED') };
+    return { kind: 'none' };
+  }
+
+  if (!isSourceCall(path, method)) return { kind: 'none' };
+  return {
+    kind: 'body',
+    status: 502,
+    body: {
+      type: 'import-source-unavailable',
+      title: 'The source system did not answer',
+      status: 502,
+      detail: IMPORT_SOURCE_ERRORS[fault],
+      permission: null,
+      scope: null,
+      line: null,
+    },
+  };
+}
+
 /**
  * A card move that landed **and** put its column over the limit — story B3's 200 carrying a fact.
  *
@@ -751,6 +1000,21 @@ export function installFaultConsole(): void {
           : `[tcms faults] releases are now: ${fault}`,
       );
     },
+    /**
+     * How an import misbehaves. `tcmsFaults.importing(null)` restores it without clearing anything
+     * else, for `tracker()`'s reason.
+     *
+     * ~~`import`~~ — a reserved word cannot be a shorthand method name that reads as a verb here,
+     * and `importing` is what the call site says anyway: `tcmsFaults.importing('midway')`.
+     */
+    importing(fault: ImportFault | null) {
+      faults.import = fault;
+      console.info(
+        fault === null
+          ? '[tcms faults] imports behave again'
+          : `[tcms faults] imports are now: ${fault}`,
+      );
+    },
     only(pathContains: string | null) {
       faults.pathContains = pathContains;
       console.info(`[tcms faults] scoped to paths containing ${JSON.stringify(pathContains)}`);
@@ -767,6 +1031,7 @@ export function installFaultConsole(): void {
       faults.rank = null;
       faults.wip = false;
       faults.release = null;
+      faults.import = null;
       console.info('[tcms faults] cleared');
     },
     state: () => ({ ...faults }),
@@ -776,6 +1041,6 @@ export function installFaultConsole(): void {
   console.info(
     '[tcms faults] available — try tcmsFaults.status(500), .hang(), .expire(), '
       + ".tracker('403'), .issue('conflict'), .rank('conflict'), .wip(), "
-      + ".release('empty'), .off()",
+      + ".release('empty'), .importing('midway'), .off()",
   );
 }

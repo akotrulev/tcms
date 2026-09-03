@@ -176,6 +176,12 @@ const ReleaseNewPage = lazy(() =>
 const ReleaseDetailPage = lazy(() =>
   import('../features/releases/ReleaseDetailPage').then((m) => ({ default: m.ReleaseDetailPage })),
 );
+const ImportWizardPage = lazy(() =>
+  import('../features/imports/ImportWizardPage').then((m) => ({ default: m.ImportWizardPage })),
+);
+const ImportRunPage = lazy(() =>
+  import('../features/imports/ImportRunPage').then((m) => ({ default: m.ImportRunPage })),
+);
 const ReviewSettingsPage = lazy(() =>
   import('../features/settings/ReviewSettingsPage').then((m) => ({
     default: m.ReviewSettingsPage,
@@ -670,6 +676,40 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <ReleaseDetailPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            The import offramp (014 M4). Two routes here; the list at `/projects/:projectId/imports`
+            and the *Imports* rail entry are T8's.
+
+            **`/imports/new` is declared before `/imports/:importRunId`** for the releases block's
+            reason one section up: React Router 7 ranks static segments above dynamic ones, so the
+            order is not what makes this work — reading it in this order is what stops somebody
+            "fixing" it later.
+
+            Routed for everybody and gated on the controls, which is this file's standing shape.
+            **The rail entry is a different question** and D-e answers it the other way: every
+            operation in this module costs `issue:import`, so the entry is gated and un-listed
+            without it — the report names the source site, the account that connected to it and the
+            person who ran the migration, and that belongs with the people who can run one. The
+            precedent is the Notifications entry (005 C2): an entry leading to a screen whose whole
+            content is a refusal.
+          */}
+          <Route
+            path="/projects/:projectId/imports/new"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <ImportWizardPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/projects/:projectId/imports/:importRunId"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <ImportRunPage />
               </Suspense>
             }
           />

@@ -44,7 +44,7 @@ renumbers — M5 will be `015`.
 | 4 | T4 — The run, the report, and the stuck-run reaper | `be` · `be-java` | `POST /imports` imports a Jira project keeping `PROJ-4812` as `PROJ-4812`, `GET /imports/{id}` serves the report, and a test asserts the report's `droppedFields` equals the preview's element for element | T3 | done 2026-09-02 @ 2573e482 |
 | 5 | T5 — The Azure DevOps source | `be` · `be-java` | `provider: AZURE_DEVOPS` previews and imports an ADO project through the same port, proven against a recorded-shape fake; no other file in `imports` changes | T4 | **done 2026-09-02 @ e7d420e4** — `ImportSources` was not edited; one open finding on `DroppedFields`, in T5 step 3 |
 | 6 | T6 — `tcms import list` and `tcms import show` | `ts` · `tooling-engineer` | Two CLI commands print a past import and its dropped-field list from a terminal; the surface document's §3.7 records that MCP deliberately gets nothing | T4 | **done** |
-| 7 | T7 — The wizard: connect → preview → map → run | `fe` · `fe-react` | `/projects/:projectId/imports/new` walks the three steps, refuses to confirm while one status is unmapped, and starts a run; `tcmsFaults.importing()` drives every failure path | T6 | not started |
+| 7 | T7 — The wizard: connect → preview → map → run | `fe` · `fe-react` | `/projects/:projectId/imports/new` walks the three steps, refuses to confirm while one status is unmapped, and starts a run; `tcmsFaults.importing()` drives every failure path | T6 | **done 2026-09-03 @ 0a88fd98** — build and lint green; `test:run` red on the four pre-existing files only |
 | 8 | T8 — The report screen, the imports list, and the close-out | `fe` · `fe-react` | `/projects/:projectId/imports` and `/projects/:projectId/imports/:importRunId` render `settings-import.html` and `import-report.html` with no call to the source system, and 009 · `features.md` · the ERD are closed out | T7 | not started |
 
 **One paste-ready prompt per task is directly below**, in the same order. The `Status` column
@@ -519,6 +519,24 @@ Walk docs/mockups/settings-import.html and docs/mockups/import-report.html first
 Build ImportsListPage and ImportReportPage, replacing T7's minimal polling body, plus
 downloadReport.ts and the rail entry.
 
+What T7 left you, and read its "What T7 landed that this plan did not predict" section for the rest:
+  * `api/queries/imports.ts` already has `useImportRuns(projectId)` and `useImportRun(importRunId)`
+    — the second polls while `status` is `RUNNING` and stops on its own. `keys.imports` has the two
+    keys and **no third**; the header says at length why the preview and source-project list are
+    mutations, and it is the thing in this module most likely to be "simplified".
+  * `features/imports/sourceError.ts` — `describeImportError`. Use it rather than `describeError`
+    on any import screen: a `502` here carries the SOURCE system's own sentence, and
+    `describeError` answers every 5xx with "the server ran into a problem".
+  * `lib/labels.ts` has `importProviderLabels`, `importRunStatusLabels` and `importRunStatusTones`.
+    `FAILED` reads **"Failed — nothing was imported"**, not the bare word, for T7's reason.
+  * `test/fixtures.ts` has `anImportRun`, `anImportRunSummary`, `anImportPreview`, `aDroppedField`,
+    `aPreviewStatusRow`, `aPreviewTypeRow`, `anImportBlocker`, `aSourceProject` — all typed to the
+    contract and never cast. `anImportRun` defaults `startedBy: null`, which is the state the report
+    has to survive.
+  * `ImportStepper` draws the four chips; the report is step 4.
+  * The report IS a `useQuery`, so a test driving its failure calls `drivingAFailedRead()`. T7's own
+    tests call `drivingAFailedWrite()` because the preview is a mutation — do not copy that across.
+
 The report's shape, as T4 actually serves it:
   * `startedBy` is a NULLABLE `UserRef` (read `startedBy?.displayName`), not T1's inline
     `{id, name}` — see T7's prompt for why. `accountEmail`, `finishedAt` and `failureReason` are
@@ -585,8 +603,11 @@ Then the close-out, and none of it is optional:
          message rather than adding a note to the document.
   3. Mark T8 done in plan 014's Tasks table and tick its steps.
 
-The frontend suite is NOT green and was not before this module — 4 files / 40 cases in board,
-cases, dashboard and projects, verified identical with 014's frontend changes stashed. `npm run
+The frontend suite is NOT green and was not before this module — as measured on 2026-09-03 at the
+end of T7, **38 cases across four files**: `board/BacklogView`, `cases/CaseGrid`,
+`dashboard/TileLabels`, `projects/ProjectOverviewPage`. (The plan said 40; one of them,
+ProjectOverviewPage's "in 17 days", is a date-dependent assertion, so the count moves with the
+calendar and the file list does not.) `npm run
 build` and `npm run lint` ARE green (T4 fixed the one-line type error T1 recorded and left). Record
 that state in the Built and unverified list rather than adopting it.
 
@@ -2556,7 +2577,7 @@ starts a run. `tcmsFaults.importing(...)` drives every failure path from the bro
 **Read the three mockups before writing a line.** They are the source of truth for what the screens
 show; this plan and the scope spec are the source of truth for what the system does.
 
-- [ ] **Step 1 — the fault switch, first, before the screens it proves.** Add the `import` arm to
+- [x] **Step 1 — the fault switch, first, before the screens it proves.** Add the `import` arm to
       `frontend/src/lib/devFaults.ts`, beside `tracker`, `issue`, `rank` and `release`:
 
 ```ts
@@ -2576,7 +2597,7 @@ with `tcmsFaults.importing(fault)` on the console object and its line in the mod
 example block. Both `import.meta.env.DEV` guards stay **literal**, so Rollup drops the module from
 a production build.
 
-- [ ] **Step 2 — `keys.ts`.** One family in the single factory. Never a second factory.
+- [x] **Step 2 — `keys.ts`.** One family in the single factory. Never a second factory.
 
 ```ts
   imports: {
@@ -2591,22 +2612,22 @@ a query key is a cache key — the token would sit in the query cache, in the de
 any future persister. They are `useMutation` and their results live in the wizard's own state.
 Write that sentence into `imports.ts`, because it is the kind of thing somebody optimises away.
 
-- [ ] **Step 3 — `ImportWizardPage`** owns the whole flow's state, including the token, in one
+- [x] **Step 3 — `ImportWizardPage`** owns the whole flow's state, including the token, in one
       `useState`. The step rail is `ImportStepper`, drawn from the mockups' four chips.
 
-- [ ] **Step 4 — `ConnectStep`.** The mockup's form, plus D-k's provider selector above Site with
+- [x] **Step 4 — `ConnectStep`.** The mockup's form, plus D-k's provider selector above Site with
       Jira Cloud preselected. The help text under the token field is the mockup's own —
       *"Read-only is enough. The token is used for this import and is not stored afterwards."* —
       and it is now **true**, which is what D-a bought. One sentence is added beside it that the
       mockup has no reason to carry: *"Reloading this page means entering it again."* The
       *"Connected · n projects visible"* note appears after `listSourceProjects` resolves.
 
-- [ ] **Step 5 — `PreviewStep`.** The three panels the mockup draws, plus the state it does not:
+- [x] **Step 5 — `PreviewStep`.** The three panels the mockup draws, plus the state it does not:
       `blockers` non-empty replaces *Continue* with the blocker's `detail` and, for
       `KEY_COLLISION`, the offending keys as `Identifier` chips. The green *No data has been
       written* banner is the mockup's copy verbatim.
 
-- [ ] **Step 6 — `MappingStep`, and the thing it must get right.** Confirm is disabled while any
+- [x] **Step 6 — `MappingStep`, and the thing it must get right.** Confirm is disabled while any
       row has no target, with the mockup's own reason on the control's `title` — *"an unmapped
       status would silently become the default and put n issues in the wrong column"* — and the
       count of unmapped rows in the footer. Disable-don't-hide, per §31.
@@ -2618,19 +2639,19 @@ Write that sentence into `imports.ts`, because it is the kind of thing somebody 
       status appears in every picker. A full page load loses it, and the connect step's warning is
       why that is acceptable rather than a bug.
 
-- [ ] **Step 7 — Confirm** issues `POST /imports` with an `Idempotency-Key`, then navigates to
+- [x] **Step 7 — Confirm** issues `POST /imports` with an `Idempotency-Key`, then navigates to
       `/projects/:projectId/imports/:importRunId`, which T8 builds. Until T8 lands, that route does
       not exist — so this task ships the route as a **minimal polling page** showing the run's
       status and nothing else, and T8 replaces its body. The tree builds and the flow works end to
       end at this boundary; it is not pretty until T8.
 
-- [ ] **Step 8 — Tests.** RTL over the three steps: an unmapped row disables Confirm and says why;
+- [x] **Step 8 — Tests.** RTL over the three steps: an unmapped row disables Confirm and says why;
       a preview with a `KEY_COLLISION` blocker cannot continue; `drivingAFailedRead()` on the
       source-project list renders `describeError`'s copy and not an empty dropdown. Use
       `createTestQueryClient` — **never build your own `QueryClient` in a test**, only that one has
       the caches.
 
-- [ ] **Step 9 — Gate and commit.**
+- [x] **Step 9 — Gate and commit.**
 
 ```bash
 ~/bin/tcms-remote sync
@@ -2639,6 +2660,67 @@ git add frontend/src/features/imports frontend/src/api/queries frontend/src/lib/
         frontend/src/lib/labels.ts frontend/src/app/router.tsx
 git commit -m "feat(imports): the wizard — connect, preview, map, confirm"
 ```
+
+---
+
+### What T7 landed that this plan did not predict
+
+Written here rather than appended as a changelog, because T8 binds to four of these.
+
+- **A fourth disagreement with the mockups, beside D-k's selector, the collision state and the
+  reload warning: `import-preview.html`'s Notes column is prose the contract cannot serve.** The
+  mockup writes a bespoke sentence per type — *"acceptance criteria from the description"*, *"parent
+  link preserved"*, *"counts as unfinished work in its epic"*. `PreviewTypeRow` carries no such
+  field, and a map keyed on the English type name would be `TypeIcon`'s hardcoded-`Bug` defect
+  again: silently wrong on any project that does not spell its types in English. What the row does
+  carry is `countsTowardCompletion`, which is the one note that changes what a reader should expect,
+  so that is the note. **The mockup wins on what a screen shows and the contract decides what it can
+  say**; where the two cannot both be had, this is recorded rather than resolved by inventing a
+  field.
+
+- **`describeError` could not be used for the `502`, and the answer is a four-line module rather
+  than a change to it.** `describeError` answers every `5xx` with *"The server ran into a problem.
+  Try again in a moment."* — correctly, because our own server's `detail` on a 500 is written for
+  whoever is holding a stack trace. But the contract says the opposite about this one operation:
+  *"the `detail` is the source's own message and is shown only to the person whose credential it
+  is"*, and the only person who ever sees the connect step is the one who just pasted the token. A
+  rejected token rendered as *"the server ran into a problem"* sends them looking for a fault in
+  this product. `features/imports/sourceError.ts` narrows it as far as it can go — **502 only, on
+  this module's screens only**, everything else falling through to `describeError` unchanged — and
+  says why widening the shared function was refused. **T8's report screen should use it too.**
+
+- **The workflow trip is two navigations, and the first is a `replace`.** The plan said "writes its
+  state into a React Router `location.state` before navigating". The detail that makes it work: the
+  state has to land on **the entry the browser's Back button returns to**, which is the wizard's own
+  — so the handler `replace`s the current entry with the state on it, *then* pushes the workflow
+  route. Pushing the workflow route with the state on *it* would put the wizard's state on the
+  screen the person is leaving for, where nothing reads it.
+
+- **The source-project list and the preview are refused by `drivingAFailedWrite`, not
+  `drivingAFailedRead`.** They are reads by behaviour and mutations by mechanism — that is the whole
+  of D-a's cost — and `renderFailures` classifies by which cache reported, so the hatch a test calls
+  is the write one. Said here because T8's report tests will reach for the read hatch by instinct
+  and it will be the right one there, the report being an actual `useQuery`.
+
+- **`ImportRunPage` ships as the minimal polling page the plan asked for, and T8 replaces its
+  body.** It draws the status chip, the provider and source key, `startedBy?.displayName` when the
+  account still resolves, and the `FAILED` sentence in full. The last is not decoration: a chip
+  reading only *Failed* invites the question *what did it do before it failed?*, whose answer is
+  "nothing" and must not be left to a reader to guess. `importRunStatusLabels.FAILED` is therefore
+  the phrase *"Failed — nothing was imported"* rather than the bare word, in `lib/labels.ts`, and
+  **T8 inherits that label**.
+
+- **Two label maps for three providers, deliberately.** `importProviderLabels` sits beside
+  `trackerProviderLabels` and repeats two of its three rows. They are different enums in the
+  contract — 004's outbound integration spells its middle member `JIRA_DC`, this one
+  `JIRA_DATA_CENTER` — so a shared map would need a key neither enum has, and they mean different
+  things besides: one is a credential the product keeps and files issues through, the other a
+  connection used once and abandoned.
+
+- **The gate.** `npm run build` and `npm run lint` green. `npm run test:run` is **38 failures across
+  the four files that were failing before this module** — `board/BacklogView`, `cases/CaseGrid`,
+  `dashboard/TileLabels`, `projects/ProjectOverviewPage` — and every file this task added is green.
+  T8 inherits the same four and should not adopt them.
 
 ---
 

@@ -628,6 +628,21 @@ export const keys = {
   caseSearch: (filters: Record<string, unknown>) => ['case-search', filters] as const,
 
   /*
+    Imports (014 M4).
+
+    **Two keys, and there is deliberately no third.** The source-project list and the preview are
+    `POST`s carrying an API token, so they are mutations and their results live in the wizard's own
+    state — a query key is a cache key, and the token would then sit in the query cache, in the
+    devtools panel and in any future persister. `imports.ts`' header makes the argument at length,
+    because it is exactly the kind of thing somebody later "simplifies" into a `useQuery`.
+  */
+  imports: {
+    all: ['imports'] as const,
+    forProject: (projectId: string) => ['imports', 'project', projectId] as const,
+    run: (importRunId: string) => ['imports', 'run', importRunId] as const,
+  },
+
+  /*
     The prefix roots (§250).
 
     Every key above that takes a filter object or an id carries it INSIDE the array, so an

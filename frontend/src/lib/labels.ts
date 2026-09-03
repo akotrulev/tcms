@@ -57,6 +57,8 @@ import type {
   SwimlaneBy,
   ReleaseStatus,
   ReleaseVerdict,
+  ImportProvider,
+  ImportRunStatus,
 } from '../api/types';
 
 /**
@@ -1127,6 +1129,42 @@ export const trackerProviderLabels = {
   JIRA_DC: 'Jira Data Center',
   AZURE_DEVOPS: 'Azure DevOps',
 } as const satisfies Record<TrackerProvider, string>;
+
+/**
+ * The three systems an import can read **from** (014 M4).
+ *
+ * A second provider catalogue beside `trackerProviderLabels`, and the duplication is the honest
+ * shape rather than the lazy one: these are two different enums in the contract — 004's outbound
+ * integration spells its middle member `JIRA_DC`, this one `JIRA_DATA_CENTER` — and a shared map
+ * would need a key neither enum has. They also mean different things. That one is a credential the
+ * product keeps and files issues through; this one is a connection used once and abandoned.
+ */
+export const importProviderLabels = {
+  JIRA_CLOUD: 'Jira Cloud',
+  JIRA_DATA_CENTER: 'Jira Data Center',
+  AZURE_DEVOPS: 'Azure DevOps',
+} as const satisfies Record<ImportProvider, string>;
+
+/**
+ * What a run is doing, or what became of it.
+ *
+ * `FAILED` reads as *"Failed \u2014 nothing was imported"* rather than the bare word, because that
+ * is the fact the state carries: the write is one all-or-nothing transaction after the read pass
+ * (D-b), so a failed run leaves the project exactly as it was. A screen showing only "Failed"
+ * invites the question the label can simply answer.
+ */
+export const importRunStatusLabels = {
+  RUNNING: 'Running',
+  COMPLETED: 'Completed',
+  FAILED: 'Failed \u2014 nothing was imported',
+} as const satisfies Record<ImportRunStatus, string>;
+
+/** The tone each run status wears, in the eight the kit names. */
+export const importRunStatusTones = {
+  RUNNING: 'retest',
+  COMPLETED: 'passed',
+  FAILED: 'failed',
+} as const satisfies Record<ImportRunStatus, BadgeTone>;
 
 /**
  * A tracker's status, reduced to the **category** and never to its own status name.
