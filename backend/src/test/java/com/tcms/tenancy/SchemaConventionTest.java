@@ -371,7 +371,18 @@ class SchemaConventionTest extends IntegrationTestBase {
                 // a screen a year later rather than written and forgotten. It carries NO credential
                 // column at all; V7's header says why, and that absence is a decision rather than a
                 // gap this number covers.
-                .isEqualTo(91);
+                //
+                // 92 since V8 (plan 015, module M5) — project_repository, and ONE table for the whole
+                // module. It is reference data (D16): the repositories a project spans and how each
+                // is built, which is the shape where "it is only configuration a person types in"
+                // could argue itself out of a policy — and would be wrong, because the row names a
+                // client's private repository URL, so company_id is what stops Acme reading Globex's.
+                // The module's other three changes are columns on tables that already carry their
+                // policies — issue.agent_eligible, issue.pr_url and project_settings.review_enabled_issue
+                // — and a column added to a protected table is protected by it, so they do not move
+                // this number. There is NO agent, orchestrator, runner or credential table; V8's
+                // header says why, and that absence is a decision rather than a gap this number covers.
+                .isEqualTo(92);
     }
 
     @Test
