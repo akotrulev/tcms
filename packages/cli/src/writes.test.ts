@@ -1103,6 +1103,58 @@ describe('the issue commands', () => {
     // A side effect nobody asked for by name, so the command says it happened (story H8).
     expect(out.stdout).toContain('Watching');
   });
+
+  it('sends --agent-eligible, which optionSpecFor renders and the body has to carry', async () => {
+    /*
+      The defect this asserts against is the one `case edit`'s header describes: `optionSpecFor`
+      renders the flag from the catalogue, so `parseArgs` accepts it in strict mode whether or not
+      the builder reads it — and the command then reports success having sent nothing for it.
+    */
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'POST /issues': { status: 201, body: issue() } });
+
+    expect(await mainWith(
+      ['issue', 'create', '--type', 'Task', '--title', 'Repair it', '--agent-eligible'],
+      out,
+      stub.fetch,
+    )).toBe(EXIT.ok);
+
+    expect(JSON.parse(stub.write('/issues').body ?? '{}')).toMatchObject({ agentEligible: true });
+  });
+
+  it('attaches a pull request as the only field on the PATCH', async () => {
+    // D25: this product never opens a PR. The URL arriving here is the only thing that puts the
+    // work on the issue's history, so the command sends it and nothing else.
+    const out = recorder();
+    const stub = api({
+      ...scaffolding(),
+      'PATCH /issues/ACME-124': {
+        status: 200,
+        body: issue({ prUrl: 'https://github.com/northwind/acme-storefront/pull/482' }),
+      },
+    });
+
+    expect(await mainWith(
+      [
+        'issue', 'attach-pr', 'ACME-124',
+        '--pr-url', 'https://github.com/northwind/acme-storefront/pull/482',
+      ],
+      out,
+      stub.fetch,
+    )).toBe(EXIT.ok);
+
+    expect(JSON.parse(stub.write('/issues/ACME-124').body ?? '{}'))
+      .toEqual({ prUrl: 'https://github.com/northwind/acme-storefront/pull/482' });
+    expect(out.stdout).toContain('pull/482');
+  });
+
+  it('refuses attach-pr with no --url rather than sending an empty one', async () => {
+    const out = recorder();
+    const stub = api(scaffolding());
+
+    expect(await mainWith(['issue', 'attach-pr', 'ACME-124'], out, stub.fetch)).toBe(EXIT.usage);
+    expect(stub.sent.some((request) => request.method === 'PATCH')).toBe(false);
+  });
 });
 
 describe('the board verbs', () => {

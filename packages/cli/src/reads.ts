@@ -810,6 +810,133 @@ const issueShow: Command = {
   },
 };
 
+/**
+ * `tcms issue queue` — the AI-eligible tasks assigned to whoever this token acts as.
+ *
+ * Two terms, and both are required for the answer to mean anything. `agentEligible` alone is the
+ * project's whole flagged pool, which is not *mine*; `assigneeId` alone is everything on my plate,
+ * flagged or not. D30 has the flag assign nothing and D26 has a token act as its owner, so the
+ * intersection is the only spelling of *the work waiting for me*.
+ *
+ * The owner is read from `/me` rather than taken as a flag. A `--assignee` here would let a token
+ * read somebody else's queue, and there is no version of that this command needs.
+ */
+const issueQueue: Command = {
+  name: 'issue queue',
+  summary: 'The AI-eligible tasks assigned to you',
+  usage: 'tcms issue queue [--page N] [--size N]',
+  options: { page: { type: 'string' }, size: { type: 'string' } },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const me = await client.GET('/me', { tcms: request });
+
+    const rows = await client.GET('/issues', {
+      params: {
+        query: {
+          projectId: await projectOf(context),
+          agentEligible: true,
+          assigneeId: [me.id],
+        },
+      },
+      tcms: request,
+    });
+
+    if (json) return out.json(rows);
+
+    // The same client-side window `issue list` uses, and for the same reason: `/issues` is not
+    // paginated on the wire.
+    const size = clampPageSize(number(first(options['size'])));
+    const page = Math.max(0, number(first(options['page'])) ?? 0);
+    const shown = rows.slice(page * size, page * size + size);
+
+    table(out, shown, [
+      { header: 'KEY', value: (row) => show(row.key) },
+      { header: 'TYPE', value: (row) => show(row.type.name) },
+      { header: 'TITLE', value: (row) => show(row.title) },
+      { header: 'STATUS', value: (row) => show(row.status.name) },
+      { header: 'DUE', value: (row) => show(row.dueDate) },
+    ]);
+
+    out.line();
+    if (rows.length === 0) {
+      // An empty queue is the ordinary answer and it is not an error, so it says what would put
+      // something in it rather than printing a bare `0 of 0`.
+      out.line('Nothing flagged for an assistant is assigned to you in this project.');
+      return;
+    }
+    out.line(`${shown.length} of ${rows.length} — page ${page + 1}`);
+  },
+};
+
+/**
+ * `tcms issue context ACME-124` — everything needed to work one task, in one read.
+ *
+ * The composite, and §3.1's grounding argument is the whole of why it is one endpoint rather than
+ * five commands piped together: the story, its acceptance criteria, the epic's goal, the linked
+ * specification excerpts and the repository to check out are what the work is judged against, and
+ * an assistant that has to assemble them itself will skip it.
+ */
+const issueContext: Command = {
+  name: 'issue context',
+  summary: 'Everything needed to work one task — story, criteria, epic goal, specs, repositories',
+  usage: 'tcms issue context ACME-124',
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const key = requireArg(context, 'issue');
+
+    const found = await client.GET('/issues/{key}/agent-context', {
+      params: { path: { key } }, tcms: request,
+    });
+
+    if (json) return out.json(found);
+
+    fields(out, [
+      ['Task', `${show(found.issue.key)} — ${show(found.issue.title)}`],
+      ['Status', show(found.issue.status.name)],
+      ['Release', show(found.issue.release?.version)],
+      // The NAMES again, because `issue move --status` is the next command a reader types. Under
+      // the review gate a DONE status is simply absent from this list rather than present and
+      // refused — see the server's 409 detail, which names the move to make instead.
+      ['Moves allowed', found.issue.allowedTransitions.map((row) => row.name).join(', ') || '(none)'],
+      ['Story', found.story ? `${show(found.story.key)} — ${show(found.story.title)}` : '(none)'],
+      ['Epic goal', show(found.epic?.goal)],
+    ]);
+
+    if (found.story && found.story.acceptanceCriteria.length > 0) {
+      out.line();
+      out.line('Acceptance criteria');
+      for (const criterion of found.story.acceptanceCriteria) {
+        out.line(`  [${criterion.done ? 'x' : ' '}] ${criterion.text}`);
+      }
+    }
+
+    if (found.specExcerpts.length > 0) {
+      out.line();
+      out.line('Specification');
+      for (const excerpt of found.specExcerpts) {
+        out.line(`  ${show(excerpt.title)}`);
+        out.line(`    ${excerpt.excerpt}`);
+      }
+    }
+
+    out.line();
+    if (found.repositories.length === 0) {
+      // Reference data (D16): a project with none is not degraded, and saying so is what stops a
+      // reader treating an empty list as a failed read.
+      out.line('Repositories  (none recorded — this project has not listed any)');
+      return;
+    }
+    table(out, found.repositories, [
+      { header: 'REPOSITORY', value: (row) => show(row.name) },
+      { header: 'URL', value: (row) => show(row.url) },
+      { header: 'BRANCH', value: (row) => show(row.defaultBranch) },
+      { header: 'DIR', value: (row) => show(row.subdirectory) },
+      { header: 'BUILD', value: (row) => show(row.buildCommand) },
+      { header: 'PRIMARY', value: (row) => (row.primary ? 'yes' : 'no') },
+    ]);
+  },
+};
+
 /* -------------------------------------------------------------------- board ---- */
 
 /**
@@ -1542,6 +1669,8 @@ export const READS: readonly Command[] = [
   proposalShow,
   issueList,
   issueShow,
+  issueQueue,
+  issueContext,
   boardList,
   boardShow,
   backlog,

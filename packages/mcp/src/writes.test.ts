@@ -681,6 +681,42 @@ describe('tcms_write_issue', () => {
       .toHaveLength(0);
   });
 
+  it('carries the AI-eligible flag on a create, so the field is not invisible on this surface', async () => {
+    const stub = api(agentRoutes({ ...WORKFLOW, 'POST /issues': { status: 201, body: issue() } }));
+
+    await run(stub, 'tcms_write_issue', {
+      action: 'create', typeName: 'Task', title: 'Repair the flaky sign-in case', agentEligible: true,
+    });
+
+    expect(JSON.parse(stub.write('/issues').body ?? '{}')).toMatchObject({ agentEligible: true });
+  });
+
+  it('attaches a PR as one field on the PATCH, and nothing else', async () => {
+    /*
+      D25: this product never opens a pull request — the developer's own git does, and the URL is
+      how the work reaches the issue's history (`issue.pr_url_set`). So the arm sends exactly the
+      field it was given; anything else here would be a write nobody asked for.
+    */
+    const stub = api(agentRoutes({ 'PATCH /issues/ACME-124': { status: 200, body: issue() } }));
+
+    await run(stub, 'tcms_write_issue', {
+      action: 'attach-pr',
+      issue: 'ACME-124',
+      prUrl: 'https://github.com/northwind/acme-storefront/pull/482',
+    });
+
+    expect(JSON.parse(stub.write('/issues/ACME-124').body ?? '{}'))
+      .toEqual({ prUrl: 'https://github.com/northwind/acme-storefront/pull/482' });
+  });
+
+  it('refuses attach-pr with no URL rather than sending an empty one', async () => {
+    const stub = api(agentRoutes({ 'PATCH /issues/ACME-124': { status: 200, body: issue() } }));
+
+    await expect(run(stub, 'tcms_write_issue', { action: 'attach-pr', issue: 'ACME-124' }))
+      .rejects.toThrow(/prUrl/);
+    expect(stub.sent.some((request) => request.method === 'PATCH')).toBe(false);
+  });
+
   it('names a COLUMN and lets the server pick the status it means', async () => {
     /*
       The whole of why `move-card` is not `move` with extra steps. `In flight` claims In Progress

@@ -100,7 +100,13 @@ export type Qualifier = 'ALL' | 'OWN' | 'PLAN_SCOPE';
 
 /** Who this credential is, and what it can reach. Answered once, at connect. */
 export interface Reach {
-  user: { displayName: string; email: string; isSystemAdmin: boolean };
+  /**
+   * `id` is here for one caller and is worth the line: `tcms_read_issue {queue: true}` asks for
+   * *the tasks assigned to me*, and `GET /issues` takes `assigneeId` as a UUID. A token acts as
+   * its owner (D26), so the owner is resolved from the session rather than taken as an argument —
+   * a token that could name another owner would be reading somebody else's queue.
+   */
+  user: { id: string; displayName: string; email: string; isSystemAdmin: boolean };
   /** The project every project-scoped tool acts in, when there is exactly one answer. */
   project?: ResolvedProject | undefined;
   /** Why there is no project, when there is none. Rendered into the instructions. */
@@ -230,6 +236,7 @@ async function probe(client: TcmsClient, requested: string | undefined): Promise
 
   return {
     user: {
+      id: me.id,
       displayName: me.displayName,
       email: me.email,
       isSystemAdmin: me.isSystemAdmin,

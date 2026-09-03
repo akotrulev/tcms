@@ -253,7 +253,7 @@ a claim a host plans around. Resources are **not permission-filtered**, unlike `
 shape of a test case is the same document whatever a credential holds, it names no project, no
 company and no row, and withholding it would tell a caller nothing except that it must guess.
 
-### 3.1 The two composites, and why only two
+### 3.1 The ~~two~~ three composites, and why only three
 
 `tcms_orient` and `tcms_open_case` are the only tools that fan out to more than one endpoint for a
 *read*. They exist for one reason, which is §6w's own stated value: an agent must ground itself in
@@ -263,6 +263,19 @@ file-based-tool failure mode §6w was written against.
 
 Every other tool that spans endpoints does so along a single gate, per §2. No third composite is
 added without the same argument, because a composite's cost is an output that is hard to bound.
+
+~~The two composites~~ → **three, since 015 T4**, and the third is the argument above applied to a
+narrower reader. `tcms_read_issue {context: true}` reaches `GET /issues/{key}/agent-context`, which
+assembles a task with its parent story's acceptance criteria, the epic's goal, the target release,
+the linked specification excerpts and the project's repositories. The same sentence governs it:
+**an assistant that has to assemble what it is being judged against from six calls will skip it and
+generate blind**, and the criteria are exactly the thing skipping loses.
+
+Two things keep the cost bounded, and they are why this one is admissible where a fourth may not
+be. **The fan-out is the server's** — one endpoint, one call from here, so the tool does not span
+endpoints at all and §2's gate rule is untouched (`issue:read` throughout). And it is **opt-in**:
+`context` is off by default, exactly as `tcms_open_case`'s sub-reads are, so the detail read a
+caller already makes does not silently grow.
 
 ### 3.2 `tcms_whoami` and the capability summary
 
@@ -408,6 +421,8 @@ entirely. The description is narrowed per session with the actions the credentia
 | `startDate` · `targetDate` | date or null | create · update | epics only, server-side |
 | `dueDate` | date or null | create · update | |
 | `acceptanceCriteria` | string[] | **create only** | see the shortfall below |
+| `agentEligible` | boolean | create · update | D30 — a hint and a filter; it assigns nothing (015 T4) |
+| `prUrl` | string | **attach-pr** | the PR *you* opened; this product never opens one (D25) |
 | `body` | string | comment | required |
 
 Arms, and the header each one's `kind` implies (§4.2/§4.3):
@@ -417,6 +432,7 @@ Arms, and the header each one's `kind` implies (§4.2/§4.3):
 | `create` | `create` | `issue:create` | `POST /issues` — carries `Idempotency-Key` |
 | `update` | `edit` | `issue:edit` | `PATCH /issues/{key}` — carries **no** `If-Match`; see below |
 | `move` | `state` | `issue:edit` | `POST /issues/{key}/transitions` |
+| `attach-pr` | `edit` | `issue:edit` | `PATCH /issues/{key}` — carries **no** `If-Match`, the same wall as `update` |
 | `comment` | `state` | `issue:comment` | `POST /issues/{key}/comments` |
 
 **`comment` is a `state` arm, not a `create`.** `POST …/comments` declares no `Idempotency-Key`, and
@@ -449,6 +465,8 @@ default, so the tool never fans out unasked and §3.1's ceiling is untouched.
 | `level` | `EPIC` / `STORY` / `TASK` | list |
 | `epic` · `parent` | string — a key | list |
 | `unparented` | boolean | story-level issues with no epic |
+| `queue` | boolean | list — **`agentEligible=true` AND `assigneeId=<the token's owner>`**; refused beside `issue` |
+| `context` | boolean | detail — reads `GET …/agent-context` **instead of** the plain detail (§3.1's third composite) |
 | `sort` | `key` / `title` / `status` / `dueDate` / `estimateHours` | list |
 | `page` · `size` | integer | list — §4.6's window |
 | `comments` | boolean | detail — also reads `GET …/comments` |
@@ -472,6 +490,43 @@ Unchanged, and named here because this section is where a reader will look for i
   they were asked for.
 - **Every write arm** answers the contract resource the endpoint returned, through `result.ts` — JSON,
   no prose — and a refusal is composed once by `core/outcome.ts`.
+
+#### The three arms and modes 015 T4 adds — and why the count is still 30
+
+`tcms_read_issue` gains `queue` and `context` (both `issue:read`); `tcms_write_issue` gains
+`attach-pr` (`issue:edit`). **No tool was added**, so the surface is still 30 — every one of the
+three is an arm or a mode of a tool whose gate already covers it, which is §2 doing exactly what it
+was written to do. A `tcms_agent_queue` holding `issue:read` would be a second tool listed to every
+caller who already has `tcms_read_issue`, and a `tcms_report_pr` holding `issue:edit` would be a
+one-field tool listed to everyone holding `tcms_write_issue`.
+
+**`queue` is two query terms and neither is optional.** `agentEligible=true` alone is the project's
+whole flagged pool, which is not *mine*; `assigneeId` alone is everything on the owner's plate,
+flagged or not. D30 has the flag assign nothing and D26 has a token act as its owner, so the
+intersection is the only thing that means *the work waiting for me*. **The owner is resolved from
+the session, never taken as an argument** — an owner parameter would let a token read somebody
+else's queue, and there is no version of that this surface needs. `queue` beside `issue` is refused
+rather than one of them silently winning.
+
+**`context` replaces the detail read rather than riding beside it**, which is the one place it
+differs from `comments`/`docLinks`. `AgentTaskContext` already carries the whole `Issue`, so
+serving both would send the same resource twice; the arm projects the nested issue through the
+*same* mapping the plain branch uses, so `allowedTransitions` is names on both paths.
+
+**`attach-pr` sends one field and it is not nullable.** `IssueUpdate.prUrl` accepts null, but *take
+the PR off this issue* is not something an assistant does — it reports what it opened, and the
+server records it as `issue.pr_url_set` on the history. Clearing it is `update`'s job.
+
+**None of the three is in the shape catalogue**, and `core/shapes.ts`'s `ISSUE_SHAPE` header
+carries the rule: the catalogue holds an action only when it has a payload of its own to describe.
+`attach-pr` is the sharpest case, because `prUrl` is the one of them that *has* a contract property
+— it lives on `IssueUpdate` and nowhere else, so cataloguing it would pull that schema into
+`shapesContract.test.ts`'s accounted set, where every other property is already offered at its
+`IssueInput` site by the `update` action. The accounting would then have to be satisfied with a
+dozen `UNOFFERED` lines declaring fields unoffered that this surface offers, and a check answered
+by writing down the opposite of what is true is worse than no entry. `agentEligible` *is* a
+catalogue field — it is a plain `IssueInput` property — which is what closed T1's
+`UNOFFERED['IssueInput.agentEligible']` placeholder.
 
 #### One measured gap in the §8.1 check
 
@@ -884,8 +939,9 @@ needing a separate decision. A bulk generation therefore decomposes per item.
 ## 6. The CLI surface
 
 `tcms <noun> <verb>`, one command per operation the `Agent` role can reach — approximately ~~45~~ ~~53~~ 61,
-against the MCP surface's ~~21~~ ~~28~~ 30. **The registry holds ~~43~~ ~~53~~ 55** (`COMMANDS`, measured
-014 T6, eight of them 012's board verbs, ten 013's release verbs and two this slice's import reads),
+against the MCP surface's ~~21~~ ~~28~~ 30. **The registry holds ~~43~~ ~~53~~ ~~55~~ 58** (`COMMANDS`, measured
+015 T4, eight of them 012's board verbs, ten 013's release verbs, two 014's import reads and three
+this slice's issue verbs),
 and the two numbers have
 never met: the count above is what the
 `Agent` grant *reaches*, the registry is what has been *spelled*, and §6's own struck-through
@@ -922,6 +978,27 @@ rendered from the catalogue by `optionSpecFor`, so a field added there cannot be
 `format.test.ts` is what asserts it. There is **no `tcms issue edit`**: the three issue writes here are
 the ones a person or a CI step actually reaches for, and the field-by-field update stays on the MCP
 side, where it is composed from a read the model has already made.
+
+**The three issue commands 015 T4 adds**, so the noun now carries eight of the CLI's commands:
+
+| Command | Kind | Permission | Reaches |
+|---|---|---|---|
+| `tcms issue queue [--page N] [--size N]` | read | `issue:read` | `GET /issues` with **both** queue terms |
+| `tcms issue context ACME-124` | read | `issue:read` | `GET /issues/{key}/agent-context` |
+| `tcms issue attach-pr ACME-124 --pr-url URL` | `edit` | `issue:edit` | `PATCH /issues/{key}` |
+
+Three things there are decisions rather than spellings:
+
+- **`issue queue` takes no `--assignee`.** The owner comes from `/me`, for §3.4's reason: a flag
+  there would let a token read somebody else's queue.
+- **An empty queue prints a sentence, not `0 of 0`.** It is the ordinary answer on a project that
+  has flagged nothing, and a bare zero reads as a failed request.
+- **`--pr-url`, not `--url`, and this one was found rather than chosen.** `--url` is a GLOBAL flag
+  naming the instance, so `attach-pr --url https://github.com/…/pull/482` parses as a command
+  pointed at GitHub and writes to `PATCH /northwind/…/pull/482/api/v1/issues/…`. It fails loudly
+  rather than silently, and it is still a flag nobody could use; the contract-exchange check named
+  it. `issue create` gains `--agent-eligible` for free, rendered from the catalogue by
+  `optionSpecFor` — the flag exists because the field does, which is what that renderer is for.
 
 **The eight board commands** (012 T5; §3.5 carries the typed inputs and the reasons). `board` is the
 third noun the CLI gains, and unlike `work-item` it arrives delivered rather than promised:

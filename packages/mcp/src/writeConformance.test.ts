@@ -113,6 +113,13 @@ const CREATE_WITHOUT_A_KEY: Record<string, string> = {
     + 'here — the same wall the issue update above meets. What it costs is bounded by the row: a '
     + 'label is a name and a colour token, the arm sends both because `LabelInput` requires both, '
     + 'and two people renaming one label at once lose a rename rather than a body of work.',
+  'tcms_write_issue.attach-pr':
+    'PATCH /issues/{key} a third time, so it inherits the issue update entry above and is listed '
+    + 'separately for the same reason `release` is — a by-decision map that covered an arm by '
+    + 'implication could not report the day one of them stopped needing it. What it costs is the '
+    + 'narrowest of the three: the arm sends one field that only ever goes from empty to a URL, so '
+    + 'two callers racing it lose a link to a pull request that is still in the history as a '
+    + '`issue.pr_url_set` row.',
   'tcms_write_artifact.edit':
     'PATCH …/artifacts/{artifactId} declares no If-Match, so two callers correcting one register '
     + 'row race and the later write wins silently. It cannot simply be added: the endpoint would '
@@ -574,6 +581,16 @@ const INVOCATIONS: Record<string, Invocation> = {
     input: { action: 'release', issue: 'ACME-124', release: '2.4' },
     path: '/issues/ACME-124',
     routes: { ...RELEASES, 'PATCH /issues/ACME-124': { status: 200, body: ISSUE } },
+  },
+  'tcms_write_issue.attach-pr': {
+    tool: 'tcms_write_issue',
+    input: {
+      action: 'attach-pr',
+      issue: 'ACME-124',
+      prUrl: 'https://github.com/northwind/acme-storefront/pull/482',
+    },
+    path: '/issues/ACME-124',
+    routes: { 'PATCH /issues/ACME-124': { status: 200, body: ISSUE } },
   },
   'tcms_write_release.create': {
     tool: 'tcms_write_release',

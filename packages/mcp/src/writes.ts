@@ -1263,7 +1263,10 @@ const reviewVerdict: ToolDefinition = {
  */
 const ISSUE_ARMS: readonly { permission: string; can: string }[] = [
   { permission: 'issue:create', can: 'create' },
-  { permission: 'issue:edit', can: 'update, move, move cards, label, link test cases and set a release' },
+  {
+    permission: 'issue:edit',
+    can: 'update, move, move cards, label, link test cases, set a release and attach a pull request',
+  },
   { permission: 'issue:comment', can: 'comment' },
 ];
 
@@ -1309,7 +1312,9 @@ const writeIssue: ToolDefinition = {
     + 'review requests, case-health repairs, quarantined cases — which are computed on every read '
     + 'from their source and cannot be created or moved here; fix the source instead. `cases` '
     + 'replaces the whole set of test cases a story is proven by, and `release` targets it at a '
-    + 'version by NAME — both cost the same key as an edit.',
+    + 'version by NAME — both cost the same key as an edit. `attach-pr` reports the pull request '
+    + 'you opened for a task: this product never opens one, so the URL is the only way the work '
+    + 'you did off-site reaches the issue\'s history.',
   gate: { mode: 'any', permissions: ['issue:create', 'issue:edit', 'issue:comment'] },
   arms: [
     { action: 'create', kind: 'create', permission: 'issue:create' },
@@ -1343,6 +1348,16 @@ const writeIssue: ToolDefinition = {
     */
     { action: 'cases', kind: 'state', permission: 'issue:edit' },
     { action: 'release', kind: 'edit', permission: 'issue:edit' },
+    /*
+      015 T4. `PATCH /issues/{key}` a third time, and an arm rather than a tool for §2's reason
+      read once more: it costs `issue:edit`, which this tool already gates on, so a separate
+      `tcms_report_pr` would be a tool with one field listed to exactly the callers who already
+      have this one.
+
+      Not a catalogue action — `core/shapes.ts`'s ISSUE_SHAPE header carries why, and it is the
+      same reason `release` is not one.
+    */
+    { action: 'attach-pr', kind: 'edit', permission: 'issue:edit' },
     // A `state`, not a `create`: `POST …/comments` declares no `Idempotency-Key`, and a create
     // kind would send a header the endpoint never reads. `review comment` is declared the same way.
     { action: 'comment', kind: 'state', permission: 'issue:comment' },
@@ -1356,7 +1371,10 @@ const writeIssue: ToolDefinition = {
     additionalProperties: false,
     required: ['action'],
     properties: {
-      action: ACTION(['create', 'update', 'move', 'move-card', 'label', 'comment', 'cases', 'release'], 'What to do.'),
+      action: ACTION(
+        ['create', 'update', 'move', 'move-card', 'label', 'comment', 'cases', 'release', 'attach-pr'],
+        'What to do.',
+      ),
       issue: idProperty('issue to update, move or comment on — required for those, refused for create', 'ACME-124'),
       board: {
         type: 'string',
@@ -1391,6 +1409,12 @@ const writeIssue: ToolDefinition = {
         description:
           'For release: the target release by VERSION (`2.4`), or null to take the issue off one. '
           + 'Read the versions from tcms_read_release — an unknown one is refused with the list.',
+      },
+      prUrl: {
+        type: 'string',
+        description:
+          'For attach-pr: the pull request you opened, as a URL. e.g. '
+          + 'https://github.com/northwind/acme-storefront/pull/482',
       },
       /*
         Rendered from the catalogue rather than written out, for `tcms_write_case`'s reason: two
@@ -1430,6 +1454,7 @@ const writeIssue: ToolDefinition = {
           targetDate: nullableStr(input, 'targetDate'),
           dueDate: nullableStr(input, 'dueDate'),
           acceptanceCriteria: strings(input, 'acceptanceCriteria'),
+          agentEligible: bool(input, 'agentEligible'),
         }) as components['schemas']['IssueInput'],
         tcms: { ...tcms, ...createIntent({ key: session.callId }) },
       });
@@ -1454,6 +1479,7 @@ const writeIssue: ToolDefinition = {
           startDate: nullableStr(input, 'startDate'),
           targetDate: nullableStr(input, 'targetDate'),
           dueDate: nullableStr(input, 'dueDate'),
+          agentEligible: bool(input, 'agentEligible'),
         }) as components['schemas']['IssueUpdate'],
         tcms,
       });
@@ -1536,6 +1562,20 @@ const writeIssue: ToolDefinition = {
       return session.client.PATCH('/issues/{key}', {
         params: { path: { key } },
         body: { releaseId: wanted === null ? null : (await releaseIn(session, wanted)).id },
+        tcms,
+      });
+    }
+
+    if (action === 'attach-pr') {
+      /*
+        The whole arm is one field, and it is deliberately NOT nullable: `IssueUpdate.prUrl`
+        accepts null, but "take the PR off this issue" is not a thing an assistant does — it
+        reports what it opened. A caller that wants to clear it is editing the issue, which is
+        `update`'s job, and the server records this one as `issue.pr_url_set` on the history.
+      */
+      return session.client.PATCH('/issues/{key}', {
+        params: { path: { key } },
+        body: { prUrl: requireStr(input, 'prUrl') },
         tcms,
       });
     }

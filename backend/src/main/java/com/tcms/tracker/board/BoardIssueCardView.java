@@ -28,7 +28,10 @@ import java.util.UUID;
  *                          caller who is this issue's assignee on a project that requires review
  *                          to close, so the drag is refused before it starts rather than by the
  *                          endpoint afterwards
- * @param agentEligible     D30's hint, on the card so the board can mark it (`board.html`)
+ * @param agentEligible     D30's hint, on the card so the board can mark it
+ *                          (~~`board.html`~~ → `docs/mockups/work-board.html`, which is the file's
+ *                          actual name — the citation was stale on arrival and `citedFiles.test.ts`
+ *                          is what said so)
  */
 public record BoardIssueCardView(
         String key,

@@ -99,6 +99,10 @@ const CREATE_WITHOUT_A_KEY: Record<string, string> = {
   'issue release': 'PATCH /issues/{key} declares no If-Match and `Issue` carries no lockVersion — '
     + 'the same wall `tcms_write_issue.update` meets. The field is one reference, so the loss is '
     + 'bounded to two people retargeting one issue in the same moment.',
+  'issue attach-pr': 'PATCH /issues/{key} again, so it meets the same wall as `issue release` above '
+    + 'and is listed separately rather than covered by implication. Narrower still: the field only '
+    + 'ever goes from empty to a URL, and the loss is a link to a pull request that is still on the '
+    + 'history as an `issue.pr_url_set` row.',
 };
 
 describe('write conformance — surface spec §8.3', () => {
@@ -423,6 +427,14 @@ const INVOCATIONS: Record<string, Invocation> = {
   },
   'issue release': {
     argv: () => ['issue', 'release', 'ACME-124', '--release', '2.4'],
+    path: '/issues/ACME-124',
+    routes: { 'PATCH /issues/ACME-124': { status: 200, body: ISSUE } },
+  },
+  'issue attach-pr': {
+    argv: () => [
+      'issue', 'attach-pr', 'ACME-124',
+      '--pr-url', 'https://github.com/northwind/acme-storefront/pull/482',
+    ],
     path: '/issues/ACME-124',
     routes: { 'PATCH /issues/ACME-124': { status: 200, body: ISSUE } },
   },

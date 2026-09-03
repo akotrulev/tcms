@@ -155,11 +155,8 @@ const UNOFFERED: Readonly<Record<string, string>> = {
     + 'retarget work as N PATCHes from a list somebody is looking at, which is when a release is '
     + 'actually chosen — a story is raised first and scheduled after.',
 
-  'IssueInput.agentEligible':
-    'D30 — the AI-eligible flag on CREATE. The contract carries it (plan 015 T1); the tool surface '
-    + 'that offers it is plan 015 T4, which extends ISSUE_SHAPE with the flag and the attach-pr arm. '
-    + 'Unoffered here rather than silent so T4 turns a failure into a field, not an absence into a '
-    + 'feature.',
+  // ~~'IssueInput.agentEligible' — offered by neither adapter until 015 T4.~~ → CLOSED by T4: it is
+  // `issue.agentEligible` in the catalogue, on `create` and `update`, so both adapters spell it.
 
   /* ---- doc page ---- */
   'DocBlockInput.id':

@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  agentTaskContext,
   appliedStatusMapping,
   caseDetail,
   casePage,
@@ -22,6 +23,7 @@ import {
   issueSummary,
   issueTestCase,
   permissions,
+  projectRepository,
   readinessSummary,
   releaseReadiness,
   releaseBlocker,
@@ -370,6 +372,59 @@ describe('reads', () => {
     expect(out.stdout).toContain('In Progress');
     expect(out.stdout).not.toContain('is-2');
     expect(out.stdout).toContain('Reproduced.');
+  });
+
+  it('asks for both queue terms and takes the owner from /me, never from a flag', async () => {
+    const out = recorder();
+    const stub = api({
+      '/projects': { status: 200, body: [PROJECT] },
+      '/me': { status: 200, body: currentUser() },
+      'GET /issues': { status: 200, body: [issueSummary({ key: 'ACME-7', agentEligible: true })] },
+    });
+
+    expect(await mainWith(['issue', 'queue'], out, stub.fetch)).toBe(EXIT.ok);
+
+    const asked = stub.urls.find((url) => url.includes('/issues?')) ?? '';
+    // Either term alone answers a different question — the project's whole flagged pool, or
+    // everything on this person's plate. Only the intersection is "the work waiting for me".
+    expect(asked).toContain('agentEligible=true');
+    expect(asked).toContain('assigneeId=u-1');
+    expect(out.stdout).toContain('ACME-7');
+  });
+
+  it('says what an empty queue means rather than printing 0 of 0', async () => {
+    const out = recorder();
+    const stub = api({
+      '/projects': { status: 200, body: [PROJECT] },
+      '/me': { status: 200, body: currentUser() },
+      'GET /issues': { status: 200, body: [] },
+    });
+
+    expect(await mainWith(['issue', 'queue'], out, stub.fetch)).toBe(EXIT.ok);
+    expect(out.stdout).toContain('Nothing flagged for an assistant is assigned to you');
+  });
+
+  it('fetches the whole working context in one read, repositories and criteria included', async () => {
+    const out = recorder();
+    const stub = api({
+      '/projects': { status: 200, body: [PROJECT] },
+      'GET /issues/ACME-124/agent-context': {
+        status: 200,
+        body: agentTaskContext({
+          repositories: [projectRepository({ buildCommand: 'npm ci && npm test' })],
+        }),
+      },
+    });
+
+    expect(await mainWith(['issue', 'context', 'ACME-124'], out, stub.fetch)).toBe(EXIT.ok);
+
+    // §3.1's grounding argument, asserted as content: the criteria and the build command are what
+    // the work is judged against and what it is run with.
+    expect(out.stdout).toContain('The session cookie is gone.');
+    expect(out.stdout).toContain('npm ci && npm test');
+    expect(out.stdout).toContain('Nobody stays signed in by accident.');
+    // One call, not six — the whole reason the endpoint is a composite.
+    expect(stub.urls.filter((url) => url.includes('/issues'))).toHaveLength(1);
   });
 
   it('refuses a key of the wrong kind without making a request', async () => {

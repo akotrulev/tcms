@@ -698,6 +698,8 @@ tcms proposal list     # the review queue of proposed cases
 tcms proposal show <id># one proposal, with its payload and grounding
 tcms issue list        # the project's epics, stories, bugs, spikes and tasks
 tcms issue show ACME-1 # one issue, its children, comments and the moves it may make
+tcms issue queue       # the AI-eligible tasks assigned to you
+tcms issue context ACME-1 # everything an assistant needs to work one task, in one read
 tcms board list        # the boards over this project
 tcms board show <name> # one board — its columns, its cards, and any column over its WIP limit
 tcms backlog           # every story and task that is not done, in rank order
@@ -724,6 +726,7 @@ tcms label add | label set
 tcms release create | release edit | release publish | release delete
 tcms issue release ACME-1 --release 2.4      # target a story at a version, or --none
 tcms issue cases set ACME-1 --case TC-311    # the cases that prove it; a replacement, not an addition
+tcms issue attach-pr ACME-1 --pr-url <URL>   # report the pull request the work went into
 tcms review comment    # a remark on an open review`}</Terminal>
 
         <H>Options that apply everywhere</H>

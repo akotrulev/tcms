@@ -484,6 +484,43 @@ export function issue(overrides: Partial<Schemas['Issue']> = {}): Schemas['Issue
   };
 }
 
+/* --------------------------------------------------------------- agent (015) ---- */
+
+export function projectRepository(
+  overrides: Partial<Schemas['ProjectRepository']> = {},
+): Schemas['ProjectRepository'] {
+  return {
+    id: 'pr-1',
+    name: 'acme-storefront',
+    url: 'git@github.com:northwind/acme-storefront.git',
+    defaultBranch: 'main',
+    subdirectory: '/',
+    buildCommand: 'npm ci && npm run build && npm test',
+    position: 0,
+    // Computed from `position`, never stored (D16/plan 015 §6) — so the fixture's default agrees
+    // with its own position rather than being a second, independent claim.
+    primary: true,
+    ...overrides,
+  };
+}
+
+export function agentTaskContext(
+  overrides: Partial<Schemas['AgentTaskContext']> = {},
+): Schemas['AgentTaskContext'] {
+  return {
+    issue: issue({ agentEligible: true }),
+    story: {
+      key: 'ACME-118',
+      title: 'Sign-out clears the session',
+      acceptanceCriteria: [{ text: 'The session cookie is gone.', done: false }],
+    },
+    epic: { key: 'ACME-90', title: 'Account security', goal: 'Nobody stays signed in by accident.' },
+    specExcerpts: [],
+    repositories: [projectRepository()],
+    ...overrides,
+  };
+}
+
 export function issueComment(
   overrides: Partial<Schemas['IssueComment']> = {},
 ): Schemas['IssueComment'] {

@@ -11,6 +11,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  agentTaskContext,
   caseDetail,
   caseHistory,
   casePage,
@@ -46,7 +47,7 @@ import {
 import { roleMatrix } from '../../client/src/test/roleMatrix.js';
 import { READ_TOOLS } from './reads.js';
 import { isListed, type ToolDefinition } from './tool.js';
-import { PROJECT, agentRoutes, api, sessionWith, withApi, type Api } from './test/harness.js';
+import { ME, PROJECT, agentRoutes, api, sessionWith, withApi, type Api } from './test/harness.js';
 
 function tool(name: string): ToolDefinition {
   const found = READ_TOOLS.find((candidate) => candidate.name === name);
@@ -302,6 +303,55 @@ describe('tcms_read_issue', () => {
     const answer = await run(stub, 'tcms_read_issue', { issue: 'ACME-124' });
 
     expect(answer['allowedTransitions']).toEqual(['In Review', 'Done']);
+  });
+
+  it('asks for BOTH queue terms, because either one alone answers a different question', async () => {
+    /*
+      `agentEligible` alone is the project's whole flagged pool and `assigneeId` alone is everything
+      on the owner's plate. D30 has the flag assign nothing, so only the intersection means *the
+      work waiting for me* — and the owner comes from the session, never from an argument.
+    */
+    const stub = api(agentRoutes({
+      'GET /issues': { status: 200, body: [issueSummary({ agentEligible: true })] },
+    }));
+
+    const answer = await run(stub, 'tcms_read_issue', { queue: true });
+
+    const query = queryOf(stub, '/issues');
+    expect(query.get('agentEligible')).toBe('true');
+    expect(query.get('assigneeId')).toBe(ME.id);
+    expect((answer['items'] as Record<string, unknown>[])[0]?.['agentEligible']).toBe(true);
+  });
+
+  it('refuses a queue that also names an issue rather than silently ignoring one of them', async () => {
+    const stub = api(agentRoutes({ 'GET /issues': { status: 200, body: [] } }));
+
+    await expect(run(stub, 'tcms_read_issue', { queue: true, issue: 'ACME-124' }))
+      .rejects.toThrow(/queue lists the tasks assigned to you/);
+  });
+
+  it('fetches the whole working context in ONE call, with the moves spelled as names', async () => {
+    /*
+      §3.1's grounding rule is the whole argument for the endpoint: an agent that assembles the
+      story, its criteria, the epic goal, the spec excerpts and the repository from six calls will
+      skip it and generate blind. So the assertion is both halves — the content, and that nothing
+      else was read to get it.
+    */
+    const stub = api(agentRoutes({
+      'GET /issues/ACME-124/agent-context': {
+        status: 200,
+        body: agentTaskContext({
+          issue: issue({ agentEligible: true, allowedTransitions: [REVIEWING] }),
+        }),
+      },
+    }));
+
+    const answer = await run(stub, 'tcms_read_issue', { issue: 'ACME-124', context: true });
+
+    expect((answer['issue'] as Record<string, unknown>)['allowedTransitions']).toEqual(['In Review']);
+    expect((answer['story'] as Record<string, unknown>)['key']).toBe('ACME-118');
+    expect(answer['repositories']).toHaveLength(1);
+    expect(stub.sent.filter((request) => request.path.includes('/issues'))).toHaveLength(1);
   });
 
   it('reads the comments and the spec links only when they were asked for', async () => {

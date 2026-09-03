@@ -1312,6 +1312,9 @@ const issueCreate: Command = {
         targetDate: nullableText(options['target-date']),
         dueDate: nullableText(options['due-date']),
         acceptanceCriteria: completeSet(options['acceptance-criterion']),
+        // Rendered as a flag by `optionSpecFor` from the catalogue field; absent means false, and
+        // `present` drops it rather than sending `false` explicitly — the contract defaults it.
+        agentEligible: flag(options['agent-eligible']) ? true : undefined,
       }) as components['schemas']['IssueInput'],
       tcms: { ...request, ...intent },
     });
@@ -1805,6 +1808,46 @@ const issueCasesSet: Command = {
   },
 };
 
+/**
+ * `tcms issue attach-pr ACME-124 --url https://…` — report the pull request the work went into.
+ *
+ * A command of its own for `issue release`'s reason: there is no `tcms issue edit`, and this is the
+ * second field of `IssueUpdate` somebody reaches for at a terminal. **This product never opens a
+ * pull request** (D25) — the developer's own git does — so the URL arriving here is the only thing
+ * that puts the work on the issue's history, where it lands as `issue.pr_url_set`.
+ *
+ * **`--pr-url`, not `--url`** — and that is not a style choice. `--url` is a GLOBAL flag naming
+ * the instance (`config.ts`), so `attach-pr --url https://github.com/…/pull/482` parses as a
+ * command pointed at GitHub, and the request goes to `PATCH /northwind/…/pull/482/api/v1/issues/…`.
+ * It exits non-zero, so nothing is silently written; it is still a flag nobody could use, and the
+ * contract exchange check is what named it.
+ */
+const issueAttachPr: Command = {
+  name: 'issue attach-pr',
+  summary: 'Report the pull request opened for an issue',
+  usage: 'tcms issue attach-pr ACME-124 --pr-url https://github.com/northwind/acme-storefront/pull/482',
+  options: { 'pr-url': { type: 'string' } },
+  write: { kind: 'edit', permission: 'issue:edit' },
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const key = requireArg(context, 'issue');
+
+    const updated = await client.PATCH('/issues/{key}', {
+      params: { path: { key } },
+      body: { prUrl: requireOption(context, 'pr-url') } as components['schemas']['IssueUpdate'],
+      tcms: request,
+    });
+
+    reportWrite(out, json, updated, [
+      ['Issue', `${show(updated.key)} — ${show(updated.title)}`],
+      ['Pull request', show(updated.prUrl)],
+      // Printed because it is the next decision: the work is reported, and where it may go from
+      // here is the workflow's answer — which under the review gate will not include a Done status.
+      ['Can move to', updated.allowedTransitions.map((row) => row.name).join(', ') || '(none)'],
+    ]);
+  },
+};
+
 export const WRITES: readonly Command[] = [
   caseEdit,
   caseProposal,
@@ -1835,4 +1878,5 @@ export const WRITES: readonly Command[] = [
   releaseDelete,
   issueRelease,
   issueCasesSet,
+  issueAttachPr,
 ];

@@ -832,6 +832,22 @@ const RESULT_SHAPE: EntityShape = {
  * workflow forbids from where this issue stands is the server's 409, whose `detail` names the moves
  * that are allowed. A legal-move ladder here would be a second copy of the one rule `tracker` exists
  * to enforce.
+ *
+ * ## Five arms of `tcms_write_issue` are deliberately NOT actions here
+ *
+ * `move-card` and `label` (012 T5), `cases` and `release` (013 T4) and `attach-pr` (015 T4) are
+ * arms on both adapters and have no `ActionSpec` below. That is a rule rather than five omissions:
+ * **the catalogue carries an action only when it has a payload of its own to describe.** Each of
+ * those five sends exactly one argument that is not a property of `IssueInput` — a column name, a
+ * label set, a case-key set, a version, a PR URL — so a catalogue entry would be an action whose
+ * field list is empty, printed by `tcms format` as a shape with nothing in it.
+ *
+ * `attach-pr` is the sharpest instance and worth naming, because it is the one that has a contract
+ * property. `prUrl` is on `IssueUpdate` and on **no** other schema, so cataloguing it would pull
+ * `IssueUpdate` into `shapesContract.test.ts`'s accounted set — and every other field of it is
+ * already offered at its `IssueInput` site by the `update` action, so the accounting would have to
+ * be satisfied with a dozen `UNOFFERED` lines declaring fields unoffered that this surface offers.
+ * A check answered by writing down the opposite of what is true is worse than no entry.
  */
 export const ISSUE_SHAPE: EntityShape = {
   entity: 'issue',
@@ -911,6 +927,17 @@ export const ISSUE_SHAPE: EntityShape = {
         + 'no component name, and every nested pin in `shapesContract.test.ts` resolves a named one '
         + '— so ticking a criterion off is the story screen\'s, not this surface\'s. Written down '
         + 'rather than discovered as a missing field.',
+    },
+    {
+      name: 'agentEligible',
+      type: 'boolean',
+      actions: ['create', 'update'],
+      describe: 'Flags this as a good candidate for an AI assistant. A hint and a filter, not an assignment.',
+      note:
+        'D30. It assigns nothing and grants nothing — an assistant is its owner\'s token (D26), so '
+        + 'the queue an assistant reads is `agentEligible` AND assigned to that owner. Setting it '
+        + 'on an unassigned issue puts it in nobody\'s queue, which is why the marker and the '
+        + 'assignee are two separate answers on every screen that shows both.',
     },
     {
       name: 'body',

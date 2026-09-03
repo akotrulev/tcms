@@ -584,6 +584,33 @@ function nameOf(row: { name: string }): string {
   return row.name;
 }
 
+/**
+ * One issue as this surface hands it back — ids traded for the names every write arm takes.
+ *
+ * Extracted in 015 T4 rather than written twice: `agent-context` carries a whole `Issue` inside it,
+ * and a second copy of this mapping is how the two branches come to answer `allowedTransitions` as
+ * names in one and as `IssueStatusRef` objects in the other.
+ */
+function projected(detail: components['schemas']['Issue']): Record<string, unknown> {
+  return {
+    ...detail,
+    // The ids are dropped and the names kept, §6's rule: an id here is a second handle for a row
+    // that no tool on this surface takes one for.
+    type: detail.type.name,
+    level: detail.type.level,
+    status: detail.status.name,
+    statusKind: detail.status.kind,
+    allowedTransitions: detail.allowedTransitions.map(nameOf),
+    watchers: detail.watchers.map((watcher) => watcher.displayName),
+    children: detail.children.map((child) => ({
+      key: child.key,
+      title: child.title,
+      type: child.type.name,
+      status: child.status.name,
+    })),
+  };
+}
+
 const readIssue: ToolDefinition = {
   name: 'tcms_read_issue',
   title: 'List the project\'s issues, or open one',
@@ -594,7 +621,9 @@ const readIssue: ToolDefinition = {
     + 'as the NAMES tcms_write_issue takes. Read those before moving anything: a move the workflow '
     + 'forbids is refused, and an Epic can never be moved because its status is derived from its '
     + 'stories. Ask for `comments` to see what people have said and `docLinks` for the '
-    + 'specification blocks it is bound to.',
+    + 'specification blocks it is bound to. **Start here when you have been asked to do some '
+    + 'work**: `queue` lists what has been flagged for you, and `context` on one of them fetches '
+    + 'everything needed to do it in a single read.',
   gate: { mode: 'all', permissions: ['issue:read'] },
   inputSchema: {
     type: 'object',
@@ -614,6 +643,22 @@ const readIssue: ToolDefinition = {
           'Story-level issues with no epic — the unscheduled backlog. A flag rather than an empty '
           + '`epic`, because an absent filter already means "do not filter".',
       },
+      queue: {
+        type: 'boolean',
+        description:
+          'Your AI-eligible queue — the tasks flagged for an assistant AND assigned to you. Takes '
+          + 'no owner: this credential acts as its owner and reads that person\'s queue, so there '
+          + 'is nobody else to name. Combine with nothing; `issue` is refused beside it.',
+      },
+      context: {
+        type: 'boolean',
+        description:
+          'For one `issue`: everything needed to work it, in one read — the task, its parent '
+          + 'story with the acceptance criteria, the epic\'s goal, the target release, the linked '
+          + 'specification excerpts, and the project\'s repositories with their build commands. '
+          + 'A project-scoped token gets nothing from another project. Read this BEFORE writing '
+          + 'code: the criteria and the spec excerpts are what the work is judged against.',
+      },
       sort: {
         type: 'string',
         enum: ['key', 'title', 'status', 'dueDate', 'estimateHours'],
@@ -628,6 +673,14 @@ const readIssue: ToolDefinition = {
     const projectId = session.projectId();
     const tcms = session.request;
     const key = str(input, 'issue');
+    const queue = bool(input, 'queue');
+
+    if (queue && key) {
+      throw new InputMismatch(
+        'queue lists the tasks assigned to you and `issue` opens one, so the two together name no '
+          + 'request. Call it with queue alone, then open one of the keys it answers.',
+      );
+    }
 
     if (!key) {
       const rows = await session.client.GET('/issues', {
@@ -639,6 +692,15 @@ const readIssue: ToolDefinition = {
             ...optional('parentKey', str(input, 'parent')),
             ...optional('unparented', bool(input, 'unparented')),
             ...optional('sort', str(input, 'sort')),
+            /*
+              The queue is TWO terms and neither is optional. `agentEligible` alone is the
+              project's whole AI-eligible pool, which is not "mine"; `assigneeId` alone is
+              everything assigned to the owner, flagged or not. D30 has the flag assign nothing,
+              so the intersection is the only thing that means *the work waiting for me*.
+            */
+            ...(queue
+              ? { agentEligible: true, assigneeId: [session.reach.user.id] }
+              : {}),
           },
         },
         tcms,
@@ -658,29 +720,35 @@ const readIssue: ToolDefinition = {
           dueDate: row.dueDate,
           overdue: row.overdue,
           estimateHours: row.estimateHours,
+          // On every row rather than only the queue's: a marker the caller can see everywhere is
+          // what stops "is this one mine to take" being a second call.
+          agentEligible: row.agentEligible,
         })),
         input,
       );
     }
 
+    /*
+      The composite, and §3.1's third — its whole argument is the grounding one that section
+      already makes: an agent that has to assemble a task's story, criteria, epic goal, spec
+      excerpts and repository from six calls will skip it and generate blind. Served by ONE
+      endpoint, so the fan-out is the server's and this stays a single call.
+
+      Returned as it arrives except for the projection below, which is the same one the plain
+      detail read applies — a caller that got names from one branch and `IssueStatusRef` objects
+      from the other would have to translate between two spellings of one thing.
+    */
+    if (bool(input, 'context')) {
+      const context = await session.client.GET('/issues/{key}/agent-context', {
+        params: { path: { key } }, tcms,
+      });
+      return { ...context, issue: projected(context.issue) };
+    }
+
     const detail = await session.client.GET('/issues/{key}', { params: { path: { key } }, tcms });
 
     return {
-      ...detail,
-      // The ids are dropped and the names kept, §6's rule: an id here is a second handle for a row
-      // that no tool on this surface takes one for.
-      type: detail.type.name,
-      level: detail.type.level,
-      status: detail.status.name,
-      statusKind: detail.status.kind,
-      allowedTransitions: detail.allowedTransitions.map(nameOf),
-      watchers: detail.watchers.map((watcher) => watcher.displayName),
-      children: detail.children.map((child) => ({
-        key: child.key,
-        title: child.title,
-        type: child.type.name,
-        status: child.status.name,
-      })),
+      ...projected(detail),
       ...(bool(input, 'comments')
         ? {
           comments: await session.client.GET('/issues/{key}/comments', {
