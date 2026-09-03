@@ -68,7 +68,7 @@ would mean eight edits to three documents that a test pins byte-for-byte. It is 
 | **M2** | Board & backlog | ~~`V4`~~ → `V5` | work the board, rank the backlog, filter once across every view | M1 | done 2026-09-01 @ `95c9960b` |
 | **M3** | Releases, roadmap & readiness | ~~`V5`~~ → `V6` | plan versions, see the roadmap, and answer "can we ship 2.4?" | M2 | done 2026-09-01 @ `55cb4bc0` |
 | **M4** | Jira offramp | ~~`V6`~~ → ~~`V7`~~ → ~~`V8`~~ → `V7` | move a Jira project in, keys intact, with a preview and a report | M1 | done 2026-09-03 @ `ba0031bb` — plan 014 |
-| **M5** | Agent execution | ~~`V7`~~ → ~~`V6`~~ → ~~`V7`~~ → `V8` | connect their own assistant and have it work a task, but never close it | M1 | not started |
+| **M5** | Agent execution | ~~`V7`~~ → ~~`V6`~~ → ~~`V7`~~ → `V8` | connect their own assistant and have it work a task, but never close it | M1 | done 2026-09-04 @ `4f3bbf8b` — plan 015 |
 | **M6** | Time | ~~`V8`~~ → ~~`V10`~~ → `V11` | log hours, submit a period, and have a PM approve it | M1 | not started |
 | **M7** | Staffing | ~~`V9` (unchanged)~~ → `V10` | allocate people, see capacity, and find who is free | ~~M6~~ → **M0** (review R11) | not started |
 | **M8** | Billing | ~~`V10`~~ → ~~`V11`~~ → `V12` | price approved time and issue an invoice | M6 · Mc | not started |
@@ -698,6 +698,53 @@ orchestrator, no runner, no forge adapter, no model credential** (D25, D26). Act
 
 **contract** — `/me/assistants`, `/issues/{key}/transitions` gains its allowed-moves projection,
 `/projects/{id}/repositories`.
+
+**Landed 2026-09-04 @ `4f3bbf8b`, plan `015-agent-execution.md`, five tasks.** `V8__agent.sql` as
+reserved — the directory was re-read on 2026-09-03 and held `V1 … V7`, `V7__import.sql` being M4's.
+No roles-spec, permission-matrix or README churn: `Agent` already held every key this module needs,
+`/me/assistants` costs authentication alone, and `review_enabled_issue` is a **setting**, not a
+permission.
+
+**Two deliberate narrowings of D10 §3, taken rather than discovered.** The "refuse Done" gate is the
+**terminal-transition self-approval guard**, not the full review module: no `review` row is opened
+for an issue, no reviewer is assigned and no verdict is recorded. It binds when
+`review_enabled_issue` ∧ ¬`author_may_approve_own_work` ∧ caller-is-assignee, so **an assistant is
+bound exactly as its owner would be and there is no token-specific rule** — which is what lets a
+one-person company with the gate off close its own work (A6). And `project_repository` is reference
+data nothing else in the product reads.
+
+**Smoked against a running instance in T4** (`acffef5e`, transcript in that commit body): a real
+`/me/assistants` token on both adapters — the queue, the context read, `attach-pr`, the 409 with its
+sentence, and A6's same-move-succeeds with the gate off.
+
+**Built and unverified.** ~~The refuse-to-close on a real project with the gate on, and the
+agent-context fetch through a real Agent token~~ → both smoked in T4, above. What is left is the
+whole of **T5's frontend**: nothing in it has been seen in a browser — 24 component tests, a green
+`tsc -b` and oxlint at zero, none of which is a renderer. Specifically: the connect flow end to end
+against a live `/me/assistants` (the token-shown-once path is asserted through a mocked `api.post`,
+so the seam itself is what the tests do not exercise), the agent-context panel against a real
+composite, and D33's gate biting through this UI rather than through a tool call.
+
+**A5 — propose-then-accept — is NOT built, and is deferred rather than omitted.** An assistant
+cannot propose a breakdown of a story into sub-tasks for a person to accept. D21 calls for
+`tracker`'s own `issue_proposal` — its own table, because a shared row is not a shared class — and
+neither the table nor an endpoint exists; the on-wire `/projects/{id}/ai-proposals` family is
+`repository`'s **test-case** proposals, a different subject in a different module, and pointing the
+screen at it would have been the wrong one. `story-proposal.html` is therefore unported: every arm
+of it would be disabled, and a routed dead screen is worse than an absent one. Recorded as not built
+in `docs/features.md`, in those words. It needs a follow-on slice: the table, the endpoint, and then
+the screen.
+
+**One open backend defect, carried out of T4 and NOT fixed here.** `POST /issues` with
+`agentEligible: true` answers **500** (`rank=NULL` on the post-insert flush), which also breaks
+`seed-demo-data` and therefore blocks building a demo instance. It is not M5's deliverable and it is
+open.
+
+**Nothing downstream is rewritten:** no module's *Depends on* names M5. M3 shows
+`done 2026-09-01 @ 55cb4bc0`, so the R9 note about populating `issue.release_id` is unnecessary —
+the release fact is populated and `AgentTaskContext.issue.release` carries it.
+
+**No R-number taken.**
 
 **fe** — ports `profile-assistants.html`, `assistant-connect.html`, `story-proposal.html`,
 `settings-repositories.html`, the AI-eligible toggle and marker on cards and lists, and the
