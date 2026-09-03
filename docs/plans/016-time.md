@@ -31,6 +31,274 @@ mockups `timesheets.html`, `timesheet-approvals.html`, and the time figures on `
 
 ---
 
+## Prompts — one per task
+
+One task is one session, so each block below is what is pasted into a fresh session to run that
+task, complete on its own. **They are living text**: a task that lands something different from what
+this plan predicted rewrites the prompts below it before it stops — in place, no changelog appended.
+
+Every block assumes the same two things and does not repeat them: read `CLAUDE.md` first, and run
+the gates on `shanks` through `~/bin/tcms-remote` after reading
+`docs/specs/shanks-runner-details.md` — `BUILD FAILED` with `Could not write XML test results` and
+**zero** assertion failures is the fd limit, not a red suite.
+
+### Prompt — T1 — The time contract, both clients, and the CLI/MCP verbs
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory —
+this task is the `ts` stack, so /tooling-engineer with tool-cli-builder and tool-mcp-builder.
+Run task T1 of docs/plans/016-time.md.
+
+Read, in this order: 016's header, its "Decisions this plan takes" section (all ten — D-b, D-d and
+D-e decide what is in this contract and what is deliberately not), and its T1 block, which carries
+the schemas and the paths in full. Then the neighbourhood you are editing: docs/specs/openapi.yaml
+around the `tracker` tag at line 45 and the `/issues/{key}/doc-links` block, and both
+contractBodies.ts copies. The mockups timesheets.html and timesheet-approvals.html are the source of
+truth for what a screen needs from this contract; T1's schema block is what to type.
+
+Depends on nothing. Nothing else may be in progress beside it — work in this repo is sequential.
+
+Traps this task specifically will hit:
+- **`required` does not descend.** Every schema gets its `required` array INCLUDING the inline
+  nested objects — TimeEntry.subject, EpicTimeRollup.children[], TimesheetQueueEntry.projectTotals[].
+  Without it every generated property is optional and both clients go soft.
+- **There are TWO generated clients and they are not the same command.** `cd frontend && npm run
+  gen:api` AND `cd packages/client && npm run gen:api`. Regenerate both or contractPairing.test.ts
+  reddens on a pair that has drifted.
+- **The marked region of contractBodies.ts is byte-identical across both copies.** Edit one, edit
+  both, and paste rather than retype.
+- **The CLI and MCP each have their own reads.ts/writes.ts.** Five verbs mirrored into both;
+  writeConformance.test.ts in each package compares the write verbs against openapi.yaml and is the
+  check that a mirror drifted.
+- **The verbs 404 until T3.** That is the contract-first cost, and it is a real 404 from a path the
+  server does not serve. Do NOT add a stub returning a fake success.
+- **No verb on this surface returns a rate or a cost**, and the surface doc must say so — that is
+  M8's, gated on billing:* and ratecard:read.
+
+Gate: ~/bin/tcms-remote sync, then
+  packages "npm run build && npm run lint --workspaces && npm run test:run --workspaces"
+  frontend "npm run build"
+
+Commit (one commit, `git add <paths>` only — never -A): openapi.yaml, the MCP surface doc, both
+schema files, both contractBodies.ts, and the four cli/mcp source files. Message:
+`feat(time): the time contract, both clients, and the CLI/MCP verbs`.
+
+Done when: contractPairing.test.ts and both writeConformance.test.ts are green, and `node
+cli/dist/main.js help` lists the five time verbs.
+````
+
+### Prompt — T2 — `V9`: `time_entry`, `timesheet_period`, `issue_time_rollup`
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory —
+this task is the database, so /data-architect with data-postgresql and data-migrations.
+Run task T2 of docs/plans/016-time.md.
+
+Read, in this order: 016's "The two numbers this plan takes" section, its decisions D-a, D-b, D-c,
+D-g and D-h (they are why each table and each CHECK is shaped the way it is), and its T2 block,
+which carries the migration in full. Then, as patterns:
+backend/src/main/resources/db/migration/V8__agent.sql (the RLS DO-block and the "seed function
+deliberately not touched" section) and V3__tracker_core.sql §5 (what a seed-function change looks
+like when one IS needed). Then docs/specs/tenancy-invariants.md and the ERD's §0.1 company_id rule.
+
+Depends on: T1.
+
+Traps this task specifically will hit:
+- **`ls backend/src/main/resources/db/migration/` BEFORE writing the file, every time.** The plan
+  says V9 and the directory is the authority. `out-of-order` is unset in application.yml, so a
+  reused number is SILENTLY not applied, and Testcontainers builds every test database from empty
+  and can never show you the conflict. If anything above V8 has landed since, take the next free
+  number and correct 009's table to it.
+- **`time_entry.subject_id` carries NO FOREIGN KEY, and the reason goes in the comments.** That is
+  the module rule (scope §3), not an omission — `tracker` is not a foundation module and never will
+  be. State the cost too: a deleted issue can orphan an entry.
+- **FORCE ROW LEVEL SECURITY, not merely ENABLE**, and the predicate is byte-identical to V1's.
+  SchemaConventionTest.everyPolicyHasTheExactIsolationPredicate compares the text and fails equally
+  on an explicit WITH CHECK — a USING-only policy reuses USING as the insert check.
+- **`company_id` leads every composite index.** SchemaConventionTest computes this; do not read the
+  file and conclude it holds.
+- **Do NOT restate tcms_seed_project_defaults.** Nothing here is a per-project default row —
+  track_time is a column DEFAULT. Reproducing that function is the only way this file could break
+  it, since CREATE OR REPLACE replaces the whole body, and an omitted block silently stops being
+  seeded (ProjectKeySequenceSchemaTest is the check that one went missing).
+- **No GRANT statements.** The two-role split grants tcms_app everything through
+  ALTER DEFAULT PRIVILEGES, set up before Flyway runs.
+
+Gate: ~/bin/tcms-remote sync, then
+  backend "ulimit -n 65535; ./gradlew test --tests 'com.tcms.schema.*' --tests 'com.tcms.tenancy.*'"
+
+Commit: V9__time.sql and the ERD amendment. Message:
+`feat(time): V9 — time_entry, timesheet_period and the issue rollup`.
+
+Done when: SchemaConventionTest is green, the three tables carry forced RLS, and the ERD records
+subject_id as the fourth polymorphic reference in the schema with the orphan cost named.
+````
+
+### Prompt — T3 — The `time` module, the rollup, and the money-boundary negative test
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory —
+this task is the backend, so /be-java with be-java-database-code, be-java-unit-testing and
+qa-permission-testing-java.
+Run task T3 of docs/plans/016-time.md. This is the largest task in the plan.
+
+Read, in this order: 016's decisions D-c, D-d, D-e, D-f, D-h and D-i (D-i decides who may approve a
+period and is the one a reader will get wrong), then its T3 block, which carries the package-info,
+the tests and the crossing class in full. Then, as patterns:
+backend/src/main/java/com/tcms/work/BoardFacts.java (the read-a-foreign-table idiom this task's
+IssueFacts is the fourth instance of), com/tcms/tracker/package-info.java (the module declaration
+and the issue_fact trap stated from the other side), and any tracker service for the
+permission-check and CompanyContext shape. Then V2__pm_foundation.sql's role grants — the comment
+above the Test Lead INSERT flags D-f for this module by name.
+
+Depends on: T2 (the tables) and T1 (the contract these controllers must match — do not invent a
+response shape, read openapi.yaml).
+
+Traps this task specifically will hit:
+- **`issue_fact` is READ and NEVER written** (009 review R10, scope §3). One writer exists,
+  tracker.IssueFactProjection. The whole crossing lives in ONE class, time.IssueFacts, and
+  TimeWritesNoIssueFactTest asserts both halves — that nothing writes it, and that exactly one file
+  names it. Write that test; do not assume it.
+- **Every repository interface carries `@Transactional(readOnly = true)` ON THE INTERFACE.** Spring
+  Data gives a transaction only to the inherited CRUD methods, so a derived or @Query method
+  otherwise runs with no company set and every RLS-protected read returns ZERO ROWS — fail-closed
+  and silent, with no error to attribute it to.
+- **Company context comes from the authenticated session, never from a parameter, header or path
+  segment.**
+- **The money boundary needs a test asserting the NEGATIVE, and it is written now even though rate
+  cards arrive in M8**, so M8 inherits it. Derive the money keys from the catalogue and assert
+  their absence — do not read §A3 and conclude it holds. That reading is the pass that missed five
+  join tables without company_id.
+- **D-f: a Test Lead cannot approve a timesheet. Assert it; do not repair it.** Widening that grant
+  would widen a grant nobody decided to widen.
+- **The rollup is synchronous, inside the approval transaction (D-h).** Not an outbox event — this
+  module owns both sides, and the outbox has a delivery floor around a minute while the story panel
+  must be right the moment Approve is clicked.
+- **ArchUnit**: allowedDependencies is the five foundation modules and nothing else. `identity` is
+  asked what a person is called, never whether they may.
+- **A comment must not claim somebody lacks a permission §A3 grants them** — tierClaims.test.ts
+  fails the packages job on it.
+
+Gate: ~/bin/tcms-remote sync, then backend "ulimit -n 65535; ./gradlew build".
+
+Commit: backend/src/main/java/com/tcms/time, backend/src/test/java/com/tcms/time, and the
+architecture test. Message:
+`feat(time): the time module, the rollup projection, and the money boundary`.
+
+Done when: a submitted period refuses an edit with 409 and a rejected one accepts it; a rejection
+without a note is refused; approving posts hours onto the issue and rolls them to the epic;
+TimeMoneyBoundaryTest and TimeWritesNoIssueFactTest are green; ArchUnit is green.
+````
+
+### Prompt — T4 — Timesheets and approvals
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory —
+this task is the SPA, so /fe-react with fe-react-forms, fe-react-data-fetching and
+fe-react-component-testing.
+Run task T4 of docs/plans/016-time.md.
+
+Read, in this order: 016's decisions D-b, D-d, D-i and D-j (D-j is why a KPI tile is missing and
+must stay missing), then its T4 block, which carries the keys, the labels and the fault arm in full.
+Then walk the mockups — docs/mockups/timesheets.html and timesheet-approvals.html — in a browser
+alongside docs/mockups/index.html. **The mockups are the source of truth for what these screens
+show**; the plan and the scope spec for what the system does. Then, as patterns:
+frontend/src/features/tracker/ for a ported screen on the kit, frontend/src/api/queries/issues.ts
+for the hook shape, and frontend/src/app/AppShell.tsx's MY_WORK block for a nav item outside the
+project frame.
+
+Depends on: T3 — the endpoints must serve real data before a screen reads them. There is no mock
+API lane in this repo.
+
+Traps this task specifically will hit:
+- **Build the fault switch BEFORE the feature it proves.** devFaults.ts gets the `isTimePath` arm
+  in this task, not afterwards. A resilience behaviour you cannot trigger is one you have not
+  tested. Both guards stay a literal `import.meta.env.DEV` — route that through an imported
+  constant and the module ships to production.
+- **ONE keys factory.** Add to frontend/src/api/queries/keys.ts. Never add a second, and never
+  hand-spell a prefix a root helper exists for.
+- **`npm run build`, not `tsc --noEmit`.** The latter has reported 0 errors while the build failed
+  with nine, because `tsc -b` uses the stricter config.
+- **Never build your own QueryClient in a test** — only createTestQueryClient's has the caches. A
+  render that trips an error boundary FAILS unless the test calls renderingIntoAnErrorBoundary()
+  and says why.
+- **Every exchange crossing the fetch double is compared against openapi.yaml.** Use
+  frontend/src/test/fixtures.ts and anchor path-keyed mock arms (/^\/timesheets\/periods\/[^/]+$/)
+  so a sub-resource is not caught by a prefix.
+- **D-j: ship three KPI tiles, not four.** Period capacity is M7's. Do not invent a capacity figure
+  — that is the two-contradictory-percentages-on-one-screen failure.
+- **Keep the mockup's "What you never see here" panel.** It is the screen saying out loud what
+  scope §7 calls the sharpest boundary in the product.
+- **Routes go outside the project frame**, beside /my-work: a period spans projects (D-i), and
+  scoping it under the project switcher would state the opposite.
+- **No `sx`, no CSS-in-JS, no second stylesheet.** Tailwind utilities and the kit; new enums into
+  lib/labels.ts as `satisfies Record<Union, string>`.
+
+Gate: ~/bin/tcms-remote sync, then frontend "npm run build && npm run lint && npm run test:run".
+
+Commit: frontend/src/features/time, the time query module, index.ts, keys.ts, labels.ts,
+devFaults.ts, router.tsx, AppShell.tsx. Message: `feat(time): timesheets and the approvals queue`.
+
+Done when: a person logs against an issue, a meeting and leave from one screen; a submitted period
+renders no Add form and no edit buttons; a rejected one renders its note and an editable form; and
+rejecting requires a note before the dialog will submit.
+````
+
+### Prompt — T5 — Estimate vs actual, the four additive panels, and the close-out
+
+````text
+You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory —
+this task is the SPA plus the module's documentation close-out, so /fe-react.
+Run task T5 of docs/plans/016-time.md. This is the last task in the module, and the close-out rides
+with it rather than taking a session of its own — this session is the only one that knows what
+actually landed and what is built-but-unverified.
+
+Read, in this order: 016's decisions D-d, D-g and D-j, then its T5 block. Then the mockups for the
+five screens you are touching ADDITIVELY — story.html (the Time panel and the `Logged` detail row),
+epic.html (the estimate-vs-actual table), work-table.html (the `Logged` column and footer),
+my-work.html (the This-week panel) and settings-general.html (the Time panel). Then 009's
+"Prompt hand-off protocol", which is what step 8 executes.
+
+Depends on: T4.
+
+Traps this task specifically will hit:
+- **All five panels are ABSENT rather than empty** — M1 rendered none of them. Adding them is
+  additive; GeneralSettingsPage needs a NEW panel, not a stub filled in.
+- **No screen renders a bare "hours" (D-d).** Approved and pending are different numbers and every
+  figure says which it is. epic.html's panel is labelled "approved hours only" for this reason.
+- **All five surfaces are behind `track_time` (D-g).** Off hides them; it deletes nothing.
+- **Do NOT build settings-general.html's Budget row.** It reads "Edit in Billing" and is M8's.
+- **D-j again: My Work gets the Logged figure alone — no Capacity tile, no meter.**
+- **Each panel is its own DataRegion.** A failed rollup must not take the story page with it.
+- **The close-out is four separate obligations and none is optional**: 009's status table set to
+  `done <date> @ <short sha>`; a `**Built and unverified:**` list under the M6 section (the gates
+  prove it compiles, not that it works — a no-op theme toggle and a provider-ordering bug that
+  rendered nothing but the error page both typechecked and linted clean); the V actually taken,
+  with the reserved V11 STRUCK THROUGH rather than deleted; and the M7 and M8 prompts rewritten IN
+  PLACE with what landed — M8 gets the endpoint paths, `issue_time_rollup` as the projection's name,
+  `time.RollupService` as its only writer, TimeMoneyBoundaryTest as the test it inherits and must
+  not weaken, and D-i's approval rule; M7 gets D-j's two absent capacity figures as work M7
+  completes. No changelog appended under either.
+- **docs/features.md is struck through and superseded, never deleted**, so the next reader can see
+  the old reasoning was considered.
+
+Gates — all three stacks, because this is the module's last task:
+  ~/bin/tcms-remote sync
+  backend "ulimit -n 65535; ./gradlew build"
+  frontend "npm run build && npm run lint && npm run test:run"
+  packages "npm run build && npm run lint --workspaces && npm run test:run --workspaces"
+
+Commits — TWO, in this order:
+1. the frontend files plus docs/features.md
+2. docs/plans/009-project-management-expansion-modules.md ALONE, message `docs(plan): M6 done`
+
+Done when: approved hours appear on the story, the epic and the work table; the Track-time toggle
+saves; every gate is green; and 009's status table, its M6 section and the M7/M8 prompts are true
+again.
+````
+
+---
+
 ## The two numbers this plan takes, and why they are not the ones the prompt named
 
 **Migration `V9`, not `V10` or `V11`.** `ls backend/src/main/resources/db/migration/` on 2026-09-04
