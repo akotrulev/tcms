@@ -212,6 +212,26 @@ describe('AppShell — the credential entries (005 C2)', () => {
     expect(rail().queryByRole('link', { name: 'Single sign-on' })).not.toBeInTheDocument()
   })
 
+  it('lists Imports for a holder of issue:import and un-lists it for everybody else', async () => {
+    /*
+      014 D-e. The same rule as the four above and a different key: every operation in the import
+      family costs `issue:import` — the report names the source site, the account that connected to
+      it and the person who ran the migration — so there is no read-only view to fall back on and
+      the entry would lead to a screen whose whole content is a refusal.
+
+      `find` for the same reason the two project-scoped entries above use it: the project gate
+      cannot be requested until `/projects` has named the active project.
+    */
+    const withKey = renderShell(`/projects/${OLB}/cases`, ['case:read', 'issue:import'])
+    await railReady()
+    expect(await rail().findByRole('link', { name: 'Imports' })).toBeInTheDocument()
+    withKey.unmount()
+
+    renderShell(`/projects/${OLB}/cases`, ['case:read'])
+    await railReady()
+    expect(rail().queryByRole('link', { name: 'Imports' })).not.toBeInTheDocument()
+  })
+
   it('keeps listing the entries whose pages ARE readable without the write key', async () => {
     // The rule is whether the page can be READ, not whether it can be written. Both of these
     // render read-only for a caller without `project:settings` / `project:members`, so both stay.

@@ -16,6 +16,7 @@ import {
 import { Button } from '../../components/ui';
 import { formatCount, plural } from '../../lib/format';
 import { TypeIcon } from '../tracker/TypeIcon';
+import { DroppedFieldTable } from './DroppedFieldTable';
 
 const TEST_ID = 'ImportPreview';
 
@@ -165,37 +166,16 @@ export function PreviewStep({
               </Badge>
             }
           >
-            <Table data-testid={`${TEST_ID}.Dropped.Table`}>
-              <TableHead>
-                <TableRow>
-                  <TableHeaderCell>Source field</TableHeaderCell>
-                  <TableHeaderCell>Type</TableHeaderCell>
-                  <TableHeaderCell align="right">Values held</TableHeaderCell>
-                  <TableHeaderCell>Why</TableHeaderCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {preview.droppedFields.map((field) => (
-                  <TableRow key={field.name} data-testid={`${TEST_ID}.Dropped.Row`}>
-                    <TableCell>{field.name}</TableCell>
-                    <TableCell>
-                      <span className="text-ink-4">{field.fieldType}</span>
-                    </TableCell>
-                    <TableCell align="right">
-                      <Identifier variant="muted">{formatCount(field.valueCount)}</Identifier>
-                    </TableCell>
-                    {/*
-                      The server's own sentence, rendered and never rewritten. The report stores the
-                      reason per row for the same purpose — editing the catalogue later must not
-                      retroactively change what a report said at the time (D-f).
-                    */}
-                    <TableCell>
-                      <span className="text-ink-4">{field.reason}</span>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            {/*
+              The report renders this same component from the same shape (D-f). It is not a
+              coincidence worth preserving by hand: the two lists are asserted equal element for
+              element on the server, and two tables would let a word diverge in a `<td>` where no
+              gate is looking.
+            */}
+            <DroppedFieldTable
+              fields={preview.droppedFields}
+              testId={`${TEST_ID}.Dropped`}
+            />
             <p className="m-0 mt-2.5 border-t border-line pt-2.5 text-[12px] leading-[1.55] text-[color:var(--color-blocked)]">
               <strong>
                 These values are not imported and cannot be recovered from this product later.

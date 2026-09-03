@@ -49,12 +49,13 @@ interface WizardLocationState {
  * in it should not, so the restore is keyed on a live navigation rather than on the entry existing.
  * The connect step says so before the token field.
  *
- * ## The run page this navigates to is a stub until T8
+ * ## Confirm lands on the report, which polls itself
  *
- * Confirm posts with an `Idempotency-Key` and goes to `/projects/:projectId/imports/:importRunId`,
- * which T8 builds properly. What ships here is a minimal polling page showing the run's status, so
- * the tree builds and the flow works end to end at this boundary. It is not pretty until T8, and
- * the plan says so rather than pretending the report landed.
+ * Confirm posts with an `Idempotency-Key` and goes to `/projects/:projectId/imports/:importRunId`
+ * — `ImportReportPage`, which arrives on a `RUNNING` run, shows progress, and redraws itself as the
+ * report when the poll comes back `COMPLETED`. The wizard does not wait for the run: the read pass
+ * against the source takes minutes for a real project, and a fourth step that spun until it
+ * finished would be a tab somebody has to keep open.
  */
 export function ImportWizardPage() {
   const { projectId = '' } = useParams();

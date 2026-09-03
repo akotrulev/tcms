@@ -82,9 +82,10 @@ const TEST_ID = 'BoardSettings';
  * is on the wire: the column count and the grouping axis.
  *
  * **The subnav is one entry, not five.** The mockup's row is *General · Workflow · Boards ·
- * Repositories · Imports*; Repositories is M5's and Imports is M4's, and a nav link that leads
- * nowhere is worse than an absent one. This screen adds Boards to the project rail beside Workflow
- * and nothing else.
+ * Repositories · Imports*; ~~Repositories is M5's and Imports is M4's~~ → **Imports landed in 014
+ * and is in the rail now, gated on `issue:import`; Repositories is still M5's**, and a nav link
+ * that leads nowhere is worse than an absent one. This screen adds Boards to the project rail
+ * beside Workflow and nothing else.
  *
  * **Labels are here and the mockup has no panel for them.** `ProjectBoardView`'s Configure boards
  * button has been promising *"columns, WIP limits and labels"* since 012 T7, the four label

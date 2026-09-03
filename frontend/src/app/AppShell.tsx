@@ -12,6 +12,7 @@ import {
   GitBranch,
   HelpCircle,
   History,
+  Import,
   Kanban,
   Key,
   LayoutDashboard,
@@ -251,6 +252,14 @@ function projectNav(
   projectId: string,
   audit: AuditReach,
   credentials: CredentialReach,
+  /**
+   * `issue:import` — the migration offramp (014 D-e). Its own parameter rather than a fourth field
+   * on {@link CredentialReach}: that interface's whole subject is a *credential the product keeps*,
+   * and an import connection is the opposite — used once for one run and never stored. The rule the
+   * two share is `CredentialReach`'s, not its name: the page has no read-only view, so the entry is
+   * listed only for a caller who has one.
+   */
+  canImport: boolean,
 ): { heading: string; items: NavItem[] }[] {
   const p = `/projects/${projectId}`;
   return [
@@ -386,10 +395,10 @@ function projectNav(
         },
         /*
           012 T9's board settings, at `settings-boards.html`'s position in the mockup's subnav —
-          between Workflow and the two entries this rail does NOT have. That row reads
-          *General · Workflow · Boards · Repositories · Imports*; Repositories is M5's and Imports is
-          M4's, and a rail entry leading to a route that does not exist is worse than an absent one,
-          so only Boards is here.
+          between Workflow and the one entry this rail still does NOT have. That row reads
+          *General · Workflow · Boards · Repositories · Imports*; ~~Repositories is M5's and Imports
+          is M4's~~ → **Imports landed in 014 and is below; Repositories is still M5's**, and a rail
+          entry leading to a route that does not exist is worse than an absent one, so it stays off.
 
           Ungated, like the two above it: the reads cost `board:read`, which every role holds, and
           the page renders read-only without `board:configure`.
@@ -399,6 +408,26 @@ function projectNav(
           to: `${p}/settings/boards`,
           icon: <Kanban className="size-4" />,
         },
+        /*
+          014 T8's imports, at `settings-import.html`'s position in that same subnav — and **gated**,
+          which is the opposite of the three entries above it and matches Notifications (005 C2).
+
+          Those three are ungated because each renders read-only for a caller who cannot write, so a
+          reader without the key still learns what their project's statuses mean. There is no
+          read-only view of an import: every operation in the family costs `issue:import` (014 D-e,
+          because a report names the source site, the account that connected to it and the person
+          who ran the migration), so the entry would lead to a screen whose whole content is a
+          refusal.
+        */
+        ...(canImport
+          ? [
+              {
+                label: 'Imports',
+                to: `${p}/imports`,
+                icon: <Import className="size-4" />,
+              },
+            ]
+          : []),
         {
           label: 'Classification',
           to: `${p}/settings/classification`,
@@ -706,6 +735,7 @@ function RailContent({
           tokens: companyGate.can('token:issue'),
           sso: companyGate.can('company:idp'),
         },
+        projectGate.can('issue:import'),
       )
     : [];
 

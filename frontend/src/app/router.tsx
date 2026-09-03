@@ -179,8 +179,11 @@ const ReleaseDetailPage = lazy(() =>
 const ImportWizardPage = lazy(() =>
   import('../features/imports/ImportWizardPage').then((m) => ({ default: m.ImportWizardPage })),
 );
-const ImportRunPage = lazy(() =>
-  import('../features/imports/ImportRunPage').then((m) => ({ default: m.ImportRunPage })),
+const ImportsListPage = lazy(() =>
+  import('../features/imports/ImportsListPage').then((m) => ({ default: m.ImportsListPage })),
+);
+const ImportReportPage = lazy(() =>
+  import('../features/imports/ImportReportPage').then((m) => ({ default: m.ImportReportPage })),
 );
 const ReviewSettingsPage = lazy(() =>
   import('../features/settings/ReviewSettingsPage').then((m) => ({
@@ -681,8 +684,8 @@ function AppRoutes() {
           />
 
           {/*
-            The import offramp (014 M4). Two routes here; the list at `/projects/:projectId/imports`
-            and the *Imports* rail entry are T8's.
+            The import offramp (014 M4). Three routes: the project's past imports, the wizard, and
+            one run's report.
 
             **`/imports/new` is declared before `/imports/:importRunId`** for the releases block's
             reason one section up: React Router 7 ranks static segments above dynamic ones, so the
@@ -698,6 +701,14 @@ function AppRoutes() {
             content is a refusal.
           */}
           <Route
+            path="/projects/:projectId/imports"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <ImportsListPage />
+              </Suspense>
+            }
+          />
+          <Route
             path="/projects/:projectId/imports/new"
             element={
               <Suspense fallback={<RouteFallback />}>
@@ -709,7 +720,7 @@ function AppRoutes() {
             path="/projects/:projectId/imports/:importRunId"
             element={
               <Suspense fallback={<RouteFallback />}>
-                <ImportRunPage />
+                <ImportReportPage />
               </Suspense>
             }
           />

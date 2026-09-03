@@ -326,6 +326,52 @@ What replaces it:
   are reordered with ↑ / ↓ as well as by drag (because dragging is never the only way), and the
   boards screen where a project's boards, their columns and its labels are defined
 
+### Moving in from Jira
+
+An **offramp**, not an integration: it runs once, brings a Jira or Azure DevOps project into this
+one, and finishes. Nothing keeps syncing afterwards — a change made in Jira after the migration does
+not arrive here, and a change made here does not go back. (The per-project tracker binding under
+*Settings → Issue tracker* is the separate, still-live thing that files issues outward.)
+
+- **Four steps: connect, preview, map statuses, report.** Connect takes a site URL and a token; the
+  token is used for that one run and is **never stored** — not on the run, not encrypted, nowhere.
+  A reload means entering it again, and the screen says so before the field
+- **The preview writes nothing at all.** It reads the source project and shows exactly what would
+  come across, what would not, and how many values each loss holds. Leaving the page changes not one
+  issue, status or label — and a test on the server snapshots every table before and after to keep
+  that a fact rather than a reassurance
+- **Original keys survive.** `PROJ-4812` is still `PROJ-4812` after the migration, so a commit
+  message, a pull request title and a year of Slack history all still point at the right issue. The
+  project keeps its own prefix as well, and both resolve
+- **Every source status is mapped by hand** onto one of this project's own, with a suggestion where
+  the names match. Confirm stays refused while one is unmapped, and the mapping step links across to
+  the workflow screen and back with the half-made mapping intact, for the status this project does
+  not have yet
+- **What cannot come across is named before it is lost, not after.** Story points, sprints, epic
+  colour, flags, service-desk request types, time tracking and every custom field — each with the
+  number of values it holds and one sentence saying why. **It cannot be recovered from this product
+  later**, so the list is shown before the confirm and kept in the report word for word
+- **Sprints are dropped and counted**, with an option to keep each one as a label instead. Off by
+  default: a project with sixty sprints becomes sixty labels nobody chose. The sprint row stays in
+  the dropped list either way, with its sentence changed to say what was kept in its place
+- **The source's backlog order is imported when it is asked for** (on by default for Jira). When it
+  is not, the report says the order is insertion order rather than letting it read as imported
+- **Comment authors are matched by email**, and an author who does not match is **kept as text on
+  the comment** rather than reassigned to somebody who did not write it
+- **The whole write is one transaction after the source has been read.** A run that fails leaves the
+  project exactly as it was — there is no half-imported project to clean up — and a run left hanging
+  by a lost connection is closed out rather than spinning forever
+- **A second import of the same source project is refused**, not merged. Two runs would be two sets
+  of issues with different keys, and refusing is the only outcome that does not do that silently
+- **The report is kept indefinitely and needs nothing but this product to read.** Every count, the
+  dropped list, the mapping as applied — with each target status's name and kind as they were at the
+  time — and who was matched. It is readable a year later with the source system decommissioned, the
+  statuses renamed and the person who ran it gone, and it downloads as JSON, or the dropped fields
+  alone as a CSV
+- **Jira Cloud, Jira Data Center and Azure DevOps**, through one port. Also reachable from the
+  command line: `tcms import list` and `tcms import show` print a past run and its dropped fields.
+  Starting one is deliberately not available there, or to an agent over MCP
+
 ## Teams and People
 
 - Create teams and manage their membership

@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Which source fields are not imported, and the sentence the report will still be showing a year
@@ -43,6 +44,7 @@ final class DroppedFields {
             "story points", "estimates here are hours; points have no conversion",
             "story point estimate", "estimates here are hours; points have no conversion",
             "sprint", "releases replace sprints (D6); this run kept nothing in their place",
+            "iteration path", "releases replace sprints (D6); this run kept nothing in their place",
             "epic colour", "no equivalent",
             "epic color", "no equivalent",
             "flagged", "use a label or the Blocked status",
@@ -50,7 +52,7 @@ final class DroppedFields {
             "time tracking", "time entries here belong to a person and a period"));
 
     /**
-     * The {@code Sprint} row's sentence when {@code labelPerSprint} was taken (D-h).
+     * The sprint row's sentence when {@code labelPerSprint} was taken (D-h).
      *
      * <p>The row stays either way, and that is the decision: an option that made a loss disappear
      * from the list would make the list a function of what was chosen rather than of what was lost.
@@ -65,6 +67,20 @@ final class DroppedFields {
 
     /** For a built-in of the source's that this product has no place for. */
     private static final String NO_EQUIVALENT = "no equivalent in this product";
+
+    /**
+     * The names a source gives the field whose values {@code labelPerSprint} keeps.
+     *
+     * <p>Two names for one concept, because {@link SourceField#name()} is <em>the source's own
+     * vocabulary</em> and the two sources do not share it: Jira calls it {@code Sprint} and Azure
+     * DevOps calls it {@code Iteration Path}, which is what {@code AzureDevOpsImportSource} reports
+     * it under deliberately. Both land on {@code SourceIssue.sprintNames}, so both are kept as
+     * labels when the option is taken — and a condition that named only Jira's spelling had an ADO
+     * report saying {@code Iteration Path} had <em>"no equivalent in this product"</em> while its
+     * values were in fact on the issues as labels. That is precisely the claim D-h exists to
+     * prevent, so the set is here rather than inline: a third source adds its spelling once.
+     */
+    private static final Set<String> SPRINT_FIELD_NAMES = Set.of("sprint", "iteration path");
 
     private DroppedFields() {
     }
@@ -106,7 +122,7 @@ final class DroppedFields {
 
     private static String reasonFor(SourceField field, boolean labelPerSprint) {
         String key = field.name().toLowerCase(Locale.ROOT).strip();
-        if (labelPerSprint && "sprint".equals(key)) {
+        if (labelPerSprint && SPRINT_FIELD_NAMES.contains(key)) {
             return SPRINT_KEPT;
         }
         String known = REASONS.get(key);

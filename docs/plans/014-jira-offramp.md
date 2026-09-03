@@ -45,7 +45,7 @@ renumbers — M5 will be `015`.
 | 5 | T5 — The Azure DevOps source | `be` · `be-java` | `provider: AZURE_DEVOPS` previews and imports an ADO project through the same port, proven against a recorded-shape fake; no other file in `imports` changes | T4 | **done 2026-09-02 @ e7d420e4** — `ImportSources` was not edited; one open finding on `DroppedFields`, in T5 step 3 |
 | 6 | T6 — `tcms import list` and `tcms import show` | `ts` · `tooling-engineer` | Two CLI commands print a past import and its dropped-field list from a terminal; the surface document's §3.7 records that MCP deliberately gets nothing | T4 | **done** |
 | 7 | T7 — The wizard: connect → preview → map → run | `fe` · `fe-react` | `/projects/:projectId/imports/new` walks the three steps, refuses to confirm while one status is unmapped, and starts a run; `tcmsFaults.importing()` drives every failure path | T6 | **done 2026-09-03 @ d909b903** — build and lint green; `test:run` red on the four pre-existing files only |
-| 8 | T8 — The report screen, the imports list, and the close-out | `fe` · `fe-react` | `/projects/:projectId/imports` and `/projects/:projectId/imports/:importRunId` render `settings-import.html` and `import-report.html` with no call to the source system, and 009 · `features.md` · the ERD are closed out | T7 | not started |
+| 8 | T8 — The report screen, the imports list, and the close-out | `fe` · `fe-react` | `/projects/:projectId/imports` and `/projects/:projectId/imports/:importRunId` render `settings-import.html` and `import-report.html` with no call to the source system, and 009 · `features.md` · the ERD are closed out | T7 | **done 2026-09-03 @ fe19ba0c** — all three gates run; `test:run` red on the four pre-existing files only |
 
 **One paste-ready prompt per task is directly below**, in the same order. The `Status` column
 above is the only place a task's completion is recorded, and the task's own session writes it.
@@ -2737,11 +2737,11 @@ surface doc are closed out.
 The documentation close-out rides with this task rather than taking a session of its own: this is
 the only session that knows what actually landed and what is built-but-unverified.
 
-- [ ] **Step 1 — `ImportsListPage`** = `settings-import.html`. The table, the *"reports are kept
+- [x] **Step 1 — `ImportsListPage`** = `settings-import.html`. The table, the *"reports are kept
       indefinitely"* hint, and the footer note that nothing keeps syncing with Jira afterwards.
       Empty state: *"No imports yet"* with the start button, never a bare empty table.
 
-- [ ] **Step 2 — `ImportReportPage`** = `import-report.html`, replacing T7's minimal polling body.
+- [x] **Step 2 — `ImportReportPage`** = `import-report.html`, replacing T7's minimal polling body.
       Four KPI tiles, *Keys survived*, *Dropped fields* (the same `DroppedFieldTable` component the
       preview step uses — D-f, on screen as well as on the wire), *Status mapping applied*,
       *People matched*. While `status === 'RUNNING'` it polls `keys.imports.run(id)` at 2s through
@@ -2753,7 +2753,7 @@ the only session that knows what actually landed and what is built-but-unverifie
       on 2026-08-30. The panel becomes *Sprints* and says what this run did — dropped, or kept as
       n labels — which is the mockup being **out of date about a decision**, not about a layout.
 
-- [ ] **Step 3 — `downloadReport.ts`.** The mockup's *Download* renders client-side from the
+- [x] **Step 3 — `downloadReport.ts`.** The mockup's *Download* renders client-side from the
       `ImportRun` already in the cache: a JSON blob of the whole run and a CSV of the dropped
       fields. **No server artifact** — D15 says *"persisted as an `artifact`"*, and `artifact` is
       the `repository` module's table, which `tracker` may not write; `import_run` +
@@ -2761,7 +2761,7 @@ the only session that knows what actually landed and what is built-but-unverifie
       better for the purpose. A comment in the file records the departure so a reader who knows
       D15 does not read this as an omission.
 
-- [ ] **Step 4 — The rail entry**, in `AppShell.tsx`'s `Project` group after Boards, at
+- [x] **Step 4 — The rail entry**, in `AppShell.tsx`'s `Project` group after Boards, at
       `settings-import.html`'s position in the mockup's subnav — and **gated**, unlike General,
       Workflow and Boards:
 
@@ -2782,19 +2782,19 @@ the only session that knows what actually landed and what is built-but-unverifie
         ...(canImport ? [{ label: 'Imports', to: `${p}/imports`, icon: <Import className="size-4" /> }] : []),
 ```
 
-- [ ] **Step 5 — Tests.** A report renders from `GET /imports/{id}` alone with **no other fetch** —
+- [x] **Step 5 — Tests.** A report renders from `GET /imports/{id}` alone with **no other fetch** —
       asserted by failing the test on any unexpected call, which is the "reachable after the source
       is gone" done-when made checkable. A `RUNNING` run polls and then stops on `COMPLETED`. The
       dropped table renders identically in the preview step and the report from the same fixture.
 
-- [ ] **Step 6 — `docs/features.md`.** Under `## Issues`, a new `### Moving in from Jira`
+- [x] **Step 6 — `docs/features.md`.** Under `## Issues`, a new `### Moving in from Jira`
       subsection: the four-step flow, keys surviving, what is dropped and that it cannot be
       recovered, the report kept indefinitely, and that nothing keeps syncing. Amend the
       `Planned but Not Yet Implemented` list — line 507's *"Bulk import/export — CSV/Excel import,
       TestRail/Xray migration importers"* is **not** what this built and stays as a gap; strike
       through nothing there.
 
-- [ ] **Step 7 — Close 009 per the hand-off protocol**, in its **own** commit, staging only that
+- [x] **Step 7 — Close 009 per the hand-off protocol**, in its **own** commit, staging only that
       file:
 
   1. **Status table** — M4's row to `done 2026-09-0N @ <short sha>`.
@@ -2814,7 +2814,7 @@ the only session that knows what actually landed and what is built-but-unverifie
      dependency.
   6. Commit `docs(plan): M4 done`.
 
-- [ ] **Step 8 — Gates and commits.**
+- [x] **Step 8 — Gates and commits.**
 
 ```bash
 ~/bin/tcms-remote sync
@@ -2828,6 +2828,62 @@ git commit -m "feat(imports): the report, the imports list, and the M4 close-out
 git add docs/plans/009-project-management-expansion-modules.md
 git commit -m "docs(plan): M4 done — V7 taken, R14 closed, no module depends on M4"
 ```
+
+### What T8 landed that this plan did not predict
+
+Written here rather than appended as a changelog. **Nothing binds to it** — T8 is the last task of
+the module and no module depends on M4 — so this is for a reader, not a successor.
+
+- **`ImportRunPage` is now `ImportReportPage`.** T7 shipped the file under the first name because it
+  was a status page; it is the report now and the name follows. Nothing outside `router.tsx`
+  referenced it.
+
+- **The kit has no `good` banner tone, and *Keys survived* uses `steel`.** `BannerTone` is
+  `neutral | warn | bad | steel` — deliberately, by the look of it: an affirmative banner is an
+  emphasis, and the mockup's green `note good` has no counterpart. Recorded because the mockup draws
+  one and a reader will look for it.
+
+- **The *Sprints* panel says what happened and does not say *n labels*.** The plan asked for
+  *"dropped, or kept as n labels"*. `ImportRun` carries `labelPerSprint` and `labelsCreated`, and
+  the second is **every** label the run made, the source's own included — so a count of the labels
+  that came from sprints is not on the wire and printing `labelsCreated` there would be a number
+  that is wrong on every project that had labels already. The panel says which of the two things
+  this run did, and the value count stays where it already is: on the sprint row of the dropped
+  list, three inches up the same screen. Widening the contract for a number one panel would render
+  was refused on the last task of a module.
+
+- **A fifth panel, *Backlog order*, which the mockup does not have.** D-i requires the report to say
+  whether the source's order was kept, and `backlogOrderPreserved` is on the contract for that
+  purpose with nothing rendering it. A flag on the wire that no screen shows is a decision recorded
+  in a column and told to nobody.
+
+- **The mockup's *Keys survived* search box and sample issue are not drawn.** It shows `PROJ-4812`
+  with its title, its type icon and its status, over a search field. `ImportRun` carries no issue —
+  it is a report of a migration, not a list of what the migration made — so both would be a screen
+  inventing rows. What is left is the claim, which is the panel's actual subject, and a link into
+  Work where the search the mockup drew already exists. The fourth disagreement with a mockup in
+  this module, and the same rule as the other three: **the mockup wins on what a screen shows and
+  the contract decides what it can say.**
+
+- **The rail gate is a fourth parameter to `projectNav`, not a fourth field on `CredentialReach`.**
+  That interface's whole subject is *a credential the product keeps*, and an import connection is
+  the opposite — used once for one run and stored nowhere (D-a). The rule the two share is
+  `CredentialReach`'s and not its name: the page has no read-only view, so the entry is listed only
+  for a caller who has one.
+
+- **T5's one-liner became a named set and a test.** `"iteration path"` beside `"sprint"` in one
+  inline condition was what the finding asked for. It is `SPRINT_FIELD_NAMES` instead, because the
+  condition and the `REASONS` entry are two places one fact has to be spelled and a third source
+  will add a third spelling — and `DroppedFieldsTest` is new, because the defect it fixes was
+  **invisible to `ImportReportMatchesPreviewTest`**: that test compares the preview's list against
+  the report's, so a reason sentence saying the opposite of what the run did passes it every time.
+  A list can be identical to itself and wrong.
+
+- **The gate.** Backend `./gradlew build` green. `packages` build and all three suites green.
+  `frontend` build green and lint at 0 warnings; `test:run` is **38 failures across the four files
+  that were failing before this module** — `board/BacklogView` (18), `cases/CaseGrid` (16),
+  `dashboard/TileLabels` (5), `projects/ProjectOverviewPage` (1) — and every file this task added or
+  touched is green. Inherited, not adopted.
 
 ---
 
