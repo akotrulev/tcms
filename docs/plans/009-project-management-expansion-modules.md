@@ -67,7 +67,7 @@ would mean eight edits to three documents that a test pins byte-for-byte. It is 
 | **M1** | Tracker core | `V3` | run a project's work — epics, stories, tasks, statuses, comments, spec links — and see it all on My Work | M0 | done 2026-08-31 @ `8bf37408` |
 | **M2** | Board & backlog | ~~`V4`~~ → `V5` | work the board, rank the backlog, filter once across every view | M1 | done 2026-09-01 @ `95c9960b` |
 | **M3** | Releases, roadmap & readiness | ~~`V5`~~ → `V6` | plan versions, see the roadmap, and answer "can we ship 2.4?" | M2 | done 2026-09-01 @ `55cb4bc0` |
-| **M4** | Jira offramp | ~~`V6`~~ → ~~`V7`~~ → ~~`V8`~~ → `V7` | move a Jira project in, keys intact, with a preview and a report | M1 | in progress — plan 014 |
+| **M4** | Jira offramp | ~~`V6`~~ → ~~`V7`~~ → ~~`V8`~~ → `V7` | move a Jira project in, keys intact, with a preview and a report | M1 | done 2026-09-03 @ `ba0031bb` — plan 014 |
 | **M5** | Agent execution | ~~`V7`~~ → ~~`V6`~~ → ~~`V7`~~ → `V8` | connect their own assistant and have it work a task, but never close it | M1 | not started |
 | **M6** | Time | ~~`V8`~~ → ~~`V10`~~ → `V11` | log hours, submit a period, and have a PM approve it | M1 | not started |
 | **M7** | Staffing | ~~`V9` (unchanged)~~ → `V10` | allocate people, see capacity, and find who is free | ~~M6~~ → **M0** (review R11) | not started |
@@ -611,10 +611,14 @@ still links defects out. Dry-run preview writing nothing (D32), a status-mapping
 to confirm while one status is unmapped**, original keys preserved (D5), standard fields only with
 every dropped field counted (D15).
 
-**Still open, for this module's plan:** whether the importer reuses the per-person credential in
+~~**Still open, for this module's plan:** whether the importer reuses the per-person credential in
 `integration.tracker.TrackerIdentity` / `TrackerCredential`. Reusing it is the same forbidden
 crossing; the alternative is `import-connect.html` taking the connection for the run and storing it
-on `import_run`, encrypted the way `TrackerCredential` is. The mockup already shows the form.
+on `import_run`, encrypted the way `TrackerCredential` is. The mockup already shows the form.~~ →
+**closed (014 D-a): neither.** The connection is entered per run and **persisted nowhere** —
+`import_run` has no secret column. The alternative this paragraph expected was refused for a reason
+it did not see: `SecretCipher` is in `integration` too, so encrypting onto `import_run` meant a
+second AES-GCM key user rather than a way around the crossing. See R14 in the review table.
 
 **contract** — `/imports/preview`, `/imports`, `/imports/{id}`.
 
@@ -630,6 +634,44 @@ is **dropped and counted in the report** like any other non-standard field. A la
 make M4 depend on M2's `issue_label`, and the point of M4 depending on M1 alone is that an import
 can land before there is a board. If M2 has already merged when M4's plan is written, that plan may
 *offer* label-per-sprint as an option in the mapping step; it is never required.
+
+**Landed 2026-09-03 at `ba0031bb`**, plan [014-jira-offramp.md](014-jira-offramp.md), migration
+`V7__import.sql`, in eight tasks. R14 is closed (D-a): the connection is entered per run and
+persisted nowhere. R8's option was taken — `labelPerSprint` is offered on the mapping step and
+defaults off, M2 having landed first — and the `Sprint` row stays in the dropped list either way.
+
+**Built and unverified:**
+
+- **No gate has ever dialled a real Jira site.** Every backend test drives `FakeImportSource`, a
+  recorded-shape double behind the `ImportSource` port. `JiraImportSourceTest` and
+  `AzureDevOpsImportSourceTest` exercise the two real clients against **recorded JSON**, so what is
+  proven is that this product parses the shapes it was shown — not that a live Jira Cloud site, a
+  Data Center install behind a corporate proxy, or an Azure DevOps organisation serves them. Paging
+  past the first page, a rate-limited response, a 10 000-issue project and a token with partial
+  project visibility are all unexercised. **This is the module's largest unverified claim** and it
+  is the one that cannot be closed without a real site.
+- **Nobody has run a migration in a browser.** The four screens are asserted in RTL against mocked
+  responses. The wizard's round trip to the workflow screen and back with a half-made mapping intact
+  (014 T7) is proven by a test that calls `navigate(-1)` in a `MemoryRouter`; a real browser Back
+  button has not been pressed on it.
+- **The report's own promise is tested, not aged.** `ImportReportPage.test.tsx` fails the render on
+  any fetch that is not `GET /imports/{id}`, which is the checkable half of *"readable a year later
+  with the source system gone"*. The other half — that the row is still there and still legible
+  after a year of schema changes — is a claim only time settles.
+- **The stuck-run reaper has not fired in anger.** `ImportReaperTest` drives it directly. No run has
+  been stranded by a real server restart mid-import and found `FAILED` with its sentence afterwards.
+- **The all-or-nothing write is proven on a fake failure.** `ImportWriterTest` fails the transaction
+  deliberately and asserts the project is unchanged. A source that dies at issue 900 of 1 482 has
+  not been staged.
+- **The client-side download has produced no file a person opened.** `downloadReport.test.ts` covers
+  the CSV's quoting; `saveBlob` is the shared anchor dance and is not exercised by a test with a
+  filesystem behind it. Nobody has opened the CSV in a spreadsheet.
+- **The frontend suite was already red when this module started and still is** — 38 cases across
+  `board/BacklogView`, `cases/CaseGrid`, `dashboard/TileLabels` and `projects/ProjectOverviewPage`,
+  none of them touched by M4. `npm run build` and `npm run lint` are green, as are the backend and
+  `packages` gates in full. Inherited and recorded here rather than adopted.
+
+The gates prove it compiles. They do not prove a migration works.
 
 ---
 
@@ -1361,8 +1403,8 @@ principal, no orchestrator, no runner, no forge adapter, no model credential. Th
 identity; actions attribute to "<person>, via <assistant>".
 
 Confirm M1 reads `done` in the status table before starting. ~~Only M7 may run beside M5.~~
-Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M5 runs FOURTH, BEFORE M4 — so M5 takes `V6` and M4 takes `V7`, the reverse of what
-the status table originally reserved. Task list in docs/plans/009-execution-breakdown.md, phase 4.
+Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". ~~M5 runs FOURTH, BEFORE M4 — so M5 takes `V6` and M4 takes `V7`~~ → **M4 ran first anyway and took `V7` (2026-09-01, plan 014), so M5 takes `V8`.** `ls backend/src/main/resources/db/migration/` before writing a line: the directory is the authority and this column has now been corrected three times.
+Task list in docs/plans/009-execution-breakdown.md, phase 4.
 
 
 M1 landed 2026-08-31 (`V3`, plan 011-tracker-core.md, `8bf37408`). **What it actually built, which is
@@ -1424,7 +1466,7 @@ not everywhere what this plan guessed:**
 
 Then:
 1. Write docs/plans/0NN-agent-execution.md with ep-writing-plans — next free NNN, next free V from
-   the migration directory (the table says V7 — check it). project_repository as reference data, issue.pr_url,
+   the migration directory (M4 took `V7` on 2026-09-01, so it is `V8` — check the directory anyway). project_repository as reference data, issue.pr_url,
    issue.agent_eligible, review_enabled_issue defaulting to false.
 2. Execute with ep-executing-plans. Contract first in one commit (openapi.yaml with `required`
    arrays, both generated clients, contractBodies.ts ×2). The legal-transition set goes on the wire
@@ -1810,7 +1852,7 @@ where it was resolved above; the two that need the owner or a module plan are na
 | R11 | M7 depended on M6 for nothing it reads. | **Resolved** — M7 depends on M0; utilisation stays out unless M6 landed. |
 | R12 | M9 "needs no migration" was only true if M1/M3 stored timestamps `issue_fact` was not sketched with. | **Resolved** — four timestamps on `issue_fact` in M1, `release.created_at` in M3. |
 | R13 | M2 did not say what happens to a workflow status added after a board exists. | **Resolved, and built (M2, 2026-09-01)** — auto-claimed by the same-`kind` default column; unique index, not a CHECK. The claim is a **direct call** from `WorkflowService` into `BoardConfigService.claimNewStatus`, same module and same transaction, not an event (012 D-g): an unclaimed status is not a state the data can be in, rather than one it is briefly in. `settings-boards` shows the claim where it landed and lets it be moved. **Unverified end to end** — the screen's test seeds the claim by hand; nothing has driven the workflow `PUT` and read the board back. |
-| R14 | M4: whether the importer may reuse `integration.tracker`'s per-person credential. | **Open — for M4's own plan.** Reuse is the same forbidden crossing; the alternative is the connection entered per run and stored on `import_run`. |
+| R14 | M4: whether the importer may reuse `integration.tracker`'s per-person credential. | **Closed (014 D-a, 2026-09-02)** — neither of the two the review named. The connection is entered per run, carried in the request body, held for the life of the run and **written nowhere**: `import_run` has no secret column at all. Reuse was refused because it does not compile — `tracker`'s `allowedDependencies` does not name `integration`, and `ArchitectureRulesTest` is a hard gate with no exception list. Encrypting it onto `import_run`, which is the option this plan expected to be taken, was refused because `SecretCipher` is in `integration` too: taking it meant a **second AES-GCM key user**, which is the rotation defect that class's own header names. It costs re-typing the token after a browser reload, and `import-connect.html` already promised exactly this under the field. |
 | R15 | The migration numbers ~~`V8 / V9 / V10`~~ → `V11 / V10 / V12` for M6–M8 are wrong the moment a second lane lands anything out of table order. | **Open by design, and it has now bitten twice with no second lane at all** — M5 was placed ahead of M4 (2026-08-30), then M1 turned out to have spent two versions rather than one (2026-09-01), and every number below M2 moved. The reservation warning covers it; the parallel section restates it because that is where it bites hardest. |
 
 ---
