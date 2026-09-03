@@ -461,6 +461,7 @@ export function issueSummary(
     status: issueStatus(),
     projectId: IDS.project,
     projectKey: 'ACME',
+    agentEligible: false,
     ...overrides,
   };
 }
@@ -478,6 +479,7 @@ export function issue(overrides: Partial<Schemas['Issue']> = {}): Schemas['Issue
     children: [],
     allowedTransitions: [],
     createdAt: NOW,
+    agentEligible: false,
     ...overrides,
   };
 }
@@ -573,6 +575,7 @@ export function boardIssueCard(
     rank: '1000',
     labels: [],
     allowedTransitions: [],
+    agentEligible: false,
     subtaskTotal: 0,
     subtaskDone: 0,
     ...overrides,

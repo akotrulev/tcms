@@ -39,6 +39,10 @@ const BY_DECISION: Record<string, string> = {
   'IssuedApiToken.secret':
     'The plaintext, shown once and recoverable never (§118). Its own type rather than a nullable ' +
     'field on ApiToken, so no read path is one forgotten null away from serving it.',
+  'IssuedAssistant.secret':
+    "`IssuedApiToken.secret`'s rule for a connected assistant (an Agent-role api_token the caller " +
+    'owns, D26): the plaintext bearer token, shown once and recoverable never. Its own type rather ' +
+    'than a nullable field on Assistant, so no read path is one forgotten null away from serving it.',
   'ApiToken.tokenPrefix':
     'The first characters only, so an administrator can tell two credentials apart in a list. ' +
     'Nothing accepts it — it authenticates nothing.',

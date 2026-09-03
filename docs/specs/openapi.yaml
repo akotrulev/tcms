@@ -8406,6 +8406,152 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
 
   # ------------------------------------------------------------- tracker ----
+  /me/assistants:
+    get:
+      tags: [identity]
+      summary: The caller's own connected assistants
+      operationId: listMyAssistants
+      description: |
+        The caller's own `Agent`-role tokens (D26). **Needs authentication only** — an assistant
+        grants nothing its owner lacks, so issuing or listing one is not privileged. Distinct from
+        `GET /api-tokens`, which administers the whole company's credentials and costs `token:issue`.
+      responses:
+        '200':
+          description: The caller's assistants, newest first.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Assistant' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [identity]
+      summary: Connect an assistant
+      operationId: connectAssistant
+      description: |
+        Issues an `Agent`-role token owned by the caller, scoped to one project or all, expiring
+        server-side. Returns the secret **once**.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssistantInput' }
+      responses:
+        '201':
+          description: Connected. The secret is in the body and nowhere else, ever again.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IssuedAssistant' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /me/assistants/{assistantId}:
+    parameters:
+      - { name: assistantId, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      tags: [identity]
+      summary: Revoke one of the caller's assistants
+      operationId: revokeAssistant
+      description: |
+        Immediate, and it does not undo anything the assistant already did — those acts stay in each
+        issue's history, attributed to the owner via it. Revoking one the caller does not own is a 404.
+      responses:
+        '204': { description: Revoked (idempotent). }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{projectId}/repositories:
+    parameters:
+      - { name: projectId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [project]
+      summary: A project's repositories
+      operationId: listProjectRepositories
+      description: '`project:read` — reference data (D16). A project with none returns `[]`.'
+      responses:
+        '200':
+          description: The repositories, by position.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/ProjectRepository' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [project]
+      summary: Add a repository
+      operationId: addProjectRepository
+      description: '`project:settings`. Appended at the next position.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectRepositoryInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectRepository' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /projects/{projectId}/repositories/{repositoryId}:
+    parameters:
+      - { name: projectId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: repositoryId, in: path, required: true, schema: { type: string, format: uuid } }
+    patch:
+      tags: [project]
+      summary: Edit a repository
+      operationId: updateProjectRepository
+      description: '`project:settings`. A full replacement of the five values.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectRepositoryInput' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectRepository' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [project]
+      summary: Remove a repository
+      operationId: deleteProjectRepository
+      description: '`project:settings`. Nothing references a repository row, so a delete is clean.'
+      responses:
+        '204': { description: Removed (idempotent). }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /issues/{key}/agent-context:
+    parameters:
+      - { name: key, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [tracker]
+      summary: One task with everything needed to work it
+      operationId: getAgentTaskContext
+      description: |
+        `issue:read`. The composite an assistant fetches to work a task — the issue (with its
+        caller-scoped `allowedTransitions`), the parent story and its acceptance criteria, the epic
+        goal, the linked spec excerpts, and the project's repositories and build commands. A token
+        scoped to another project cannot reach it — the same scope that returns nothing from
+        `GET /issues`.
+      responses:
+        '200':
+          description: The task and its working context.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgentTaskContext' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /issues:
     get:
       tags: [tracker]
@@ -8429,6 +8575,7 @@ paths:
             means "don't filter" and a client cannot spell the difference.
           schema: { type: boolean }
         - { name: sort, in: query, schema: { type: string, enum: [key, title, status, dueDate, estimateHours] } }
+        - { name: agentEligible, in: query, schema: { type: boolean }, description: 'D30 — only AI-eligible issues. The assistant queue tool combines it with assigneeId=owner.' }
       responses:
         '200':
           description: Issues, newest key first unless `sort` says otherwise.
@@ -10505,6 +10652,7 @@ components:
         - authorMayApproveOwnWork
         - editAfterApproval
         - requireApprovedCaseForRun
+        - reviewEnabledIssue
       properties:
         projectId: { type: string, format: uuid }
         reviewEnabledCase:
@@ -10571,6 +10719,14 @@ components:
         # edge — was REMOVED on 2026-08-05 (§97, M7) with that edge. Its column is dropped, not left
         # unread: a policy toggle whose rule no longer exists is worse than an absent one, because
         # an administrator turns it on to stop unapproved releases and nothing happens.
+        reviewEnabledIssue:
+          type: boolean
+          description: |
+            D33 — "Require review to close issues". **Off by default.** When true, and with
+            `authorMayApproveOwnWork` false, an issue's **assignee** may not move it into a
+            `DONE`-kind status — a second person must. When false the assignee closes their own
+            work (A6), which is why the default is off: a one-person company must not dead-end.
+            The status ladder is unaffected either way.
         updatedBy:
           allOf: [{ $ref: '#/components/schemas/UserRef' }]
           nullable: true
@@ -10597,6 +10753,7 @@ components:
         authorMayApproveOwnWork: { type: boolean, default: false }
         editAfterApproval: { $ref: '#/components/schemas/EditAfterApproval' }
         requireApprovedCaseForRun: { type: boolean, default: false }
+        reviewEnabledIssue: { type: boolean, default: false }
 
     ReviewImpact:
       type: object
@@ -16992,6 +17149,11 @@ components:
           description: |
             Statuses this card may legally move to; others reject the drop. Empty for a derived
             card whose source offers no board-driven action, and empty for an Epic (011 D31).
+
+            **Caller-scoped under the review-to-close gate:** when `reviewEnabledIssue` is on,
+            `authorMayApproveOwnWork` is off and the caller is this issue's assignee, `DONE`-kind
+            targets are absent here — the move exists in the workflow but not for this caller, and
+            `POST …/transitions` refuses it with the reason (`task.html`: "needs a reviewer").
           items: { $ref: '#/components/schemas/IssueStatusRef' }
 
     CardAnnotation:
@@ -17082,7 +17244,7 @@ components:
 
     IssueSummary:
       type: object
-      required: [key, title, type, status, projectId, projectKey]
+      required: [key, title, type, status, projectId, projectKey, agentEligible]
       description: A row in a list — the work table, an epic's children, a story's sub-tasks.
       properties:
         key: { type: string, example: ACME-124 }
@@ -17106,12 +17268,13 @@ components:
           description: |
             The target release, or null. A story either has one or it does not — there is no join
             table and there will not be one (D6).
+        agentEligible: { type: boolean }
 
     Issue:
       type: object
       required:
         [key, title, type, status, projectId, projectKey, watchers, children,
-         allowedTransitions, createdAt, seq]
+         allowedTransitions, createdAt, seq, agentEligible]
       properties:
         key: { type: string, example: ACME-118 }
         seq:
@@ -17182,10 +17345,28 @@ components:
             Statuses this issue may legally move to, from where it stands. **Disabled, not
             hidden** on the screen (`task.html`) — a caller can see the move exists. Empty for
             an Epic: D31 derives an epic's status from its stories and it is not editable.
+
+            **Caller-scoped under the review-to-close gate:** when `reviewEnabledIssue` is on,
+            `authorMayApproveOwnWork` is off and the caller is this issue's assignee, `DONE`-kind
+            targets are absent here — the move exists in the workflow but not for this caller, and
+            `POST …/transitions` refuses it with the reason (`task.html`: "needs a reviewer").
           items: { $ref: '#/components/schemas/IssueStatusRef' }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time, nullable: true }
         doneAt: { type: string, format: date-time, nullable: true }
+        agentEligible:
+          type: boolean
+          description: |
+            D30 — a hint that this issue is a good candidate for an LLM. **A boolean and a filter,
+            not an assignment target** (D26 unchanged): the assistant's queue defaults to the
+            owner's AI-eligible tasks. Shown as a marker on cards and lists.
+        prUrl:
+          type: string
+          nullable: true
+          description: |
+            The pull request an assistant (or a person) opened for this task, reported back through
+            `PATCH`. This product never opens the PR — the local agent does, with the developer's
+            own git, and reports the URL (D25).
 
     IssueInput:
       type: object
@@ -17231,6 +17412,7 @@ components:
         acceptanceCriteria:
           type: array
           items: { type: string }
+        agentEligible: { type: boolean, default: false, description: 'D30. Defaults to false.' }
 
     IssueUpdate:
       type: object
@@ -17265,6 +17447,8 @@ components:
             properties:
               text: { type: string }
               done: { type: boolean }
+        agentEligible: { type: boolean }
+        prUrl: { type: string, nullable: true, description: 'The PR an assistant opened, reported back. Recorded on history as issue.pr_url_set.' }
 
     IssueTransitionInput:
       type: object
@@ -17522,7 +17706,7 @@ components:
       type: object
       required:
         [key, title, typeName, typeLevel, iconCode, countsTowardCompletion, columnId, status,
-         rank, labels, allowedTransitions, subtaskTotal, subtaskDone]
+         rank, labels, allowedTransitions, subtaskTotal, subtaskDone, agentEligible]
       description: |
         **Not `BoardCard`.** That schema is `work`'s composite card and carries four `kind`s, a
         `derived` flag and a synthetic id. Every card here is an issue with a real key, so the
@@ -17556,9 +17740,15 @@ components:
             §12.4, verbatim and load-bearing: the legal set must be known **client-side before the
             drag starts**, so a forbidden drop is refused at the drag with the reason rather than
             accepted and reverted. Empty for an Epic (D31).
+
+            **Caller-scoped under the review-to-close gate:** when `reviewEnabledIssue` is on,
+            `authorMayApproveOwnWork` is off and the caller is this issue's assignee, `DONE`-kind
+            targets are absent here — the move exists in the workflow but not for this caller, and
+            `POST …/transitions` refuses it with the reason (`task.html`: "needs a reviewer").
           items: { $ref: '#/components/schemas/IssueStatusRef' }
         subtaskTotal: { type: integer }
         subtaskDone: { type: integer, description: 'The card face reads "3/5 sub-tasks".' }
+        agentEligible: { type: boolean }
 
     CardMoveInput:
       type: object
@@ -18923,6 +19113,147 @@ components:
         - review.endorsed
         - review.changes_requested
         - review.approved
+
+    Assistant:
+      type: object
+      description: |
+        A connected AI assistant — **an `api_token` the caller owns carrying the `Agent` role**
+        (D26). There is no agent principal and no separate table; this is the self-service view
+        over the caller's own Agent-role tokens that `profile-assistants.html` renders. A revoked
+        assistant stays on the wire (its acts remain in each issue's history, attributed to the
+        owner via it) — `revokedAt` is set rather than the row filtered out.
+      required: [id, name, projectId, projectKey, lastUsedAt, revokedAt, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, example: claude-code, description: 'Appears in every history line: "<person>, via <name>".' }
+        projectId:
+          type: string
+          format: uuid
+          nullable: true
+          description: The one project it is scoped to, or null for every project the owner can reach.
+        projectKey:
+          type: string
+          nullable: true
+          description: The scoped project's key, for display. Null when scoped to every project.
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When it last did anything, coarse to the hour (`api_token.last_used_at`). Null = never used.
+        revokedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    AssistantInput:
+      type: object
+      description: |
+        Connecting an assistant. **No `role`, no `owner`, no `expiresAt`** — the role is `Agent`,
+        the owner is the caller, and the expiry is set server-side (an Agent token must expire).
+        Nothing here can grant it more than the caller holds.
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        projectId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Scope it to one project, or null for every project the caller can reach.
+
+    IssuedAssistant:
+      type: object
+      description: |
+        The creation response, and **the only place the token secret ever appears**. Shown once,
+        unrecoverable afterwards — a separate type from `Assistant` so no read path is one forgotten
+        null away from serving it (`IssuedApiTokenView`'s reasoning).
+      required: [assistant, secret]
+      properties:
+        assistant: { $ref: '#/components/schemas/Assistant' }
+        secret:
+          type: string
+          description: The plaintext bearer token, shown once. Never logged, never in an audit row.
+
+    ProjectRepository:
+      type: object
+      description: |
+        One repository a project spans, with how it is built — **reference data (D16)**. This
+        product never holds a repository, clones one or runs a build; this is what a new joiner or
+        somebody's assistant is told to check out. A project with none is not degraded.
+      required: [id, name, url, defaultBranch, subdirectory, buildCommand, position, primary]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, example: acme-storefront }
+        url: { type: string, example: 'git@github.com:northwind/acme-storefront.git' }
+        defaultBranch: { type: string, example: main }
+        subdirectory: { type: string, example: /, description: 'The working subdirectory within the repo. `/` for the root.' }
+        buildCommand: { type: string, example: 'npm ci && npm run build && npm test' }
+        position: { type: integer, description: Order within the project, from 0. }
+        primary: { type: boolean, description: 'True for the lowest-position row; computed, not stored.' }
+
+    ProjectRepositoryInput:
+      type: object
+      required: [name, url, defaultBranch, subdirectory, buildCommand]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        url: { type: string, minLength: 1, maxLength: 500 }
+        defaultBranch: { type: string, minLength: 1, maxLength: 200 }
+        subdirectory: { type: string, minLength: 1, maxLength: 500, description: '`/` for the repository root.' }
+        buildCommand: { type: string, minLength: 1, maxLength: 1000 }
+
+    AgentTaskContext:
+      type: object
+      description: |
+        Everything an assistant needs to work one task, assembled in one read (§3.1's grounding
+        rule — an agent that assembles context from six calls generates blind). The `issue` already
+        carries the target release, the parent/epic keys and the caller-scoped `allowedTransitions`;
+        this adds the parent story's acceptance criteria, the epic goal, the linked spec excerpts and
+        the project's repositories and build commands.
+      required: [issue, specExcerpts, repositories]
+      properties:
+        issue: { $ref: '#/components/schemas/Issue' }
+        story:
+          allOf: [{ $ref: '#/components/schemas/AgentStoryContext' }]
+          nullable: true
+          description: The parent story, or null for a task with no story parent.
+        epic:
+          allOf: [{ $ref: '#/components/schemas/AgentEpicContext' }]
+          nullable: true
+        specExcerpts:
+          type: array
+          items: { $ref: '#/components/schemas/AgentSpecExcerpt' }
+        repositories:
+          type: array
+          items: { $ref: '#/components/schemas/ProjectRepository' }
+
+    AgentStoryContext:
+      type: object
+      required: [key, title, acceptanceCriteria]
+      properties:
+        key: { type: string, example: ACME-118 }
+        title: { type: string }
+        description: { type: string, nullable: true }
+        acceptanceCriteria:
+          type: array
+          items:
+            type: object
+            required: [text, done]
+            properties:
+              text: { type: string }
+              done: { type: boolean }
+
+    AgentEpicContext:
+      type: object
+      required: [key, title]
+      properties:
+        key: { type: string, example: ACME-90 }
+        title: { type: string }
+        goal: { type: string, nullable: true, description: The epic's description — its goal. }
+
+    AgentSpecExcerpt:
+      type: object
+      required: [title, excerpt]
+      properties:
+        pageId: { type: string, format: uuid, nullable: true }
+        title: { type: string, example: 'Checkout specification §3.2' }
+        excerpt: { type: string }
 
 security:
   - bearerAuth: []

@@ -492,6 +492,7 @@ export function aBoardIssueCard(overrides: Partial<BoardIssueCard> = {}): BoardI
     rank: '1024',
     labels: [],
     allowedTransitions: [],
+    agentEligible: false,
     subtaskTotal: 0,
     subtaskDone: 0,
     ...overrides,
@@ -750,6 +751,7 @@ export function anIssueSummary(overrides: Partial<IssueSummary> = {}): IssueSumm
     status: aStatusRef(),
     projectId: 'p1',
     projectKey: 'PRJ',
+    agentEligible: false,
     ...overrides,
   }
 }
@@ -774,6 +776,7 @@ export function anIssue(overrides: Partial<Issue> = {}): Issue {
     children: [],
     allowedTransitions: [],
     createdAt: AT,
+    agentEligible: false,
     ...overrides,
   }
 }

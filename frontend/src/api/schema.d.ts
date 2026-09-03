@@ -10167,6 +10167,135 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/assistants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's own connected assistants
+         * @description The caller's own `Agent`-role tokens (D26). **Needs authentication only** — an assistant
+         *     grants nothing its owner lacks, so issuing or listing one is not privileged. Distinct from
+         *     `GET /api-tokens`, which administers the whole company's credentials and costs `token:issue`.
+         */
+        get: operations["listMyAssistants"];
+        put?: never;
+        /**
+         * Connect an assistant
+         * @description Issues an `Agent`-role token owned by the caller, scoped to one project or all, expiring
+         *     server-side. Returns the secret **once**.
+         */
+        post: operations["connectAssistant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/assistants/{assistantId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assistantId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke one of the caller's assistants
+         * @description Immediate, and it does not undo anything the assistant already did — those acts stay in each
+         *     issue's history, attributed to the owner via it. Revoking one the caller does not own is a 404.
+         */
+        delete: operations["revokeAssistant"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/repositories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * A project's repositories
+         * @description `project:read` — reference data (D16). A project with none returns `[]`.
+         */
+        get: operations["listProjectRepositories"];
+        put?: never;
+        /**
+         * Add a repository
+         * @description `project:settings`. Appended at the next position.
+         */
+        post: operations["addProjectRepository"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/repositories/{repositoryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                repositoryId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a repository
+         * @description `project:settings`. Nothing references a repository row, so a delete is clean.
+         */
+        delete: operations["deleteProjectRepository"];
+        options?: never;
+        head?: never;
+        /**
+         * Edit a repository
+         * @description `project:settings`. A full replacement of the five values.
+         */
+        patch: operations["updateProjectRepository"];
+        trace?: never;
+    };
+    "/issues/{key}/agent-context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One task with everything needed to work it
+         * @description `issue:read`. The composite an assistant fetches to work a task — the issue (with its
+         *     caller-scoped `allowedTransitions`), the parent story and its acceptance criteria, the epic
+         *     goal, the linked spec excerpts, and the project's repositories and build commands. A token
+         *     scoped to another project cannot reach it — the same scope that returns nothing from
+         *     `GET /issues`.
+         */
+        get: operations["getAgentTaskContext"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/issues": {
         parameters: {
             query?: never;
@@ -11441,6 +11570,14 @@ export interface components {
              *     `case:approve`, who could reach the same state by approving the cases first.
              */
             requireApprovedCaseForRun: boolean;
+            /**
+             * @description D33 — "Require review to close issues". **Off by default.** When true, and with
+             *     `authorMayApproveOwnWork` false, an issue's **assignee** may not move it into a
+             *     `DONE`-kind status — a second person must. When false the assignee closes their own
+             *     work (A6), which is why the default is off: a one-person company must not dead-end.
+             *     The status ladder is unaffected either way.
+             */
+            reviewEnabledIssue: boolean;
             /** @description Null for a project nobody has configured — which is most of them. */
             updatedBy?: components["schemas"]["UserRef"] | null;
             /** Format: date-time */
@@ -11468,6 +11605,8 @@ export interface components {
             editAfterApproval: components["schemas"]["EditAfterApproval"];
             /** @default false */
             requireApprovedCaseForRun: boolean;
+            /** @default false */
+            reviewEnabledIssue: boolean;
         };
         /**
          * @description What switching review **off** — or raising `requiredPeerReviews` — would land on (005
@@ -16432,6 +16571,11 @@ export interface components {
             /**
              * @description Statuses this card may legally move to; others reject the drop. Empty for a derived
              *     card whose source offers no board-driven action, and empty for an Epic (011 D31).
+             *
+             *     **Caller-scoped under the review-to-close gate:** when `reviewEnabledIssue` is on,
+             *     `authorMayApproveOwnWork` is off and the caller is this issue's assignee, `DONE`-kind
+             *     targets are absent here — the move exists in the workflow but not for this caller, and
+             *     `POST …/transitions` refuses it with the reason (`task.html`: "needs a reviewer").
              */
             allowedTransitions: components["schemas"]["IssueStatusRef"][];
         };
@@ -16541,6 +16685,7 @@ export interface components {
              *     table and there will not be one (D6).
              */
             release?: components["schemas"]["ReleaseRef"] | null;
+            agentEligible: boolean;
         };
         Issue: {
             /** @example ACME-118 */
@@ -16614,6 +16759,11 @@ export interface components {
              * @description Statuses this issue may legally move to, from where it stands. **Disabled, not
              *     hidden** on the screen (`task.html`) — a caller can see the move exists. Empty for
              *     an Epic: D31 derives an epic's status from its stories and it is not editable.
+             *
+             *     **Caller-scoped under the review-to-close gate:** when `reviewEnabledIssue` is on,
+             *     `authorMayApproveOwnWork` is off and the caller is this issue's assignee, `DONE`-kind
+             *     targets are absent here — the move exists in the workflow but not for this caller, and
+             *     `POST …/transitions` refuses it with the reason (`task.html`: "needs a reviewer").
              */
             allowedTransitions: components["schemas"]["IssueStatusRef"][];
             /** Format: date-time */
@@ -16622,6 +16772,18 @@ export interface components {
             updatedAt?: string | null;
             /** Format: date-time */
             doneAt?: string | null;
+            /**
+             * @description D30 — a hint that this issue is a good candidate for an LLM. **A boolean and a filter,
+             *     not an assignment target** (D26 unchanged): the assistant's queue defaults to the
+             *     owner's AI-eligible tasks. Shown as a marker on cards and lists.
+             */
+            agentEligible: boolean;
+            /**
+             * @description The pull request an assistant (or a person) opened for this task, reported back through
+             *     `PATCH`. This product never opens the PR — the local agent does, with the developer's
+             *     own git, and reports the URL (D25).
+             */
+            prUrl?: string | null;
         };
         /**
          * @description **No `status` field**, for ~~`WorkItemInput`~~'s reason and `TestPlan.create`'s: a create
@@ -16666,6 +16828,11 @@ export interface components {
              */
             releaseId?: string | null;
             acceptanceCriteria?: string[];
+            /**
+             * @description D30. Defaults to false.
+             * @default false
+             */
+            agentEligible: boolean;
         };
         /**
          * @description Every field optional; an absent key is "leave it". **`status` is not here** — a move goes
@@ -16698,6 +16865,9 @@ export interface components {
                 text: string;
                 done: boolean;
             }[];
+            agentEligible?: boolean;
+            /** @description The PR an assistant opened, reported back. Recorded on history as issue.pr_url_set. */
+            prUrl?: string | null;
         };
         IssueTransitionInput: {
             /** Format: uuid */
@@ -16934,11 +17104,17 @@ export interface components {
              * @description §12.4, verbatim and load-bearing: the legal set must be known **client-side before the
              *     drag starts**, so a forbidden drop is refused at the drag with the reason rather than
              *     accepted and reverted. Empty for an Epic (D31).
+             *
+             *     **Caller-scoped under the review-to-close gate:** when `reviewEnabledIssue` is on,
+             *     `authorMayApproveOwnWork` is off and the caller is this issue's assignee, `DONE`-kind
+             *     targets are absent here — the move exists in the workflow but not for this caller, and
+             *     `POST …/transitions` refuses it with the reason (`task.html`: "needs a reviewer").
              */
             allowedTransitions: components["schemas"]["IssueStatusRef"][];
             subtaskTotal: number;
             /** @description The card face reads "3/5 sub-tasks". */
             subtaskDone: number;
+            agentEligible: boolean;
         };
         CardMoveInput: {
             /** Format: uuid */
@@ -18079,6 +18255,134 @@ export interface components {
          * @enum {string}
          */
         NotificationEventType: "execution.run_completed" | "work.item_assigned" | "review.requested" | "review.endorsed" | "review.changes_requested" | "review.approved";
+        /**
+         * @description A connected AI assistant — **an `api_token` the caller owns carrying the `Agent` role**
+         *     (D26). There is no agent principal and no separate table; this is the self-service view
+         *     over the caller's own Agent-role tokens that `profile-assistants.html` renders. A revoked
+         *     assistant stays on the wire (its acts remain in each issue's history, attributed to the
+         *     owner via it) — `revokedAt` is set rather than the row filtered out.
+         */
+        Assistant: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description Appears in every history line: "<person>, via <name>".
+             * @example claude-code
+             */
+            name: string;
+            /**
+             * Format: uuid
+             * @description The one project it is scoped to, or null for every project the owner can reach.
+             */
+            projectId: string | null;
+            /** @description The scoped project's key, for display. Null when scoped to every project. */
+            projectKey: string | null;
+            /**
+             * Format: date-time
+             * @description When it last did anything, coarse to the hour (`api_token.last_used_at`). Null = never used.
+             */
+            lastUsedAt: string | null;
+            /** Format: date-time */
+            revokedAt: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        /**
+         * @description Connecting an assistant. **No `role`, no `owner`, no `expiresAt`** — the role is `Agent`,
+         *     the owner is the caller, and the expiry is set server-side (an Agent token must expire).
+         *     Nothing here can grant it more than the caller holds.
+         */
+        AssistantInput: {
+            name: string;
+            /**
+             * Format: uuid
+             * @description Scope it to one project, or null for every project the caller can reach.
+             */
+            projectId?: string | null;
+        };
+        /**
+         * @description The creation response, and **the only place the token secret ever appears**. Shown once,
+         *     unrecoverable afterwards — a separate type from `Assistant` so no read path is one forgotten
+         *     null away from serving it (`IssuedApiTokenView`'s reasoning).
+         */
+        IssuedAssistant: {
+            assistant: components["schemas"]["Assistant"];
+            /** @description The plaintext bearer token, shown once. Never logged, never in an audit row. */
+            secret: string;
+        };
+        /**
+         * @description One repository a project spans, with how it is built — **reference data (D16)**. This
+         *     product never holds a repository, clones one or runs a build; this is what a new joiner or
+         *     somebody's assistant is told to check out. A project with none is not degraded.
+         */
+        ProjectRepository: {
+            /** Format: uuid */
+            id: string;
+            /** @example acme-storefront */
+            name: string;
+            /** @example git@github.com:northwind/acme-storefront.git */
+            url: string;
+            /** @example main */
+            defaultBranch: string;
+            /**
+             * @description The working subdirectory within the repo. `/` for the root.
+             * @example /
+             */
+            subdirectory: string;
+            /** @example npm ci && npm run build && npm test */
+            buildCommand: string;
+            /** @description Order within the project */
+            position: number;
+            /** @description True for the lowest-position row; computed, not stored. */
+            primary: boolean;
+        };
+        ProjectRepositoryInput: {
+            name: string;
+            url: string;
+            defaultBranch: string;
+            /** @description `/` for the repository root. */
+            subdirectory: string;
+            buildCommand: string;
+        };
+        /**
+         * @description Everything an assistant needs to work one task, assembled in one read (§3.1's grounding
+         *     rule — an agent that assembles context from six calls generates blind). The `issue` already
+         *     carries the target release, the parent/epic keys and the caller-scoped `allowedTransitions`;
+         *     this adds the parent story's acceptance criteria, the epic goal, the linked spec excerpts and
+         *     the project's repositories and build commands.
+         */
+        AgentTaskContext: {
+            issue: components["schemas"]["Issue"];
+            /** @description The parent story, or null for a task with no story parent. */
+            story?: components["schemas"]["AgentStoryContext"] | null;
+            epic?: components["schemas"]["AgentEpicContext"] | null;
+            specExcerpts: components["schemas"]["AgentSpecExcerpt"][];
+            repositories: components["schemas"]["ProjectRepository"][];
+        };
+        AgentStoryContext: {
+            /** @example ACME-118 */
+            key: string;
+            title: string;
+            description?: string | null;
+            acceptanceCriteria: {
+                text: string;
+                done: boolean;
+            }[];
+        };
+        AgentEpicContext: {
+            /** @example ACME-90 */
+            key: string;
+            title: string;
+            /** @description The epic's description — its goal. */
+            goal?: string | null;
+        };
+        AgentSpecExcerpt: {
+            /** Format: uuid */
+            pageId?: string | null;
+            /** @example Checkout specification §3.2 */
+            title: string;
+            excerpt: string;
+        };
     };
     responses: {
         /**
@@ -21530,6 +21834,210 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    listMyAssistants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's assistants, newest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Assistant"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    connectAssistant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantInput"];
+            };
+        };
+        responses: {
+            /** @description Connected. The secret is in the body and nowhere else, ever again. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedAssistant"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    revokeAssistant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assistantId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked (idempotent). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listProjectRepositories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The repositories, by position. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectRepository"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    addProjectRepository: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectRepositoryInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectRepository"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteProjectRepository: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                repositoryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed (idempotent). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateProjectRepository: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                repositoryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectRepositoryInput"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectRepository"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getAgentTaskContext: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The task and its working context. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTaskContext"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     listIssues: {
         parameters: {
             query: {
@@ -21546,6 +22054,8 @@ export interface operations {
                  */
                 unparented?: boolean;
                 sort?: "key" | "title" | "status" | "dueDate" | "estimateHours";
+                /** @description D30 — only AI-eligible issues. The assistant queue tool combines it with assigneeId=owner. */
+                agentEligible?: boolean;
             };
             header?: never;
             path?: never;
