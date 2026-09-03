@@ -93,6 +93,10 @@ public interface IssueRepository extends JpaRepository<Issue, UUID> {
     /**
      * One project's live issues, with every filter the work table offers.
      *
+     * <p>{@code agentEligible} (D30) is switched the same way and for the neighbouring reason: the
+     * parameter is a tri-state on the wire — absent, true, false — and {@code false} is a filter
+     * somebody asks for, so it cannot be spelled by the absence of the flag.
+     *
      * <p>The two collection filters are switched by a boolean rather than by a null collection:
      * Hibernate binds an empty {@code IN ()} as a syntax error and a null one as an unknown, so a
      * caller that sent no {@code statusId} would otherwise get either a 500 or an empty table
@@ -113,9 +117,12 @@ public interface IssueRepository extends JpaRepository<Issue, UUID> {
                AND (:unparented = false OR i.parentId IS NULL)
                AND (:anyStatus = true OR i.statusId IN :statusIds)
                AND (:anyAssignee = true OR i.assigneeId IN :assigneeIds)
+               AND (:anyEligibility = true OR i.agentEligible = :agentEligible)
             """)
     List<Issue> findFiltered(
             @Param("projectId") UUID projectId,
+            @Param("anyEligibility") boolean anyEligibility,
+            @Param("agentEligible") boolean agentEligible,
             @Param("anyLevel") boolean anyLevel,
             @Param("typeIds") Collection<UUID> typeIds,
             @Param("anyParent") boolean anyParent,

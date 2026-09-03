@@ -5,6 +5,8 @@ import com.tcms.project.GateResult;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectKeys;
 import com.tcms.project.ProjectService;
+import com.tcms.project.ProjectSettingsService;
+import com.tcms.project.ReviewSettings;
 import com.tcms.tenancy.AuditEvent;
 import com.tcms.tenancy.AuditEventRepository;
 import com.tcms.tenancy.CompanyContext;
@@ -69,6 +71,22 @@ public class IssueService {
     private static final String AUDIT_TARGET = "issue";
 
     /**
+     * Its own action rather than a field inside {@code issue.updated}'s document, because
+     * {@code task.html} renders it as an event in its own right — "attached PR #482". A reader
+     * scanning a history for where the work went wants a line, not a diff to open.
+     */
+    private static final String AUDIT_PR_URL_SET = "issue.pr_url_set";
+
+    private static final String AUDIT_AGENT_ELIGIBILITY_SET = "issue.agent_eligibility_set";
+
+    /**
+     * A cap this endpoint's contract does not state, applied for {@link #MAX_IDEMPOTENCY_KEY}'s
+     * reason: {@code issue.pr_url} is {@code TEXT}, the value is caller-controlled, and a field
+     * error naming the limit is a better answer than a row nobody meant to store.
+     */
+    private static final int MAX_PR_URL = 2000;
+
+    /**
      * {@code CaseCreateService}'s cap, for its reason: the header is attacker-controlled and it is
      * indexed.
      *
@@ -93,6 +111,7 @@ public class IssueService {
     private final AuditEventRepository auditEvents;
     private final Outbox outbox;
     private final ReleaseRepository releases;
+    private final ProjectSettingsService settings;
     private final Clock clock;
 
     public IssueService(
@@ -107,6 +126,7 @@ public class IssueService {
             AuditEventRepository auditEvents,
             Outbox outbox,
             ReleaseRepository releases,
+            ProjectSettingsService settings,
             Clock clock) {
 
         this.projects = projects;
@@ -120,6 +140,7 @@ public class IssueService {
         this.auditEvents = auditEvents;
         this.outbox = outbox;
         this.releases = releases;
+        this.settings = settings;
         this.clock = clock;
     }
 
@@ -156,6 +177,7 @@ public class IssueService {
             List<UUID> statusIds,
             List<UUID> assigneeIds,
             boolean unparented,
+            Boolean agentEligible,
             String sort) {
     }
 
@@ -170,11 +192,28 @@ public class IssueService {
         return projects.readVisible(userId, projectId, project -> summaries(project, filter));
     }
 
+    /**
+     * Whether {@code DONE}-kind targets must be withheld from this caller on this issue — D33's
+     * guard, asked once and answered the same way by the view, the two board card faces and
+     * {@link TransitionService}.
+     *
+     * <p>Package-private so those callers share this reading rather than each spelling it: the
+     * project half is {@link ReviewSettings#issueCloseNeedsSecondPerson()} and the request half is
+     * "the caller is the assignee". An unassigned issue is not guarded — nobody is the author of
+     * work nobody has taken, and a rule that bit there would make an unassigned task unclosable by
+     * everyone.
+     */
+    public static boolean closeGuardBinds(ReviewSettings policy, Issue issue, UUID userId) {
+        return policy.issueCloseNeedsSecondPerson()
+                && issue.getAssigneeId() != null
+                && issue.getAssigneeId().equals(userId);
+    }
+
     /** One issue, with its children and its legal moves. Addressed by key, gated on its own project. */
     public Optional<IssueView> find(UUID userId, String key) {
         return issues.findByIssueKeyAndDeletedAtIsNull(key)
                 .flatMap(issue -> projects.readVisible(
-                        userId, issue.getProjectId(), project -> viewOf(issue, project)));
+                        userId, issue.getProjectId(), project -> viewOf(userId, issue, project)));
     }
 
     public GateResult<Outcome> create(UUID userId, IssueInput request, String idempotencyKey) {
@@ -267,7 +306,7 @@ public class IssueService {
             }
             Optional<Issue> replay = issues.findReplay(project.getId(), idempotencyKey);
             if (replay.isPresent()) {
-                return new Outcome.Replayed(viewOf(replay.get(), project));
+                return new Outcome.Replayed(viewOf(userId, replay.get(), project));
             }
         }
 
@@ -314,9 +353,10 @@ public class IssueService {
                 idempotencyKey == null || idempotencyKey.isBlank() ? null : idempotencyKey,
                 now));
 
+        created.setAgentEligible(Boolean.TRUE.equals(request.agentEligible()));
         audit(project, userId, created, "issue.created", now);
         announceAssignment(created, null);
-        return new Outcome.Created(viewOf(created, project));
+        return new Outcome.Created(viewOf(userId, created, project));
     }
 
     private Outcome applyUpdate(
@@ -357,13 +397,59 @@ public class IssueService {
             return new Outcome.Invalid(releaseErrors);
         }
 
+        String prUrl = patch.has("prUrl") ? blankToNull(request.prUrl()) : issue.getPrUrl();
+        if (prUrl != null && prUrl.length() > MAX_PR_URL) {
+            return new Outcome.Invalid(Map.of("prUrl", List.of(
+                    "Keep the pull request link to " + MAX_PR_URL + " characters or fewer.")));
+        }
+        boolean agentEligible = patch.has("agentEligible")
+                ? Boolean.TRUE.equals(request.agentEligible())
+                : issue.isAgentEligible();
+
         Instant now = clock.instant();
         UUID wasAssignedTo = issue.getAssigneeId();
+        boolean prUrlChanged = !java.util.Objects.equals(prUrl, issue.getPrUrl());
+        boolean eligibilityChanged = agentEligible != issue.isAgentEligible();
+
         issue.apply(edit, parent == null ? null : parent.getId(), userId, now);
+        issue.setPrUrl(prUrl);
+        issue.setAgentEligible(agentEligible);
         Issue saved = issues.save(issue);
+
         audit(project, userId, saved, "issue.updated", now);
+        if (prUrlChanged) {
+            // Beside issue.updated rather than instead of it: the edit happened and the trail
+            // records edits, and a reader who filters to this action is asking a narrower question
+            // than "what changed on this issue".
+            auditEvents.save(AuditEvent.record(
+                    project.getId(), userId, AUDIT_PR_URL_SET, AUDIT_TARGET,
+                    List.of(saved.getId()),
+                    // A cleared link is the JSON literal null, not jsonString(null) — that
+                    // helper takes a String's length and throws on one, and the failure surfaces
+                    // as a 500 out of the audit writer on a PATCH about something else.
+                    "{\"key\":" + AuditEvent.jsonString(saved.getIssueKey())
+                            + ",\"prUrl\":"
+                            + (prUrl == null ? "null" : AuditEvent.jsonString(prUrl)) + "}",
+                    now));
+        }
+        if (eligibilityChanged) {
+            auditEvents.save(AuditEvent.record(
+                    project.getId(), userId, AUDIT_AGENT_ELIGIBILITY_SET, AUDIT_TARGET,
+                    List.of(saved.getId()),
+                    "{\"key\":" + AuditEvent.jsonString(saved.getIssueKey())
+                            + ",\"agentEligible\":" + agentEligible + "}",
+                    now));
+        }
         announceAssignment(saved, wasAssignedTo);
-        return new Outcome.Updated(viewOf(saved, project));
+        return new Outcome.Updated(viewOf(userId, saved, project));
+    }
+
+    /**
+     * An empty string clears the link rather than storing one nobody can follow — the shape
+     * {@code IssueEdit} applies to every other free-text field on this form.
+     */
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.strip();
     }
 
     /**
@@ -540,7 +626,7 @@ public class IssueService {
      * without a second round trip, and without a second assembly of this shape that would drift from
      * this one the first time a field was added.
      */
-    IssueView viewOf(Issue issue, Project project) {
+    IssueView viewOf(UUID userId, Issue issue, Project project) {
         Map<UUID, IssueType> typesById = typesOf(project.getId());
         Map<UUID, IssueStatus> statusesById = statusesOf(project.getId());
         IssueType type = typesById.get(issue.getTypeId());
@@ -601,12 +687,14 @@ public class IssueService {
                 overdue(issue, status, today),
                 completion,
                 releaseRefOf(issue.getReleaseId()),
+                issue.isAgentEligible(),
+                issue.getPrUrl(),
                 children.stream()
                         .map(child -> summaryOf(child, project, typesById, statusesById, refs,
                                 releaseRefsOf(children), issue, epic, today))
                         .toList(),
                 watchers.watchersOf(issue.getId()),
-                allowedTransitions(issue, type, statusesById),
+                allowedTransitions(userId, issue, type, statusesById),
                 issue.getCreatedAt(),
                 issue.getUpdatedAt(),
                 issue.getDoneAt());
@@ -641,14 +729,20 @@ public class IssueService {
      * and the 409 are one decision expressed twice rather than two rules that could drift.
      */
     private List<IssueStatusView> allowedTransitions(
-            Issue issue, IssueType type, Map<UUID, IssueStatus> statusesById) {
+            UUID userId, Issue issue, IssueType type, Map<UUID, IssueStatus> statusesById) {
 
         if (type.getLevel() == IssueLevel.EPIC) {
             return List.of();
         }
+        boolean withholdDone =
+                closeGuardBinds(settings.effective(issue.getProjectId()), issue, userId);
         return transitions.findByFromStatusId(issue.getStatusId()).stream()
                 .map(move -> statusesById.get(move.getToStatusId()))
                 .filter(java.util.Objects::nonNull)
+                // The workflow set is the base and DONE is SUBTRACTED from it — never a
+                // replacement set built from the guard. A caller under the guard must still be
+                // offered In Review and Blocked, which is what makes the refusal actionable.
+                .filter(status -> !withholdDone || status.getKind() != IssueStatusKind.DONE)
                 .sorted(Comparator.comparingInt(IssueStatus::getPosition))
                 .map(IssueStatusView::of)
                 .toList();
@@ -680,6 +774,8 @@ public class IssueService {
 
         List<Issue> matched = issues.findFiltered(
                 project.getId(),
+                filter.agentEligible() == null,
+                Boolean.TRUE.equals(filter.agentEligible()),
                 filter.level() == null,
                 levelTypeIds.isEmpty() ? List.of(project.getId()) : levelTypeIds,
                 anyParent,
@@ -773,7 +869,8 @@ public class IssueService {
                 issue.getDueDate(),
                 overdue(issue, status, today),
                 issue.getEstimateHours(),
-                releaseRefs.get(issue.getReleaseId()));
+                releaseRefs.get(issue.getReleaseId()),
+                issue.isAgentEligible());
     }
 
     /**

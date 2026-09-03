@@ -155,9 +155,12 @@ public class DemoProjectSeeder {
      * project answers the same is a screen nobody can tell is wired up.
      */
     private void applySettings(DemoCast cast, UUID projectId, boolean full) {
+        // The last flag is D33's review-to-close gate, and it follows `full` for this method's own
+        // reason: the thin project is the one-person-company path (A6), where an assignee closes
+        // their own work, and the full project is where a lead can see the refusal actually fire.
         settings.update(cast.adminId(), projectId, new ProjectSettingsRequest(
                 full, full, false, false, full ? 1 : 0, false,
-                full ? "REQUIRES_REREVIEW" : "ALLOWED", full));
+                full ? "REQUIRES_REREVIEW" : "ALLOWED", full, full));
     }
 
     /** The project-scoped {@code feature} tree, two levels deep. */

@@ -346,6 +346,65 @@ class IssueEndpointTest extends TrackerEndpointTestBase {
     }
 
     @Test
+    void agentEligibilityAndThePrUrlRoundTrip() throws Exception {
+        // D30 and the PR link, asserted on the DETAIL and on the LIST ROW, because the two are
+        // separate projections and a field threaded into one of them is the shape a work table
+        // renders as "no issue here is AI-eligible" while the task page says otherwise.
+        JsonNode created = create(LEAD, typeNamed("Story"), "Retry budget", null, null);
+        String key = created.get("key").asText();
+
+        assertThat(created.get("agentEligible").asBoolean()).isFalse();
+        assertThat(created.get("prUrl").isNull()).isTrue();
+
+        JsonNode patched = patch(LEAD, key, "{\"agentEligible\":true,"
+                + "\"prUrl\":\"https://github.com/northwind/acme/pull/482\"}");
+
+        assertThat(patched.get("agentEligible").asBoolean()).isTrue();
+        assertThat(patched.get("prUrl").asText())
+                .isEqualTo("https://github.com/northwind/acme/pull/482");
+        assertThat(get(LEAD, key).get("agentEligible").asBoolean()).isTrue();
+        assertThat(rowFor(list(LEAD, PROJECT), key).get("agentEligible").asBoolean()).isTrue();
+    }
+
+    @Test
+    void attachingAPrIsItsOwnEventOnTheHistory() throws Exception {
+        // "attached PR #482" is a line somebody scanning a task's history looks for. Folded into
+        // issue.updated it is a diff they have to open, which is not the same thing.
+        JsonNode created = create(LEAD, typeNamed("Story"), "Retry budget", null, null);
+
+        patch(LEAD, created.get("key").asText(),
+                "{\"prUrl\":\"https://github.com/northwind/acme/pull/482\"}");
+
+        assertThat(auditActionsFor(created.get("key").asText()))
+                .contains("issue.pr_url_set");
+    }
+
+    @Test
+    void anEmptyPrUrlClearsItRatherThanStoringSomethingNobodyCanFollow() throws Exception {
+        JsonNode created = create(LEAD, typeNamed("Story"), "Retry budget", null, null);
+        String key = created.get("key").asText();
+        patch(LEAD, key, "{\"prUrl\":\"https://example.test/pull/1\"}");
+
+        assertThat(patch(LEAD, key, "{\"prUrl\":\"  \"}").get("prUrl").isNull()).isTrue();
+    }
+
+    @Test
+    void theListFiltersOnAgentEligibilityInBothDirections() throws Exception {
+        // Both directions, because `agentEligible=false` is a filter somebody asks for and an
+        // absent parameter already means "do not filter" — a two-state implementation answers the
+        // whole table to the first and looks correct against the second.
+        JsonNode eligible = create(LEAD, typeNamed("Story"), "Retry budget", null, null);
+        create(LEAD, typeNamed("Story"), "Hand-written migration", null, null);
+        patch(LEAD, eligible.get("key").asText(), "{\"agentEligible\":true}");
+
+        assertThat(titlesOf(listFiltered(LEAD, PROJECT, "agentEligible=true")))
+                .containsExactly("Retry budget");
+        assertThat(titlesOf(listFiltered(LEAD, PROJECT, "agentEligible=false")))
+                .containsExactly("Hand-written migration");
+        assertThat(titlesOf(list(LEAD, PROJECT))).hasSize(2);
+    }
+
+    @Test
     void assigningSomebodyWhoCannotOpenTheProjectIsRefused() throws Exception {
         // The id is trivially available from any other tab, the card would render their name
         // perfectly, and the only person who ever sees the problem is the assignee — who gets a 404
@@ -438,6 +497,30 @@ class IssueEndpointTest extends TrackerEndpointTestBase {
                 .andReturn();
         assertThat(result.getResponse().getStatus()).isEqualTo(200);
         return json.readTree(result.getResponse().getContentAsString());
+    }
+
+    private static JsonNode rowFor(JsonNode rows, String key) {
+        for (JsonNode row : rows) {
+            if (key.equals(row.get("key").asText())) {
+                return row;
+            }
+        }
+        throw new AssertionError("the list has no row for " + key);
+    }
+
+    private java.util.List<String> auditActionsFor(String key) throws java.sql.SQLException {
+        try (var connection = appConnection(ACME);
+                var statement = connection.prepareStatement(
+                        "SELECT action FROM audit_event WHERE changes::text LIKE ?")) {
+            statement.setString(1, "%" + key + "%");
+            try (var rows = statement.executeQuery()) {
+                java.util.List<String> actions = new java.util.ArrayList<>();
+                while (rows.next()) {
+                    actions.add(rows.getString(1));
+                }
+                return actions;
+            }
+        }
     }
 
     private JsonNode list(UUID userId, UUID projectId) throws Exception {

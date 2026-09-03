@@ -125,6 +125,29 @@ public class Issue {
     @Column(name = "release_id")
     private UUID releaseId;
 
+    /**
+     * D30 — a hint that this issue is a good candidate for an LLM, and the default filter of an
+     * assistant's queue.
+     *
+     * <p>A boolean and a filter, <strong>never an assignment target</strong>: assignment stays
+     * person to person, and an "assigned to the agent" column is the shape that makes a machine
+     * answerable for work a person is answerable for.
+     */
+    @Column(name = "agent_eligible", nullable = false)
+    private boolean agentEligible;
+
+    /**
+     * The pull request somebody — a person, or an assistant acting as one — opened for this issue,
+     * reported back through {@code PATCH}.
+     *
+     * <p>This product opens no PR and holds no forge credential (D25). The value is a string
+     * somebody sends, which is why setting it records its own audit action rather than riding on
+     * {@code issue.updated}: "attached PR #482" is a thing that happened, and a generic edit row
+     * says nothing a reader can act on.
+     */
+    @Column(name = "pr_url")
+    private String prUrl;
+
     @Column(name = "assignee_id")
     private UUID assigneeId;
 
@@ -355,6 +378,27 @@ public class Issue {
         this.deletedAt = now;
         this.updatedBy = actorId;
         this.updatedAt = now;
+    }
+
+    public boolean isAgentEligible() {
+        return agentEligible;
+    }
+
+    /**
+     * Set from the create form and from {@code PATCH}, and <strong>not through
+     * {@link IssueEdit}</strong>: that record is the validated field set one form submits whole, and
+     * a flag with no rule to validate against would be carried through it for the sake of symmetry.
+     */
+    void setAgentEligible(boolean eligible) {
+        this.agentEligible = eligible;
+    }
+
+    public String getPrUrl() {
+        return prUrl;
+    }
+
+    void setPrUrl(String url) {
+        this.prUrl = url;
     }
 
     public UUID getId() {

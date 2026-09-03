@@ -3,6 +3,7 @@ package com.tcms.work;
 import com.tcms.api.UserRef;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectService;
+import com.tcms.project.ProjectSettingsService;
 import com.tcms.project.TeamDirectory;
 import com.tcms.tenancy.CompanyContext;
 import java.time.Clock;
@@ -123,6 +124,7 @@ public class BoardService {
     private static final String DEFAULT_PRIORITY = "MEDIUM";
 
     private final ProjectService projects;
+    private final ProjectSettingsService settings;
     private final BoardFacts facts;
     private final BoardPeople people;
     private final TeamDirectory teams;
@@ -131,6 +133,7 @@ public class BoardService {
 
     BoardService(
             ProjectService projects,
+            ProjectSettingsService settings,
             BoardFacts facts,
             BoardPeople people,
             TeamDirectory teams,
@@ -138,6 +141,7 @@ public class BoardService {
             Clock clock) {
 
         this.projects = projects;
+        this.settings = settings;
         this.facts = facts;
         this.people = people;
         this.teams = teams;
@@ -404,9 +408,18 @@ public class BoardService {
         Map<UUID, List<BoardStatusRef>> moves = movesByStatus(projectIds);
         Map<String, CardAnnotationView> notes = notesOf(userId);
 
+        // D33, per project rather than per card: the guard is a project setting and this board
+        // spans several, so one read each beats one read per card on the view somebody keeps open
+        // all day.
+        Map<UUID, Boolean> closeGuarded = new HashMap<>();
+        projectIds.forEach(projectId -> closeGuarded.put(
+                projectId, settings.effective(projectId).issueCloseNeedsSecondPerson()));
+
         List<BoardCardView> cards = new ArrayList<>();
         for (BoardFacts.AssignedIssue issue : issues) {
-            cards.add(cardFor(issue, byId.get(issue.projectId()), resolved, moves, notes));
+            cards.add(cardFor(issue, byId.get(issue.projectId()), resolved, moves, notes,
+                    Boolean.TRUE.equals(closeGuarded.get(issue.projectId()))
+                            && userId.equals(issue.assigneeId())));
         }
         for (BoardFacts.AssignedExecution execution : executions) {
             cards.add(cardFor(execution, byId.get(execution.projectId()), resolved, notes));
@@ -759,7 +772,8 @@ public class BoardService {
             Project project,
             Map<UUID, UserRef> resolved,
             Map<UUID, List<BoardStatusRef>> moves,
-            Map<String, CardAnnotationView> notes) {
+            Map<String, CardAnnotationView> notes,
+            boolean withholdDone) {
 
         boolean epic = "EPIC".equals(issue.typeLevel());
 
@@ -780,7 +794,26 @@ public class BoardService {
                 project.getKey(),
                 null,
                 notes.get(annotationKey(KIND_ISSUE, issue.issueId())),
-                epic ? List.of() : moves.getOrDefault(issue.statusId(), List.of()));
+                epic ? List.of() : legalMoves(issue, moves, withholdDone));
+    }
+
+    /**
+     * The card's legal moves, with {@code DONE} subtracted when D33's guard binds for this reader.
+     *
+     * <p>Subtracted from the workflow's set rather than replacing it, exactly as
+     * {@code tracker.IssueService} and {@code tracker.board.BoardCardService} do: the three are one
+     * decision expressed three times, and a caller under the guard is still offered In Review —
+     * which is what makes the refusal something they can act on rather than a dead end.
+     */
+    private static List<BoardStatusRef> legalMoves(
+            BoardFacts.AssignedIssue issue,
+            Map<UUID, List<BoardStatusRef>> moves,
+            boolean withholdDone) {
+
+        List<BoardStatusRef> legal = moves.getOrDefault(issue.statusId(), List.of());
+        return withholdDone
+                ? legal.stream().filter(move -> !"DONE".equals(move.kind())).toList()
+                : legal;
     }
 
     /**

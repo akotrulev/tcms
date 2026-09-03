@@ -40,6 +40,15 @@ public interface ApiTokenRepository extends JpaRepository<ApiToken, UUID> {
     List<ApiToken> findAllByIdIn(Collection<UUID> ids);
 
     /**
+     * One person's own tokens carrying one role, newest first — the profile assistant list (D26).
+     *
+     * <p>Revoked rows are included, exactly as the company-wide list includes them: an assistant's
+     * acts stay on each issue's history attributed to its owner via it, so a row that vanished on
+     * revocation would leave those lines naming a credential the screen says never existed.
+     */
+    List<ApiToken> findByOwnerIdAndRoleIdOrderByCreatedAtDesc(UUID ownerId, UUID roleId);
+
+    /**
      * Whether this company already has a live token by this name.
      *
      * <p>{@code V36}'s unique index is the real guarantee; this is what turns the collision into a

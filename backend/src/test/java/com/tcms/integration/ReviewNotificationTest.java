@@ -319,7 +319,7 @@ class ReviewNotificationTest extends IntegrationTestBase {
      */
     private void enableReview(boolean on) {
         inCompany(() -> assertThat(settings.update(LEAD, BANKING, new ProjectSettingsRequest(
-                on, on, on, on, 0, true, EditAfterApproval.RETAIN.name(), false)))
+                on, on, on, on, 0, true, EditAfterApproval.RETAIN.name(), false, false)))
                 .isInstanceOf(ProjectSettingsService.Outcome.Updated.class));
     }
 

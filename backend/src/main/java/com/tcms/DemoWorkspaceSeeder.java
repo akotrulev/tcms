@@ -300,7 +300,12 @@ public class DemoWorkspaceSeeder {
                             // No target release, deliberately: D14 says releases start empty, and
                             // a demo that seeded one would be this product inventing a version
                             // number for the person looking at it.
-                            null, null),
+                            null,
+                            // D30, on every second card. Not on all of them and not on none: a
+                            // marker that is everywhere and a marker that is nowhere are equally
+                            // invisible to somebody looking at the screen to see whether it works.
+                            created % 2 == 0,
+                            null),
                     DemoProjectSeeder.idempotencyKey(projectId, "card", card.title()));
 
             String key = keyOf(gate);

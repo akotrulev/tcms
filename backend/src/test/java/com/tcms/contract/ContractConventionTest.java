@@ -405,6 +405,27 @@ class ContractConventionTest {
      */
     private static final Map<String, List<Class<?>>> RESPONSE_RECORDS = Map.ofEntries(
             Map.entry("AiProposal", List.of(com.tcms.repository.AiProposalView.class)),
+            // ---- 015's agent block (M5) ----
+            // An assistant is an api_token the caller owns carrying the Agent role (D26) — there is
+            // no assistant table — so the record serving this schema is a projection of ApiToken
+            // narrowed to what its owner needs to recognise one of their own machines.
+            Map.entry("Assistant", List.of(com.tcms.identity.AssistantView.class)),
+            Map.entry("AssistantInput", List.of(com.tcms.identity.AssistantInput.class)),
+            Map.entry("IssuedAssistant", List.of(com.tcms.identity.IssuedAssistantView.class)),
+            // NOT a name match, and deliberately: com.tcms.project.ProjectRepository is this
+            // package's Spring Data interface for Project, so the entity and its view are
+            // ProjectRepo / ProjectRepoView. Two types one import apart, one an entity and one a
+            // repository, is how a wrong import survives review.
+            Map.entry("ProjectRepository", List.of(com.tcms.project.ProjectRepoView.class)),
+            Map.entry("ProjectRepositoryInput", List.of(com.tcms.project.ProjectRepoInput.class)),
+            Map.entry("AgentTaskContext",
+                    List.of(com.tcms.tracker.agent.AgentTaskContextView.class)),
+            Map.entry("AgentStoryContext",
+                    List.of(com.tcms.tracker.agent.AgentStoryContextView.class)),
+            Map.entry("AgentEpicContext",
+                    List.of(com.tcms.tracker.agent.AgentEpicContextView.class)),
+            Map.entry("AgentSpecExcerpt",
+                    List.of(com.tcms.tracker.agent.AgentSpecExcerptView.class)),
             // ---- 004's tracker block: the last unpaired schemas in the contract ----
             // Every one of them is public in com.tcms.integration.tracker, so they are class
             // literals rather than PACKAGE_PRIVATE_OWNERS strings. What is worth reading here is
@@ -1020,7 +1041,15 @@ class ContractConventionTest {
                     + "DevOps happened to return, that one answers to openapi.yaml, and "
                     + "collapsing them would make an adapter's convenience field a wire change. "
                     + "The three components are identical today, which is exactly when a "
-                    + "collapse looks free");
+                    + "collapse looks free",
+
+            "com.tcms.tracker.agent.AgentStoryContextView.Criterion",
+            "an ACCEPTANCE criterion — one line of a story's checklist, text and a tick. The "
+                    + "Criterion schema is a test plan's EXIT criterion (metric, op, value), "
+                    + "machine-evaluated so the plan page is a gate rather than prose. Two "
+                    + "unrelated shapes that English spells the same; this one is paired by "
+                    + "location as AgentStoryContext.acceptanceCriteria[] in INLINE_RECORDS, "
+                    + "which is where it is actually compared to the contract");
 
     /**
      * Members one side names and the other deliberately does not, with the reason each stays.
@@ -1427,6 +1456,11 @@ class ContractConventionTest {
     private static final Map<String, List<Class<?>>> INLINE_RECORDS = Map.ofEntries(
             Map.entry("AiProposal.acceptedCase",
                     List.of(com.tcms.repository.AiProposalView.AcceptedCaseView.class)),
+            // 015. A THIRD record for the acceptance-criteria shape, beside Issue's and
+            // IssueUpdate's: this one is what an assistant reads, so it carries no id (there is
+            // nothing here it could tick) and no position (the list arrives in order).
+            Map.entry("AgentStoryContext.acceptanceCriteria[]",
+                    List.of(com.tcms.tracker.agent.AgentStoryContextView.Criterion.class)),
             // `CurrentUser.teams[]` and `RoleAssignment.team` were both here until §175, each with
             // its own record, and between them they were the whole of the TeamRef question §147
             // opened. They are `$ref`s to the TeamRef schema now, served by com.tcms.api.TeamRef —

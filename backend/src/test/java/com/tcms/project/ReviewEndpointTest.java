@@ -236,7 +236,7 @@ class ReviewEndpointTest extends IntegrationTestBase {
                     // two until §97 (M7) removed requireApprovedPlanToStart with its edge.
                     new ReviewSettings(
                             true, true, true, true, requiredPeers, authorMayApprove,
-                            EditAfterApproval.RETAIN, false),
+                            EditAfterApproval.RETAIN, false, false),
                     null,
                     at);
             projectSettings.saveAndFlush(row);

@@ -1,6 +1,6 @@
 # be-java — orientation cache
 
-Baseline: 014 T3, refreshed 2026-09-02.
+Baseline: 015 T3, refreshed 2026-09-03.
 Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
 
 ## Version lane
@@ -18,9 +18,10 @@ Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
 - Flyway `backend/src/main/resources/db/migration` holds **four files** — `V1__initial_schema.sql`
   (V2–V75 were absorbed into it 2026-08-29 and deleted; it only ever runs on an empty database),
   `V2__pm_foundation.sql`, `V3__tracker_core.sql`, `V4__retire_work_item.sql`,
-  `V5__tracker_board.sql`, `V6__release.sql`, `V7__import.sql`. ~~head `V71` (B2)~~ ~~the next
-  number is `V2`~~ ~~→ `V5`~~ ~~→ `V6`~~ ~~→ `V7`~~ → the next number is **`V8`**. `out-of-order` is unset, so a lower number
-  arriving after a higher one is silently not applied — `ls` the directory before writing.
+  `V5__tracker_board.sql`, `V6__release.sql`, `V7__import.sql`, `V8__agent.sql`. ~~head `V71` (B2)~~
+  ~~the next number is `V2`~~ ~~→ `V5`~~ ~~→ `V6`~~ ~~→ `V7`~~ ~~→ `V8`~~ → the next number is
+  **`V9`**. `out-of-order` is unset, so a lower number arriving after a higher one is silently not
+  applied — `ls` the directory before writing.
 
 ## Seams to reuse
 - `ProjectService.readVisible / readGranted / writeGranted` → `GateResult` (Unreachable/Denied/Allowed).
@@ -116,6 +117,40 @@ Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
 - `ContractConventionTest.HOMONYMS` **is no longer empty**: `tracker.imports.SourceProject` is
   named for the `SourceProject` schema and `SourceProjectView` serves it.
 
+- `identity.AssistantService` (015 T3) — **an assistant IS an `api_token` the caller owns carrying
+  `Role.AGENT_ID`** (D26); there is no assistant table and no agent principal. `/me/assistants` needs
+  **authentication only**, which is safe because `PermissionEvaluator` caps a token at the
+  intersection of its role and its owner's grants. `ApiTokenService` grew two package-private
+  ungated seams for it — `mintOwned` and `revokeOwned` — around the extracted `mint`/`withdraw`;
+  **neither carries `@Transactional`**, deliberately: a non-public annotated method is a boundary
+  the proxy may not honour, and every caller is already inside one.
+- **`api_token_name_idx` is `(company_id, name)` among live rows**, so two developers cannot both
+  call their assistant "claude-code". Surfaced as a field error through the shared validator rather
+  than repaired — a per-owner name would be a `V9`.
+- `project.ProjectRepo` / `ProjectRepoRepository` / `ProjectRepoService` (015 T3) — the entity is
+  **`ProjectRepo`, not `ProjectRepository`**, which is this package's Spring Data interface for
+  `Project`. `primary` is computed from the lowest `position` and never stored. Two gates:
+  `project:read` to list, `project:settings` to write — `ProjectSettingsService`'s asymmetry.
+  `forProject(projectId)` is the ungated read for a caller already past its own gate
+  (`ProjectSettingsService.effective`'s shape); `tracker.agent` is its one consumer.
+- **D33's close guard lives in two places and nowhere else.**
+  `ReviewSettings.issueCloseNeedsSecondPerson()` is the project half (`reviewEnabledIssue &&
+  !authorMayApproveOwnWork`) and `IssueService.closeGuardBinds(policy, issue, userId)` is the whole
+  reading, **public** because `tracker.board` is a sub-package. Four consumers subtract `DONE`-kind
+  targets from the workflow set — never replace it: `TransitionService` (409 `CloseRefused` +
+  an `issue.close_refused` audit row), `IssueService.allowedTransitions`,
+  `tracker.board.BoardCardService.Facts`, and `work.BoardService.cardFor`. `work` may not import
+  `tracker`, which is why the rule's project half lives on `ReviewSettings` in `project`.
+- `IssueService.viewOf` and `BoardCardService.factsFor`/`factsOf` **now take a `userId`** — the
+  projection is caller-scoped, so a card and its detail page cannot offer different moves.
+- `tracker.agent` (015 T3) — `AgentContextService` composes `IssueService.find` (x3),
+  `DocLinkService.list` and `ProjectRepoService.forProject`, and **adds no gate of its own**: the
+  scope property (a token scoped to project A gets nothing from B) holds because every part goes
+  through `readVisible`. A doc link with no captured excerpt is **dropped**, not served empty.
+- `AuditEvent.jsonString(null)` **throws** (it reads the String's length). A nullable value in a
+  changes document is the JSON literal `null`; 015 T3 shipped the NPE and its test caught it as a
+  500 out of the audit writer on a PATCH about something else.
+
 ## Conventions observed
 - A schema pairs with a **view record**, never an entity — `Label` → `LabelView`, not `IssueLabel`.
 - Records for views/requests, sealed `Outcome` interfaces per service, exhaustive switches in
@@ -157,6 +192,23 @@ Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
   endpoints answer 400 on a blank name, which the contract does not list — invisible to every gate.
 
 ## Session log
+
+
+- 2026-09-03 015 T3: `be`. The M5 backend. `identity`: `AssistantService` +
+  `MeAssistantsController` + three records, and `ApiTokenService` split into gated and ungated
+  halves. `project`: `ProjectRepo` and its five companions, plus `reviewEnabledIssue` threaded
+  through `ProjectSettings`/`View`/`Request`/`Service` and **`ReviewSettings` as a ninth component
+  that is NOT a `ReviewSubjectType`**. `tracker`: `agent_eligible` + `pr_url` on `Issue` and its
+  four projections, the `agentEligible` list filter (tri-state, switched by a boolean like the
+  collection filters), `TransitionService.Outcome.CloseRefused`, the caller-scoped
+  `allowedTransitions` in three assemblies, and the `tracker.agent` sub-package. `work`:
+  the fourth assembly. Five test classes (`MeAssistantsTest` `e5`, `ProjectRepoTest` `e6`,
+  `AgentCloseRefusalTest` `e7`, `AgentContextScopeTest` `e8`, plus four tests on
+  `IssueEndpointTest`), 45 new tests. Three things cost a round trip: **`Role.COMPANY_ADMIN_ID` is
+  COMPANY scope and `tcms_role_assignment_scope_shape` refuses a project-scoped grant of it** (use
+  Test Lead, which holds `project:settings`); **the seeded `Task` type is STORY level** (V3 §592) —
+  the TASK-level type is `Sub-task`; and the `Criterion` schema is a test plan's EXIT criterion, so
+  `AgentStoryContextView.Criterion` needed a `HOMONYMS` entry.
 
 
 - 2026-09-02 014 T3: `be`. `com.tcms.tracker.imports` up to the preview — the `ImportSource` port

@@ -72,6 +72,13 @@ public class TransitionController {
                         .body(Problem.conflict("An Epic's status is not set by hand",
                                 "It follows its stories: not started until one of them starts, "
                                         + "and done when the last one is done."));
+                // D33. A 409 like the other two refusals and not a 403: the caller HOLDS
+                // issue:edit — the move is refused by the project's policy about who may close
+                // their own work, which is a state conflict rather than a missing permission.
+                case TransitionService.Outcome.CloseRefused refused -> ResponseEntity
+                        .status(HttpStatus.CONFLICT)
+                        .body(Problem.conflict("This one needs a second person",
+                                refused.detail()));
                 case TransitionService.Outcome.Moved moved -> ResponseEntity.ok(moved.view());
             };
         };

@@ -31,6 +31,14 @@ package com.tcms.project;
  *                                   {@link Review#getRequiredPeerReviews()}
  * @param authorMayApproveOwnWork    {@code false} means §6g's rule is on, which is the default
  * @param editAfterApproval          what an edit to an approved artifact does
+ * @param reviewEnabledIssue         D33's opt-in for the terminal issue transition — see
+ *                                   {@link #issueCloseNeedsSecondPerson()}. <strong>Not a member of
+ *                                   {@link ReviewSubjectType} and not routed through
+ *                                   {@link #reviewEnabledFor}</strong>: adding {@code ISSUE} to that
+ *                                   enum would drag in the whole reviewer apparatus — a ladder, a
+ *                                   reviewer flow, a migration — and this is a self-approval guard
+ *                                   on one edge, which is the same kind of thing as the two gating
+ *                                   flags this record's header already keeps out of that switch.
  * @param requireApprovedCaseForRun  §6g's gating rule for cases — every case a new run materialises
  *                                   must be {@code APPROVED}, on the resolved set and not merely on
  *                                   the explicitly named one. <strong>The only one of §6g's two
@@ -47,7 +55,28 @@ public record ReviewSettings(
         int requiredPeerReviews,
         boolean authorMayApproveOwnWork,
         EditAfterApproval editAfterApproval,
-        boolean requireApprovedCaseForRun) {
+        boolean requireApprovedCaseForRun,
+        boolean reviewEnabledIssue) {
+
+    /**
+     * Whether closing an issue in this project takes a second person — <strong>D33's rule, in the
+     * one place that spells it</strong>.
+     *
+     * <p>Both halves, and the second is why this is a method rather than the flag read directly:
+     * {@code reviewEnabledIssue} turns the guard on, and {@code authorMayApproveOwnWork} — §6g's
+     * own author-cannot-approve rule, stored in the positive — is what the guard <em>is</em>. A
+     * project that deliberately lets authors approve their own work has said the thing this refusal
+     * would say no to, so ANDing them here is what stops the two settings contradicting each other
+     * on one screen.
+     *
+     * <p>It does not name the caller. Whether the caller is the issue's assignee is the consumer's
+     * question and is asked at four call sites — the transition, the issue view, and the two board
+     * card faces — so the half that is a <em>project</em> fact lives here and the half that is a
+     * <em>request</em> fact does not.
+     */
+    public boolean issueCloseNeedsSecondPerson() {
+        return reviewEnabledIssue && !authorMayApproveOwnWork;
+    }
 
     /**
      * Whether §6g's workflow is switched on for one kind of artifact in this project.

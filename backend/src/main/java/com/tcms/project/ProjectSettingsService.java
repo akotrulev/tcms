@@ -245,7 +245,8 @@ public class ProjectSettingsService {
                         peers,
                         Boolean.TRUE.equals(req.authorMayApproveOwnWork()),
                         mode,
-                        Boolean.TRUE.equals(req.requireApprovedCaseForRun())),
+                        Boolean.TRUE.equals(req.requireApprovedCaseForRun()),
+                        Boolean.TRUE.equals(req.reviewEnabledIssue())),
                 userId,
                 now);
         settings.saveAndFlush(row);

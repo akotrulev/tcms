@@ -1,7 +1,7 @@
 package com.tcms.project;
 
 /**
- * The settings form's submission — a full replacement of all eight values.
+ * The settings form's submission — a full replacement of all nine values.
  *
  * <p><strong>Boxed types, so "not sent" and "sent false" are distinguishable in this class</strong>
  * even though the service goes on to treat them alike. A primitive {@code boolean} field would make
@@ -31,5 +31,6 @@ public record ProjectSettingsRequest(
         Integer requiredPeerReviews,
         Boolean authorMayApproveOwnWork,
         String editAfterApproval,
-        Boolean requireApprovedCaseForRun) {
+        Boolean requireApprovedCaseForRun,
+        Boolean reviewEnabledIssue) {
 }

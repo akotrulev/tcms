@@ -84,6 +84,17 @@ public class BoardMoveService {
         record DerivedStatus() implements Outcome {
         }
 
+        /**
+         * D33 — the dragger is the assignee and this project requires a second person to close.
+         *
+         * <p>Carried through rather than mapped to {@code NotAllowed}: the workflow <em>does</em>
+         * allow this move and the card's own {@code allowedTransitions} already withheld the
+         * column, so a message about the workflow would send somebody to edit a setting that is
+         * correct.
+         */
+        record CloseRefused(String detail) implements Outcome {
+        }
+
         record Moved(CardMoveResultView result) implements Outcome {
         }
     }
@@ -111,7 +122,7 @@ public class BoardMoveService {
 
         if (claimed(boardId, toColumnId).contains(issue.get().getStatusId())) {
             return projects.writeGranted(userId, board.get().getProjectId(), EDIT_ISSUE,
-                    project -> answered(board.get(), column.get(), key));
+                    project -> answered(userId, board.get(), column.get(), key));
         }
 
         GateResult<TransitionService.Outcome> moved =
@@ -121,12 +132,14 @@ public class BoardMoveService {
                     new GateResult.Unreachable<>();
             case GateResult.Denied<TransitionService.Outcome> ignored -> new GateResult.Denied<>();
             case GateResult.Allowed<TransitionService.Outcome> allowed ->
-                    new GateResult.Allowed<>(mapped(allowed.value(), board.get(), column.get(), key));
+                    new GateResult.Allowed<>(
+                            mapped(userId, allowed.value(), board.get(), column.get(), key));
         };
     }
 
     private Outcome mapped(
-            TransitionService.Outcome outcome, Board board, BoardColumn column, String key) {
+            UUID userId, TransitionService.Outcome outcome, Board board, BoardColumn column,
+            String key) {
 
         return switch (outcome) {
             case TransitionService.Outcome.NotAllowed refused ->
@@ -138,7 +151,9 @@ public class BoardMoveService {
             case TransitionService.Outcome.UnknownStatus ignored ->
                     throw new IllegalStateException("board column " + column.getId()
                             + " defaults to a status that is not in its project's workflow");
-            case TransitionService.Outcome.Moved ignored -> answered(board, column, key);
+            case TransitionService.Outcome.CloseRefused refused ->
+                    new Outcome.CloseRefused(refused.detail());
+            case TransitionService.Outcome.Moved ignored -> answered(userId, board, column, key);
         };
     }
 
@@ -149,8 +164,8 @@ public class BoardMoveService {
      * and may have written {@code done_at}, and a card assembled from what the caller sent would be
      * a second assembly of the shape {@link BoardCardService} owns.
      */
-    private Outcome answered(Board board, BoardColumn column, String key) {
-        BoardCardService.Facts facts = cards.factsFor(board.getProjectId());
+    private Outcome answered(UUID userId, Board board, BoardColumn column, String key) {
+        BoardCardService.Facts facts = cards.factsFor(userId, board.getProjectId());
         Issue moved = issues.findByIssueKeyAndDeletedAtIsNull(key).orElseThrow();
 
         Map<UUID, UUID> columnOfStatus = new HashMap<>();

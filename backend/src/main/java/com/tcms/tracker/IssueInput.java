@@ -12,6 +12,9 @@ import java.util.UUID;
  * the shape that lets a board show completed work nobody did. A new issue enters the project's
  * first status <em>by position</em>.
  *
+ * <p>{@code agentEligible} is boxed and absent means {@code false} (D30) — an opt-in hint, and an
+ * absent switch is off.
+ *
  * <p>No {@code key} either — the key is allocated server-side from the project's own counter
  * ({@link com.tcms.project.ProjectKeys}) and is never a field on the request.
  */
@@ -28,5 +31,6 @@ public record IssueInput(
         LocalDate targetDate,
         LocalDate dueDate,
         UUID releaseId,
+        Boolean agentEligible,
         List<String> acceptanceCriteria) {
 }

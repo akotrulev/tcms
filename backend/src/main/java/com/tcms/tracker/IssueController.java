@@ -74,6 +74,7 @@ public class IssueController {
             @RequestParam(name = "assigneeId", required = false) List<UUID> assigneeIds,
             @RequestParam(name = "unparented", required = false, defaultValue = "false")
             boolean unparented,
+            @RequestParam(name = "agentEligible", required = false) Boolean agentEligible,
             @RequestParam(name = "sort", required = false) String sort) {
 
         IssueLevel parsed;
@@ -87,7 +88,8 @@ public class IssueController {
         }
 
         IssueService.Filter filter = new IssueService.Filter(
-                parsed, epicKey, parentKey, statusIds, assigneeIds, unparented, sort);
+                parsed, epicKey, parentKey, statusIds, assigneeIds, unparented, agentEligible,
+                sort);
 
         return issues.list(UUID.fromString(jwt.getSubject()), projectId, filter)
                 .<ResponseEntity<Object>>map(ResponseEntity::ok)

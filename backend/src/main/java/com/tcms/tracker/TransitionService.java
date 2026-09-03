@@ -3,6 +3,8 @@ package com.tcms.tracker;
 import com.tcms.project.GateResult;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectService;
+import com.tcms.project.ProjectSettingsService;
+import com.tcms.project.ReviewSettings;
 import com.tcms.tenancy.AuditEvent;
 import com.tcms.tenancy.AuditEventRepository;
 import com.tcms.tenancy.Outbox;
@@ -23,7 +25,7 @@ import org.springframework.stereotype.Service;
  * second, unchecked spelling of it — so {@code IssueUpdate} has no {@code status} field and this
  * class has no field edits.
  *
- * <h2>Two refusals, both 409, and they are different facts</h2>
+ * <h2>Three refusals, all 409, and they are different facts</h2>
  *
  * <ul>
  *   <li><strong>The workflow forbids this pair.</strong> {@code issue_transition} is an allow-list,
@@ -34,7 +36,21 @@ import org.springframework.stereotype.Service;
  *       is not editable. Refused here rather than by omitting rows from the workflow table, and
  *       deliberately: an epic has no status rows of its own to omit, and a manual epic status is
  *       exactly the "In Progress, 100%" disagreement D31 exists to make unrepresentable.</li>
+ *   <li><strong>The caller is closing their own work and the project requires review to close
+ *       it</strong> (D33). Refused only when the project has switched
+ *       {@code review_enabled_issue} on, {@code author_may_approve_own_work} is off, and the caller
+ *       is the issue's <em>assignee</em> — the party who did the work. A token acts as its owner,
+ *       so an assistant working its owner's assigned task is refused exactly as its owner would be,
+ *       and there is deliberately <strong>no token-specific branch</strong>: with the gate off the
+ *       same move succeeds, which is A6's one-person company. The refusal is recorded on the
+ *       issue's history, because "the move did not happen and here is why" is the thing a lead
+ *       reading the task later needs.</li>
  * </ul>
+ *
+ * <p>That guard is <strong>not the review module</strong>. No {@code review} row is opened for an
+ * issue, no reviewer is assigned and no verdict is recorded; it is the self-approval rule §6g
+ * already states, applied to the terminal transition. Scoped that way deliberately — see plan 015's
+ * decision 2 — rather than by omission.
  *
  * <p>{@code status_entered_at} moves on every accepted transition; {@code done_at} is set the FIRST
  * time a {@code DONE}-kind status is reached and is <strong>never cleared by a reopen</strong> — an
@@ -51,6 +67,7 @@ public class TransitionService {
     private static final String EDIT_ISSUE = "issue:edit";
 
     private final ProjectService projects;
+    private final ProjectSettingsService settings;
     private final IssueService issueViews;
     private final IssueRepository issues;
     private final IssueTypeRepository types;
@@ -62,6 +79,7 @@ public class TransitionService {
 
     public TransitionService(
             ProjectService projects,
+            ProjectSettingsService settings,
             IssueService issueViews,
             IssueRepository issues,
             IssueTypeRepository types,
@@ -72,6 +90,7 @@ public class TransitionService {
             Clock clock) {
 
         this.projects = projects;
+        this.settings = settings;
         this.issueViews = issueViews;
         this.issues = issues;
         this.types = types;
@@ -95,6 +114,15 @@ public class TransitionService {
 
         /** D31 — an epic's status is derived from its stories and is not editable. */
         record DerivedStatus() implements Outcome {
+        }
+
+        /**
+         * D33 — the caller is the assignee and this project requires a second person to close.
+         *
+         * @param detail the sentence the client shows, naming the move that IS open instead. A
+         *               refusal that does not say what to do next is one somebody retries.
+         */
+        record CloseRefused(String detail) implements Outcome {
         }
 
         record Moved(IssueView view) implements Outcome {
@@ -138,7 +166,29 @@ public class TransitionService {
             // "no moves allowed" and "only the current one" the same set. Answered as a move that
             // changes nothing rather than as a refusal, so a client retrying a dropped response
             // sees the state it asked for instead of a 409 about a move it already made.
-            return new Outcome.Moved(issueViews.viewOf(issue, project));
+            return new Outcome.Moved(issueViews.viewOf(userId, issue, project));
+        }
+
+        // AFTER the self-move short circuit and before the allow-list check. A caller re-sending
+        // the status an issue is already in is a retry of a move that already happened, and
+        // answering that with a refusal would tell somebody their finished work is not finished.
+        if (target.get().getKind() == IssueStatusKind.DONE) {
+            ReviewSettings policy = settings.effective(project.getId());
+            if (IssueService.closeGuardBinds(policy, issue, userId)) {
+                // Recorded inside the read: nothing else is written, and a refusal with no trace is
+                // one the lead who set the policy cannot see working.
+                auditEvents.save(AuditEvent.record(
+                        project.getId(), userId, "issue.close_refused", "issue",
+                        List.of(issue.getId()),
+                        "{\"key\":" + AuditEvent.jsonString(issue.getIssueKey())
+                                + ",\"to\":" + AuditEvent.jsonString(target.get().getName())
+                                + ",\"reason\":\"review to close is on and you are the assignee\"}",
+                        clock.instant()));
+                return new Outcome.CloseRefused(
+                        "Closing an issue you are the assignee of takes a second person while "
+                                + "\"Require review to close issues\" is on for this project. Move "
+                                + "it to In Review instead, and ask somebody to close it.");
+            }
         }
 
         boolean allowed = transitions.findByFromStatusId(issue.getStatusId()).stream()
@@ -165,6 +215,6 @@ public class TransitionService {
                         + ",\"to\":" + AuditEvent.jsonString(target.get().getName()) + "}",
                 now));
 
-        return new Outcome.Moved(issueViews.viewOf(moved, project));
+        return new Outcome.Moved(issueViews.viewOf(userId, moved, project));
     }
 }

@@ -93,6 +93,14 @@ public class ProjectSettings {
     @Column(name = "require_approved_case_for_run", nullable = false)
     private boolean requireApprovedCaseForRun;
 
+    /**
+     * D33's "Require review to close issues" ({@code V8}). Off by default, like §6g's four opt-ins
+     * and for a sharper reason: the opposite would dead-end a one-person company the moment its own
+     * assistant worked a task (A6).
+     */
+    @Column(name = "review_enabled_issue", nullable = false)
+    private boolean reviewEnabledIssue;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -126,7 +134,7 @@ public class ProjectSettings {
      */
     static ReviewSettings defaults() {
         return new ReviewSettings(
-                false, false, false, false, 0, false, EditAfterApproval.RETAIN, false);
+                false, false, false, false, 0, false, EditAfterApproval.RETAIN, false, false);
     }
 
     /** The row a newly created project gets — {@link #defaults}, persisted. */
@@ -157,6 +165,7 @@ public class ProjectSettings {
         this.authorMayApproveOwnWork = settings.authorMayApproveOwnWork();
         this.editAfterApproval = settings.editAfterApproval();
         this.requireApprovedCaseForRun = settings.requireApprovedCaseForRun();
+        this.reviewEnabledIssue = settings.reviewEnabledIssue();
         this.updatedBy = actorId;
         this.updatedAt = now;
     }
@@ -171,7 +180,8 @@ public class ProjectSettings {
                 requiredPeerReviews,
                 authorMayApproveOwnWork,
                 editAfterApproval,
-                requireApprovedCaseForRun);
+                requireApprovedCaseForRun,
+                reviewEnabledIssue);
     }
 
     public UUID getProjectId() {

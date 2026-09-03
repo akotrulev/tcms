@@ -25,6 +25,12 @@ import java.util.UUID;
  * whose source offers no board action carries an empty list, and so does an Epic (D31), and the board
  * disables every move button with a reason rather than hiding them (§31's disable-don't-hide).
  *
+ * <p>That list is also <strong>caller-scoped</strong> under D33's review-to-close gate: on a project
+ * that requires review to close issues, a {@code DONE}-kind target is absent for the reader who is
+ * the issue's assignee. Two people looking at one card are offered different moves, which is the
+ * point — {@code tracker.IssueService} and {@code tracker.board.BoardCardService} subtract the same
+ * targets from the same workflow set, so the three assemblies cannot disagree.
+ *
  * @param id       for an {@code ISSUE} card, its <strong>key</strong> ({@code ACME-124}) — the thing
  *                 a person types into a commit message and the thing {@code /issues/{key}} takes.
  *                 For a derived card, a <strong>synthetic composite</strong> —

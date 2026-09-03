@@ -23,7 +23,12 @@ import java.util.UUID;
  * @param allowedTransitions §12.4, verbatim and load-bearing: the legal set must be known
  *                          client-side <em>before the drag starts</em>, so a forbidden drop is
  *                          refused at the drag with the reason rather than accepted and reverted.
- *                          Empty for an Epic (D31)
+ *                          Empty for an Epic (D31), and <strong>caller-scoped</strong> under
+ *                          D33's review-to-close gate: {@code DONE}-kind targets are absent for a
+ *                          caller who is this issue's assignee on a project that requires review
+ *                          to close, so the drag is refused before it starts rather than by the
+ *                          endpoint afterwards
+ * @param agentEligible     D30's hint, on the card so the board can mark it (`board.html`)
  */
 public record BoardIssueCardView(
         String key,
@@ -44,5 +49,6 @@ public record BoardIssueCardView(
         List<LabelView> labels,
         List<IssueStatusView> allowedTransitions,
         int subtaskTotal,
-        int subtaskDone) {
+        int subtaskDone,
+        boolean agentEligible) {
 }

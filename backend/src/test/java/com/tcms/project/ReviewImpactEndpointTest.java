@@ -284,7 +284,7 @@ class ReviewImpactEndpointTest extends IntegrationTestBase {
             assertThat(settingsAs(LEAD).get("reviewEnabledDoc").asBoolean()).isTrue();
 
             ReviewSettings enabledOnlyForDocs = new ReviewSettings(
-                    false, false, false, true, 1, false, EditAfterApproval.RETAIN, false);
+                    false, false, false, true, 1, false, EditAfterApproval.RETAIN, false, false);
             assertThat(enabledOnlyForDocs.reviewEnabledFor(ReviewSubjectType.DOC)).isTrue();
             assertThat(enabledOnlyForDocs.reviewEnabledFor(ReviewSubjectType.CASE)).isFalse();
         }

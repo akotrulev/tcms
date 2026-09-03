@@ -152,15 +152,39 @@ public class ApiTokenService {
      */
     @Transactional
     public Outcome issue(UUID callerId, ApiTokenIssueRequest request) {
-        UUID companyId = CompanyContext.require();
-
         if (request.projectId() != null && projects.findScopedById(request.projectId()).isEmpty()) {
             return new Outcome.NotFound();
         }
         if (!directory.reachOf(callerId).issueTokens()) {
             return new Outcome.Forbidden();
         }
+        return mint(callerId, request);
+    }
 
+    /**
+     * The same mint with <strong>no {@code token:issue} gate</strong> — {@link AssistantService}'s
+     * path, and the one credential in the product a caller issues for themselves (D26).
+     *
+     * <p>It is safe precisely because it is not general: that service fixes the role to
+     * {@link Role#AGENT_ID}, the owner to the caller and the expiry server-side, and
+     * {@code PermissionEvaluator} caps a token at the intersection of its role and its owner's own
+     * grants. So an assistant can reach nothing its owner cannot already reach by signing in, which
+     * is why issuing one is not a privileged act and why {@code /api-tokens}' gate would be the
+     * wrong question rather than a missing one.
+     *
+     * <p>Package-private and unannotated: the caller is already inside its own transaction, and a
+     * {@code @Transactional} on a non-public method is an annotation the proxy may not honour —
+     * worse than none, because it reads as a boundary that is there.
+     */
+    Outcome mintOwned(UUID callerId, ApiTokenIssueRequest request) {
+        if (request.projectId() != null && projects.findScopedById(request.projectId()).isEmpty()) {
+            return new Outcome.NotFound();
+        }
+        return mint(callerId, request);
+    }
+
+    private Outcome mint(UUID callerId, ApiTokenIssueRequest request) {
+        UUID companyId = CompanyContext.require();
         Instant now = clock.instant();
         Optional<Map<String, List<String>>> invalid = validate(request, now);
         if (invalid.isPresent()) {
@@ -209,7 +233,26 @@ public class ApiTokenService {
             return new Outcome.Forbidden();
         }
 
-        ApiToken token = found.get();
+        return withdraw(found.get(), callerId);
+    }
+
+    /**
+     * Withdrawing one of the caller's <strong>own</strong> assistants — {@link AssistantService}'s
+     * path, gated on ownership instead of on {@code token:issue} for {@link #mintOwned}'s reason.
+     *
+     * <p>A token the caller does not own, or one that is not an assistant, is
+     * {@link Outcome.NotFound} rather than {@link Outcome.Forbidden}: the profile surface is a view
+     * over the caller's own rows, so anything outside it does not exist there, and a 403 would
+     * report that somebody else's credential is real.
+     */
+    Outcome revokeOwned(UUID callerId, UUID tokenId) {
+        Optional<ApiToken> found = tokens.findScopedById(tokenId)
+                .filter(token -> callerId.equals(token.getOwnerId()))
+                .filter(token -> Role.AGENT_ID.equals(token.getRoleId()));
+        return found.isEmpty() ? new Outcome.NotFound() : withdraw(found.get(), callerId);
+    }
+
+    private Outcome withdraw(ApiToken token, UUID actorId) {
         if (token.getRevokedAt() != null) {
             // Already gone. No second audit row: the trail records the moment the credential
             // stopped working, and a row per click would make it look like it stopped twice.
@@ -219,7 +262,7 @@ public class ApiTokenService {
         Instant now = clock.instant();
         token.revoke(now);
         auditEvents.save(AuditEvent.record(
-                token.getProjectId(), callerId, AUDIT_REVOKED, AUDIT_TARGET, List.of(tokenId),
+                token.getProjectId(), actorId, AUDIT_REVOKED, AUDIT_TARGET, List.of(token.getId()),
                 null, now));
         return new Outcome.Revoked();
     }

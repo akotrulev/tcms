@@ -4,10 +4,13 @@ import com.tcms.api.UserRef;
 import com.tcms.project.PeopleDirectory;
 import com.tcms.project.Project;
 import com.tcms.project.ProjectService;
+import com.tcms.project.ProjectSettingsService;
+import com.tcms.project.ReviewSettings;
 import com.tcms.tenancy.CompanyContext;
 import com.tcms.tracker.Completion;
 import com.tcms.tracker.CountedIssue;
 import com.tcms.tracker.EpicStatus;
+import com.tcms.tracker.IssueService;
 import com.tcms.tracker.Issue;
 import com.tcms.tracker.IssueLevel;
 import com.tcms.tracker.IssueRepository;
@@ -84,6 +87,7 @@ public class BoardCardService {
     private final IssueLabelRepository labels;
     private final IssueLabelAssignmentRepository assignments;
     private final ReleaseRepository releases;
+    private final ProjectSettingsService settings;
     private final Clock clock;
 
     public BoardCardService(
@@ -99,6 +103,7 @@ public class BoardCardService {
             IssueLabelRepository labels,
             IssueLabelAssignmentRepository assignments,
             ReleaseRepository releases,
+            ProjectSettingsService settings,
             Clock clock) {
 
         this.projects = projects;
@@ -113,6 +118,7 @@ public class BoardCardService {
         this.labels = labels;
         this.assignments = assignments;
         this.releases = releases;
+        this.settings = settings;
         this.clock = clock;
     }
 
@@ -150,20 +156,22 @@ public class BoardCardService {
     public Optional<BoardContentsView> contents(UUID userId, UUID boardId, Filter filter) {
         return boards.findScopedById(boardId).flatMap(board ->
                 projects.readVisible(userId, board.getProjectId(),
-                        project -> assemble(board, project, filter)));
+                        project -> assemble(userId, board, project, filter)));
     }
 
     /** {@code GET /projects/{projectId}/backlog}. */
     @Transactional(readOnly = true)
     public Optional<List<BacklogRowView>> backlog(UUID userId, UUID projectId, Filter filter) {
         return projects.readVisible(userId, projectId,
-                project -> backlogRows(factsOf(project), filter));
+                project -> backlogRows(factsOf(userId, project), filter));
     }
 
     // =====================================================================
 
-    private BoardContentsView assemble(Board board, Project project, Filter filter) {
-        Facts facts = factsOf(project);
+    private BoardContentsView assemble(
+            UUID userId, Board board, Project project, Filter filter) {
+
+        Facts facts = factsOf(userId, project);
         Map<UUID, UUID> columnOfStatus = new HashMap<>();
         claims.findByBoardId(board.getId())
                 .forEach(claim -> columnOfStatus.put(claim.getStatusId(), claim.getColumnId()));
@@ -331,8 +339,8 @@ public class BoardCardService {
         return rows;
     }
 
-    private Facts factsOf(Project project) {
-        return factsFor(project.getId());
+    private Facts factsOf(UUID userId, Project project) {
+        return factsFor(userId, project.getId());
     }
 
     /**
@@ -343,7 +351,7 @@ public class BoardCardService {
      * project — and answering a move with a card assembled somewhere else would be a second
      * assembly of this shape, drifting from this one the first time a field was added.
      */
-    Facts factsFor(UUID projectId) {
+    Facts factsFor(UUID userId, UUID projectId) {
         List<Issue> live = issues.findByProjectIdAndDeletedAtIsNull(projectId);
 
         Map<UUID, IssueType> typesById = new LinkedHashMap<>();
@@ -385,6 +393,7 @@ public class BoardCardService {
                 releasesById.put(release.getId(), ReleaseRefView.of(release)));
 
         return new Facts(live, typesById, statusesById, labelsByIssue, refs, releasesById,
+                userId, settings.effective(projectId),
                 LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC));
     }
 
@@ -405,6 +414,8 @@ public class BoardCardService {
         private final Map<UUID, UserRef> refs;
         private final Map<UUID, ReleaseRefView> releasesById;
         private final Map<UUID, List<Issue>> childrenByParent = new HashMap<>();
+        private final UUID userId;
+        private final ReviewSettings policy;
         private final LocalDate today;
 
         private Facts(
@@ -414,6 +425,8 @@ public class BoardCardService {
                 Map<UUID, List<LabelView>> labelsByIssue,
                 Map<UUID, UserRef> refs,
                 Map<UUID, ReleaseRefView> releasesById,
+                UUID userId,
+                ReviewSettings policy,
                 LocalDate today) {
 
             this.live = live;
@@ -422,6 +435,8 @@ public class BoardCardService {
             this.labelsByIssue = labelsByIssue;
             this.refs = refs;
             this.releasesById = releasesById;
+            this.userId = userId;
+            this.policy = policy;
             this.today = today;
             live.forEach(issue -> byId.put(issue.getId(), issue));
             live.forEach(issue -> {
@@ -506,7 +521,8 @@ public class BoardCardService {
                     labelsOf(issue),
                     allowedTransitions(issue, type),
                     children.size(),
-                    (int) children.stream().filter(this::isDone).count());
+                    (int) children.stream().filter(this::isDone).count(),
+                    issue.isAgentEligible());
         }
 
         BacklogRowView backlogRowOf(Issue issue, int position) {
@@ -664,9 +680,14 @@ public class BoardCardService {
             if (type.getLevel() == IssueLevel.EPIC) {
                 return List.of();
             }
+            boolean withholdDone = IssueService.closeGuardBinds(policy, issue, userId);
             return transitions.findByFromStatusId(issue.getStatusId()).stream()
                     .map(move -> statusesById.get(move.getToStatusId()))
                     .filter(Objects::nonNull)
+                    // D33, subtracted from the workflow set rather than replacing it — the same
+                    // narrowing GET /issues/{key} applies, so a card and its detail page cannot
+                    // offer different moves to one caller.
+                    .filter(status -> !withholdDone || status.getKind() != IssueStatusKind.DONE)
                     .sorted(Comparator.comparingInt(IssueStatus::getPosition))
                     .map(Facts::viewOf)
                     .toList();

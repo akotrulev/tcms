@@ -15,6 +15,12 @@ import java.util.UUID;
  * editable, so there is no legal move out of it for anybody. The screen renders the moves disabled
  * rather than hidden ({@code task.html}), which is why the empty list has to be on the wire at all.
  *
+ * <p>{@code allowedTransitions} is also <strong>caller-scoped</strong> under D33's review-to-close
+ * gate: when a project requires review to close issues and the caller is this issue's assignee,
+ * {@code DONE}-kind targets are absent from it. The move exists in the workflow and not for this
+ * caller — {@code TransitionService} refuses it with the same reason, so the narrowed list and the
+ * 409 are one decision expressed twice rather than two rules that could drift.
+ *
  * <p>{@code completion} is <strong>null on every level but Epic</strong> (D8) — completion counts
  * story-level issues, and an epic is the only thing that has them. It is computed here and read
  * everywhere; nothing recomputes it in a component, which is how this repository once shipped two
@@ -45,6 +51,8 @@ public record IssueView(
         boolean overdue,
         CompletionView completion,
         ReleaseRefView release,
+        boolean agentEligible,
+        String prUrl,
         List<IssueSummaryView> children,
         List<UserRef> watchers,
         List<IssueStatusView> allowedTransitions,

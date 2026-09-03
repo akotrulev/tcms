@@ -1092,9 +1092,9 @@ class RunCreateEndpointTest extends IntegrationTestBase {
             // ReviewImpactEndpointTest's; what only this class can assert is WHICH plans, because
             // the plan, its scope and its cases' statuses all have to be real.
             ReviewSettings on = new ReviewSettings(
-                    false, false, false, false, 0, false, EditAfterApproval.RETAIN, true);
+                    false, false, false, false, 0, false, EditAfterApproval.RETAIN, true, false);
             ReviewSettings off = new ReviewSettings(
-                    false, false, false, false, 0, false, EditAfterApproval.RETAIN, false);
+                    false, false, false, false, 0, false, EditAfterApproval.RETAIN, false, false);
 
             assertThat(blocked(ACME_BANKING, off))
                     .as("with the gate off no run is refused for this reason, so the honest answer "

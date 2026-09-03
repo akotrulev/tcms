@@ -99,6 +99,10 @@ public class BoardCardController {
                         .body(Problem.conflict("An Epic's status is not set by hand",
                                 "It follows its stories: not started until one of them starts, "
                                         + "and done when the last one is done."));
+                case BoardMoveService.Outcome.CloseRefused refused -> ResponseEntity
+                        .status(HttpStatus.CONFLICT)
+                        .body(Problem.conflict("This one needs a second person",
+                                refused.detail()));
                 case BoardMoveService.Outcome.Moved moved -> ResponseEntity.ok(moved.result());
             };
         };
