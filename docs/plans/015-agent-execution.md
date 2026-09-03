@@ -713,6 +713,30 @@ git commit -m "feat(agent): assistant tokens, repositories, agent-context, and t
 **Deliverable:** `@tcms/mcp` and `@tcms/cli` expose the verbs an assistant drives — list my AI-eligible queue, fetch a task with its full context, attach a PR, request a transition (with a refusal that names the allowed moves) — each with a JSON-schema input and the shared output envelope; `docs/specs/2026-08-08-mcp-tool-and-command-surface.md` lists every new arm; `citedFiles.test.ts` green; `packages/` builds in order (client→cli→mcp), lints at 0, tests green; smoke-tested against a running backend.
 **Depends on:** T3
 
+**T4 landed 2026-09-03 @ `acffef5e`.** Four facts, three of which change what T5 does:
+
+1. **`attach-pr` is NOT a catalogue action** — it is an arm on both adapters with a hand-written
+   `prUrl` property, the way `release`, `cases`, `label` and `move-card` already are. Cataloguing it
+   would pull `IssueUpdate` into `shapesContract.test.ts`'s accounted set, where every other property
+   is already offered at its `IssueInput` site by the `update` action, so the accounting would need a
+   dozen `UNOFFERED` lines declaring fields unoffered that this surface offers. The rule is written
+   into `ISSUE_SHAPE`'s header: the catalogue holds an action only when it has a payload to describe.
+   `agentEligible` *is* a catalogue field, which is what closed T1's placeholder.
+2. **The CLI flag is `--pr-url`, not the plan's `--url`.** `--url` is a GLOBAL flag naming the
+   instance, so `attach-pr --url https://…/pull/482` writes to `PATCH /northwind/…/pull/482/api/v1/…`.
+3. **T4 already edited `frontend/src/features/help/sections.tsx`** — `guideCopies.test.ts` compares
+   the guide to both registries from the *packages* job, so a new CLI command reddens `packages/`
+   until the guide lists it. The three `tcms issue` lines are in. **T5 Step 7 is therefore only the
+   "Connect an AI assistant" card**, not the command lines.
+4. **`POST /issues` with `agentEligible: true` answers 500, and it is not fixed** — a backend defect
+   found by T4's smoke and left to the backend's stack. The insert leaves `Issue.rank` null in the
+   persistence context (V5's `issue_rank_default` trigger fills the column and nothing reads it
+   back), so the update T3's agent-eligibility path flushes writes `rank=NULL` against a `NOT NULL`
+   column. **It also breaks `seed-demo-data`**, which flags every second card, so a demo instance
+   cannot be built until it is repaired. `PATCH {agentEligible}` is unaffected. T5's AI-eligible
+   toggle is a PATCH and so works; `IssueNewPage` must not send `agentEligible: true` on create
+   until this lands.
+
 **Files:**
 - Modify: `packages/client/src/core/shapes.ts` (`ISSUE_SHAPE`: `attach-pr` arm, `agentEligible`)
 - Modify: `packages/mcp/src/reads.ts` (`tcms_read_issue` gains `queue` + `context` modes), `packages/mcp/src/writes.ts` (`tcms_write_issue` gains `attach-pr`)
@@ -722,19 +746,19 @@ git commit -m "feat(agent): assistant tokens, repositories, agent-context, and t
 
 Use the tooling skills: **`tool-capability-contract`** to write the arm contracts (typed inputs, one envelope, actionable errors), then **`tool-mcp-builder`** and **`tool-cli-builder`** to render them. The surface is the feature here, not the tax — §2's rule (a tool never spans two permissions on its write path) still governs: `attach-pr` is `issue:edit` (a PATCH), which the `update` arm already carries, so it is an arm of `tcms_write_issue`, not a new tool. The `queue`/`context` reads are `issue:read`, which `tcms_read_issue` already carries.
 
-- [ ] **Step 1: the context/queue reads.** In `tcms_read_issue`, add:
+- [x] **Step 1: the context/queue reads.** In `tcms_read_issue`, add:
   - a `queue: boolean` input — lists the caller's AI-eligible tasks: `GET /issues?agentEligible=true&assigneeId=<owner>`. The owner is the token's own user; resolve it from `tcms_whoami`/session rather than taking it as input (a token cannot name another owner). Its description: "your AI-eligible queue — the tasks flagged for an assistant and assigned to you."
   - a `context: boolean` input (for one `issue`) — calls `GET /issues/{key}/agent-context` and returns the assembled `AgentTaskContext`. Its description names what it carries (story, AC, epic goal, release, spec excerpts, repository + build command) and that a scoped token gets nothing from another project.
 
-- [ ] **Step 2: the `attach-pr` write.** In `tcms_write_issue`, add `attach-pr` to the `action` enum, taking `issue` (a key) and `prUrl` (string). It maps to `PATCH /issues/{key}` with `{prUrl}`. Keep the existing refusal behaviour: a `move` refused by the server (409) returns an actionable error whose text names the allowed moves — the server's `detail` already lists them, and under the M5 gate a DONE refusal reads "needs a second person; move it to In Review instead."
+- [x] **Step 2: the `attach-pr` write.** In `tcms_write_issue`, add `attach-pr` to the `action` enum, taking `issue` (a key) and `prUrl` (string). It maps to `PATCH /issues/{key}` with `{prUrl}`. Keep the existing refusal behaviour: a `move` refused by the server (409) returns an actionable error whose text names the allowed moves — the server's `detail` already lists them, and under the M5 gate a DONE refusal reads "needs a second person; move it to In Review instead."
 
-- [ ] **Step 3: the CLI verbs.** Mirror onto the CLI per its spelling rules in `ISSUE_SHAPE` (`cliSpelling`): `tcms issue queue`, `tcms issue context <KEY>`, `tcms issue attach-pr <KEY> --url <URL>`. Follow `tool-cli-builder`; keep `writeConformance.test.ts`/`guideCopies.test.ts` green (they compare CLI/MCP arms against the shape).
+- [x] **Step 3: the CLI verbs.** Mirror onto the CLI per its spelling rules in `ISSUE_SHAPE` (`cliSpelling`): `tcms issue queue`, `tcms issue context <KEY>`, `tcms issue attach-pr <KEY> --url <URL>`. Follow `tool-cli-builder`; keep `writeConformance.test.ts`/`guideCopies.test.ts` green (they compare CLI/MCP arms against the shape).
 
-- [ ] **Step 3b: clear the contract-catalogue placeholder T1 left.** T1 registered `IssueInput.agentEligible` as `UNOFFERED['IssueInput.agentEligible']` in `packages/client/src/test/shapesContract.test.ts` (a new contract property on a catalogued schema that the shape did not yet offer). When you add `agentEligible` to `ISSUE_SHAPE` in `core/shapes.ts`, **remove that `UNOFFERED` line** in the same commit — otherwise `shapesContract.test.ts` flips to "offered and unoffered" and reddens.
+- [x] **Step 3b: clear the contract-catalogue placeholder T1 left.** T1 registered `IssueInput.agentEligible` as `UNOFFERED['IssueInput.agentEligible']` in `packages/client/src/test/shapesContract.test.ts` (a new contract property on a catalogued schema that the shape did not yet offer). When you add `agentEligible` to `ISSUE_SHAPE` in `core/shapes.ts`, **remove that `UNOFFERED` line** in the same commit — otherwise `shapesContract.test.ts` flips to "offered and unoffered" and reddens.
 
-- [ ] **Step 4: the surface doc.** In `docs/specs/2026-08-08-mcp-tool-and-command-surface.md` §3.4, record: `tcms_read_issue` gains `queue` and `context` modes (both `issue:read`), `tcms_write_issue` gains `attach-pr` (`issue:edit`); note the `agent-context` composite is the third read-composite and cite §3.1's grounding justification. Update the tool-count line only if a *tool* was added (none was — all arms), so the count is unchanged; say so.
+- [x] **Step 4: the surface doc.** In `docs/specs/2026-08-08-mcp-tool-and-command-surface.md` §3.4, record: `tcms_read_issue` gains `queue` and `context` modes (both `issue:read`), `tcms_write_issue` gains `attach-pr` (`issue:edit`); note the `agent-context` composite is the third read-composite and cite §3.1's grounding justification. Update the tool-count line only if a *tool* was added (none was — all arms), so the count is unchanged; say so.
 
-- [ ] **Step 5: build, lint, test, smoke on shanks.**
+- [x] **Step 5: build, lint, test, smoke on shanks.**
 
 ```bash
 ~/bin/tcms-remote sync
@@ -743,7 +767,7 @@ Use the tooling skills: **`tool-capability-contract`** to write the arm contract
 
 Then smoke against a running backend (the module prompt requires it): with `TCMS_URL`/`TCMS_TOKEN` for an Agent token, run `node packages/cli/dist/main.js issue queue`, `... issue context ACME-124`, `... issue attach-pr ACME-124 --url https://…`, and a `move` to Done that the gate refuses — confirm the refusal names the allowed moves. Record the smoke transcript in the commit message body.
 
-- [ ] **Step 6: Commit.**
+- [x] **Step 6: Commit.**
 
 ```bash
 git add packages/client/src/core/shapes.ts packages/mcp/src/ packages/cli/src/ \
@@ -781,7 +805,7 @@ Use **`/fe-react`** (`fe-react-forms`, `fe-react-ui-rules`, `fe-react-component-
 
 - [ ] **Step 6: `ProposalReviewPage` — display only, A5 flagged.** **Confirmed at plan time:** the on-wire `/projects/{id}/ai-proposals` family is `repository`'s **test-case** proposals (`ReviewSubjectType` CASE/SUITE/PLAN/DOC); there is **no issue-proposal endpoint**, and D21 calls for `tracker`'s own `issue_proposal` (its own table, "a shared row is not a shared class"), which this module does **not** build — no migration column, no endpoint for it exists here. So port `story-proposal.html` as a **static/read-only** presentation of the shape (the accept/edit/reject layout, the "a proposal is not a task" note) with the arms **disabled and labelled "coming with the assistant-proposal write loop"**, and record in `features.md` and the close-out that **A5 (propose-then-accept) is not yet wired — it needs a `tracker` `issue_proposal` table and endpoint of its own** (a follow-on module or a later M5 slice). **Do not invent a fake accept and do not point it at the test-case proposals surface** (wrong subject, wrong module). If porting a fully non-functional screen is judged not worth it, skip the page entirely and record A5 as deferred in the close-out — the module deliverable (A1–A4, A6, A7) does not depend on it.
 
-- [ ] **Step 7: the help entry.** Add the "Connect an AI assistant" card to the help sections linking to the connect flow (mirrors `help.html` line 17).
+- [ ] **Step 7: the help entry.** Add the "Connect an AI assistant" card to the help sections linking to the connect flow (mirrors `help.html` line 17). **The three `tcms issue queue|context|attach-pr` lines are already there** — T4 added them, because `guideCopies.test.ts` reddens `packages/` over a command the guide does not list.
 
 - [ ] **Step 8: frontend gate on shanks.**
 
@@ -810,7 +834,8 @@ git commit -m "feat(agent): assistant profile, repositories, AI-eligible marker,
 Per the 009 **Prompt hand-off protocol**, in its own commit `docs(plan): M5 done`, staging only `docs/plans/009-project-management-expansion-modules.md`:
 
 1. **Status table** — set M5's row to `done 2026-09-0N @ <sha>`, `V8` (matches the reservation — no strike-through needed).
-2. **Built and unverified** — list what the gates proved compiles but nobody clicked: the token-shown-once flow end to end, the refuse-to-close on a real project with the gate on, the agent-context fetch through a real Agent token, and (if applicable) A5's propose-and-accept write loop.
+2. **Built and unverified** — list what the gates proved compiles but nobody clicked: the token-shown-once flow end to end, and (if applicable) A5's propose-and-accept write loop. ~~the refuse-to-close on a real project with the gate on, the agent-context fetch through a real Agent token~~ → **both were smoked in T4** against a stack built from this tree, through a real `/me/assistants` token, on both adapters: the queue, the context read, `attach-pr`, the 409 with its sentence, and A6's same-move-succeeds with the gate off. The transcript is in `acffef5e`'s commit body.
+2b. **The open backend defect** — `POST /issues` with `agentEligible: true` answers 500 (`rank=NULL` on the post-insert flush; see T4's landed note), which also breaks `seed-demo-data`. It is not M5's deliverable and it blocks building a demo instance, so the close-out records it as open rather than as done.
 3. **The V actually taken** — `V8`, as reserved; note the directory was re-read and held `V1…V7`.
 4. **Dependent prompts** — no module's *Depends on* names M5, so nothing downstream is rewritten. **If M3 has not landed** when M5 closes, leave a one-line note in the M3 prompt: *M5's `AgentTaskContext.issue.release` and the fetch payload's `release` are already on the wire and null; M3 must populate `issue.release_id` / `release_assigned_at` and the fact projection so the assistant's context carries the target release.* (M3 shows `done 2026-09-01 @ 55cb4bc0` in the table, so this note is likely unnecessary — verify the release *fact* is populated before skipping it.)
 5. **Review table** — M5 hits no R-number that another module owns; if it takes an R15+, record it.
