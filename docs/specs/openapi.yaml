@@ -55,6 +55,7 @@ tags:
   - name: audit
   - name: work
   - name: tracker
+  - name: time
 
 # =============================================================================
 # PATHS
@@ -8837,6 +8838,345 @@ paths:
                 type: array
                 items: { $ref: '#/components/schemas/IssueDocLink' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+
+  # ------------------------------------------------------------------ time ----
+  # Plan 016 (M6). A period is per PERSON per date range and spans projects, which is why
+  # nothing here is nested under /projects/{projectId}: Mira Sund's 16–31 August carries Acme
+  # Storefront, Acme Loyalty and a project-less meeting in one submission
+  # (`timesheet-approvals.html`), and a project-scoped path could not address it.
+  #
+  # The bounds are derived, never sent: 1–15 and 16–end of month, arithmetically, from a date
+  # (016 D-a). There is no cadence setting because no mockup has a control that sets one.
+  #
+  # **No operation here returns a rate, a cost or an invoice value**, and none ever will —
+  # that is M8's surface, gated on `billing:*` and `ratecard:read`. `timesheets.html` says so
+  # on the screen: *"Logging time tells you where the day went and nothing about what it is
+  # worth — that is a different job, on a screen you do not have."*
+  /timesheets/periods/current:
+    get:
+      tags: [time]
+      summary: The caller's open period for a date, created lazily if it has no rows yet
+      operationId: getCurrentTimesheetPeriod
+      description: |
+        Requires `time:log`. **Always the caller's own** — there is no person parameter, because
+        one would let a credential read somebody else's timesheet with a permission every role
+        holds. Reading another person's period is the approval queue, which costs `time:approve`.
+
+        The period row is created by the first write into it, so a caller who has logged nothing
+        gets the derived bounds with an empty `entries` and zero totals rather than a 404.
+      parameters:
+        - name: on
+          in: query
+          description: |
+            Any date inside the wanted period; defaults to today. The bounds are derived from it
+            (D-a) rather than passed as a pair, so two clients cannot disagree about where a
+            period starts.
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: The period, with its entries and its totals.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TimesheetPeriod' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /timesheets/periods:
+    get:
+      tags: [time]
+      summary: The caller's periods, newest first
+      operationId: listTimesheetPeriods
+      description: |
+        Requires `time:log`. The "Previous period" panel on `timesheets.html`, which is where a
+        rejected period is found again — a rejection unlocks the period and leaves its note on
+        it, so the history is the only route back to work that was sent back.
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 6, maximum: 24 } }
+      responses:
+        '200':
+          description: Periods, newest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/TimesheetPeriod' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /timesheets/periods/{periodId}:
+    parameters:
+      - { name: periodId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [time]
+      summary: One period with its entries
+      operationId: getTimesheetPeriod
+      description: |
+        Requires `time:log` for the caller's own period, or `time:read` for anybody else's.
+        A UUID rather than a display key: a period is not a keyed artifact and has no counter.
+      responses:
+        '200':
+          description: The period.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TimesheetPeriod' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /timesheets/entries:
+    post:
+      tags: [time]
+      summary: Log hours against an issue, a meeting, leave, training or internal work
+      operationId: logTime
+      description: |
+        Requires `time:log`. The period is derived from `spentOn` (D-a) and created if it does
+        not exist yet, so nothing has to open one first.
+
+        **A period that is SUBMITTED or APPROVED refuses the write with a 409.** That is the
+        lock the whole feature turns on: a submitted timesheet is editable by nobody, and a
+        rejected one is editable again.
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TimeEntryInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TimeEntry' }
+        '200':
+          description: A replay — the `Idempotency-Key` had already logged this entry.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TimeEntry' }
+        '400':
+          description: |
+            `issueKey` on a non-ISSUE entry, or missing on an ISSUE one; hours outside
+            0.25–24; an issue on a project whose `trackTime` is off (D-g).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: The period this date falls in is submitted or approved.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /timesheets/entries/{entryId}:
+    parameters:
+      - { name: entryId, in: path, required: true, schema: { type: string, format: uuid } }
+    patch:
+      tags: [time]
+      summary: Amend one entry
+      operationId: amendTimeEntry
+      description: |
+        Requires `time:log` for the caller's own entry, or `time:edit` for anybody else's.
+        A whole-body replacement rather than a delta — `TimeEntryInput` is four fields and a
+        note, and a partial amend of a row this small buys nothing.
+
+        Refused with a 409 once the period is submitted, for `POST`'s reason.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TimeEntryInput' }
+      responses:
+        '200':
+          description: The amended entry.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TimeEntry' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: The period is submitted or approved.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+    delete:
+      tags: [time]
+      summary: Remove one entry
+      operationId: deleteTimeEntry
+      description: |
+        Requires `time:log` for the caller's own entry, or `time:edit` for anybody else's.
+        A hard delete: an hour logged by mistake is not a state worth keeping, and the rollup
+        is recomputed from what remains.
+
+        Refused with a 409 once the period is submitted.
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: The period is submitted or approved.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /timesheets/periods/{periodId}/submit:
+    parameters:
+      - { name: periodId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [time]
+      summary: Submit a period for approval
+      operationId: submitTimesheet
+      description: |
+        Requires `time:log`, and **only for the caller's own period** — submitting somebody
+        else's timesheet is not an act this product has. It is not a fifth permission key
+        (D-e): it is the same act as logging, one step later.
+
+        The period stops being editable. Submitting one that is already SUBMITTED or APPROVED
+        is a 409; a REJECTED one may be submitted again, which is the whole point of a rejection
+        unlocking it.
+      responses:
+        '200':
+          description: The submitted period, now uneditable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TimesheetPeriod' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Already submitted or approved.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /timesheets/approvals:
+    get:
+      tags: [time]
+      summary: The approval queue for a period
+      operationId: listTimesheetApprovals
+      description: |
+        Requires `time:approve`. Per D-i, a period appears here when at least one of its entries
+        names a project the caller may approve for — and approving it approves the **whole**
+        period, including entries against projects they do not hold. That is the sharp edge
+        stated rather than hidden: `time:approve` is a PROJECT-scope grant and a period spans
+        projects, and per-project partial approval is a state the screen has no way to render.
+
+        The queue is not only the submitted ones. `timesheet-approvals.html` shows an OPEN
+        period as *"Not submitted · 41.0h so far"* with a Remind action beside it, so the state
+        is served and the client decides what may be done with it.
+      parameters:
+        - name: on
+          in: query
+          description: Any date inside the wanted period; defaults to today.
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: The queue, one entry per person.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/TimesheetQueueEntry' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /timesheets/periods/{periodId}/decision:
+    parameters:
+      - { name: periodId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [time]
+      summary: Approve a period, reject it with a note, or withdraw a rejection
+      operationId: decideTimesheet
+      description: |
+        Requires `time:approve`. **Test Lead does not hold it** — Project Manager and Company
+        Admin do (roles spec §A3, and 016 D-f records that this plan deliberately does not
+        widen the grant).
+
+        `REJECT` requires a `note`: a rejection is never silent, and the note is shown at the
+        top of the unlocked period and never cleared. `WITHDRAW_REJECTION` puts a period the
+        approver sent back by mistake into SUBMITTED again, with the note kept as history.
+
+        Approving posts the period's hours onto each issue and rolls them up to the story, the
+        epic and the project — synchronously, inside this transaction (D-h).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TimesheetDecisionInput' }
+      responses:
+        '200':
+          description: The decided period.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TimesheetPeriod' }
+        '400':
+          description: A `REJECT` with no note.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: |
+            The period is not in a state this decision can act on — approving one nobody has
+            submitted, or withdrawing a rejection from a period that was not rejected.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /time/rollup/issues/{key}:
+    parameters:
+      - { name: key, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [time]
+      summary: Estimate against approved and pending hours for one issue
+      operationId: getIssueTimeRollup
+      description: |
+        Requires `issue:read`. The `14h (approved)` figure on `story.html`.
+
+        **Approved and pending are carried apart and never summed** (D-d). `epic.html` says
+        *"approved hours only"* on its panel and `timesheets.html` reports `Logged this period
+        21h` for a period nobody has approved — one number is not enough, and the ambiguity is
+        what the mockups are guarding against.
+      responses:
+        '200':
+          description: The rollup.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TimeRollup' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /time/rollup/epics/{key}:
+    parameters:
+      - { name: key, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [time]
+      summary: The epic time panel — totals, and a row per counted child
+      operationId: getEpicTimeRollup
+      description: |
+        Requires `issue:read`. The children are the ones whose type counts toward completion,
+        aggregated at read time by joining `issue_fact` — there is no epic-grain rollup table,
+        because three grains that can disagree about the same hours is three answers (D-c).
+
+        There is deliberately **no project grain**: the project figure the mockups show is
+        `settings-general.html`'s budget row, which is M8's, and `work-table.html`'s footer
+        total, which the issue list already carries per row.
+      responses:
+        '200':
+          description: The epic rollup.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EpicTimeRollup' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
   # ----------------------------------------------------- tracker imports ----
@@ -19254,6 +19594,155 @@ components:
         pageId: { type: string, format: uuid, nullable: true }
         title: { type: string, example: 'Checkout specification §3.2' }
         excerpt: { type: string }
+
+    # ------------------------------------------------------------------ time ----
+    # Plan 016 (M6). Every object below carries its own `required` array, including the two
+    # inline nested ones — `TimeEntry.subject` and `EpicTimeRollup.children[]` — because
+    # `required` does not descend and a nested object without it generates every property
+    # optional in both clients.
+    TimeSubjectType:
+      type: string
+      description: >
+        What an entry is logged against (016 D-b). Five members, and TEST_RUN is deliberately not
+        one: timesheet-approvals.html displays a row against a test run, but timesheets.html — the
+        only screen that CREATES an entry — cannot produce one. Adding it later is one CHECK member.
+      enum: [ISSUE, MEETING, LEAVE, TRAINING, INTERNAL]
+
+    TimesheetState:
+      type: string
+      description: >
+        OPEN is editable by its owner. SUBMITTED is editable by nobody. APPROVED is final.
+        REJECTED is editable again, and carries the note that sent it back.
+      enum: [OPEN, SUBMITTED, APPROVED, REJECTED]
+
+    TimeEntry:
+      type: object
+      required: [id, periodId, subjectType, spentOn, hours, editable]
+      properties:
+        id: { type: string, format: uuid }
+        periodId: { type: string, format: uuid }
+        subjectType: { $ref: '#/components/schemas/TimeSubjectType' }
+        subject:
+          type: object
+          description: Present only when subjectType is ISSUE. Denormalised from issue_fact.
+          required: [issueId, issueKey, title, typeLevel, projectId, projectName]
+          properties:
+            issueId: { type: string, format: uuid }
+            issueKey: { type: string, example: ACME-124 }
+            title: { type: string }
+            typeLevel: { type: string, enum: [EPIC, STORY, TASK] }
+            projectId: { type: string, format: uuid }
+            projectName: { type: string }
+        spentOn: { type: string, format: date }
+        hours: { type: number, format: double, example: 2 }
+        note: { type: string, nullable: true }
+        editable:
+          type: boolean
+          description: >
+            False whenever the owning period is SUBMITTED or APPROVED. Served rather than derived
+            on the client so one rule has one home.
+
+    TimeEntryInput:
+      type: object
+      required: [subjectType, spentOn, hours]
+      properties:
+        subjectType: { $ref: '#/components/schemas/TimeSubjectType' }
+        issueKey:
+          type: string
+          description: Required when subjectType is ISSUE, and refused otherwise.
+        spentOn: { type: string, format: date }
+        hours: { type: number, format: double, minimum: 0.25, maximum: 24 }
+        note: { type: string, nullable: true }
+
+    TimesheetPeriod:
+      type: object
+      required: [id, personId, personName, startsOn, endsOn, state, loggedHours, approvedHours, editable, entries]
+      properties:
+        id: { type: string, format: uuid }
+        personId: { type: string, format: uuid }
+        personName: { type: string }
+        startsOn: { type: string, format: date }
+        endsOn: { type: string, format: date }
+        state: { $ref: '#/components/schemas/TimesheetState' }
+        loggedHours: { type: number, format: double }
+        approvedHours:
+          type: number
+          format: double
+          description: Zero unless state is APPROVED. Carried separately from loggedHours per D-d.
+        submittedAt: { type: string, format: date-time, nullable: true }
+        decidedAt: { type: string, format: date-time, nullable: true }
+        decidedByName: { type: string, nullable: true }
+        decisionNote:
+          type: string
+          nullable: true
+          description: The rejector's note, shown at the top of the unlocked period. Never cleared.
+        editable: { type: boolean }
+        entries:
+          type: array
+          items: { $ref: '#/components/schemas/TimeEntry' }
+
+    TimesheetDecisionInput:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [APPROVE, REJECT, WITHDRAW_REJECTION] }
+        note:
+          type: string
+          description: Required when decision is REJECT. A rejection is never silent (T2's AC).
+
+    TimeRollup:
+      type: object
+      required: [issueKey, estimateHours, approvedHours, pendingHours]
+      properties:
+        issueKey: { type: string, example: ACME-118 }
+        estimateHours:
+          type: number
+          format: double
+          nullable: true
+          description: Read from issue_fact.estimate_hours. Null when nobody estimated.
+        approvedHours: { type: number, format: double }
+        pendingHours:
+          type: number
+          format: double
+          description: Logged but not yet approved. Rendered separately, never summed into approved.
+
+    EpicTimeRollup:
+      type: object
+      required: [epicKey, estimateHours, approvedHours, pendingHours, children]
+      properties:
+        epicKey: { type: string, example: ACME-100 }
+        estimateHours: { type: number, format: double }
+        approvedHours: { type: number, format: double }
+        pendingHours: { type: number, format: double }
+        children:
+          type: array
+          items:
+            type: object
+            required: [issueKey, title, estimateHours, approvedHours, overEstimate]
+            properties:
+              issueKey: { type: string }
+              title: { type: string }
+              estimateHours: { type: number, format: double, nullable: true }
+              approvedHours: { type: number, format: double }
+              overEstimate:
+                type: boolean
+                description: approvedHours > estimateHours. The highlighted row on epic.html.
+
+    TimesheetQueueEntry:
+      type: object
+      required: [period, projectTotals]
+      properties:
+        period: { $ref: '#/components/schemas/TimesheetPeriod' }
+        projectTotals:
+          type: array
+          items:
+            type: object
+            required: [projectName, hours]
+            properties:
+              projectName:
+                type: string
+                description: The literal "—" is not used; a project-less total omits this row.
+              hours: { type: number, format: double }
 
 security:
   - bearerAuth: []

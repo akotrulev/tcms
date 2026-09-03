@@ -1848,6 +1848,175 @@ const issueAttachPr: Command = {
   },
 };
 
+/* --------------------------------------------------------------------- time ---- */
+
+/**
+ * `tcms time log --issue ACME-124 --hours 2` — an hour of work, against whatever it went into.
+ *
+ * **Not everything is an issue**, which is why `--against` exists: a meeting, a day of leave,
+ * training and internal work are logged in the same place and counted the same way. `timesheets.html`
+ * says so on the form. `TEST_RUN` is deliberately not a member (016 D-b) — the approvals mockup
+ * displays such a row and the log form cannot produce one, and the form wins because it is the only
+ * screen that creates an entry.
+ *
+ * The period is derived from the date server-side and opened if it does not exist, so nothing has to
+ * be started first. A period already submitted refuses the write with a 409 rather than logging into
+ * a timesheet somebody is approving.
+ */
+const timeLog: Command = {
+  name: 'time log',
+  summary: 'Log hours against an issue, a meeting, leave, training or internal work',
+  usage: 'tcms time log --issue ACME-124 --hours 2 [--on 2026-09-01] [--note TEXT]\n'
+    + '       tcms time log --against MEETING --hours 1 --note "2.4 readiness review"',
+  options: {
+    issue: { type: 'string' },
+    against: { type: 'string' },
+    hours: { type: 'string' },
+    on: { type: 'string' },
+    note: { type: 'string' },
+    'idempotency-key': { type: 'string' },
+  },
+  write: { kind: 'create', permission: 'time:log' },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const subjectType = (first(options['against']) ?? 'ISSUE').toUpperCase();
+    const issue = first(options['issue']);
+
+    /*
+      Refused here rather than by the server, for the reason `rank` and `doc link` are: the endpoint
+      answers 400 either way, and what is gained is a message naming the FLAGS a person typed
+      instead of the JSON fields they never composed. Both directions, because sending `--issue`
+      with `--against MEETING` is the mistake that would otherwise silently drop the issue.
+    */
+    if (subjectType === 'ISSUE' && issue === undefined) {
+      throw new UsageError('--issue names what the hours went into. For a meeting or a day off, pass --against MEETING | LEAVE | TRAINING | INTERNAL.');
+    }
+    if (subjectType !== 'ISSUE' && issue !== undefined) {
+      throw new UsageError(`--issue is for an issue entry. --against ${subjectType} takes no issue.`);
+    }
+
+    const intent = createIntent({ key: text(options['idempotency-key']) });
+    const logged = await client.POST('/timesheets/entries', {
+      body: present({
+        subjectType: subjectType as components['schemas']['TimeSubjectType'],
+        issueKey: issue,
+        hours: requireHours(context),
+        // Today, in the caller's own local date. The period the entry lands in is derived from it
+        // server-side (016 D-a), so this is the only thing that decides which timesheet it joins.
+        spentOn: first(options['on']) ?? new Date().toISOString().slice(0, 10),
+        note: text(options['note']),
+      }) as components['schemas']['TimeEntryInput'],
+      tcms: { ...request, ...intent },
+    });
+
+    reportWrite(out, json, logged, [
+      [outcome(intent, 'Logged'), `${show(logged.hours)}h on ${show(logged.spentOn)}`],
+      ['Against', logged.subject ? `${show(logged.subject.issueKey)} — ${show(logged.subject.title)}` : show(logged.subjectType)],
+      ['Entry', show(logged.id)],
+      // Printed because it is the next decision: an entry in a period that is still open can be
+      // amended or removed, and one in a submitted period cannot.
+      ['Editable', logged.editable ? 'yes' : 'no — the period is submitted'],
+    ]);
+  },
+};
+
+/** The hours flag, refused locally when it is not a number the contract would accept. */
+function requireHours(context: CommandContext): number {
+  const raw = requireOption(context, 'hours');
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0.25 || parsed > 24) {
+    throw new UsageError(`--hours takes a number of hours between 0.25 and 24, not '${raw}'.`);
+  }
+  return parsed;
+}
+
+/**
+ * `tcms time submit <period>` — the period stops being editable, by anybody.
+ *
+ * `time:log` rather than a fifth permission key (016 D-e): submitting is the same act as logging,
+ * one step later, and a key nobody would ever grant separately is a key nobody should have to hold.
+ * The id comes from `tcms time list`, which prints it for exactly this.
+ */
+const timeSubmit: Command = {
+  name: 'time submit',
+  summary: 'Submit your period for approval — it stops being editable',
+  usage: 'tcms time submit tsp-1',
+  write: { kind: 'state', permission: 'time:log' },
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const periodId = requireArg(context, 'period', 0);
+
+    const submitted = await client.POST('/timesheets/periods/{periodId}/submit', {
+      params: { path: { periodId } },
+      tcms: request,
+    });
+
+    reportWrite(out, json, submitted, [
+      ['Submitted', `${show(submitted.startsOn)} → ${show(submitted.endsOn)}`],
+      ['Hours', `${show(submitted.loggedHours)}h`],
+      ['State', show(submitted.state)],
+      // Said out loud because it is the thing a person is about to discover: there is no unsubmit.
+      // The way back is an approver rejecting it, which unlocks it and leaves their note on it.
+      ['Editable', 'no — an approver rejecting it is what unlocks it again'],
+    ]);
+  },
+};
+
+/**
+ * `tcms time approve <period>` — approve, reject with a note, or withdraw a rejection.
+ *
+ * One command over the contract's three decisions because they are one act with three outcomes, and
+ * the id is the same handle for all three. **A rejection is never silent**: `--reject` demands
+ * `--note`, which is what the period's owner sees at the top of their unlocked timesheet.
+ *
+ * The period is approved WHOLE, including entries against projects this caller does not hold
+ * `time:approve` for (016 D-i). That is stated in the output rather than hidden: `time:approve` is a
+ * project-scope grant and a period spans projects, and per-project partial approval is a state no
+ * screen can render.
+ */
+const timeApprove: Command = {
+  name: 'time approve',
+  summary: 'Approve a submitted period, reject it with a note, or withdraw a rejection',
+  usage: 'tcms time approve tsp-1\n'
+    + '       tcms time approve tsp-1 --reject --note "the 8h on 24 Aug is against an epic on hold"\n'
+    + '       tcms time approve tsp-1 --withdraw',
+  options: { reject: { type: 'boolean' }, withdraw: { type: 'boolean' }, note: { type: 'string' } },
+  write: { kind: 'state', permission: 'time:approve' },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const periodId = requireArg(context, 'period', 0);
+    const reject = flag(options['reject']);
+    const withdraw = flag(options['withdraw']);
+
+    // Exactly-one-of, refused before the request — `rank`'s rule. Approving and rejecting in one
+    // invocation is not a request the server can disambiguate, and it must not pick one.
+    if (reject && withdraw) throw new UsageError('Pass one of --reject or --withdraw, not both.');
+
+    const decided = await client.POST('/timesheets/periods/{periodId}/decision', {
+      params: { path: { periodId } },
+      body: present({
+        decision: (reject ? 'REJECT' : withdraw ? 'WITHDRAW_REJECTION' : 'APPROVE') as 'APPROVE' | 'REJECT' | 'WITHDRAW_REJECTION',
+        note: reject ? requireOption(context, 'note') : undefined,
+      }) as components['schemas']['TimesheetDecisionInput'],
+      tcms: request,
+    });
+
+    reportWrite(out, json, decided, [
+      ['Period', `${show(decided.personName)} — ${show(decided.startsOn)} → ${show(decided.endsOn)}`],
+      ['State', show(decided.state)],
+      ['Hours', `${show(decided.loggedHours)}h logged, ${show(decided.approvedHours)}h approved`],
+      [
+        'Effect',
+        decided.state === 'APPROVED'
+          ? 'posted onto each issue and rolled up to the story, the epic and the project — the whole period, every project in it'
+          : decided.state === 'REJECTED'
+            ? 'unlocked for its owner, with your note at the top of it'
+            : 'back with its owner as submitted; the note stays as history',
+      ],
+    ]);
+  },
+};
+
 export const WRITES: readonly Command[] = [
   caseEdit,
   caseProposal,
@@ -1879,4 +2048,7 @@ export const WRITES: readonly Command[] = [
   issueRelease,
   issueCasesSet,
   issueAttachPr,
+  timeLog,
+  timeSubmit,
+  timeApprove,
 ];

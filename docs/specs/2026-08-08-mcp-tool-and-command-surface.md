@@ -156,7 +156,7 @@ The count below is the **outcome** of this rule, not a target.
 
 ---
 
-## 3. The MCP surface — ~~21~~ ~~26~~ ~~28~~ 30 tools
+## 3. The MCP surface — ~~21~~ ~~26~~ ~~28~~ ~~30~~ 34 tools
 
 Namespaced `tcms_*`. `projectId` and `companyId` **do not appear in any schema** (§4.1).
 
@@ -190,6 +190,12 @@ Namespaced `tcms_*`. `projectId` and `companyId` **do not appear in any schema**
 | 26 | `tcms_read_issue` | `issue:read` | `GET /issues`, `GET /issues/{key}`, `…/comments`, `…/doc-links` | 011 T5 — see §3.4 |
 | 27 | `tcms_read_board` | `board:read` | `GET /projects/{id}/boards`, `GET /boards/{id}`, `…/cards`, `GET /projects/{id}/backlog`, `…/labels` | 012 T5 — see §3.5 |
 | 28 | `tcms_write_backlog` | `board:rank` + `board:configure` | `PUT /issues/{key}/rank`, `POST /projects/{id}/labels`, `PATCH`/`DELETE /labels/{id}` | 012 T5 — see §3.5 |
+| 29 | `tcms_read_release` | `release:read` | `GET /projects/{id}/releases`, `GET /releases/{id}`, `…/readiness`, `GET /projects/{id}/roadmap` | 013 T4 — see §3.6 |
+| 30 | `tcms_write_release` | `release:manage` + `release:publish` | `POST`/`PATCH`/`DELETE /releases`, `POST …/publish` | 013 T4 — see §3.6 |
+| 31 | `tcms_read_timesheet` | **any of** `time:log` / `time:approve` | `GET /timesheets/periods/current`, `GET /timesheets/periods`, `GET /timesheets/approvals` | 016 T1 — see §3.8 |
+| 32 | `tcms_read_time_rollup` | `issue:read` | `GET /time/rollup/issues/{key}`, `GET /time/rollup/epics/{key}` | 016 T1 — see §3.8 |
+| 33 | `tcms_write_timesheet` | `time:log` | `POST /timesheets/entries`, `POST /timesheets/periods/{id}/submit` | 016 T1 — see §3.8 |
+| 34 | `tcms_approve_timesheet` | `time:approve` | `POST /timesheets/periods/{id}/decision` | 016 T1 — see §3.8 |
 
 Eighteen are buildable against today's contract; two need §4.2's contract addition first; one has a
 blocked arm (§5).
@@ -829,6 +835,67 @@ proxy log and the browser history — which is a second reason none of them is a
 The two CLI rows were **declared here and spelled in §6 by 014 T6**, which has landed: `import` is
 in `COMMANDS` as two reads and this table is what says why the other three never will be.
 
+### 3.8 The time verbs (016 T1) — four tools, because the gates split two ways twice
+
+Plan 016 (M6). Eleven operations over ten path items, tagged `time`.
+[The plan](../plans/016-time.md) carries the decisions; what follows is only what they do to this
+surface.
+
+**Rows 29 and 30 of §3's table were missing before this slice** — 013 T4 shipped
+`tcms_read_release` and `tcms_write_release` and updated the count in the heading without adding
+the rows, so the table listed 28 tools under a heading saying 30. Added here rather than left,
+because a table that disagrees with its own heading is the shape §6's own paragraph about two
+numbers that never met is written about.
+
+| Tool | Gate | Wraps |
+|---|---|---|
+| `tcms_read_timesheet` | **any of** `time:log` / `time:approve` | current period · period history · the approvals queue |
+| `tcms_read_time_rollup` | `issue:read` | the issue grain and the epic grain |
+| `tcms_write_timesheet` | `time:log` | `log` · `submit` |
+| `tcms_approve_timesheet` | `time:approve` | `approve` · `reject` · `withdraw-rejection` |
+
+Four rather than two, and each split is §2's rule meeting a gate:
+
+- **`tcms_read_timesheet` is this surface's first `any`-gated READ.** A timesheet has two readers
+  with two keys: its owner reads their own period with `time:log`, which every role that can log
+  hours holds, and an approver reads the queue with `time:approve`, which is Project Manager and
+  Company Admin. Gating it `all` would hide a person's own timesheet from everybody who can only
+  log one; splitting it in two would put one noun on two tools whose arguments differ by a boolean.
+  So it is listed on either key and carries a `narrow(held)` sentence naming the scope this
+  credential actually reaches — `tcms_review_verdict`'s arrangement, on the read half.
+- **`tcms_read_time_rollup` is `issue:read`, not a time key.** Estimate against actual is a property
+  of the issue, and the panels that show it are the story's and the epic's. A caller who may read an
+  issue may read what has been spent on it.
+- **Logging and submitting are one tool because they are one key.** Submitting your own period is
+  the same act as logging, one step later, and 016 D-e is explicit that it is not a fifth permission
+  — `V2` seeded four and this module adds none.
+- **Deciding is its own tool because Test Lead cannot do it.** `time:approve` is Project Manager and
+  Company Admin (§A3); 016 D-f records that as a decided consequence of D3 rather than an oversight
+  this plan repairs. Merging the decision arms into `tcms_write_timesheet` would list them to every
+  Test Engineer who can log an hour and 403 on half the tool.
+
+**A period is decided whole, and the description says so.** A period is per person per date range
+and **spans projects**, while `time:approve` is a PROJECT-scope grant — so approving one approves
+entries against projects the approver does not hold (016 D-i). That is in
+`tcms_approve_timesheet`'s description rather than only in the plan, because a model relaying
+"approved" without it is relaying half of what happened.
+
+**No verb on this surface returns a rate, a cost or an invoice value, and none ever will.** That is
+M8's surface, gated on `billing:*` and `ratecard:read`, and neither key is on any tool or command
+here. It is stated because it is a question an agent will otherwise try to answer from what it has:
+hours are on this surface and money is not, and multiplying the first by a number it invented is the
+failure this sentence exists to prevent. `timesheets.html` says the same thing to a person, on the
+screen: *"Logging time tells you where the day went and nothing about what it is worth — that is a
+different job, on a screen you do not have."*
+
+**Two shortfalls, recorded rather than hidden.** `PATCH` and `DELETE /timesheets/entries/{entryId}`
+have **no verb on either surface**. Amending is retyping four fields, which on the MCP side is a
+`log` followed by a delete and on the CLI is two commands, and neither is worth a verb until
+somebody asks for it; the operations exist in the contract because the SPA's edit pencil
+(`timesheets.html`) is T4's and needs them. And **`TEST_RUN` is not a `TimeSubjectType`** — the
+approvals mockup displays such a row and the log form cannot produce one, so the form wins (016
+D-b). Adding it later is one member of an enum and one line of a `CHECK`.
+
 ---
 
 ## 4. Cross-cutting rules — all of them in the command core
@@ -939,9 +1006,9 @@ needing a separate decision. A bulk generation therefore decomposes per item.
 ## 6. The CLI surface
 
 `tcms <noun> <verb>`, one command per operation the `Agent` role can reach — approximately ~~45~~ ~~53~~ 61,
-against the MCP surface's ~~21~~ ~~28~~ 30. **The registry holds ~~43~~ ~~53~~ ~~55~~ 58** (`COMMANDS`, measured
-015 T4, eight of them 012's board verbs, ten 013's release verbs, two 014's import reads and three
-this slice's issue verbs),
+against the MCP surface's ~~21~~ ~~28~~ ~~30~~ 34. **The registry holds ~~43~~ ~~53~~ ~~55~~ ~~58~~ 64** (`COMMANDS`, measured
+016 T1, eight of them 012's board verbs, ten 013's release verbs, two 014's import reads, three
+015's issue verbs and six this slice's time verbs),
 and the two numbers have
 never met: the count above is what the
 `Agent` grant *reaches*, the registry is what has been *spelled*, and §6's own struck-through
@@ -1120,6 +1187,54 @@ Three things about the two that *are* here are decisions rather than spellings:
 - **A run is named by its id, not by anything friendlier.** `release show 2.4` takes text a person
   typed; a run has no such handle, so `import list` prints the ids beside the dates that tell them
   apart.
+
+**The six time commands** (016 T1; §3.8 carries the tool split and the reasons). `time` is the sixth
+noun the CLI gains, and it is the first whose reads are split by **who is reading** rather than by
+what is read:
+
+| Command | Kind | Permission | Reaches |
+|---|---|---|---|
+| `tcms time list [--on D] [--history]` | read | `time:log` | `GET /timesheets/periods/current`, `GET /timesheets/periods` |
+| `tcms time queue [--on D]` | read | `time:approve` | `GET /timesheets/approvals` |
+| `tcms time rollup ACME-118 [--epic]` | read | `issue:read` | `GET /time/rollup/issues\|epics/{key}` |
+| `tcms time log --hours 2 [--issue K \| --against C] [--on D] [--note T]` | `create` | `time:log` | `POST /timesheets/entries` |
+| `tcms time submit <periodId>` | `state` | `time:log` | `POST /timesheets/periods/{id}/submit` |
+| `tcms time approve <periodId> [--reject --note T \| --withdraw]` | `state` | `time:approve` | `POST /timesheets/periods/{id}/decision` |
+
+**Six, and plan 016 T1's own prompt said five.** The fifth was `time approve`, whose only argument
+is a period id — and before `time queue` there was **nowhere on this surface to get one that was
+not your own**. `time list` prints the caller's id and nothing printed anybody else's, so the
+approve verb was reachable only for a period the approver could not have submitted. `time queue` is
+the read that makes the flow composable, which is the property the whole surface is built for; it is
+one command, it wraps an operation the plan's own contract table already carries, and the plan's
+prompts below T1 are corrected rather than this being left as a gap. Five things about the table are
+decisions rather than spellings:
+
+- **`time list` is always the caller's own, and there is deliberately no `--person`.**
+  `GET /timesheets/periods/current` takes no person parameter at all, because one would let any
+  credential holding `time:log` — which is every role that can log an hour — read somebody else's
+  timesheet. Another person's period is `time queue`, and it costs `time:approve`.
+- **A period is addressed by UUID, alone on this surface.** §4.4 says display keys in both
+  directions and a period has none: it is not a keyed artifact and has no counter, because it is
+  derived — `1–15` and `16–end of month`, arithmetically, from a date (016 D-a). So `time list` and
+  `time queue` both print the id, which is the handle `submit` and `approve` take, and that is why
+  the queue read is not optional.
+- **`--issue` and `--against` are mutually exclusive, and refused locally in both directions.**
+  Logging against a meeting or a day of leave is the same act in the same place as logging against
+  an issue, and `--against MEETING --issue ACME-1` is the mistake that would otherwise drop the
+  issue in silence. `rank`'s rule, applied to a pair where one side is the default.
+- **`--reject` demands `--note`.** A rejection is never silent: the note is what the period's owner
+  reads at the top of their unlocked timesheet, and the endpoint's own `400` is the same rule from
+  the other side. `--withdraw` undoes a rejection made in error and keeps the note as history.
+- **`time approve` prints what approving actually did.** The period is decided **whole** — it spans
+  projects while `time:approve` is project-scoped (016 D-i) — so the output says that the hours went
+  onto every issue in it, including entries against projects this caller does not hold. A success
+  that understates its own reach is the shape `board move`'s WIP line exists to avoid.
+
+**No time command prints or accepts a rate, a cost or an invoice value**, and none ever will: that
+is M8's surface, gated on `billing:*` and `ratecard:read`. §3.8 carries the argument; it is repeated
+here because a person at a terminal with hours and a spreadsheet is exactly who would otherwise
+supply the missing number themselves.
 
 - **Read commands are phase 5, writes are phase 7**, per the plan's order.
 - **`--json` on every command**, so the CLI composes in a shell. Human-readable output is the

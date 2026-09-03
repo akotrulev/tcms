@@ -1341,6 +1341,124 @@ const readRelease: ToolDefinition = {
   },
 };
 
+/* --------------------------------------------------------------------- time ---- */
+
+/**
+ * The one `any`-gated READ tool on this surface, and the gate is the honest shape of the question.
+ *
+ * A timesheet has two readers with two keys. Its owner reads their own period with `time:log`,
+ * which every role that can log hours holds; an approver reads the queue with `time:approve`,
+ * which is Project Manager and Company Admin (roles spec §A3 — and 016 D-f records that Test Lead
+ * deliberately does not hold it). Gating this `all` would hide the tool from everybody who can
+ * only log, and splitting it in two would put one noun on two tools whose arguments differ by a
+ * boolean. So it is listed on either key and {@link narrow} says which scope this credential
+ * actually reaches — `tcms_review_verdict`'s arrangement, one surface over.
+ */
+const readTimesheet: ToolDefinition = {
+  name: 'tcms_read_timesheet',
+  title: 'Read your timesheet, your period history, or the approvals queue',
+  description:
+    'Where the hours went. With nothing, the caller\'s OWN open period for today — its entries, '
+    + 'its totals and whether it is still editable; `on` reads the period a date falls in; '
+    + '`history` lists their recent periods newest first. `queue` reads the periods waiting on '
+    + 'this caller to approve instead, which costs time:approve. '
+    + '**loggedHours and approvedHours are different numbers and must never be added or swapped**: '
+    + 'a period nobody has approved has logged hours and zero approved ones, and only approved '
+    + 'hours reach a rollup. A period is OPEN (its owner may edit it), SUBMITTED (nobody may), '
+    + 'APPROVED (final) or REJECTED (editable again, carrying the note that sent it back). The '
+    + 'queue is not only the submitted ones — an unsubmitted period appears with its hours so far, '
+    + 'and is something to remind about rather than to approve. Periods are semi-monthly, 1-15 and '
+    + '16 to the end of the month, and nothing configures that. Ids here are what tcms_write_timesheet '
+    + 'and tcms_approve_timesheet take. **Nothing on this surface returns a rate, a cost or an '
+    + 'invoice value.**',
+  gate: { mode: 'any', permissions: ['time:log', 'time:approve'] },
+  narrow: (held) => {
+    const own = held.has('time:log');
+    const queue = held.has('time:approve');
+    if (own && queue) return undefined;
+    return own
+      ? 'This credential holds time:log and not time:approve, so `queue` will be refused — it reads only this user\'s own timesheet.'
+      : 'This credential holds time:approve and not time:log, so it reads the approvals `queue`; it has no timesheet of its own to read.';
+  },
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      on: {
+        type: 'string',
+        description: 'Any date inside the wanted period, `YYYY-MM-DD`. Defaults to today; the bounds are derived from it.',
+      },
+      history: {
+        type: 'boolean',
+        description: 'List this user\'s recent periods newest first, rather than one period in full.',
+      },
+      queue: {
+        type: 'boolean',
+        description: 'Read the approvals queue instead of this user\'s own timesheet. Costs time:approve.',
+      },
+      ...PAGING_PROPERTIES,
+    },
+  },
+  run: async (session, input) => {
+    const tcms = session.request;
+    const on = str(input, 'on');
+    const query = on === undefined ? {} : { on };
+
+    if (bool(input, 'queue')) {
+      const rows = await session.client.GET('/timesheets/approvals', { params: { query }, tcms });
+      // Not paginated on the wire — the client-side window every other list here uses.
+      return window(rows, input);
+    }
+
+    if (bool(input, 'history')) {
+      const rows = await session.client.GET('/timesheets/periods', { params: { query: {} }, tcms });
+      return window(rows, input);
+    }
+
+    return session.client.GET('/timesheets/periods/current', { params: { query }, tcms });
+  },
+};
+
+/**
+ * Estimate against approved and pending hours, at the issue grain or the epic grain.
+ *
+ * `issue:read` rather than a time key, because it is a property OF the issue and the panels that
+ * show it are the story's and the epic's. There is no project grain and there will not be one:
+ * the project figure is a budget, which is a different module behind a different gate.
+ */
+const readTimeRollup: ToolDefinition = {
+  name: 'tcms_read_time_rollup',
+  title: 'Estimate against approved and pending hours for an issue or an epic',
+  description:
+    'What an issue was estimated at and what has actually been spent on it. Name an `issue` for '
+    + 'the issue grain; add `epic` for the epic grain, which also returns a row per child that '
+    + 'counts toward completion, each flagged `overEstimate` when the approved hours have passed '
+    + 'the estimate. **approvedHours and pendingHours are separate and must never be summed**: '
+    + 'pending hours are logged and not yet approved, and only approved ones count as spent. '
+    + '**estimateHours is null when nobody estimated**, which is not the same as an estimate of '
+    + 'zero — report it as unestimated. There is no project grain on this surface.',
+  gate: { mode: 'all', permissions: ['issue:read'] },
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['issue'],
+    properties: {
+      issue: idProperty('issue or epic to read', 'ACME-118'),
+      epic: {
+        type: 'boolean',
+        description: 'Read `issue` as an EPIC: its totals plus a row per counted child.',
+      },
+    },
+  },
+  run: async (session, input) => {
+    const key = requireStr(input, 'issue');
+    const tcms = session.request;
+    return bool(input, 'epic')
+      ? session.client.GET('/time/rollup/epics/{key}', { params: { path: { key } }, tcms })
+      : session.client.GET('/time/rollup/issues/{key}', { params: { path: { key } }, tcms });
+  },
+};
+
 export const READ_TOOLS: readonly ToolDefinition[] = [
   orient,
   searchCases,
@@ -1357,4 +1475,6 @@ export const READ_TOOLS: readonly ToolDefinition[] = [
   readRelease,
   listProposals,
   triage,
+  readTimesheet,
+  readTimeRollup,
 ];

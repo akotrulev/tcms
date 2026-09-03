@@ -51,6 +51,8 @@ export const IDS = {
   artifact: 'af-1',
   release: 'rl-1',
   importRun: 'ir-1',
+  period: 'tsp-1',
+  timeEntry: 'te-1',
 } as const;
 
 /** A fixed instant, so nothing here depends on when the suite runs. */
@@ -1046,6 +1048,88 @@ export function caseVerification(
   overrides: Partial<Schemas['CaseVerification']> = {},
 ): Schemas['CaseVerification'] {
   return { caseId: IDS.case, issues: [], ...overrides };
+}
+
+/* --------------------------------------------------------------------- time ---- */
+
+/**
+ * A period nobody has submitted, which is the state every screen opens in.
+ *
+ * `entries` is empty and `approvedHours` is 0 for the reason the header gives: the defaults are
+ * the server's answer for an EMPTY resource. A test that turns on an entry names one, and a test
+ * that turns on approval names the state — the contract carries approved and pending apart (016
+ * D-d) precisely so neither can be inferred from the other.
+ */
+export function timesheetPeriod(
+  overrides: Partial<Schemas['TimesheetPeriod']> = {},
+): Schemas['TimesheetPeriod'] {
+  return {
+    id: IDS.period,
+    personId: IDS.user,
+    personName: 'Ana Engineer',
+    startsOn: '2026-09-01',
+    endsOn: '2026-09-15',
+    state: 'OPEN',
+    loggedHours: 0,
+    approvedHours: 0,
+    submittedAt: null,
+    decidedAt: null,
+    decidedByName: null,
+    decisionNote: null,
+    editable: true,
+    entries: [],
+    ...overrides,
+  };
+}
+
+/** An entry against an issue. `subject` is absent for MEETING, LEAVE, TRAINING and INTERNAL. */
+export function timeEntry(overrides: Partial<Schemas['TimeEntry']> = {}): Schemas['TimeEntry'] {
+  return {
+    id: IDS.timeEntry,
+    periodId: IDS.period,
+    subjectType: 'ISSUE',
+    subject: {
+      issueId: 'i-1',
+      issueKey: 'ACME-124',
+      title: 'Address validation',
+      typeLevel: 'TASK',
+      projectId: IDS.project,
+      projectName: 'Acme Storefront',
+    },
+    spentOn: '2026-09-01',
+    hours: 2,
+    note: null,
+    editable: true,
+    ...overrides,
+  };
+}
+
+/** One person in the approval queue — the period, plus the per-project totals the screen shows. */
+export function timesheetQueueEntry(
+  overrides: Partial<Schemas['TimesheetQueueEntry']> = {},
+): Schemas['TimesheetQueueEntry'] {
+  return { period: timesheetPeriod(), projectTotals: [], ...overrides };
+}
+
+/**
+ * The issue grain. `estimateHours` defaults to null — nobody estimated — which is a real state and
+ * not zero, the same distinction `readinessSummary` keeps for an untested release.
+ */
+export function timeRollup(overrides: Partial<Schemas['TimeRollup']> = {}): Schemas['TimeRollup'] {
+  return { issueKey: 'ACME-118', estimateHours: null, approvedHours: 0, pendingHours: 0, ...overrides };
+}
+
+export function epicTimeRollup(
+  overrides: Partial<Schemas['EpicTimeRollup']> = {},
+): Schemas['EpicTimeRollup'] {
+  return {
+    epicKey: 'ACME-100',
+    estimateHours: 0,
+    approvedHours: 0,
+    pendingHours: 0,
+    children: [],
+    ...overrides,
+  };
 }
 
 /**

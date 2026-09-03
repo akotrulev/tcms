@@ -1652,6 +1652,211 @@ function peopleLine(people: readonly components['schemas']['ImportedPerson'][]):
     : `${matched} — kept as the source's own text: ${unmatched.map((person) => person.sourceName).join(', ')}`;
 }
 
+/* --------------------------------------------------------------------- time ---- */
+
+/**
+ * `tcms time list` — the caller's own period, its entries and whether it is still editable.
+ *
+ * **Always the caller's own, and there is no `--person` flag**: `GET /timesheets/periods/current`
+ * takes no person parameter for the reason the operation records — one would let a credential read
+ * somebody else's timesheet with a permission every role holds. Another person's period is
+ * `tcms time queue`, which costs `time:approve`.
+ *
+ * The period id is printed because it is the handle the two write verbs take: `time submit` and
+ * `time approve` are both spelled by id, and this is the only place a person gets their own.
+ */
+const timeList: Command = {
+  name: 'time list',
+  summary: 'Your timesheet for a period — entries, totals and whether it is still editable',
+  usage: 'tcms time list [--on 2026-09-04] [--history]',
+  options: { on: { type: 'string' }, history: { type: 'boolean' }, limit: { type: 'string' } },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const on = first(options['on']);
+
+    if (flag(options['history'])) {
+      const limit = number(first(options['limit']));
+      const periods = await client.GET('/timesheets/periods', {
+        params: { query: limit === undefined ? {} : { limit } },
+        tcms: request,
+      });
+      if (json) return out.json(periods);
+
+      table(out, periods, [
+        { header: 'PERIOD', value: (row) => `${show(row.startsOn)} → ${show(row.endsOn)}` },
+        { header: 'STATE', value: (row) => show(row.state) },
+        { header: 'LOGGED', value: (row) => show(row.loggedHours) },
+        { header: 'APPROVED', value: (row) => show(row.approvedHours) },
+        { header: 'ID', value: (row) => show(row.id) },
+      ]);
+      return;
+    }
+
+    const period = await client.GET('/timesheets/periods/current', {
+      params: { query: on === undefined ? {} : { on } },
+      tcms: request,
+    });
+    if (json) return out.json(period);
+
+    fields(out, [
+      ['Period', `${show(period.startsOn)} → ${show(period.endsOn)}`],
+      ['State', show(period.state)],
+      // Logged and approved are printed apart and never added together (016 D-d). A period
+      // nobody has approved logs hours and has approved none, and one number cannot say both.
+      ['Logged', `${show(period.loggedHours)}h`],
+      ['Approved', `${show(period.approvedHours)}h`],
+      ['Editable', period.editable ? 'yes — until you submit' : 'no'],
+      ['Id', show(period.id)],
+    ]);
+
+    if (period.decisionNote) {
+      out.line();
+      // Printed above the entries because that is where it belongs: a rejected period is unlocked
+      // again and the note is the whole reason it came back. It is never cleared.
+      out.line(`Sent back by ${show(period.decidedByName)}: ${period.decisionNote}`);
+    }
+
+    out.line();
+    table(out, period.entries, [
+      { header: 'DATE', value: (row) => show(row.spentOn) },
+      { header: 'AGAINST', value: (row) => againstOf(row) },
+      { header: 'HOURS', value: (row) => show(row.hours) },
+      { header: 'NOTE', value: (row) => show(row.note) },
+      { header: 'ID', value: (row) => show(row.id) },
+    ]);
+
+    if (period.entries.length === 0) {
+      out.line();
+      out.line('Nothing logged in this period yet. Log some with: tcms time log --issue ACME-124 --hours 2');
+    }
+  },
+};
+
+/**
+ * What an entry is against, in one cell.
+ *
+ * `subject` is present only for an ISSUE entry, so a meeting or a day of leave prints the category
+ * itself rather than an empty column — a blank there reads as data the request failed to fetch,
+ * which is exactly what it is not.
+ */
+function againstOf(entry: components['schemas']['TimeEntry']): string {
+  return entry.subject ? `${entry.subject.issueKey} ${entry.subject.title}` : show(entry.subjectType);
+}
+
+/**
+ * `tcms time queue` — the periods waiting on this caller, and the ids `time approve` takes.
+ *
+ * **It is not only the submitted ones.** `timesheet-approvals.html` shows an open period as
+ * *"Not submitted · 41.0h so far"* beside a Remind action, so the state is served and printed
+ * rather than filtered out here; an approver who cannot see that somebody has not submitted has
+ * no way to tell an empty queue from an unfinished one.
+ *
+ * A period spans projects and `time:approve` is a PROJECT-scope grant, so what appears here is
+ * every period with at least one entry against a project this caller may approve for — and
+ * approving it approves the whole period, entries against other projects included (016 D-i).
+ */
+const timeQueue: Command = {
+  name: 'time queue',
+  summary: 'Timesheets waiting on you to approve, with the id each decision takes',
+  usage: 'tcms time queue [--on 2026-08-20]',
+  options: { on: { type: 'string' } },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const on = first(options['on']);
+
+    const rows = await client.GET('/timesheets/approvals', {
+      params: { query: on === undefined ? {} : { on } },
+      tcms: request,
+    });
+    if (json) return out.json(rows);
+
+    table(out, rows, [
+      { header: 'PERSON', value: (row) => show(row.period.personName) },
+      { header: 'PERIOD', value: (row) => `${show(row.period.startsOn)} → ${show(row.period.endsOn)}` },
+      { header: 'STATE', value: (row) => show(row.period.state) },
+      { header: 'LOGGED', value: (row) => show(row.period.loggedHours) },
+      { header: 'SUBMITTED', value: (row) => showDate(row.period.submittedAt) },
+      { header: 'PROJECTS', value: (row) => totalsLine(row.projectTotals) },
+      { header: 'ID', value: (row) => show(row.period.id) },
+    ]);
+
+    if (rows.length === 0) {
+      out.line();
+      // A sentence rather than an empty table: nobody having anything to approve is the ordinary
+      // state of a fortnight, and a bare zero-row table reads as a request that went wrong.
+      out.line('Nothing is waiting on you for this period.');
+    }
+  },
+};
+
+function totalsLine(
+  totals: readonly components['schemas']['TimesheetQueueEntry']['projectTotals'][number][],
+): string {
+  if (totals.length === 0) return '(none)';
+  return totals.map((total) => `${total.projectName} ${String(total.hours)}h`).join(', ');
+}
+
+/**
+ * `tcms time rollup ACME-118` — estimate against approved and pending, for an issue or an epic.
+ *
+ * One command over two operations because it is one question at two grains, the same arrangement
+ * `time list --history` makes. **Approved and pending are printed apart and never summed**
+ * (016 D-d): `epic.html` labels its panel *"approved hours only"* and `timesheets.html` reports
+ * hours nobody has approved, so a single figure would be wrong on one screen or the other.
+ *
+ * There is no project grain and there will not be one — the project figure the mockups show is
+ * the budget row, which is M8's, and the work table's footer, which the issue list already carries
+ * per row.
+ */
+const timeRollup: Command = {
+  name: 'time rollup',
+  summary: 'Estimate against approved and pending hours, for an issue or an epic',
+  usage: 'tcms time rollup ACME-118\n       tcms time rollup ACME-100 --epic',
+  options: { epic: { type: 'boolean' } },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const key = requireArg(context, 'issue');
+
+    if (!flag(options['epic'])) {
+      const rollup = await client.GET('/time/rollup/issues/{key}', {
+        params: { path: { key } }, tcms: request,
+      });
+      if (json) return out.json(rollup);
+
+      fields(out, [
+        ['Issue', show(rollup.issueKey)],
+        // Null, not zero, when nobody estimated — and printed as such. `show` renders it as the
+        // absence it is; a `?? 0` here would turn "unestimated" into "estimated at nothing".
+        ['Estimate', show(rollup.estimateHours)],
+        ['Approved', `${show(rollup.approvedHours)}h`],
+        ['Pending', `${show(rollup.pendingHours)}h — logged, nobody has approved it`],
+      ]);
+      return;
+    }
+
+    const rollup = await client.GET('/time/rollup/epics/{key}', {
+      params: { path: { key } }, tcms: request,
+    });
+    if (json) return out.json(rollup);
+
+    fields(out, [
+      ['Epic', show(rollup.epicKey)],
+      ['Estimate', `${show(rollup.estimateHours)}h`],
+      ['Approved', `${show(rollup.approvedHours)}h`],
+      ['Pending', `${show(rollup.pendingHours)}h`],
+    ]);
+
+    out.line();
+    table(out, rollup.children, [
+      { header: 'ISSUE', value: (row) => show(row.issueKey) },
+      { header: 'TITLE', value: (row) => show(row.title) },
+      { header: 'ESTIMATE', value: (row) => show(row.estimateHours) },
+      { header: 'APPROVED', value: (row) => show(row.approvedHours) },
+      { header: 'OVER', value: (row) => (row.overEstimate ? 'yes' : '') },
+    ]);
+  },
+};
+
 export const READS: readonly Command[] = [
   whoami,
   format,
@@ -1681,4 +1886,7 @@ export const READS: readonly Command[] = [
   issueCases,
   importList,
   importShow,
+  timeList,
+  timeQueue,
+  timeRollup,
 ];

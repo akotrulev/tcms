@@ -710,7 +710,10 @@ tcms release show 2.4  # can we ship it — and the stories that stand in the wa
 tcms roadmap           # releases on a timeline, with the epics targeting each
 tcms issue cases ACME-1# the test cases a story is proven by, and their latest result
 tcms import list       # migrations into this project, newest first
-tcms import show <id>  # one import report — the counts, the mapping, and every dropped field`}</Terminal>
+tcms import show <id>  # one import report — the counts, the mapping, and every dropped field
+tcms time list         # your own timesheet for this period — entries, totals, and its id
+tcms time queue        # timesheets waiting on you to approve
+tcms time rollup ACME-1# estimate against approved and pending hours; --epic for the epic grain`}</Terminal>
 
         <H>Writing</H>
         <Terminal>{`tcms case edit         # change a test case
@@ -728,6 +731,9 @@ tcms release create | release edit | release publish | release delete
 tcms issue release ACME-1 --release 2.4      # target a story at a version, or --none
 tcms issue cases set ACME-1 --case TC-311    # the cases that prove it; a replacement, not an addition
 tcms issue attach-pr ACME-1 --pr-url <URL>   # report the pull request the work went into
+tcms time log --issue ACME-1 --hours 2       # or --against MEETING | LEAVE | TRAINING | INTERNAL
+tcms time submit <period>                    # your period stops being editable, by anybody
+tcms time approve <period> [--reject --note TEXT | --withdraw]
 tcms review comment    # a remark on an open review`}</Terminal>
 
         <H>Options that apply everywhere</H>
@@ -813,7 +819,7 @@ tcms review comment    # a remark on an open review`}</Terminal>
   {
     id: 'mcp',
     title: 'AI agent access (MCP)',
-    summary: 'Connecting an AI assistant, the 30 tools, and the limits that make it safe.',
+    summary: 'Connecting an AI assistant, the 34 tools, and the limits that make it safe.',
     body: (
       <>
         <P>
@@ -848,19 +854,19 @@ tcms review comment    # a remark on an open review`}</Terminal>
                 'tcms_whoami reports who the credential acts as and what it can reach. tcms_orient returns the project with its classification dimensions, execution statuses, suites, tags and case counts in one call — the vocabulary is per-project, so an agent that skips this guesses values that get refused. tcms_shape answers what a payload of a given kind must look like, and reaches no instance at all, so it is safe to call before anything is configured.',
             },
             {
-              term: 'Reading — 14',
+              term: 'Reading — 16',
               detail:
-                'tcms_search_cases · tcms_open_case · tcms_list_suites · tcms_list_library · tcms_list_artifacts · tcms_doc_tree · tcms_open_doc_page · tcms_list_plans · tcms_open_run · tcms_read_issue · tcms_read_board · tcms_read_release · tcms_list_proposals · tcms_triage',
+                'tcms_search_cases · tcms_open_case · tcms_list_suites · tcms_list_library · tcms_list_artifacts · tcms_doc_tree · tcms_open_doc_page · tcms_list_plans · tcms_open_run · tcms_read_issue · tcms_read_board · tcms_read_release · tcms_read_timesheet · tcms_read_time_rollup · tcms_list_proposals · tcms_triage',
             },
             {
-              term: 'Writing — 13',
+              term: 'Writing — 15',
               detail:
-                'tcms_write_case · tcms_write_suite · tcms_write_doc_page · tcms_write_plan · tcms_write_run · tcms_record_result · tcms_review_comment · tcms_review_verdict · tcms_write_issue · tcms_write_backlog · tcms_write_release · tcms_write_artifact · tcms_report',
+                'tcms_write_case · tcms_write_suite · tcms_write_doc_page · tcms_write_plan · tcms_write_run · tcms_record_result · tcms_review_comment · tcms_review_verdict · tcms_write_issue · tcms_write_backlog · tcms_write_release · tcms_write_artifact · tcms_write_timesheet · tcms_approve_timesheet · tcms_report',
             },
           ]}
         />
         <P>
-          The list is workflow-shaped rather than one tool per endpoint: 30 tools over roughly 88 API
+          The list is workflow-shaped rather than one tool per endpoint: 34 tools over roughly 98 API
           paths. Tool definitions cost the model context, so a mirror of the API would be a surface
           only the largest hosts could afford to load.
         </P>

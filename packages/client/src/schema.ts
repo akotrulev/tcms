@@ -10478,6 +10478,277 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/timesheets/periods/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's open period for a date, created lazily if it has no rows yet
+         * @description Requires `time:log`. **Always the caller's own** — there is no person parameter, because
+         *     one would let a credential read somebody else's timesheet with a permission every role
+         *     holds. Reading another person's period is the approval queue, which costs `time:approve`.
+         *
+         *     The period row is created by the first write into it, so a caller who has logged nothing
+         *     gets the derived bounds with an empty `entries` and zero totals rather than a 404.
+         */
+        get: operations["getCurrentTimesheetPeriod"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/timesheets/periods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's periods, newest first
+         * @description Requires `time:log`. The "Previous period" panel on `timesheets.html`, which is where a
+         *     rejected period is found again — a rejection unlocks the period and leaves its note on
+         *     it, so the history is the only route back to work that was sent back.
+         */
+        get: operations["listTimesheetPeriods"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/timesheets/periods/{periodId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                periodId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One period with its entries
+         * @description Requires `time:log` for the caller's own period, or `time:read` for anybody else's.
+         *     A UUID rather than a display key: a period is not a keyed artifact and has no counter.
+         */
+        get: operations["getTimesheetPeriod"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/timesheets/entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Log hours against an issue, a meeting, leave, training or internal work
+         * @description Requires `time:log`. The period is derived from `spentOn` (D-a) and created if it does
+         *     not exist yet, so nothing has to open one first.
+         *
+         *     **A period that is SUBMITTED or APPROVED refuses the write with a 409.** That is the
+         *     lock the whole feature turns on: a submitted timesheet is editable by nobody, and a
+         *     rejected one is editable again.
+         */
+        post: operations["logTime"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/timesheets/entries/{entryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entryId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove one entry
+         * @description Requires `time:log` for the caller's own entry, or `time:edit` for anybody else's.
+         *     A hard delete: an hour logged by mistake is not a state worth keeping, and the rollup
+         *     is recomputed from what remains.
+         *
+         *     Refused with a 409 once the period is submitted.
+         */
+        delete: operations["deleteTimeEntry"];
+        options?: never;
+        head?: never;
+        /**
+         * Amend one entry
+         * @description Requires `time:log` for the caller's own entry, or `time:edit` for anybody else's.
+         *     A whole-body replacement rather than a delta — `TimeEntryInput` is four fields and a
+         *     note, and a partial amend of a row this small buys nothing.
+         *
+         *     Refused with a 409 once the period is submitted, for `POST`'s reason.
+         */
+        patch: operations["amendTimeEntry"];
+        trace?: never;
+    };
+    "/timesheets/periods/{periodId}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                periodId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit a period for approval
+         * @description Requires `time:log`, and **only for the caller's own period** — submitting somebody
+         *     else's timesheet is not an act this product has. It is not a fifth permission key
+         *     (D-e): it is the same act as logging, one step later.
+         *
+         *     The period stops being editable. Submitting one that is already SUBMITTED or APPROVED
+         *     is a 409; a REJECTED one may be submitted again, which is the whole point of a rejection
+         *     unlocking it.
+         */
+        post: operations["submitTimesheet"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/timesheets/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The approval queue for a period
+         * @description Requires `time:approve`. Per D-i, a period appears here when at least one of its entries
+         *     names a project the caller may approve for — and approving it approves the **whole**
+         *     period, including entries against projects they do not hold. That is the sharp edge
+         *     stated rather than hidden: `time:approve` is a PROJECT-scope grant and a period spans
+         *     projects, and per-project partial approval is a state the screen has no way to render.
+         *
+         *     The queue is not only the submitted ones. `timesheet-approvals.html` shows an OPEN
+         *     period as *"Not submitted · 41.0h so far"* with a Remind action beside it, so the state
+         *     is served and the client decides what may be done with it.
+         */
+        get: operations["listTimesheetApprovals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/timesheets/periods/{periodId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                periodId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a period, reject it with a note, or withdraw a rejection
+         * @description Requires `time:approve`. **Test Lead does not hold it** — Project Manager and Company
+         *     Admin do (roles spec §A3, and 016 D-f records that this plan deliberately does not
+         *     widen the grant).
+         *
+         *     `REJECT` requires a `note`: a rejection is never silent, and the note is shown at the
+         *     top of the unlocked period and never cleared. `WITHDRAW_REJECTION` puts a period the
+         *     approver sent back by mistake into SUBMITTED again, with the note kept as history.
+         *
+         *     Approving posts the period's hours onto each issue and rolls them up to the story, the
+         *     epic and the project — synchronously, inside this transaction (D-h).
+         */
+        post: operations["decideTimesheet"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/time/rollup/issues/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Estimate against approved and pending hours for one issue
+         * @description Requires `issue:read`. The `14h (approved)` figure on `story.html`.
+         *
+         *     **Approved and pending are carried apart and never summed** (D-d). `epic.html` says
+         *     *"approved hours only"* on its panel and `timesheets.html` reports `Logged this period
+         *     21h` for a period nobody has approved — one number is not enough, and the ambiguity is
+         *     what the mockups are guarding against.
+         */
+        get: operations["getIssueTimeRollup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/time/rollup/epics/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * The epic time panel — totals, and a row per counted child
+         * @description Requires `issue:read`. The children are the ones whose type counts toward completion,
+         *     aggregated at read time by joining `issue_fact` — there is no epic-grain rollup table,
+         *     because three grains that can disagree about the same hours is three answers (D-c).
+         *
+         *     There is deliberately **no project grain**: the project figure the mockups show is
+         *     `settings-general.html`'s budget row, which is M8's, and `work-table.html`'s footer
+         *     total, which the issue list already carries per row.
+         */
+        get: operations["getEpicTimeRollup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/imports/source-projects": {
         parameters: {
             query?: never;
@@ -18383,6 +18654,135 @@ export interface components {
             title: string;
             excerpt: string;
         };
+        /**
+         * @description What an entry is logged against (016 D-b). Five members, and TEST_RUN is deliberately not one: timesheet-approvals.html displays a row against a test run, but timesheets.html — the only screen that CREATES an entry — cannot produce one. Adding it later is one CHECK member.
+         * @enum {string}
+         */
+        TimeSubjectType: "ISSUE" | "MEETING" | "LEAVE" | "TRAINING" | "INTERNAL";
+        /**
+         * @description OPEN is editable by its owner. SUBMITTED is editable by nobody. APPROVED is final. REJECTED is editable again, and carries the note that sent it back.
+         * @enum {string}
+         */
+        TimesheetState: "OPEN" | "SUBMITTED" | "APPROVED" | "REJECTED";
+        TimeEntry: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            periodId: string;
+            subjectType: components["schemas"]["TimeSubjectType"];
+            /** @description Present only when subjectType is ISSUE. Denormalised from issue_fact. */
+            subject?: {
+                /** Format: uuid */
+                issueId: string;
+                /** @example ACME-124 */
+                issueKey: string;
+                title: string;
+                /** @enum {string} */
+                typeLevel: "EPIC" | "STORY" | "TASK";
+                /** Format: uuid */
+                projectId: string;
+                projectName: string;
+            };
+            /** Format: date */
+            spentOn: string;
+            /**
+             * Format: double
+             * @example 2
+             */
+            hours: number;
+            note?: string | null;
+            /** @description False whenever the owning period is SUBMITTED or APPROVED. Served rather than derived on the client so one rule has one home. */
+            editable: boolean;
+        };
+        TimeEntryInput: {
+            subjectType: components["schemas"]["TimeSubjectType"];
+            /** @description Required when subjectType is ISSUE, and refused otherwise. */
+            issueKey?: string;
+            /** Format: date */
+            spentOn: string;
+            /** Format: double */
+            hours: number;
+            note?: string | null;
+        };
+        TimesheetPeriod: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            personId: string;
+            personName: string;
+            /** Format: date */
+            startsOn: string;
+            /** Format: date */
+            endsOn: string;
+            state: components["schemas"]["TimesheetState"];
+            /** Format: double */
+            loggedHours: number;
+            /**
+             * Format: double
+             * @description Zero unless state is APPROVED. Carried separately from loggedHours per D-d.
+             */
+            approvedHours: number;
+            /** Format: date-time */
+            submittedAt?: string | null;
+            /** Format: date-time */
+            decidedAt?: string | null;
+            decidedByName?: string | null;
+            /** @description The rejector's note, shown at the top of the unlocked period. Never cleared. */
+            decisionNote?: string | null;
+            editable: boolean;
+            entries: components["schemas"]["TimeEntry"][];
+        };
+        TimesheetDecisionInput: {
+            /** @enum {string} */
+            decision: "APPROVE" | "REJECT" | "WITHDRAW_REJECTION";
+            /** @description Required when decision is REJECT. A rejection is never silent (T2's AC). */
+            note?: string;
+        };
+        TimeRollup: {
+            /** @example ACME-118 */
+            issueKey: string;
+            /**
+             * Format: double
+             * @description Read from issue_fact.estimate_hours. Null when nobody estimated.
+             */
+            estimateHours: number | null;
+            /** Format: double */
+            approvedHours: number;
+            /**
+             * Format: double
+             * @description Logged but not yet approved. Rendered separately, never summed into approved.
+             */
+            pendingHours: number;
+        };
+        EpicTimeRollup: {
+            /** @example ACME-100 */
+            epicKey: string;
+            /** Format: double */
+            estimateHours: number;
+            /** Format: double */
+            approvedHours: number;
+            /** Format: double */
+            pendingHours: number;
+            children: {
+                issueKey: string;
+                title: string;
+                /** Format: double */
+                estimateHours: number | null;
+                /** Format: double */
+                approvedHours: number;
+                /** @description approvedHours > estimateHours. The highlighted row on epic.html. */
+                overEstimate: boolean;
+            }[];
+        };
+        TimesheetQueueEntry: {
+            period: components["schemas"]["TimesheetPeriod"];
+            projectTotals: {
+                /** @description The literal "—" is not used; a project-less total omits this row. */
+                projectName: string;
+                /** Format: double */
+                hours: number;
+            }[];
+        };
     };
     responses: {
         /**
@@ -22392,6 +22792,386 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getCurrentTimesheetPeriod: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Any date inside the wanted period; defaults to today. The bounds are derived from it
+                 *     (D-a) rather than passed as a pair, so two clients cannot disagree about where a
+                 *     period starts.
+                 */
+                on?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The period, with its entries and its totals. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimesheetPeriod"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listTimesheetPeriods: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Periods, newest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimesheetPeriod"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getTimesheetPeriod: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                periodId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The period. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimesheetPeriod"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    logTime: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
+                 *     already succeeded answers **200** with the resource that intent created, instead of creating
+                 *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
+                 *     §136; the parameter has been shared by six other creates since `V14`, and by report generation since `V66`.)
+                 *
+                 *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
+                 *     it across retries. A key generated per attempt is the mistake that makes the header look
+                 *     right and do nothing.
+                 *
+                 *     Scoped to the project the request is addressed to, which is the scope the uniqueness
+                 *     constraint behind it uses. Optional: omitted, every call creates. At most 200 characters.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimeEntryInput"];
+            };
+        };
+        responses: {
+            /** @description A replay — the `Idempotency-Key` had already logged this entry. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeEntry"];
+                };
+            };
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeEntry"];
+                };
+            };
+            /**
+             * @description `issueKey` on a non-ISSUE entry, or missing on an ISSUE one; hours outside
+             *     0.25–24; an issue on a project whose `trackTime` is off (D-g).
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The period this date falls in is submitted or approved. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteTimeEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The period is submitted or approved. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    amendTimeEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimeEntryInput"];
+            };
+        };
+        responses: {
+            /** @description The amended entry. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeEntry"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The period is submitted or approved. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    submitTimesheet: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                periodId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The submitted period, now uneditable. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimesheetPeriod"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Already submitted or approved. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listTimesheetApprovals: {
+        parameters: {
+            query?: {
+                /** @description Any date inside the wanted period; defaults to today. */
+                on?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The queue, one entry per person. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimesheetQueueEntry"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    decideTimesheet: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                periodId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimesheetDecisionInput"];
+            };
+        };
+        responses: {
+            /** @description The decided period. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimesheetPeriod"];
+                };
+            };
+            /** @description A `REJECT` with no note. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /**
+             * @description The period is not in a state this decision can act on — approving one nobody has
+             *     submitted, or withdrawing a rejection from a period that was not rejected.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getIssueTimeRollup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The rollup. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeRollup"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getEpicTimeRollup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The epic rollup. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EpicTimeRollup"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };

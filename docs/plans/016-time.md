@@ -65,11 +65,17 @@ Traps this task specifically will hit:
 - **There are TWO generated clients and they are not the same command.** `cd frontend && npm run
   gen:api` AND `cd packages/client && npm run gen:api`. Regenerate both or contractPairing.test.ts
   reddens on a pair that has drifted.
-- **The marked region of contractBodies.ts is byte-identical across both copies.** Edit one, edit
-  both, and paste rather than retype.
-- **The CLI and MCP each have their own reads.ts/writes.ts.** Five verbs mirrored into both;
+- **`contractBodies.ts` holds NO fixtures — it is the schema walker.** Its marked region is
+  byte-identical across the two copies and neither copy needs a line for this slice. The fixtures
+  live in `packages/client/src/test/fixtures.ts` (a factory per resource, `Partial<T>` in, `T` out),
+  which is what `writeConformance.test.ts` imports.
+- **The CLI and MCP each have their own reads.ts/writes.ts.** Six CLI commands and four MCP tools;
   writeConformance.test.ts in each package compares the write verbs against openapi.yaml and is the
-  check that a mirror drifted.
+  check that a mirror drifted — a write with no INVOCATIONS entry FAILS rather than skipping.
+- **A registry change reaches four files outside `packages/*/src`.**
+  `frontend/src/features/help/sections.tsx` is pinned BOTH ways by `guideCopies.test.ts` in both
+  packages — its command list, its tool list and its `N tools` count — and
+  `mcp/src/writes.test.ts` pins the tool count.
 - **The verbs 404 until T3.** That is the contract-first cost, and it is a real 404 from a path the
   server does not serve. Do NOT add a stub returning a fake success.
 - **No verb on this surface returns a rate or a cost**, and the surface doc must say so — that is
@@ -80,11 +86,12 @@ Gate: ~/bin/tcms-remote sync, then
   frontend "npm run build"
 
 Commit (one commit, `git add <paths>` only — never -A): openapi.yaml, the MCP surface doc, both
-schema files, both contractBodies.ts, and the four cli/mcp source files. Message:
-`feat(time): the time contract, both clients, and the CLI/MCP verbs`.
+schema files, `packages/client/src/test/fixtures.ts`, the four cli/mcp source files, both
+`writeConformance.test.ts`, `mcp/src/writes.test.ts` and `frontend/src/features/help/sections.tsx`.
+Message: `feat(time): the time contract, both clients, and the CLI/MCP verbs`.
 
 Done when: contractPairing.test.ts and both writeConformance.test.ts are green, and `node
-cli/dist/main.js help` lists the five time verbs.
+cli/dist/main.js help` lists the six time verbs.
 ````
 
 ### Prompt — T2 — `V9`: `time_entry`, `timesheet_period`, `issue_time_rollup`
@@ -421,7 +428,7 @@ writes the two panels into M7's prompt as work M7 completes.
 | `…/time/*View.java`, `*Input.java` | Wire records |
 | `frontend/src/features/time/` | `TimesheetPage.tsx`, `ApprovalsPage.tsx` and their components |
 | `frontend/src/api/queries/time.ts` | Every time hook, behind the `index.ts` barrel |
-| `packages/cli/src/reads.ts`, `writes.ts` · `packages/mcp/src/reads.ts`, `writes.ts` | The five verbs |
+| `packages/cli/src/reads.ts`, `writes.ts` · `packages/mcp/src/reads.ts`, `writes.ts` | ~~The five verbs~~ → six CLI commands and four MCP tools (T1) |
 
 ---
 
@@ -429,7 +436,7 @@ writes the two panels into M7's prompt as work M7 completes.
 
 | # | Task | Stack | Agent | Deliverable | Depends on |
 |---|---|---|---|---|---|
-| 1 | T1 — The time contract, both clients, and the CLI/MCP verbs | `ts` | `tooling-engineer` | `openapi.yaml` carries ten time path items — eleven operations — with `required` on every schema; both generated clients and both `contractBodies.ts` copies move with it; `time log/list/submit/approve/rollup` exist on the CLI and MCP and are in the surface doc | none |
+| 1 | T1 — The time contract, both clients, and the CLI/MCP verbs | `ts` | `tooling-engineer` | `openapi.yaml` carries ten time path items — eleven operations — with `required` on every schema; both generated clients and `packages/client/src/test/fixtures.ts` move with it; `time list/queue/rollup/log/submit/approve` on the CLI and four `tcms_*` tools on the MCP server, both in the surface doc and the shipped guide | none |
 | 2 | T2 — `V9`: `time_entry`, `timesheet_period`, `issue_time_rollup` | `be` (db) | `data-architect` | `V9__time.sql` applied; three tables with `company_id NOT NULL` and forced RLS, `project_settings.track_time`; `SchemaConventionTest` green | T1 |
 | 3 | T3 — The `time` module, the rollup, and the money-boundary negative test | `be` | `be-java` | The eleven operations serve real data; a submitted period refuses edits and a rejected one accepts them; a test asserts a Test Engineer **lacks** `ratecard:read` and every `billing:*`; a test asserts `time` never writes `issue_fact`; ArchUnit green | T2 |
 | 4 | T4 — Timesheets and approvals | `fe` | `fe-react` | `/timesheets` and `/timesheets/approvals` render; a person logs against an issue, a meeting and leave, submits, and a PM approves or rejects with a note | T3 |
@@ -447,11 +454,36 @@ existing screens touched additively, plus the docs close-out riding with it per 
 
 **Deliverable:** `docs/specs/openapi.yaml` carries the ten `time` path items — eleven operations — and their schemas, every
 schema with its `required` array including on inline nested objects; `frontend/src/api/schema.d.ts`
-and `packages/client/src/schema.ts` are regenerated from it; the marked region of both
-`contractBodies.ts` copies carries the new fixtures byte-identically; `time log`, `time list`,
-`time submit`, `time approve` and `time rollup` exist on both the CLI and the MCP server and are
-documented in the surface doc. One commit.
+and `packages/client/src/schema.ts` are regenerated from it; `packages/client/src/test/fixtures.ts`
+carries a factory per new resource; `time list`, `time queue`, `time rollup`, `time log`,
+`time submit` and `time approve` exist on the CLI, four tools serve the same surface on the MCP
+server, and both are documented in the surface doc. One commit.
 **Depends on:** none
+
+> **Landed 2026-09-04, with four corrections to what this block predicted.** They are written into
+> the steps below rather than appended as a note.
+>
+> 1. **`contractBodies.ts` needed no change.** It is the schema *walker* — the marked region is
+>    `violationsOf` and its helpers, and it holds no response bodies at all. The fixtures the
+>    conformance checks import are factories in `packages/client/src/test/fixtures.ts`, one per
+>    resource, `Partial<T>` in and `T` out. Step 4 is rewritten to that file.
+> 2. **Six CLI commands, not five.** `time approve` takes a period id and, before `time queue`,
+>    nothing on this surface could produce one belonging to somebody else — `time list` prints only
+>    the caller's own. The approve verb was reachable only for a period the approver could not have
+>    submitted. `time queue` wraps `GET /timesheets/approvals`, which this block's own contract
+>    table already carries.
+> 3. **Four MCP tools, and the read half splits by WHO is reading.** `tcms_read_timesheet` is the
+>    surface's first `any`-gated read (`time:log` for your own period, `time:approve` for the queue)
+>    and carries a `narrow(held)` sentence; `tcms_read_time_rollup` is `issue:read`;
+>    `tcms_write_timesheet` (`log`, `submit`) is `time:log`; `tcms_approve_timesheet` (`approve`,
+>    `reject`, `withdraw-rejection`) is `time:approve` — separate because Test Lead does not hold it
+>    (D-f), so merging would list the decision to every Test Engineer.
+> 4. **Four files outside `packages/*/src` moved with the registries**, all of them found by an
+>    existing check rather than by reading: `frontend/src/features/help/sections.tsx` (pinned both
+>    ways by `guideCopies.test.ts` in both packages, including its `N tools` prose), both
+>    `writeConformance.test.ts` (a write with no `INVOCATIONS` entry fails rather than skips) and
+>    `mcp/src/writes.test.ts`'s tool count. §3's table in the surface doc was also missing rows 29
+>    and 30 — 013 T4 moved the heading's count and not the rows — and they are added here.
 
 **Stack:** `ts` · **Agent:** `tooling-engineer` · **Skills:** `tool-cli-builder`, `tool-mcp-builder`
 
@@ -459,10 +491,15 @@ documented in the surface doc. One commit.
 - Modify: `docs/specs/openapi.yaml`
 - Modify: `frontend/src/api/schema.d.ts` (generated — `cd frontend && npm run gen:api`)
 - Modify: `packages/client/src/schema.ts` (generated — `cd packages/client && npm run gen:api`)
-- Modify: `frontend/src/api/contractBodies.ts`
-- Modify: `packages/client/src/test/contractBodies.ts`
+- Modify: `packages/client/src/test/fixtures.ts` — ~~`frontend/src/api/contractBodies.ts` and
+  `packages/client/src/test/contractBodies.ts`~~ → **superseded: those two are the schema walker and
+  hold no bodies.** The frontend's own `src/test/fixtures.ts` is T4's, when a screen first doubles
+  one of these resources.
 - Modify: `packages/cli/src/reads.ts`, `packages/cli/src/writes.ts`
 - Modify: `packages/mcp/src/reads.ts`, `packages/mcp/src/writes.ts`
+- Modify: `packages/cli/src/writeConformance.test.ts`, `packages/mcp/src/writeConformance.test.ts`,
+  `packages/mcp/src/writes.test.ts` — the three checks a registry change is not allowed to pass
+- Modify: `frontend/src/features/help/sections.tsx` — the shipped guide, pinned both ways
 - Modify: `docs/specs/2026-08-08-mcp-tool-and-command-surface.md`
 
 **The contract, in full.** Eleven operations over ten path items, under a new `time` tag (add `- name: time` to the `tags:`
@@ -818,164 +855,87 @@ cd ../packages/client && npm run gen:api
 Expected: `frontend/src/api/schema.d.ts` and `packages/client/src/schema.ts` both gain the eleven
 operations. **Both, or the pair has drifted** — `contractPairing.test.ts` is what catches it.
 
-- [ ] **Step 4: Add the fixtures to the marked region of both `contractBodies.ts`**
+- [x] **Step 4: ~~Add the fixtures to the marked region of both `contractBodies.ts`~~ → add a
+      factory per resource to `packages/client/src/test/fixtures.ts`**
 
-The marked region is byte-identical across the two copies. Paste the same text into both:
+`contractBodies.ts` is the schema **walker** — its marked region is `violationsOf`, `deref`,
+`pathMatchers` and the rest, byte-identical across the two copies and pinned by
+`contractPairing.test.ts`. It holds no response bodies and never has. What the conformance checks
+import is `packages/client/src/test/fixtures.ts`: a factory per resource, complete by construction,
+`Partial<T>` in and `T` out, with the defaults set to the server's answer for an **empty** resource.
 
-```ts
-export const timesheetPeriodBody = {
-  id: '00000000-0000-4000-8000-00000000e001',
-  personId: '00000000-0000-4000-8000-00000000e002',
-  personName: 'Dana Petrov',
-  startsOn: '2026-09-01',
-  endsOn: '2026-09-15',
-  state: 'OPEN',
-  loggedHours: 21,
-  approvedHours: 0,
-  submittedAt: null,
-  decidedAt: null,
-  decidedByName: null,
-  decisionNote: null,
-  editable: true,
-  entries: [
-    {
-      id: '00000000-0000-4000-8000-00000000e003',
-      periodId: '00000000-0000-4000-8000-00000000e001',
-      subjectType: 'ISSUE',
-      subject: {
-        issueId: '00000000-0000-4000-8000-00000000e004',
-        issueKey: 'ACME-124',
-        title: 'Address validation',
-        typeLevel: 'TASK',
-        projectId: '00000000-0000-4000-8000-00000000e005',
-        projectName: 'Acme Storefront',
-      },
-      spentOn: '2026-09-01',
-      hours: 2,
-      note: 'carrier list spike-out',
-      editable: true,
-    },
-    {
-      id: '00000000-0000-4000-8000-00000000e006',
-      periodId: '00000000-0000-4000-8000-00000000e001',
-      subjectType: 'MEETING',
-      spentOn: '2026-09-01',
-      hours: 1,
-      note: '2.4 readiness review',
-      editable: true,
-    },
-  ],
-} as const;
-
-export const timeRollupBody = {
-  issueKey: 'ACME-118',
-  estimateHours: 16,
-  approvedHours: 14,
-  pendingHours: 0,
-} as const;
-
-export const epicTimeRollupBody = {
-  epicKey: 'ACME-100',
-  estimateHours: 306,
-  approvedHours: 241,
-  pendingHours: 0,
-  children: [
-    { issueKey: 'ACME-112', title: 'Cart survives a sign-in', estimateHours: 8, approvedHours: 7, overEstimate: false },
-    { issueKey: 'ACME-122', title: 'Card capture without a redirect', estimateHours: 16, approvedHours: 19, overEstimate: true },
-  ],
-} as const;
-```
-
-- [ ] **Step 5: Add the CLI verbs**
-
-In `packages/cli/src/reads.ts`, beside `issue list` / `issue show`:
+Five factories, and two `IDS` entries (`period: 'tsp-1'`, `timeEntry: 'te-1'`):
 
 ```ts
-{
-  name: 'time list',
-  summary: 'Your timesheet for a period — entries, totals and whether it is still editable.',
-  args: [],
-  options: [{ name: 'on', description: 'Any date inside the period. Defaults to today.' }],
-  async run(context) {
-    const on = context.options.on;
-    return context.api.get('/timesheets/periods/current', on ? { on } : {});
-  },
-},
-{
-  name: 'time rollup',
-  summary: 'Estimate against approved and pending hours for an issue or an epic.',
-  args: [{ name: 'issue', description: 'An issue key, e.g. ACME-118.' }],
-  options: [{ name: 'epic', description: 'Read the epic grain instead, with a row per child.', flag: true }],
-  async run(context) {
-    const key = requireArg(context, 'issue');
-    const grain = context.options.epic ? 'epics' : 'issues';
-    return context.api.get(`/time/rollup/${grain}/${encodeURIComponent(key)}`);
-  },
-},
+export function timesheetPeriod(overrides = {}) { /* OPEN, no entries, 0 logged, 0 approved */ }
+export function timeEntry(overrides = {}) { /* an ISSUE entry with its `subject` filled */ }
+export function timesheetQueueEntry(overrides = {}) { /* a period plus empty projectTotals */ }
+export function timeRollup(overrides = {}) { /* estimateHours NULL, not 0 — nobody estimated */ }
+export function epicTimeRollup(overrides = {}) { /* zeroes and no children */ }
 ```
 
-In `packages/cli/src/writes.ts`, following the shape of `issue comment` at line 1365:
+`timeRollup`'s `estimateHours` defaults to **null** rather than 0, which is the same distinction
+`readinessSummary` keeps for an untested release: unestimated and estimated-at-nothing are different
+answers and a `?? 0` between the wire and a cell erases one of them.
 
-```ts
-{
-  name: 'time log',
-  summary: 'Log hours against an issue, a meeting, leave, training or internal work.',
-  args: [],
-  options: [
-    { name: 'issue', description: 'An issue key. Omit it and pass --against for non-issue work.' },
-    { name: 'against', description: 'MEETING | LEAVE | TRAINING | INTERNAL. Defaults to ISSUE.' },
-    { name: 'hours', description: 'Decimal hours, 0.25 to 24.', required: true },
-    { name: 'on', description: 'The date worked. Defaults to today.' },
-    { name: 'note', description: 'Optional.' },
-  ],
-  write: { kind: 'create', permission: 'time:log' },
-  async run(context) {
-    const subjectType = (context.options.against ?? 'ISSUE').toUpperCase();
-    return context.api.post('/timesheets/entries', {
-      subjectType,
-      issueKey: subjectType === 'ISSUE' ? requireOption(context, 'issue') : undefined,
-      hours: Number(requireOption(context, 'hours')),
-      spentOn: context.options.on ?? new Date().toISOString().slice(0, 10),
-      note: context.options.note,
-    });
-  },
-},
-{
-  name: 'time submit',
-  summary: 'Submit your period for approval. It stops being editable.',
-  args: [{ name: 'period', description: 'The period id, from `time list`.' }],
-  write: { kind: 'state', permission: 'time:log' },
-  async run(context) {
-    const id = requireArg(context, 'period');
-    return context.api.post(`/timesheets/periods/${encodeURIComponent(id)}/submit`, {});
-  },
-},
-{
-  name: 'time approve',
-  summary: 'Approve a submitted period, or reject it with a note that goes back to its owner.',
-  args: [{ name: 'period', description: 'The period id.' }],
-  options: [{ name: 'reject', description: 'Reject instead of approving. Requires --note.', flag: true }],
-  write: { kind: 'state', permission: 'time:approve' },
-  async run(context) {
-    const id = requireArg(context, 'period');
-    const reject = Boolean(context.options.reject);
-    return context.api.post(`/timesheets/periods/${encodeURIComponent(id)}/decision`, {
-      decision: reject ? 'REJECT' : 'APPROVE',
-      note: reject ? requireOption(context, 'note') : undefined,
-    });
-  },
-},
-```
+- [x] **Step 5: Add the CLI verbs and the MCP tools**
 
-Mirror all five into `packages/mcp/src/reads.ts` and `writes.ts` in that package's own tool shape —
-`writeConformance.test.ts` in both packages compares the write verbs against `openapi.yaml` and is
-the check that a mirrored verb drifted.
+**Six CLI commands**, in this package's own `Command` shape — `{name, summary, usage, options, write,
+run}` where `run` writes through the injected `Output` sink and returns nothing. (The sketches this
+block originally carried used an `args`/`context.api` shape that exists nowhere in the tree; what
+follows is what landed.)
 
-- [ ] **Step 6: Document the surface**
+| Command | Kind | Permission | Reaches |
+|---|---|---|---|
+| `time list [--on D] [--history]` | read | `time:log` | `…/periods/current`, `…/periods` |
+| `time queue [--on D]` | read | `time:approve` | `/timesheets/approvals` |
+| `time rollup ACME-118 [--epic]` | read | `issue:read` | `/time/rollup/issues\|epics/{key}` |
+| `time log --hours 2 [--issue K \| --against C] [--on D] [--note T]` | `create` | `time:log` | `POST /timesheets/entries` |
+| `time submit <periodId>` | `state` | `time:log` | `POST …/{id}/submit` |
+| `time approve <periodId> [--reject --note T \| --withdraw]` | `state` | `time:approve` | `POST …/{id}/decision` |
 
-Add a `## Time` section to `docs/specs/2026-08-08-mcp-tool-and-command-surface.md` listing the five
-verbs, their permissions and the one thing an agent must not expect: **no verb on this surface
-returns a rate or a cost**, and none ever will — that is M8's surface, gated on `billing:*`.
+Three things are refused **locally**, before the request, on the `rank` / `doc link` rule — the
+endpoint answers 400 either way, and what is bought is a message naming the flags a person typed:
+`--issue` with a non-ISSUE `--against` and either one missing; `--reject` without `--note`;
+`--reject` together with `--withdraw`. `--hours` is range-checked against the contract's
+0.25–24 here too, because `--hours 2h` is the expected typo.
+
+**Four MCP tools**, in that package's workflow shape rather than one per operation:
+
+| Tool | Gate | Arms |
+|---|---|---|
+| `tcms_read_timesheet` | **any of** `time:log` / `time:approve` | — (`on`, `history`, `queue`) |
+| `tcms_read_time_rollup` | `issue:read` | — (`issue`, `epic`) |
+| `tcms_write_timesheet` | `time:log` | `log` (create) · `submit` (state) |
+| `tcms_approve_timesheet` | `time:approve` | `approve` · `reject` · `withdraw-rejection`, all state |
+
+`tcms_read_timesheet` is the surface's **first `any`-gated read** and carries a `narrow(held)`
+sentence for the two credentials that hold one key and not the other — the arrangement
+`tcms_review_verdict` established on the write half. Its `queue` argument is the same read
+`time queue` is; splitting it into a second tool would put one noun on two tools whose arguments
+differ by a boolean.
+
+`tcms_approve_timesheet` declares **three** `state` arms rather than one `decide` arm, because
+`writeConformance.test.ts` reads an arm per action and one arm would assert the headers of three
+different decisions once.
+
+**Each new write needs its `INVOCATIONS` entry** in the matching `writeConformance.test.ts` — three
+on the CLI side, five on the MCP side — and `mcp/src/writes.test.ts`'s tool count moves 30 → 34 with
+the reason written beside it. A write with no entry **fails**; it does not skip.
+
+- [x] **Step 6: Document the surface, and the guide the users read**
+
+`docs/specs/2026-08-08-mcp-tool-and-command-surface.md` gains **§3.8** (the four tools and the two
+gate splits) and a six-row table in **§6** (the CLI half), and its two counts move — 30 → 34 tools,
+58 → 64 commands. Both sections state the one thing an agent must not expect: **no verb on this
+surface returns a rate or a cost**, and none ever will — that is M8's, gated on `billing:*` and
+`ratecard:read`. It is said twice on purpose: a person at a terminal with hours and a spreadsheet is
+exactly who would otherwise supply the missing number themselves.
+
+`frontend/src/features/help/sections.tsx` moves with it and is **not optional** —
+`guideCopies.test.ts` in *both* packages pins its command list, its tool list and its `N tools`
+prose, in both directions, so a guide naming a tool the registry does not serve fails as hard as one
+that omits a tool it does.
 
 - [ ] **Step 7: Gate and commit**
 
@@ -990,10 +950,12 @@ matter here.
 
 ```bash
 git add docs/specs/openapi.yaml docs/specs/2026-08-08-mcp-tool-and-command-surface.md \
-        frontend/src/api/schema.d.ts frontend/src/api/contractBodies.ts \
-        packages/client/src/schema.ts packages/client/src/test/contractBodies.ts \
-        packages/cli/src/reads.ts packages/cli/src/writes.ts \
-        packages/mcp/src/reads.ts packages/mcp/src/writes.ts
+        docs/plans/016-time.md \
+        frontend/src/api/schema.d.ts frontend/src/features/help/sections.tsx \
+        packages/client/src/schema.ts packages/client/src/test/fixtures.ts \
+        packages/cli/src/reads.ts packages/cli/src/writes.ts packages/cli/src/writeConformance.test.ts \
+        packages/mcp/src/reads.ts packages/mcp/src/writes.ts \
+        packages/mcp/src/writeConformance.test.ts packages/mcp/src/writes.test.ts
 git commit -m "feat(time): the time contract, both clients, and the CLI/MCP verbs"
 ```
 

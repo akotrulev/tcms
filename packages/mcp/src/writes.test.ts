@@ -1066,7 +1066,7 @@ describe('registry declarations', () => {
 });
 
 describe('the surface as a whole — surface spec §2 and §4.1', () => {
-  it('is 28 tools', () => {
+  it('is 34 tools', () => {
     // The count is an OUTCOME of "a tool never spans two permissions on its write path", not a
     // target. It is asserted so that a merge or a split has to be a decision somebody records.
     // ~~21~~ → 23 with audit C10: `tcms_list_artifacts` and `tcms_write_artifact`, which arrived
@@ -1091,7 +1091,16 @@ describe('the surface as a whole — surface spec §2 and §4.1', () => {
     // `release:manage` + `release:publish`, which is Project Manager and up. Linking a story to a
     // release or to the cases that prove it is neither: both cost `issue:edit` and are arms of
     // `tcms_write_issue`, for the same reason `move-card` and `label` are.
-    expect(TOOLS).toHaveLength(30);
+    // ~~30~~ → 34 with 016 T1's time verbs, and the gates split two ways twice.
+    // `tcms_read_timesheet` is the surface's first `any`-gated READ: `time:log` reads your own
+    // period and `time:approve` reads the queue, and gating it `all` would hide a timesheet from
+    // everybody who can only log one. `tcms_read_time_rollup` is `issue:read`, because
+    // estimate-against-actual is a property of the issue and the panels that show it are the
+    // story's and the epic's. On the write half, logging and submitting are both `time:log`
+    // (016 D-e — submitting is logging one step later, not a fifth key) and deciding is
+    // `time:approve`, which Test Lead does not hold (D-f), so one tool over both would be listed
+    // to every Test Engineer and 403 on half of itself.
+    expect(TOOLS).toHaveLength(34);
   });
 
   it('names every tool in the tcms_ namespace', () => {

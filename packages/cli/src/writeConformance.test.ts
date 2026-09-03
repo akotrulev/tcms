@@ -56,6 +56,8 @@ import {
   issueComment,
   issueTestCase,
   plan,
+  timeEntry,
+  timesheetPeriod,
   projectWorkflow,
   proposal,
   review,
@@ -437,6 +439,38 @@ const INVOCATIONS: Record<string, Invocation> = {
     ],
     path: '/issues/ACME-124',
     routes: { 'PATCH /issues/ACME-124': { status: 200, body: ISSUE } },
+  },
+  'time log': {
+    argv: () => ['time', 'log', '--issue', 'ACME-124', '--hours', '2', '--on', '2026-09-01'],
+    path: '/timesheets/entries',
+    routes: { 'POST /timesheets/entries': { status: 201, body: timeEntry() } },
+  },
+  'time submit': {
+    argv: () => ['time', 'submit', 'tsp-1'],
+    path: '/timesheets/periods/tsp-1/submit',
+    routes: {
+      'POST /timesheets/periods/tsp-1/submit': {
+        status: 200,
+        body: timesheetPeriod({ state: 'SUBMITTED', editable: false, submittedAt: '2026-09-16T08:00:00Z' }),
+      },
+    },
+  },
+  'time approve': {
+    argv: () => ['time', 'approve', 'tsp-1'],
+    path: '/timesheets/periods/tsp-1/decision',
+    routes: {
+      'POST /timesheets/periods/tsp-1/decision': {
+        status: 200,
+        body: timesheetPeriod({
+          state: 'APPROVED',
+          editable: false,
+          loggedHours: 21,
+          approvedHours: 21,
+          decidedAt: '2026-09-16T09:00:00Z',
+          decidedByName: 'Rae Lindqvist',
+        }),
+      },
+    },
   },
   'issue cases set': {
     argv: () => ['issue', 'cases', 'set', 'ACME-124', '--case', 'TC-42'],

@@ -67,6 +67,8 @@ import {
   issueComment,
   issueTestCase,
   projectWorkflow,
+  timeEntry,
+  timesheetPeriod,
   release as releaseFixture,
   releaseSummary,
   suite,
@@ -298,6 +300,10 @@ const REVIEWS = { 'GET /reviews': { status: 200, body: [REVIEW] } } as const;
 const ISSUE = issue();
 /** The create and move arms resolve a NAME against this, which is the point of taking one. */
 const WORKFLOW = { 'GET /workflow': { status: 200, body: projectWorkflow() } } as const;
+
+const PERIOD_ID = 'tsp-1';
+/** Whatever the decision was, the endpoint answers the period — one body serves all three arms. */
+const DECIDED = timesheetPeriod({ state: 'APPROVED', editable: false, loggedHours: 21, approvedHours: 21 });
 
 const BOARD = board();
 /*
@@ -678,5 +684,40 @@ const INVOCATIONS: Record<string, Invocation> = {
     input: { action: 'delete', artifact: ARTIFACT.id },
     path: `/artifacts/${ARTIFACT.id}`,
     routes: { [`DELETE /artifacts/${ARTIFACT.id}`]: { status: 204 } },
+  },
+  'tcms_write_timesheet.log': {
+    tool: 'tcms_write_timesheet',
+    input: { action: 'log', issue: 'ACME-124', hours: 2, spentOn: '2026-09-01' },
+    path: '/timesheets/entries',
+    routes: { 'POST /timesheets/entries': { status: 201, body: timeEntry() } },
+  },
+  'tcms_write_timesheet.submit': {
+    tool: 'tcms_write_timesheet',
+    input: { action: 'submit', period: PERIOD_ID },
+    path: `/timesheets/periods/${PERIOD_ID}/submit`,
+    routes: {
+      [`POST /timesheets/periods/${PERIOD_ID}/submit`]: {
+        status: 200,
+        body: timesheetPeriod({ state: 'SUBMITTED', editable: false, submittedAt: '2026-09-16T08:00:00Z' }),
+      },
+    },
+  },
+  'tcms_approve_timesheet.approve': {
+    tool: 'tcms_approve_timesheet',
+    input: { action: 'approve', period: PERIOD_ID },
+    path: `/timesheets/periods/${PERIOD_ID}/decision`,
+    routes: { [`POST /timesheets/periods/${PERIOD_ID}/decision`]: { status: 200, body: DECIDED } },
+  },
+  'tcms_approve_timesheet.reject': {
+    tool: 'tcms_approve_timesheet',
+    input: { action: 'reject', period: PERIOD_ID, note: 'the 8h on 24 Aug is against an epic that was on hold' },
+    path: `/timesheets/periods/${PERIOD_ID}/decision`,
+    routes: { [`POST /timesheets/periods/${PERIOD_ID}/decision`]: { status: 200, body: DECIDED } },
+  },
+  'tcms_approve_timesheet.withdraw-rejection': {
+    tool: 'tcms_approve_timesheet',
+    input: { action: 'withdraw-rejection', period: PERIOD_ID },
+    path: `/timesheets/periods/${PERIOD_ID}/decision`,
+    routes: { [`POST /timesheets/periods/${PERIOD_ID}/decision`]: { status: 200, body: DECIDED } },
   },
 };

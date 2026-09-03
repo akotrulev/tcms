@@ -2171,6 +2171,175 @@ const writeRelease: ToolDefinition = {
   },
 };
 
+/* --------------------------------------------------------------------- time ---- */
+
+/**
+ * Logging and submitting, and they are one tool because they are one key.
+ *
+ * Both arms cost `time:log` (016 D-e): submitting your own period is the same act as logging, one
+ * step later, and a fifth permission key for it would be one nobody would grant separately.
+ * Deciding on somebody else's period costs `time:approve` and is `tcms_approve_timesheet`, split
+ * off for §2's rule — a tool spanning both gates would be listed to every Test Engineer and 403 on
+ * half of itself.
+ */
+const writeTimesheet: ToolDefinition = {
+  name: 'tcms_write_timesheet',
+  title: 'Log hours, and submit your period for approval',
+  description:
+    'Where the day went. `log` records hours against an ISSUE — name `issue` — or against a '
+    + 'MEETING, LEAVE, TRAINING or INTERNAL entry, which take no issue; not everything is an '
+    + 'issue and a day off is logged in the same place. TEST_RUN is deliberately not a category. '
+    + '`hours` is decimal, 0.25 to 24. The period the entry lands in is derived from `spentOn` and '
+    + 'opened if it does not exist, so nothing has to be started first — periods are semi-monthly, '
+    + '1-15 and 16 to the end of the month. `submit` closes a period for approval and it stops '
+    + 'being editable BY ANYBODY, including its owner; there is no unsubmit, and what unlocks it '
+    + 'again is an approver rejecting it. Both arms act on THIS user\'s own timesheet only. '
+    + 'A period that is already submitted or approved refuses a log with a 409 — that is the lock '
+    + 'working, not a fault. Period and entry ids come from tcms_read_timesheet.',
+  gate: { mode: 'all', permissions: ['time:log'] },
+  arms: [
+    { action: 'log', kind: 'create', permission: 'time:log' },
+    /*
+      `state`, not `edit`: the precondition is the period BEING open, which is a state the server
+      holds, not a version the caller read. There is nothing to send `If-Match` over — a period
+      carries no `lockVersion` on the wire — and a header the endpoint never reads is not a weaker
+      guarantee, it is the absence of one wearing the guarantee's name.
+    */
+    { action: 'submit', kind: 'state', permission: 'time:log' },
+  ],
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['action'],
+    properties: {
+      action: ACTION(['log', 'submit'], 'What to do.'),
+      issue: idProperty('issue the hours went into', 'ACME-124'),
+      against: {
+        type: 'string',
+        enum: ['ISSUE', 'MEETING', 'LEAVE', 'TRAINING', 'INTERNAL'],
+        description: 'What the entry is against. Defaults to ISSUE, which requires `issue`; the other four refuse one.',
+      },
+      hours: { type: 'number', minimum: 0.25, maximum: 24, description: 'Decimal hours. Required for log.' },
+      spentOn: { type: 'string', description: 'The date worked, `YYYY-MM-DD`. Defaults to today. It decides which period the entry joins.' },
+      note: { type: 'string', description: 'Optional free text — what the hours actually went on.' },
+      period: {
+        type: 'string',
+        description: 'The period to submit, by id, from tcms_read_timesheet. Refused for log, which derives its period from `spentOn`.',
+      },
+    },
+  },
+  run: async (session, input) => {
+    const tcms = session.request;
+    const action = requireStr(input, 'action');
+
+    if (action === 'submit') {
+      return session.client.POST('/timesheets/periods/{periodId}/submit', {
+        params: { path: { periodId: requireStr(input, 'period') } },
+        tcms,
+      });
+    }
+
+    if (action !== 'log') throw new InputError(`Unknown action '${action}'.`);
+
+    const subjectType = (str(input, 'against') ?? 'ISSUE') as components['schemas']['TimeSubjectType'];
+    const issue = str(input, 'issue');
+    // Refused here rather than by the server, so the message names the arguments the model sent
+    // instead of the request fields it never composed. Both directions: `against: MEETING` with an
+    // `issue` is the mistake that would otherwise drop the issue silently.
+    if (subjectType === 'ISSUE' && issue === undefined) {
+      throw new InputError("'issue' is required when logging against an issue. For a meeting or a day off, pass against: MEETING | LEAVE | TRAINING | INTERNAL.");
+    }
+    if (subjectType !== 'ISSUE' && issue !== undefined) {
+      throw new InputError(`'issue' is only for an ISSUE entry; against: ${subjectType} takes none.`);
+    }
+
+    return session.client.POST('/timesheets/entries', {
+      body: present({
+        subjectType,
+        issueKey: issue,
+        hours: num(input, 'hours'),
+        spentOn: str(input, 'spentOn') ?? new Date().toISOString().slice(0, 10),
+        note: str(input, 'note'),
+      }) as components['schemas']['TimeEntryInput'],
+      tcms: { ...tcms, ...createIntent({ key: session.callId }) },
+    });
+  },
+};
+
+/**
+ * The approver's half, and the whole reason it is a second tool.
+ *
+ * `time:approve` is Project Manager and Company Admin (§A3); **Test Lead does not hold it**, and
+ * 016 D-f records that as a consequence of D3 that was decided rather than an oversight this plan
+ * repairs. Merging these arms into `tcms_write_timesheet` would list the decision to every Test
+ * Engineer who can log an hour, which is §2's failure exactly.
+ *
+ * A period is decided WHOLE. It spans projects and the grant is project-scoped, so approving one
+ * approves entries against projects the approver does not hold (016 D-i) — the description says so,
+ * because it is the sharp edge and a model relaying "approved" without it is relaying half of it.
+ */
+const approveTimesheet: ToolDefinition = {
+  name: 'tcms_approve_timesheet',
+  title: 'Approve a submitted timesheet, reject it with a note, or withdraw a rejection',
+  description:
+    'Act on somebody else\'s submitted period, by id from tcms_read_timesheet with `queue`. '
+    + '`approve` posts its hours onto each issue and rolls them up to the story, the epic and the '
+    + 'project — **only approved hours reach a rollup, so nothing is counted until this happens**. '
+    + '`reject` sends it back and REQUIRES a `note`: the period is unlocked for its owner with that '
+    + 'note at the top of it, and a rejection is never silent and never a deletion. '
+    + '`withdraw-rejection` undoes a rejection made in error, putting the period back to SUBMITTED '
+    + 'with the note kept as history. A period is decided WHOLE — it spans projects, and approving '
+    + 'it approves every entry in it, including entries against projects this caller does not hold '
+    + 'time:approve for. There is no partial approval. Deciding a period nobody has submitted is a '
+    + '409. **Nothing here returns or accepts a rate, a cost or an invoice value.**',
+  gate: { mode: 'all', permissions: ['time:approve'] },
+  arms: [
+    /*
+      Three `state` arms rather than one, because the conformance check reads an arm per action and
+      a single `decide` arm would assert the headers of three different decisions once. None sends
+      a header: each names an absolute target state the server holds, so there is nothing to
+      precondition on.
+    */
+    { action: 'approve', kind: 'state', permission: 'time:approve' },
+    { action: 'reject', kind: 'state', permission: 'time:approve' },
+    { action: 'withdraw-rejection', kind: 'state', permission: 'time:approve' },
+  ],
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['action', 'period'],
+    properties: {
+      action: ACTION(['approve', 'reject', 'withdraw-rejection'], 'What to do with the period.'),
+      period: { type: 'string', description: 'The period id, from tcms_read_timesheet with `queue`.' },
+      note: {
+        type: 'string',
+        description: 'Why it is going back. Required for reject; its owner reads it at the top of their unlocked timesheet.',
+      },
+    },
+  },
+  run: async (session, input) => {
+    const action = requireStr(input, 'action');
+    const decision = DECISIONS[action];
+    if (!decision) throw new InputError(`Unknown action '${action}'.`);
+    // Demanded here rather than left to the 400, so the refusal names what to write and the model
+    // composes one instead of retrying the same empty rejection.
+    const note = decision === 'REJECT' ? requireStr(input, 'note') : undefined;
+
+    return session.client.POST('/timesheets/periods/{periodId}/decision', {
+      params: { path: { periodId: requireStr(input, 'period') } },
+      body: present({ decision, note }) as components['schemas']['TimesheetDecisionInput'],
+      tcms: session.request,
+    });
+  },
+};
+
+/** The arm's action to the contract's enum member — the one place the two spellings meet. */
+const DECISIONS: Record<string, components['schemas']['TimesheetDecisionInput']['decision'] | undefined> = {
+  approve: 'APPROVE',
+  reject: 'REJECT',
+  'withdraw-rejection': 'WITHDRAW_REJECTION',
+};
+
 export const WRITE_TOOLS: readonly ToolDefinition[] = [
   writeCase,
   writeSuite,
@@ -2185,4 +2354,6 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   writeRelease,
   writeArtifact,
   report,
+  writeTimesheet,
+  approveTimesheet,
 ];

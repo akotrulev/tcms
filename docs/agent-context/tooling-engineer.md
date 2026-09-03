@@ -1,6 +1,6 @@
 # tooling-engineer — orientation cache
 
-Baseline: `1dae5308` (013 T3), refreshed 2026-09-01.
+Baseline: `99370dd1` (016 plan), refreshed 2026-09-04.
 Trust this as a lead, not evidence; `CLAUDE.md`, `docs/specs/openapi.yaml` and
 `docs/specs/2026-08-08-mcp-tool-and-command-surface.md` outrank it.
 
@@ -31,12 +31,14 @@ Trust this as a lead, not evidence; `CLAUDE.md`, `docs/specs/openapi.yaml` and
   `cli/src/commands.ts` (`READS` + `WRITES`). Everything else derives from those two lists — **and
   that is load-bearing rather than tidy**: 012 T5 added 8 commands and 2 tools, and neither
   `commands.ts` nor `server.ts` needed a line, consent prompt for the new delete arm included.
-- Sizes as of 013 T4: **30 tools** (13 read + 15 write + whoami + shape) and **53 CLI commands**.
-  Three places carry a count and all three are pinned: `writes.test.ts`'s `is 30 tools`,
-  `sections.tsx`'s `30 tools` prose, and §6/§3 of the surface document. `sections.tsx` also carries
-  two GROUP headings (`Reading — 14`, `Writing — 13`) that **nothing pins** — the test compares the
+- Sizes as of 016 T1: **34 tools** (16 read + 15 write + whoami + shape) and **64 CLI commands**.
+  Three places carry a count and all three are pinned: `writes.test.ts`'s `is 34 tools`,
+  `sections.tsx`'s `34 tools` prose, and §6/§3 of the surface document. `sections.tsx` also carries
+  two GROUP headings (`Reading — 16`, `Writing — 15`) that **nothing pins** — the test compares the
   names and the total, so a heading contradicting its own list ships green. 012 did exactly that;
-  count the list items by hand every time.
+  count the list items by hand every time. **§3's TABLE is not pinned either**: 013 T4 moved the
+  heading's count to 30 and never added rows 29 and 30, and it sat wrong for two slices; 016 T1
+  added them.
 - **`findCommand` tries three words, two, then one.** `issue cases set` is the only three-word name
   and `issue cases` is a real command, so shortest-first would resolve the write to the read with
   `set` as the issue key. `guideCopies.test.ts`'s parse has the same ceiling and had to move with it.
@@ -69,6 +71,12 @@ Trust this as a lead, not evidence; `CLAUDE.md`, `docs/specs/openapi.yaml` and
 - **Config**: `TCMS_URL` + `TCMS_TOKEN` (CLI: also `--url`, `--timeout`, `--project`). No config
   file, no keychain. The MCP HTTP transport takes the credential per request instead.
 - Fixtures for every doubled resource: `client/src/test/fixtures.ts`, `Partial<T>` in and `T` out.
+  **`contractBodies.ts` is NOT that file** — it is the schema walker, its marked region is
+  `violationsOf` and friends, and it holds no response bodies at all. Plan 016 T1's own prompt said
+  to put fixtures in its shared region; there is nowhere in it for one to go.
+- **A read tool may be `any`-gated too.** `tcms_read_timesheet` (016 T1) is the first: `time:log`
+  reads your own period, `time:approve` reads the approvals queue, and one noun with two audiences
+  is one tool with a `narrow(held)` sentence rather than two tools differing by a boolean.
 
 ## Conventions observed
 - `projectId` / `companyId` appear in **no** tool schema (§4.1); they come from the session.
@@ -132,6 +140,16 @@ Trust this as a lead, not evidence; `CLAUDE.md`, `docs/specs/openapi.yaml` and
   double compared to the contract.
 
 ## Session log
+- 2026-09-04 · delta (contract doc, `openapi.yaml`, generated schema, `shapes.ts`, both registries
+  and `sections.tsx` had all moved under 014 and 015; the cache's baseline predated both) · 016 T1:
+  the time verbs. **Six** CLI commands (`time list|queue|rollup|log|submit|approve` — the plan said
+  five and had no way to obtain another person's period id, so `time queue` was added) and **four**
+  MCP tools (`tcms_read_timesheet`, `tcms_read_time_rollup`, `tcms_write_timesheet`,
+  `tcms_approve_timesheet`). Arrived **green** (528 packages tests); left green at 528. Three things
+  the plan did not predict, and all three were the existing checks rather than reading: the fixtures
+  do not live in `contractBodies.ts`, `guideCopies.test.ts` forced `sections.tsx` again, and §3's
+  table in the surface doc had been two rows short since 013 T4. **The endpoints 404 until 016 T3
+  lands** — contract-first, no stub, nothing here has been run against a live instance.
 - 2026-09-01 · delta (contract doc + `openapi.yaml` + generated schema; no hand-written
   `packages/*/src` file had moved) · 013 T4: the release verbs. **Ten** CLI commands
   (`release list|show|create|edit|publish|delete`, `roadmap`, `issue cases`, `issue release`,
