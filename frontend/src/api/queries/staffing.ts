@@ -152,7 +152,7 @@ export function useSkills(): UseQueryResult<Skill[]> {
 /** Somebody's absences in a window — anybody else's needs `staffing:directory`; your own never does. */
 export function useAbsences(userId: string, from: string, to: string): UseQueryResult<Absence[]> {
   return useQuery({
-    queryKey: keys.staffing.absences(userId),
+    queryKey: keys.staffing.absences(userId, from, to),
     queryFn: ({ signal }) =>
       api.get<Absence[]>(`/staffing/people/${userId}/absences${qs({ from, to })}`, {
         signal,

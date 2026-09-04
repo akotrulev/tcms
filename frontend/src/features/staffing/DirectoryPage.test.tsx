@@ -184,13 +184,17 @@ describe('Skills directory', () => {
     expect(screen.queryByTestId('Directory.Region.Error')).toBeNull()
   })
 
-  it('offers Profile disabled, because /directory/:userId does not exist yet', async () => {
+  it('links Profile at the person page, which T5 built', async () => {
     mockReads({ matching: [TOMAS] })
     renderPage()
 
-    // A button linking to a route that is not there is the fake success plan 009 forbids; hiding
-    // it would say this product has no person page (§31).
-    expect(await screen.findByTestId('Directory.Person.u-tomas.Profile')).toBeDisabled()
+    // ~~Disabled, because the route did not exist~~ — it does now, and a button that navigates is
+    // what this control was always going to be. The `Profile` button `directory.html` draws is the
+    // only way into `/directory/:userId` from a list, so the href is the assertion.
+    expect(await screen.findByTestId('Directory.Person.u-tomas.Profile')).toHaveAttribute(
+      'href',
+      '/directory/u-tomas',
+    )
   })
 
   it('refuses a caller without staffing:directory with copy naming the project screen', async () => {

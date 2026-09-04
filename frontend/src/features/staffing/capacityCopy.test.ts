@@ -5,6 +5,7 @@ import {
   UTILISATION_BASIS,
   capacityDetail,
   capacityLabel,
+  dayFractionLabel,
   freeCapacityLabel,
   hasProfile,
   overAllocationLabel,
@@ -108,5 +109,18 @@ describe('hasProfile', () => {
     expect(hasProfile(aPersonCapacity({ profile: null }))).toBe(false)
     expect(hasProfile(aSelfCapacity())).toBe(true)
     expect(hasProfile(aSelfCapacity({ hasProfile: false, capacityHours: null }))).toBe(false)
+  })
+})
+
+describe('dayFractionLabel', () => {
+  it.each([
+    [1, 'full day'],
+    [0.5, 'half day'],
+    [0.25, '25% of each day'],
+  ])('reads %s as %s', (fraction, expected) => {
+    // 017 D-d: `dayFraction` is a number rather than a boolean, so `member.html`'s *half day* is a
+    // value and not a second table. The third reading is a percentage rather than a decimal because
+    // `0.25 day` reads as a quantity of days and this is a share of every day in the range.
+    expect(dayFractionLabel(fraction)).toBe(expected)
   })
 })

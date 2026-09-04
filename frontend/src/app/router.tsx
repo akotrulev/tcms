@@ -133,6 +133,14 @@ const StaffingPage = lazy(() =>
 const DirectoryPage = lazy(() =>
   import('../features/staffing/DirectoryPage').then((m) => ({ default: m.DirectoryPage })),
 );
+const PersonPage = lazy(() =>
+  import('../features/staffing/PersonPage').then((m) => ({ default: m.PersonPage })),
+);
+const ProjectStaffingPage = lazy(() =>
+  import('../features/staffing/ProjectStaffingPage').then((m) => ({
+    default: m.ProjectStaffingPage,
+  })),
+);
 const TeamBoardPage = lazy(() =>
   import('../features/board/TeamBoardPage').then((m) => ({ default: m.TeamBoardPage })),
 );
@@ -767,6 +775,31 @@ function AppRoutes() {
           />
 
           {/*
+            This project's staffing (017 M7) — story S1's *"I open a project's staffing"*, and the
+            screen the two company ones name when they refuse a Project Manager.
+
+            **Project-scoped, unlike `/staffing` and `/directory`**, and the difference is what the
+            three answer: an allocation spans every project a person is on, so the company views sit
+            outside the switcher, while *who is on THIS project* is a question about one project and
+            nothing else. It names no other project either (017 D-f) — each person's row carries a
+            company-wide total and the flag, and a `staffing:read` grant discloses no project the
+            caller cannot already see.
+
+            Routed for everybody and gated on the controls, which is this file's standing shape. The
+            two company screens pre-gate because their refusal has something bespoke to say; this
+            one has not, so `DataRegion`'s Refused state — which names the permission and offers the
+            org chart — is the better refusal.
+          */}
+          <Route
+            path="/projects/:projectId/staffing"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <ProjectStaffingPage />
+              </Suspense>
+            }
+          />
+
+          {/*
             The import offramp (014 M4). Three routes: the project's past imports, the wizard, and
             one run's report.
 
@@ -1107,7 +1140,15 @@ function AppRoutes() {
             Both cost `staffing:directory`, which is COMPANY scope, and both are **routed for
             everybody** as every readable screen in this app is. A Project Manager holds neither
             company key and is refused by a sentence that names the screen they can use — a
-            project's own Staffing, which arrives in T5.
+            project's own Staffing, ~~which arrives in T5~~ which is
+            `/projects/:projectId/staffing`, below.
+
+            **`/directory/:userId` is the person page, and it is NOT a member page** (017 D-g).
+            `/admin/teams` is a list; there is no `/admin/teams/:userId` and no `MemberPage`, so
+            `member.html`'s Profile, Skills and Absence panels land on the directory's own detail
+            view — the route `directory.html`'s `Profile` button already pointed at. Its gate is the
+            contract's own: `staffing:directory`, **or the caller is that person**, which is why it
+            is routed for everybody and refused by the server rather than pre-empted here.
           */}
           <Route
             path="/staffing"
@@ -1122,6 +1163,14 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <DirectoryPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/directory/:userId"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <PersonPage />
               </Suspense>
             }
           />

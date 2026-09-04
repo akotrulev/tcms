@@ -1,8 +1,10 @@
+import { Link as RouterLink } from 'react-router-dom';
 import type { PersonCapacity } from '../../api/types';
 import { Panel } from '../../components/PageHeader';
 import { Badge } from '../../components/kit';
 import { Button } from '../../components/ui';
 import { formatDate, joinMeta } from '../../lib/format';
+import type { DateWindow } from '../releases/timelineScale';
 import { AllocationTimeline } from './AllocationTimeline';
 import { SkillChips } from './DirectoryFilters';
 import { NO_PROFILE, capacityLabel, freeCapacityLabel } from './capacityCopy';
@@ -26,25 +28,43 @@ import { NO_PROFILE, capacityLabel, freeCapacityLabel } from './capacityCopy';
  * empty line — a blank there reads as a person nobody has described, which is the same thing said
  * less usefully.
  *
- * <h2>`Profile` is disabled here, and that is the task boundary</h2>
+ * <h2>~~`Profile` is disabled here, and that is the task boundary~~ → it is a link (T5)</h2>
  *
- * `/directory/:userId` is T5's route. A button linking to a route that does not exist yet is the
- * fake success plan 009's task-cutting rule forbids, so it renders disabled with the reason — never
- * hidden, per §31, because hiding it would say this product has no person page.
+ * ~~`/directory/:userId` is T5's route. A button linking to a route that does not exist yet is the
+ * fake success plan 009's task-cutting rule forbids, so it renders disabled with the reason.~~ The
+ * route exists, so the button is the link it was always going to be. Recorded rather than deleted
+ * so a reader who finds the disabled button in the history knows it was a task boundary and not a
+ * permission.
+ *
+ * <h2>Two props are optional, and each absence is the person page's own arrangement</h2>
+ *
+ * `profileTo` omitted means **no Profile control at all** — the person page is the destination, and
+ * a button linking to the page you are standing on is a control that does nothing. This is not the
+ * §31 case: disable-don't-hide is about an action the reader *could* be granted, and there is no
+ * grant that makes a self-link useful.
+ *
+ * `onToggleSkill` omitted means **no skills row**, because on the person page `SkillsPanel` owns
+ * them and owns editing them. Rendering the chips twice would put the same five words on one screen
+ * under two different affordances, and a chip with no handler would be a badge wearing the wrong
+ * component — which is exactly what `Chip`'s required `onClick` exists to make unrepresentable.
  */
 export interface PersonCardProps {
   person: PersonCapacity;
-  window: { from: string; to: string };
+  window: DateWindow;
+  /** Where `Profile` goes. Omitted on the person page, which is where it would have gone. */
+  profileTo?: string;
   /** The skill ids the reader filtered on, so the matching chips read as filled. */
-  highlighted: readonly string[];
-  onToggleSkill: (skillId: string) => void;
+  highlighted?: readonly string[];
+  /** Omitted where the skills are somebody else's to render — see the file header. */
+  onToggleSkill?: (skillId: string) => void;
   testId: string;
 }
 
 export function PersonCard({
   person,
   window,
-  highlighted,
+  profileTo,
+  highlighted = [],
   onToggleSkill,
   testId,
 }: PersonCardProps) {
@@ -67,24 +87,25 @@ export function PersonCard({
         </span>
       }
       actions={
-        <Button
-          size="sm"
-          disabled
-          title="The person page arrives with the profile and absence editor"
-          data-testid={`${testId}.Profile`}
-        >
-          Profile
-        </Button>
+        profileTo ?
+          <Button size="sm" asChild>
+            <RouterLink to={profileTo} data-testid={`${testId}.Profile`}>
+              Profile
+            </RouterLink>
+          </Button>
+        : null
       }
     >
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="flex flex-col gap-2">
-          <SkillChips
-            skills={person.skills}
-            highlighted={highlighted}
-            onToggle={onToggleSkill}
-            testId={`${testId}.Skills`}
-          />
+          {onToggleSkill && (
+            <SkillChips
+              skills={person.skills}
+              highlighted={highlighted}
+              onToggle={onToggleSkill}
+              testId={`${testId}.Skills`}
+            />
+          )}
           <p className="m-0 text-[12px] text-ink-3" data-testid={`${testId}.Profile.Meta`}>
             {profile ?
               joinMeta(

@@ -375,6 +375,20 @@ Traps this task will hit:
   landed. Also correct 009-execution-breakdown.md phase 7: t32's "No endpoint in this contract reads
   a time entry" is superseded, and the projected V9 is V10.
 - Record explicitly whether the two capacity figures were completed or left absent again.
+- **The built-and-unverified list is not yours to compose from scratch** — T4's and T5's records
+  each carry one, and T5's is the larger: no allocation, absence, profile or skill has been written
+  to a real database from this UI, and `seed-demo-data` writes no row into any of `V10`'s five
+  tables, so every M7 screen shows an empty or no-profile state in a real session. Fold both lists
+  into 009's rather than writing a third.
+- **`docs/features.md`'s Staffing section describes FOUR screens, and one of them is not a member
+  page.** `/staffing` and `/directory` (COMPANY, `staffing:directory`),
+  `/projects/:projectId/staffing` (PROJECT, `staffing:read` / `staffing:allocate`), and
+  `/directory/:userId` — the person page carrying `member.html`'s Profile, Skills and Absence panels
+  (D-g). There is no `/admin/teams/:userId` and this module did not build one. Say that the project
+  screen names no other project (D-f) and that recording your own absence needs no key (D-h); both
+  are product behaviour a reader would otherwise assume the opposite of.
+- `capacityCopy.ts` gained `dayFractionLabel` in T5. Irrelevant to the two tiles, named here only so
+  you do not read the file and think somebody wrote absence copy in the wrong place.
 
 When done: run `~/bin/tcms-remote sync` then the full set —
 `~/bin/tcms-remote frontend npm run build`, `npm run lint`, `npm run test:run`,
@@ -2974,6 +2988,86 @@ git commit -m "feat(staffing): the project's staffing, and the person page with 
 
 **Out of scope:** the two capacity figures on `/timesheets` and My Work. They are T6's, because they
 are M6's screens and the close-out that records whether they landed rides with them.
+
+**Record — landed 2026-09-04 (`30f6c783`).** `npm run build`, `npm run lint` and `npm run test:run` green on
+shanks; 23 new tests in 4 files, 2800 passing of 2802. The two failures are
+`src/features/cases/CaseGrid.test.tsx`'s selection pair, which 016's close-out recorded as
+pre-existing and which this task did not touch. `packages npm run test:run --workspaces` also run —
+`citedFiles.test.ts` walks `frontend/src` and a stale citation here reddens that job, which it did
+once (below): green, 535 tests across the three workspaces.
+
+Landed as planned, plus these deviations and decisions:
+
+1. **`/projects/:projectId/staffing` is NOT pre-gated on `staffing:read`, and the plan said it
+   should be.** The two company screens pre-gate because their refusal has something bespoke to say
+   — *open that project's Staffing* — that no generic refusal can produce. This one has nothing
+   bespoke, so a hand-written panel would be strictly worse copy than `DataRegion`'s Refused state,
+   which names the permission the server refused on and links the org chart to find somebody who can
+   grant it (005 C1b). It is also `router.tsx`'s standing shape for a project screen: routed for
+   everybody, gated on the controls. The writes are `PermissionGate` on `staffing:allocate`.
+
+2. **No range picker on the project screen.** The window is the server's default and the subtitle
+   names it out of the answer. A picker would have been a second copy of `StaffingPage`'s private
+   `rangeOf`/`boundsFor`, and the question this screen answers is *who is on this project now*; the
+   dialog's two date fields are free-form, so nothing about allocating is reachable only through a
+   wider window. Recorded rather than done silently — an allocation typed for next spring will not
+   appear in the table, which is why the subtitle names the range.
+
+3. **`StaffingPage`'s `+ Allocate` was left disabled, and `StaffingPage.tsx` is untouched.** The
+   plan's file list said to enable it as a link to a project picker; the task's own prompt overrode
+   that and the override is right — that screen names no project, `staffing:allocate` is PROJECT
+   scope, and a picker there would have to ask which of three projects the reader meant and then
+   refuse them on two of the answers. The existing title, *"Allocate from the project you are
+   staffing"*, already says where the write lives.
+
+4. **`features/staffing/staffingWindow.ts` is new and was not in the plan's file list.** The
+   directory and the person page draw the same bars from the same shape, and neither
+   `GET /staffing/people` nor `GET /staffing/people/{userId}` carries the window it used — so the
+   widest span in the answer is the only evidence of it. `DirectoryPage`'s two private helpers moved
+   there rather than being copied: two spellings would let one screen clip a bar the other shows in
+   full, and a reader comparing them would have no way to tell which was lying.
+
+5. **`keys.staffing.absences` gained the window, which it did not carry.** `useAbsences(userId,
+   from, to)` sent a range the key did not hold, so two windows would have shared one cached
+   answer — the exact defect `keys.ts`'s own staffing header forbids two paragraphs above it.
+   Nothing consumed the hook when the mismatch was found, so this is the rule applied before the
+   first consumer rather than after a wrong figure. **The person page still does not use
+   `useAbsences`**: `PersonCapacity.absences` arrives beside the capacity figures those days were
+   already subtracted from, and a second read could answer over a different window and list a day
+   the hours above it do not account for.
+
+6. **`PersonCard` gained two optional props, and each absence is the person page's arrangement.**
+   `profileTo` omitted renders no Profile control — the person page is the destination, and a button
+   linking to the page you are standing on is not the §31 case, because no grant makes a self-link
+   useful. `onToggleSkill` omitted renders no skills row, because `SkillsPanel` owns them and owns
+   editing them; the chips would otherwise appear twice on one screen under two affordances, and a
+   chip with no handler is what `Chip`'s required `onClick` exists to make unrepresentable.
+
+7. **The absence rows use the product's date format, not `member.html`'s `29 Aug`.** `format.ts` is
+   one canonical spelling per data type, and a second one on this panel would be the first place two
+   dates on one screen looked like two different kinds of thing. A one-day absence renders one date
+   and a range renders two, which is the structure the mockup draws.
+
+8. **`capacityCopy.ts` gained `dayFractionLabel`**, with its own `it.each` in the existing test.
+   New display logic goes in the shared layer, and `dayFraction` has three readings — a whole day,
+   `member.html`'s *half day*, and any other fraction — that a page writing its own would spell three
+   ways. The third reads as `25% of each day` rather than `0.25 day`, because it is a share of every
+   day in the range and not a quantity of days.
+
+9. **A comment naming `MemberPage.tsx` reddened the `packages` job**, exactly as
+   `citedFiles.test.ts`'s header predicts for a `frontend/src` citation. The absence *is* the
+   sentence there, so it is struck through per that check's own remedy — which leaves the claim
+   settled from the other end: the check walks `frontend/src` and would redden the moment somebody
+   created one.
+
+**Built and unverified:** neither screen has been opened against a running instance. `V10`'s tables
+carry no seeded rows — `seed-demo-data` writes no `person_profile`, `allocation` or `absence` — so a
+real session shows the empty state on the project screen and a no-profile person page.
+`tcmsFaults.staffing('no-profile')` and `staffing('over-allocated')` remain the way both are looked
+at; **neither reaches `/projects/{id}/staffing`**, whose `ProjectStaffingView` carries no profile, so
+a fault for that screen is still a new predicate rather than a widened prefix. The writes — the
+create, the patch, the two deletes and the two `PUT`s — are proved against doubles and the contract
+checks only; no allocation has been written to a real database from this UI.
 
 ---
 

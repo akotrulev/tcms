@@ -343,6 +343,20 @@ function projectNav(
         */
         { label: 'Releases', to: `${p}/releases`, icon: <Rocket className="size-4" /> },
         /*
+          017 M7's project staffing, immediately after Releases — story S1's *"I open a project's
+          staffing"*, and the screen `/staffing` and `/directory` name when they refuse a Project
+          Manager. Execution rather than Project for Releases' reason: who is on this project this
+          month is what somebody planning the work needs, not how the project is configured.
+
+          Ungated, like every item in this rail. `staffing:read` is a project-scoped key and the
+          allocate controls are disabled with a reason on the screen itself (§31); a gate here would
+          teach that rail items come and go by permission, which is the opposite of that rule.
+
+          **Not to be confused with the two Company entries below.** Those are company-wide and sit
+          outside the project segment, because an allocation spans every project a person is on.
+        */
+        { label: 'Staffing', to: `${p}/staffing`, icon: <Users2 className="size-4" /> },
+        /*
           §6e's reports (§89). Execution rather than Project, because what a report is *of* is
           execution results — the only one that exists today summarises a run, and every one §6e
           names is computed over the fact log. Filing it under Project would put it beside the

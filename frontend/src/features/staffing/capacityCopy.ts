@@ -128,3 +128,21 @@ export function freeCapacityLabel(freePercent: number): string {
 export function hasProfile(subject: PersonCapacity | SelfCapacity): boolean {
   return 'hasProfile' in subject ? subject.hasProfile : subject.profile !== null;
 }
+
+/**
+ * How much of each day an absence takes — `member.html`'s *half day*, and everything either side.
+ *
+ * `dayFraction` is a **number rather than a boolean** (017 D-d), so a half day is not a second
+ * table and not a pair of times inventing a working-hours-of-day model this product does not have.
+ * That makes it a value with three readings a screen would otherwise spell three ways: a whole day,
+ * the half the mockup draws, and any other fraction somebody records.
+ *
+ * The third is written as a percentage rather than as a decimal because `0.25 day` reads as a
+ * quantity of days and `25% of each day` reads as what it is — a share of every day in the range,
+ * which is what the column means and what capacity is reduced by.
+ */
+export function dayFractionLabel(dayFraction: number): string {
+  if (dayFraction >= 1) return 'full day';
+  if (dayFraction === 0.5) return 'half day';
+  return `${Math.round(dayFraction * 100)}% of each day`;
+}

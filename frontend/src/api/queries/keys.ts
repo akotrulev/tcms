@@ -740,7 +740,16 @@ export const keys = {
     person: (userId: string, from: string, to: string) =>
       ['staffing', 'people', userId, from, to] as const,
     skills: ['staffing', 'skills'] as const,
-    absences: (userId: string) => ['staffing', 'absences', userId] as const,
+    /*
+      The window is in this key too, and it was not until T5 read the rule above against it: a
+      caller's absences over September and over the next six months are two different answers, and a
+      key carrying only the person would serve the first under the second's heading. Nothing
+      consumed `useAbsences` when the mismatch was found — the person page reads
+      `PersonCapacity.absences`, which arrives beside the capacity figures it was subtracted from —
+      so this is the rule applied before the first consumer rather than after a wrong figure.
+    */
+    absences: (userId: string, from: string, to: string) =>
+      ['staffing', 'absences', userId, from, to] as const,
     projectStaffing: (projectId: string, from: string, to: string) =>
       ['projects', projectId, 'staffing', from, to] as const,
   },

@@ -9,6 +9,7 @@ import { Button } from '../../components/ui';
 import { formatCount, plural } from '../../lib/format';
 import { DirectoryFilters } from './DirectoryFilters';
 import { PersonCard } from './PersonCard';
+import { todayIso, windowOver } from './staffingWindow';
 
 /**
  * `directory.html` — who has which skills, and when they are free.
@@ -112,10 +113,15 @@ export function DirectoryPage() {
       `${formatCount(people.data.length)} of ${plural(everybody.data.length, 'person')} match`
     : plural(people.data.length, 'person');
 
-  const window =
-    people.data?.[0] ?
-      { from: earliest(people.data), to: latest(people.data) }
-    : { from: from || todayIso(), to: to || todayIso() };
+  /*
+    Widest span in the answer, falling back to the URL's range and then to today — the reasoning is
+    `staffingWindow.ts`'s, and it lives there because `/directory/:userId` draws the same bars from
+    the same shape and two spellings would let one screen clip a bar the other shows in full.
+  */
+  const window = windowOver(people.data ?? [], {
+    from: from || todayIso(),
+    to: to || todayIso(),
+  });
 
   return (
     <div>
@@ -194,6 +200,7 @@ export function DirectoryPage() {
                     key={person.person.id}
                     person={person}
                     window={window}
+                    profileTo={`/directory/${person.person.id}`}
                     highlighted={skill}
                     onToggleSkill={toggleSkill}
                     testId={`${TEST_ID}.Person.${person.person.id}`}
@@ -212,33 +219,3 @@ export function DirectoryPage() {
     </div>
   );
 }
-
-/**
- * The window every card's track is drawn against, taken from the payload rather than the picker.
- *
- * `GET /staffing/people` answers an array with no `from`/`to` on it — unlike
- * `GET /staffing/capacity`, which carries the window it used — so when the URL names no range the
- * only evidence of what the server defaulted to is the spans it sent back. Widest of those, so a
- * card whose allocation runs past another's is not clipped by its neighbour's shorter one.
- *
- * A person with no allocation and no absence contributes nothing, which is why both fall back to
- * today: a window of one day draws an empty track, which is the honest picture of *"nothing is
- * planned"* rather than a bar of arbitrary width.
- */
-function earliest(people: readonly { allocations: readonly { startsOn: string }[]; absences: readonly { startsOn: string }[] }[]): string {
-  const dates = people.flatMap((person) => [
-    ...person.allocations.map((span) => span.startsOn),
-    ...person.absences.map((absence) => absence.startsOn),
-  ]);
-  return dates.length === 0 ? todayIso() : dates.reduce((min, date) => (date < min ? date : min));
-}
-
-function latest(people: readonly { allocations: readonly { endsOn: string }[]; absences: readonly { endsOn: string }[] }[]): string {
-  const dates = people.flatMap((person) => [
-    ...person.allocations.map((span) => span.endsOn),
-    ...person.absences.map((absence) => absence.endsOn),
-  ]);
-  return dates.length === 0 ? todayIso() : dates.reduce((max, date) => (date > max ? date : max));
-}
-
-const todayIso = () => new Date().toISOString().slice(0, 10);
