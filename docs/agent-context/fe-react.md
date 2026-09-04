@@ -1,11 +1,17 @@
 # fe-react — orientation cache
 
-**Baseline commit:** `a2bf3b72` · **Last verified:** 2026-09-04 · **Verdict this run (016 T5):** DELTA
-(the only delta since the baseline below was T4's own commit, which that entry already described; no
-`package.json` / lockfile / `tsconfig` / `vite.config.ts` change, so the version lane held. T5 added
-the five additive time surfaces and the seams recorded below.)
+**Baseline commit:** `ecc71e7d` · **Last verified:** 2026-09-04 · **Verdict this run (017 T4):** DELTA
+(017 T1–T3 had moved `openapi.yaml`, `schema.d.ts`, `api/types.ts` and `test/fixtures.ts` and added
+`V10` plus the backend module; no `package.json` / lockfile / `tsconfig` / `vite.config.ts` change,
+so the version lane held. T4 added `features/staffing/` and the seams recorded below.)
 
 **Session log**
+- 2026-09-04 — 017 T4: `/staffing` and `/directory`, the staffing query module and keys, the
+  `staffing` fault arm, `capacityCopy.ts`, the absence labels, one irregular plural, and the two
+  Company rail entries. Took a `DirectoryFilters` type into `api/types.ts` — see the row below
+  (`ecc71e7d`).
+
+~~**Baseline commit:** `a2bf3b72` · **Verdict (016 T5):** DELTA~~
 - 2026-09-04 — 016 T5: `TimePanels.tsx`, the `Logged` detail row, the work table's `Logged` column
   and bulk rollup read, My Work's This-period panel, General settings' Time panel, `formatHours`,
   and the module close-out in 009. **Took a contract + backend slice inside an `fe` task** — see the
@@ -138,6 +144,18 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 | `TypeIcon`'s `name` is OPTIONAL since 016 T4 | `TimeEntry.subject` carries `typeLevel` and no type name, so the glyph and the sr-only text fall back to the level's own word and the tooltip is absent. Third widening of that component, in its own idiom |
 | The rail's Timesheets entry has NO badge, deliberately | The mockup's `SEES_APPROVALS` count needs `GET /timesheets/approvals`, which **403s** without `time:approve` — a **PROJECT-scope** grant with no company-wide "where may I approve" read on the contract. `useCanInCompany` would say no for the PMs it is for; `useCan(activeProjectId)` would key a cross-project count on the switcher, the exact claim the placement avoids. Firing it unconditionally would raise a refused-request notification on every page load for most of the company. The count is on the approvals subtitle instead. Full argument in `AppShell.tsx`'s `TIMESHEETS` comment |
 | `Approve all` and `Remind` are absent from the approvals screen | No batch operation on the contract for the first — it would be N irreversible writes with a partial outcome to word, and there is no un-approve — and no endpoint at all behind the second. Named in `ApprovalsPage`'s header so a reader comparing against the mockup finds the reason |
+| **017 M7's seams** | `features/staffing/` — `StaffingPage` (`/staffing`) · `DirectoryPage` (`/directory`) · `AllocationTimeline` · `OverAllocatedPanel` · `FreeCapacityPanel` · `UtilisationPanel` · `DirectoryFilters` (which also exports **`SkillChips`**) · `PersonCard` · plus `capacityCopy.ts`, a pure module with its own `.test.ts`. `api/queries/staffing.ts` holds all fifteen hooks. **Both routes sit OUTSIDE the project segment**, beside `/timesheets`: an allocation spans every project a person is on, so scoping either under the switcher would say the opposite of what the screens answer |
+| The staffing keys, and why there are TWO roots | `keys.staffing.{capacity(from,to), myCapacity(from,to), people(filters), person(id,from,to), skills, absences(id), projectStaffing(p,from,to)}` with **`keys.staffingRoot = ['staffing']`**. The **window is inside every key that has one** — a September–November view and a six-month one are different answers, and a key without it serves the first under the second's heading the moment the picker moves. `projectStaffing` sits under `['projects', p, …]` on purpose so a project-level invalidation reaches it, which means `staffingRoot` does **not** cover it: every write sweeps both, through the module-private `invalidateStaffing(client, projectId?)` |
+| Every staffing mutation takes its id as a HOOK argument | `useCreateAllocation(projectId).mutate(input)`, `useCreateAbsence(userId).mutate(input)`, `useUpdateAllocation(projectId).mutate({ allocationId, patch })`. Not per call, because the id is also what the sweep needs and a call-site id is one a call site could get wrong |
+| **The directory's match count is NOT served** | `GET /staffing/people` answers a bare `PersonCapacity[]` with no total, so `DirectoryPage` reads the **same hook a second time with the filters dropped** — one extra key (`{from,to}`), fetched once, reused across every filter combination, and identical to the main read (one request) when nothing is applied. 017's plan predicted a served count; it is not there. Counting the filtered array gives "3 of 3", which is not a denominator |
+| `DirectoryFilters` is a TYPE in `api/types.ts` **and** a component in `features/staffing/` | The type is beside `BoardFilters` / `BacklogFilters` for their reason — `useStaffingPeople` spreads it into `qs`, so `contractParameters.test.ts` reads the *type*, and a member the contract does not declare is **ignored** by Spring rather than rejected. The component imports it aliased (`type DirectoryFilters as Filters`) |
+| The capacity em dash has ONE home | **`features/staffing/capacityCopy.ts`** — `capacityLabel(hours, hasProfile)`, `capacityDetail`, `utilisationLabel`, `freeCapacityLabel`, `overAllocationLabel`, `hasProfile(subject)`, and the constants `NO_FIGURE` / `NO_PROFILE` / `UTILISATION_BASIS`. Three states that look identical if written per screen: a number, `—` + *no profile recorded*, and the region's own failed state. **`capacityLabel` consults `hasProfile` as well as the hours** — the server sends the five nulls together, and a caller trusting only the hours prints a stale figure the moment one of them does not arrive |
+| `overAllocationLabel` does NOT re-derive the threshold | `overAllocated` is served, computed from the peak **day** (017 D-e), and a client-side `peakPercent > 100` would be a second rule that silently overrides the server's the day it moves. `StaffingPage`'s chip reads `view.overAllocated.length` for the same reason — the subset is served so the chip, the row badge and the breakdown are three renderings of one list |
+| The over-allocation tone is `failed`, not the mockup's `b-blocked` | The kit's `blocked` means *something outside stopped this*, and the panel's own kept sentence is **"Flagged, not blocked"** — that tone would be the one word on the screen contradicting the one beside it. `failed` is the kit's red and is what `--color-danger` resolves to |
+| The timeline shares the month scale and NOT the span arithmetic | `AllocationTimeline` imports `monthsIn` / `DateWindow` from `features/releases/timelineScale.ts` and keeps a private `spanBetween`. A release has a target and may have no start, so that module's three shapes include a point marker and a `null`; an allocation and an absence always carry both dates. **The window's `to` is inclusive**, so the denominator runs to the day after it — without that, a full-window bar comes out under 100% and the last day is a sliver nothing can fill |
+| The `staffing` fault arm, and what it deliberately does not reach | `tcmsFaults.staffing('no-profile' \| 'over-allocated')`. `'no-profile'` is the only way to the five-null body — no fixture and no seeded instance produces it — and its correct rendering is an em dash and *no profile recorded*, never `0h` and never the failed state. **`/projects/{id}/staffing` is outside `isStaffingPath` on purpose**: that operation answers a `ProjectStaffingView`, which has no `profile`, so a company-shaped body served there would be a drifted response rather than a fault |
+| `pluralNoun` now has ONE irregular | `lib/format.ts::IRREGULAR_PLURALS` — `person → people`. Every count on these screens is of people and read **"2 persons"**, including inside `EmptyState`, whose `noun` prop is documented singular and inflected there, so the plural could not be passed in. That file's *"pass it already-plural"* sentence is struck through with the reason. An entry earns its place by a screen having been seen to read wrongly without it |
+| `useCan`'s pending state is a REFUSAL PANEL, so a test must await the copy | Both staffing screens render the gate's three states in one element, so `findByTestId('…DeniedText')` resolves against *"Checking your permissions…"* and the assertion fails on a screen that is about to be right. Await the **sentence** (`findByText(/Staffing across the company is for/)`), not the element. Cost time in T4 |
 | `openapi-typescript` types a **defaulted** property as REQUIRED | Not the contract's `required` array. `IssueInput.agentEligible` and `ProjectSettingsUpdate.reviewEnabledIssue` both carry `default: false` and are absent from `required`, and both came out non-optional — which is why `IssueNewPage` sends `agentEligible: false` on a form that offers no such control. Three call sites were left red by T1 and fixed in T5 |
 
 ## Test-harness rules the suites enforce
@@ -188,7 +206,8 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 ## Known unknowns
 
 - **`src/features/cases/CaseGrid.test.tsx` is RED on `master` and predates 016.** Still red after
-  016 T5 (2 failed of 2705, in 1 file of 194) — untouched by that task, which names no cases file. Two selection
+  017 T4 (2 failed of 2779, in 1 file of 198) and after 016 T5 (2 of 2705, in 1 of 194) — untouched
+  by either task, neither of which names a cases file. Two selection
   tests — *survives paging* and *select-all reaches the page* — fail with `Number of calls: 0` after
   a `userEvent.click` on the Radix `Checkbox` at `CaseGrid.tsx:118` / `:126`. Verified failing on a
   clean checkout at `90667f1e` with the working tree stashed, so it is not 016's. Not investigated:

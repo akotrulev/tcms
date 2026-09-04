@@ -304,6 +304,30 @@ Traps this task will hit:
   different endpoints and a prefix match will serve one for the other.
 - "6 years" on the profile panel is DERIVED from experienceYears (D-b). Do not add a years field to
   the edit form — the form takes a date.
+- T4 LANDED THE WHOLE QUERY MODULE, writes included. Do not re-add any of it.
+  frontend/src/api/queries/staffing.ts exports useStaffingCapacity, useMyCapacity, useStaffingPeople,
+  useStaffingPerson, useSkills, useAbsences, useProjectStaffing, useCreateAllocation,
+  useUpdateAllocation, useDeleteAllocation, useCreateAbsence, useDeleteAbsence, usePutProfile,
+  usePutPersonSkills, useCreateSkill — all through the barrel. **Every mutation takes its id as a
+  HOOK argument, not per call**: useCreateAllocation(projectId).mutate(input),
+  useCreateAbsence(userId).mutate(input), useUpdateAllocation(projectId).mutate({allocationId,
+  patch}). Each already sweeps both roots through the module's private invalidateStaffing.
+- Two disabled buttons are YOURS to wire, and they are the only two:
+  `Staffing.Allocate` on StaffingPage.tsx (leave it disabled — that screen names no project) and
+  `Directory.Person.<id>.Profile` in PersonCard.tsx, which becomes a link to /directory/:userId.
+  PersonCard also already renders the skills, the strapline and a one-person AllocationTimeline, so
+  the person page reuses it rather than drawing a second card.
+- Reusable, already built: features/staffing/capacityCopy.ts (capacityLabel, capacityDetail,
+  utilisationLabel, freeCapacityLabel, overAllocationLabel, hasProfile, NO_PROFILE, NO_FIGURE,
+  UTILISATION_BASIS) · AllocationTimeline.tsx (takes `window`, `people`, `testId`) ·
+  DirectoryFilters.tsx, which ALSO exports SkillChips(skills, highlighted, onToggle, testId) ·
+  lib/labels.ts::absenceKindLabels and absenceKindTones.
+- `tcmsFaults.staffing('no-profile' | 'over-allocated')` exists. Its path test excludes
+  /projects/{id}/staffing DELIBERATELY — that operation answers a ProjectStaffingView, which carries
+  no profile, so a company-shaped body served there would be a drifted response rather than a fault.
+  If T5 wants a fault for the project screen it is a new predicate, not a widened prefix.
+- The directory's match count is a SECOND unfiltered read of GET /staffing/people, not a served
+  total — see §T4's record. If the person page needs a company total, take it the same way.
 
 When done: run `~/bin/tcms-remote sync` then `~/bin/tcms-remote frontend npm run build`,
 `npm run lint` and `npm run test:run`. Commit the paths in §T5 step 5 as
@@ -2804,6 +2828,63 @@ project you are staffing"* until T5 ships the dialog, because the write is `staf
 project and this screen names no project. `directory.html`'s per-person `Profile` button is likewise
 rendered **disabled** here, because `/directory/:userId` is T5's — a button linking to a route that
 does not exist yet is the fake success plan 009's task-cutting rule forbids.
+
+**Record — landed 2026-09-04 (`ecc71e7d`).** `npm run build`, `npm run lint` and
+`npm run test:run` green on shanks; 38 new tests in 4 files, 2777 passing of 2779. The two failures
+are `src/features/cases/CaseGrid.test.tsx`'s selection pair, which 016's close-out already recorded
+as pre-existing and which this task did not touch. `packages npm run test:run --workspaces` also run,
+because `citedFiles.test.ts` reads comments in `frontend/src` and a stale citation here reddens that
+job: green, 535 tests.
+
+Landed as planned, plus three things the plan did not predict:
+
+1. **`api/types.ts` gained `DirectoryFilters`**, which the plan's `keys.staffing.people(filters)`
+   needed and did not name a home for. It sits beside `BoardFilters` / `BacklogFilters` for their
+   reason: `useStaffingPeople` spreads it into `qs`, so `contractParameters.test.ts` reads the
+   *type* and a member the contract does not declare is silently ignored by Spring rather than
+   rejected. Four members, matching `GET /staffing/people` exactly.
+
+2. **The match count is NOT served, and the denominator is a second read.** The plan said
+   *"the match count (`3 of 11 people match`) is served, not counted client-side"*. It is not:
+   `GET /staffing/people` answers a bare `PersonCapacity[]` with no total. `DirectoryPage` therefore
+   calls the same hook a second time with the skill and date filters dropped — one extra key,
+   `{from,to}` alone, fetched once and reused across every filter combination, and *identical* to
+   the main read (so one request) when nothing is applied. Counting the filtered array would have
+   printed "3 of 3", which is not a denominator; a company size taken from a members list would have
+   been a second answer to a question this endpoint already answers.
+
+3. **`lib/format.ts::pluralNoun` learned one irregular.** Every count on these two screens is of
+   *people*, and the suffix inflector rendered `2 persons` — including inside `EmptyState`, whose
+   `noun` prop is documented as singular and inflected there, so the plural could not be passed in.
+   An `IRREGULAR_PLURALS` map with one entry, and that file's *"pass it already-plural"* sentence is
+   struck through with the reason rather than deleted.
+
+Decisions taken inside the task:
+
+- **The over-allocation tone is `failed`, not the mockup's `b-blocked`.** The kit's `blocked` means
+  *something outside stopped this*, and the panel's own kept sentence reads **"Flagged, not
+  blocked"** — that tone would be the one word on the screen contradicting the one beside it.
+  `failed` is the kit's red and is what `--color-danger` resolves to, which is the hue the mockup
+  draws.
+- **`AllocationTimeline` imports `monthsIn` / `DateWindow` from `features/releases/timelineScale.ts`
+  and writes its own span arithmetic.** The month scale is genuinely one function; the span is not —
+  a release has a target and may have no start, so that module's three shapes include a point marker
+  and a null, where an allocation and an absence always carry both dates and the only question is
+  how much of the window they cover. `spanBetween` is private to the timeline file and its window's
+  `to` is **inclusive**, so a full-window bar reaches 100%.
+- **The `Adjust` button on the Over-100% panel links to `/directory`, not to a dialog.** An
+  allocation is written on a project and this screen names none — a dialog here would have to ask
+  which of the three the reader meant and then refuse them on two of the answers.
+- **`+ Allocate` and each card's `Profile` render disabled with a reason**, per §31 and the task's
+  own out-of-scope note. Both are T5's to wire.
+- The **utilisation panel is the one addition to the mockup**, in a third column of what the plan
+  called the `g2` row. Its subtitle is `UTILISATION_BASIS` verbatim.
+
+**Built and unverified:** every screen here was proved by RTL against doubles and by the contract
+checks; neither has been opened against a running instance, because `V10`'s tables carry no seeded
+rows — `seed-demo-data` writes no `person_profile`, `allocation` or `absence`, so a real session
+would show the empty state on both. `tcmsFaults.staffing('no-profile')` and
+`staffing('over-allocated')` are how they are looked at until T5 can write a row.
 
 ---
 
