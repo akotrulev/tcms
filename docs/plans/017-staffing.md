@@ -3090,7 +3090,7 @@ file headers and `periods.ts` read; 2 skills; 3 plan sections cited
 - Modify: `docs/features.md`, `docs/plans/009-project-management-expansion-modules.md`,
   `docs/plans/009-execution-breakdown.md`, `docs/agent-context/fe-react.md`
 
-- [ ] **Step 1: The fourth KPI tile**
+- [x] **Step 1: The fourth KPI tile**
 
 `TimesheetPage.tsx`. The grid goes `md:grid-cols-3` → `md:grid-cols-4`; the tile sits **second**,
 where `timesheets.html` puts it. It reads `useMyCapacity(period.startsOn, period.endsOn)` — **the
@@ -3116,7 +3116,7 @@ now exists, computed by `staffing.Capacity` from `person_profile`, `allocation` 
 not delete the old reasoning**; a later reader must be able to see that the absence was considered
 and why it ended.
 
-- [ ] **Step 2: My Work's Capacity and the meter**
+- [x] **Step 2: My Work's Capacity and the meter**
 
 `MyWorkPage.tsx`'s `ThisPeriodPanel` — Capacity beside Logged in a `g2` grid, and the meter under
 them at `logged / capacity`, clamped at 100% with an over-tone above it. The meter is what needed
@@ -3129,20 +3129,20 @@ The capacity read is its **own** `DataRegion` nested inside the panel, so a staf
 the tile and the meter and leaves the logged hours where they are. A single region over both would
 make one module's failure blank the other's number.
 
-- [ ] **Step 3: Tests**
+- [x] **Step 3: Tests**
 
 Four tiles render; the capacity tile reads `—` and *no staffing profile recorded* when `hasProfile`
 is false; the meter is absent when capacity is null and present when it is not; a failed capacity
 read leaves `Logged` rendered (`drivingAFailedRead()`, with the reason).
 
-- [ ] **Step 4: `docs/features.md`**
+- [x] **Step 4: `docs/features.md`**
 
 A **Staffing** section: profiles and skills, allocation at a percentage over a range, the
 over-allocation flag and what it deliberately does not do (flag, never block), absence and the one
 sentence that it zeroes capacity everywhere, the directory's "free from" question, and utilisation
 with its denominator named. Written for a reader deciding what the product does.
 
-- [ ] **Step 5: Close plan 009 per the hand-off protocol**
+- [x] **Step 5: Close plan 009 per the hand-off protocol**
 
 1. **Status table** — M7's row to `done 2026-09-04 @ <short sha>`.
 2. **The migration actually taken** — `V10`; strike through `V9` in the M6·M7·M8 table's M7 column
@@ -3161,7 +3161,7 @@ with its denominator named. Written for a reader deciding what the product does.
 6. Also correct `009-execution-breakdown.md` phase 7: t32's *"No endpoint in this contract reads a
    time entry"* is superseded (M6 landed first), and the projected `V9` is `V10`.
 
-- [ ] **Step 6: Gate and commit — two commits, per the protocol**
+- [x] **Step 6: Gate and commit — two commits, per the protocol**
 
 ```bash
 ~/bin/tcms-remote sync
@@ -3180,6 +3180,34 @@ git commit -m "docs(plan): M7 done"
 ```
 
 ---
+
+**Built and unverified:** both figures are proved by RTL against doubles and by the contract checks,
+and neither has been looked at in a browser. The failed-capacity path is asserted on both screens
+(`drivingAFailedRead()`, with the reason at each call site), so what is proved is that a staffing
+outage leaves the logged hours rendered — not that it looks right when it happens. The two
+`CaseGrid.test.tsx` failures are unchanged and pre-existing. `./gradlew build` on `shanks` answered
+**`UP-TO-DATE`**: T6 touched no backend source and none of the out-of-source inputs
+`backend/build.gradle.kts` declares, so the last real backend run of this module is T3's.
+
+**Four things this task found that the plan or the earlier records had wrong:**
+
+1. **The step 1 snippet's detail string was a second spelling.** It wrote
+   `'no staffing profile recorded'`; `capacityCopy.ts`'s `NO_PROFILE` is `'no profile recorded'`, and
+   the whole point of that constant is that the five surfaces showing a capacity figure cannot
+   disagree about the same absence. The landed code imports the constant.
+2. **`capacityDetail` still has no caller, and this task did not become its first.** Every landed
+   surface uses `capacityLabel` + `NO_PROFILE` and writes its own present-case sentence, so the
+   timesheet tile follows the four screens already on disk rather than the one function nobody
+   calls. The shared thing is the absent case, and that is shared.
+3. **T4's and T5's records are wrong about `seed-demo-data`.** Both say it writes no row into
+   `V10`'s five tables. `DemoWorkspaceSeeder.seedStaffing` landed with T3 and writes three profiles,
+   a skill vocabulary, two allocations that cross 100% over two projects, and one half-day absence.
+   Corrected in plan 009's closure rather than here, because that is the list a reader trusts.
+4. **My Work's meter is rendered off the loaded capacity payload rather than inside the nested
+   region.** The region is the grid's second cell and holds the figure; the meter sits under the
+   whole row, where `my-work.html` draws it, and is absent whenever there is no number — the read
+   failed, the read is in flight, or the person has no profile. Wrapping both in one region would
+   have put a half-width meter under the capacity column only.
 
 ## Definition of done
 
@@ -3201,3 +3229,10 @@ code:
    absorbed.
 6. **Plan 009 is closed** per the hand-off protocol, including the M9 prompt saying utilisation
    landed and this plan's record of the two capacity figures.
+
+**Where this stands on 2026-09-04: 5 and 6 are true; 1–4 are not, and none of them can be true
+without a running instance.** Every one of the first four is written as *do it and watch*, and
+nothing in this module has been done against a real database from the UI — the writes and the
+screens are proved by RTL doubles and by the contract checks. `seed-demo-data` writes the rows
+(T3, corrected above) and is the way to make 1–4 checkable in one command; running it and walking
+the four screens is the whole of what is left, and it is a verification pass rather than a task.
