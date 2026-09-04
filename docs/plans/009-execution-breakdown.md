@@ -753,9 +753,14 @@ take `V3` (M1 does), and Mc does **not** take plan `011` (M1 does).
 
 **Goal.** A PM allocates people, sees capacity and over-allocation, and answers 'who is free next month with skill X'.
 
-**Sequential.** One lane: contract → migration → staffing service → the two screens that read it.
+**Sequential.** One lane: contract → migration → staffing service → the screens that read it.
+**Executed as SIX tasks, not four** — plan 017 split the screens in two for context budget (`T4` the
+two company screens, `T5` the project screen and the person page) and gave `T6` the two capacity
+figures M6 left absent plus the close-out, per the task-cutting rule that documentation rides with
+the last task.
 
-**Module plan:** `docs/plans/017-…md` (next free at start time) · **Migration:** projected `V9`
+**Module plan:** [`docs/plans/017-staffing.md`](017-staffing.md) · **Migration:** ~~projected `V9`~~
+→ **`V10`, taken 2026-09-04** — M6 landed ahead of this phase and spent `V9`.
 
 ### `t32` · M7 — module plan and the staffing contract commit
 
@@ -763,13 +768,20 @@ take `V3` (M1 does), and Mc does **not** take plan `011` (M1 does).
 |---|---|---|
 | `be-java` | `ep-writing-plans`, `be-shared-api-surface-plan` | `t31` |
 
-Write docs/plans/0NN-staffing.md. M7 depends on M0 only; utilisation (allocated vs logged) stays out until M6 has landed. Land the contract for profiles, skills, allocations and absences with both clients and both contractBodies copies.
+Write docs/plans/0NN-staffing.md. M7 depends on M0 only; ~~utilisation (allocated vs logged) stays out until M6 has landed.~~ → **M6 landed on 2026-09-04, before this phase ran, so utilisation was IN** (017 D-i). Land the contract for profiles, skills, allocations and absences with both clients and both contractBodies copies.
 
 **Acceptance criteria**
 
-- [ ] No endpoint in this contract reads a time entry
-- [ ] Every schema has its required array; contractPairing.test.ts green
-- [ ] The plan records that utilisation is deferred to after M6
+- [x] ~~No endpoint in this contract reads a time entry~~ → **superseded 2026-09-04.** This criterion
+      was written on 2026-08-30, when the confirmed order put M6 *after* M7 and review R11 had just
+      carved utilisation out of this module because M6 might not exist. M6 landed first, so the
+      condition it guarded is gone: `GET /staffing/capacity` and `GET /staffing/people` serve
+      `approvedHours` and `utilisationPercent`, read from `time_entry` / `timesheet_period` through
+      `com.tcms.staffing.TimeFacts` — native SQL, read-only, one file, pinned both ways by
+      `StaffingReadsNoTimeEntryTest`
+- [x] Every schema has its required array; contractPairing.test.ts green
+- [x] ~~The plan records that utilisation is deferred to after M6~~ → the plan records the opposite,
+      in 017 D-i and in its "What this module was told" correction 2
 
 **Files**
 
@@ -787,13 +799,13 @@ Write docs/plans/0NN-staffing.md. M7 depends on M0 only; utilisation (allocated 
 |---|---|---|
 | `data-architect` | `data-postgresql`, `data-migrations` | `t32` |
 
-Next free V from the directory (the plan reserves V9, and it will not be that if Mc landed first). Allocation is against a project, which is a foundation module.
+Next free V from the directory (~~the plan reserves V9~~ → **`V10` was taken on 2026-09-04**; M6 spent `V9` by landing ahead of this phase, and Mc is still unstarted). Allocation is against a project, which is a foundation module.
 
 **Acceptance criteria**
 
-- [ ] SchemaConventionTest green on all five tables
-- [ ] The migration takes the next free V and plan 009's table is corrected
-- [ ] allocation carries a percentage and a date range that a query can overlap-check
+- [x] SchemaConventionTest green on all five tables (95 → 100)
+- [x] The migration takes the next free V and plan 009's table is corrected — `V10`
+- [x] allocation carries a percentage and a date range that a query can overlap-check
 
 **Files**
 
@@ -827,21 +839,26 @@ New com.tcms.staffing module: capacity, allocation percentage, an over-allocatio
 |---|---|---|
 | `fe-react` | `fe-react-data-fetching`, `fe-react-ui-rules`, `fe-react-component-testing` | `t34` |
 
-Port staffing.html and directory.html, and surface profiles and skills where teams.html and member.html already show a person.
+Port staffing.html and directory.html, and surface profiles and skills where teams.html and member.html already show a person. **Landed as FOUR screens over two tasks** (017 T4 and T5, split for context budget): `/staffing` and `/directory` under `staffing:directory`, `/projects/:projectId/staffing` under the PROJECT pair, and `/directory/:userId` carrying `member.html`'s three panels — ~~a member page under `/admin/teams/:userId`~~ does not exist in this app and M7 built none (017 D-g).
 
 **Acceptance criteria**
 
-- [ ] The over-allocation flag is visible on the staffing screen at 101%
-- [ ] An absent week reads as zero capacity on every screen that shows capacity
-- [ ] The directory answers 'free next month with skill X' through URL-held filters
-- [ ] build, lint and tests green
+- [x] The over-allocation flag is visible on the staffing screen at 101%
+- [x] An absent week reads as zero capacity on every screen that shows capacity
+- [x] The directory answers 'free next month with skill X' through URL-held filters
+- [x] build, lint and tests green — with the two pre-existing `CaseGrid.test.tsx` failures named and
+      not absorbed, and **nothing opened against a running instance**; see plan 009's M7 closure
 
 **Files**
 
 - `frontend/src/features/staffing/`
-- `frontend/src/features/admin/`
+- ~~`frontend/src/features/admin/`~~ → **untouched.** `teams.html`'s members table has no skill
+  column and no capacity figure, so the mockup this task was told to walk answers that profiles and
+  skills surface on the *person*, not in the list (017 D-g)
 - `frontend/src/api/queries/keys.ts`
 - `frontend/src/lib/labels.ts`
+- **T6 also:** `frontend/src/features/time/TimesheetPage.tsx`,
+  `frontend/src/features/board/MyWorkPage.tsx` and their tests — the two figures 016 D-j left absent
 
 ---
 
