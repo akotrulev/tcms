@@ -22,6 +22,7 @@
  *     tcmsFaults.release('empty') // the roadmap is empty — merge day, see below
  *     tcmsFaults.importing('midway') // the source stopped answering during the run — see below
  *     tcmsFaults.time('rejected')  // your fortnight came back with a note — see below
+ *     tcmsFaults.staffing('no-profile') // nobody's contracted hours are recorded — see below
  *     tcmsFaults.off()
  *
  * ## Why this lives here and not in a mock transport
@@ -193,6 +194,32 @@
  * would answer a *colleague's* period with the caller's own, which is the drifted-body failure
  * injected by accident and libellous with it.
  *
+ * ## The staffing arm, and why the interesting one is not an error at all (017 T4)
+ *
+ * These land **before the screens that prove them**, for the same working agreement.
+ *
+ *   - `staffing('no-profile')` — every staffing read answers with `profile: null` and every hours
+ *     figure null. It is the branch every capacity surface in the product has and the one no
+ *     fixture and no seeded instance produces: the demo data records a profile for everybody, and
+ *     a company where nobody has one is the state on the *first* day of using the module. Its
+ *     correct rendering is an em dash and the words *no profile recorded* — not `0h`, which says
+ *     somebody recorded zero contracted hours, and not the region's failed state, which says the
+ *     read did not answer. Those three are indistinguishable to a reader if the screen gets them
+ *     wrong, which is why `PersonCapacity.profile` is served rather than inferred from a null and
+ *     why this switch exists at all.
+ *   - `staffing('over-allocated')` — everybody comes back at `peakPercent: 130`, `overAllocated:
+ *     true`, and every person is repeated into the view's `overAllocated` list. Producing it for
+ *     real needs three allocations on one person across three projects the developer can see, and
+ *     what it proves — the danger tone, the row badge, the chip's count and the breakdown panel —
+ *     is four surfaces that must agree about one boolean.
+ *
+ * The path test is a **prefix** rather than one anchored operation, because the arm rewrites bodies
+ * of three different shapes (`PersonCapacity[]`, `StaffingCapacityView`, `SelfCapacity`) and each
+ * rewrite is chosen by its own anchored predicate below. `/projects/{id}/staffing` is deliberately
+ * **outside** it: that payload is a `ProjectStaffingView`, which is T5's screen and carries no
+ * `profile` at all, so a body written for the company shape would be served where the other was
+ * expected — this module's own drifted-body failure, injected by accident.
+ *
  * ## Tree-shaking
  *
  * **This module must stay free of top-level side effects.** Both entry points are called behind a
@@ -229,6 +256,8 @@ export interface FaultState {
   import: ImportFault | null;
   /** How the time module misbehaves, or `null` for a fortnight nobody has acted on. */
   time: TimeFault | null;
+  /** How the staffing reads misbehave, or `null` for a company whose profiles are recorded. */
+  staffing: StaffingFault | null;
 }
 
 /** The five ways somebody else's tracker fails us. See this module's header. */
@@ -277,6 +306,25 @@ export type ImportFault = 'unauthorized' | 'forbidden' | 'down' | 'midway' | 'co
  */
 export type TimeFault = 'rejected' | 'locked';
 
+/**
+ * The two staffing states a healthy seeded instance will not show you.
+ *
+ * **Neither is a failure.** Both are 200s carrying a shape the screens have a second branch for,
+ * and the branch is the thing that cannot be reached any other way:
+ *
+ *   - `'no-profile'` — every person comes back with `profile: null` and **every hours figure
+ *     null**, which is the five-null body the contract sends together (017 correction 4). It is
+ *     the state no fixture produces by accident and the one every capacity surface must read as
+ *     an em dash and *no profile recorded* — never `0h`, which claims somebody recorded 0 hours,
+ *     and never the region's failed state, which claims the read did not answer. Reaching it for
+ *     real means an instance where nobody has run `PUT /staffing/people/{id}/profile`, which the
+ *     demo seed is specifically built not to be.
+ *   - `'over-allocated'` — everybody comes back at `peakPercent: 130` with the flag set, so the
+ *     danger tone, the row badge and the Over-100% panel can be watched without arranging three
+ *     real allocations across three projects on one person.
+ */
+export type StaffingFault = 'no-profile' | 'over-allocated';
+
 const faults: FaultState = {
   status: null,
   retryAfter: null,
@@ -291,6 +339,7 @@ const faults: FaultState = {
   release: null,
   import: null,
   time: null,
+  staffing: null,
 };
 
 /**
@@ -518,6 +567,16 @@ export function verdictFor(path: string, method = 'GET'): FaultVerdict {
   */
   if (faults.time !== null && isTimePath(path) && applies(path)) {
     const verdict = timeVerdict(faults.time, path, method);
+    if (verdict.kind !== 'none') return verdict;
+  }
+
+  /*
+    The staffing arm, eighth, and scoped by path for every arm above's reason. Both of its states
+    fabricate a whole `PersonCapacity` — three operations answer three different arrangements of
+    one — so the shape is picked per operation rather than per fault.
+  */
+  if (faults.staffing !== null && isStaffingPath(path) && applies(path)) {
+    const verdict = staffingVerdict(faults.staffing, path, method);
     if (verdict.kind !== 'none') return verdict;
   }
 
@@ -964,6 +1023,173 @@ function timeVerdict(fault: TimeFault, path: string, method: string): FaultVerdi
 }
 
 /**
+ * Which requests the staffing arm applies to — the company-scope reads 017 added.
+ *
+ * `/projects/{id}/staffing` is **not** here, and the omission is the same one `isCurrentPeriodRead`
+ * makes one module over: that operation answers a `ProjectStaffingView`, which has no `profile` and
+ * no hours figure on it, so a body written for `PersonCapacity` served there would be a drifted
+ * response rather than a fault. `only('/staffing/capacity')` narrows to the two capacity reads.
+ */
+function isStaffingPath(path: string): boolean {
+  return path.startsWith('/staffing');
+}
+
+/** `GET /staffing/capacity`, and only that — `capacity/me` is one segment on and a different shape. */
+function isCapacityRead(path: string, method: string): boolean {
+  return method === 'GET' && withoutQuery(path) === '/staffing/capacity';
+}
+
+/** `GET /staffing/capacity/me`. Anchored for {@link isCapacityRead}'s reason, from the other end. */
+function isMyCapacityRead(path: string, method: string): boolean {
+  return method === 'GET' && withoutQuery(path) === '/staffing/capacity/me';
+}
+
+/**
+ * `GET /staffing/people` and `GET /staffing/people/{userId}` — the list and the one person.
+ *
+ * The two answer an **array** and a **single object** of the same schema, so they cannot share one
+ * fabricated body and the caller below picks by which of the two matched. `…/profile`, `…/skills`
+ * and `…/absences` sit under the same prefix and are excluded by the anchor: a `PersonCapacity`
+ * served where a `Skill[]` was expected is the collision this module's header warns about.
+ */
+function isPeopleRead(path: string, method: string): 'list' | 'one' | null {
+  if (method !== 'GET') return null;
+  const bare = withoutQuery(path);
+  if (bare === '/staffing/people') return 'list';
+  return /^\/staffing\/people\/[^/]+$/.test(bare) ? 'one' : null;
+}
+
+const FAULT_FROM = '2026-09-01';
+const FAULT_TO = '2026-11-30';
+
+/**
+ * The staffing bodies, and the shape of each is decided by which read matched.
+ *
+ * Two people rather than one, because every panel this proves is a *list*: an Over-100% panel with
+ * a single row cannot show that the chip's count, the row badges and the breakdown are read off one
+ * served subset rather than three separate filters.
+ */
+function staffingVerdict(fault: StaffingFault, path: string, method: string): FaultVerdict {
+  const people = [
+    faultPerson(fault, '00000000-0000-4000-8000-0000000000f1', 'Mira Sund'),
+    faultPerson(fault, '00000000-0000-4000-8000-0000000000f2', 'Tomas Ek'),
+  ];
+
+  const peopleRead = isPeopleRead(path, method);
+  if (peopleRead === 'list') return { kind: 'body', status: 200, body: people };
+  if (peopleRead === 'one') return { kind: 'body', status: 200, body: people[0] };
+
+  if (isCapacityRead(path, method)) {
+    return {
+      kind: 'body',
+      status: 200,
+      body: {
+        from: FAULT_FROM,
+        to: FAULT_TO,
+        people,
+        // Served as its own subset rather than filtered by the panel, for the contract's own
+        // reason: the chip and the row badge read one list and so cannot disagree.
+        overAllocated: fault === 'over-allocated' ? people : [],
+      },
+    };
+  }
+
+  if (isMyCapacityRead(path, method)) {
+    return {
+      kind: 'body',
+      status: 200,
+      body: {
+        from: FAULT_FROM,
+        to: FAULT_TO,
+        capacityHours: fault === 'no-profile' ? null : 80,
+        absenceHours: fault === 'no-profile' ? null : 0,
+        allocatedPercent: fault === 'over-allocated' ? 130 : 0,
+        // The whole point of the field: a screen can say *no profile recorded* instead of
+        // *failed to load*, which a null capacity on its own cannot tell apart.
+        hasProfile: fault !== 'no-profile',
+      },
+    };
+  }
+
+  return { kind: 'none' };
+}
+
+/**
+ * One person in the fabricated window.
+ *
+ * **The five nulls arrive together**, which is what makes `'no-profile'` worth having: the server
+ * sends `profile`, `capacityHours`, `absenceHours`, `allocatedCapacityHours` and `approvedHours` as
+ * one state, and a body carrying only the first would describe an answer no endpoint gives.
+ * `utilisationPercent` is null in both arms and for two different reasons — no profile in one, no
+ * allocated capacity to divide by in the other (017 D-i) — which is itself the thing the copy has
+ * to word rather than print as `0%`.
+ */
+function faultPerson(fault: StaffingFault, id: string, displayName: string): unknown {
+  const over = fault === 'over-allocated';
+  return {
+    person: {
+      id,
+      displayName,
+      email: `${displayName.toLowerCase().replace(' ', '.')}@example.test`,
+      avatarUrl: null,
+    },
+    profile:
+      over ?
+        {
+          personId: id,
+          weeklyHours: 40,
+          jobTitle: 'Test Engineer',
+          location: 'Malmö',
+          experienceSince: '2020-09-01',
+          experienceYears: 6,
+        }
+      : null,
+    skills: [],
+    capacityHours: over ? 480 : null,
+    absenceHours: over ? 0 : null,
+    allocatedPercent: over ? 130 : 0,
+    allocatedCapacityHours: over ? 624 : null,
+    freePercent: 0,
+    peakPercent: over ? 130 : 0,
+    peakOn: over ? '2026-10-12' : null,
+    overAllocated: over,
+    approvedHours: over ? 0 : null,
+    utilisationPercent: null,
+    freeFrom: over ? null : FAULT_FROM,
+    allocations:
+      over ?
+        [
+          {
+            projectId: '00000000-0000-4000-8000-0000000000fb',
+            projectKey: 'ACME',
+            projectName: 'Acme Storefront',
+            percent: 50,
+            startsOn: FAULT_FROM,
+            endsOn: FAULT_TO,
+          },
+          {
+            projectId: '00000000-0000-4000-8000-0000000000fc',
+            projectKey: 'LOYAL',
+            projectName: 'Acme Loyalty',
+            percent: 50,
+            startsOn: FAULT_FROM,
+            endsOn: FAULT_TO,
+          },
+          {
+            projectId: '00000000-0000-4000-8000-0000000000fd',
+            projectKey: 'BERG',
+            projectName: 'Bergstrom Portal',
+            percent: 30,
+            startsOn: FAULT_FROM,
+            endsOn: FAULT_TO,
+          },
+        ]
+      : [],
+    absences: [],
+  };
+}
+
+/**
  * A card move that landed **and** put its column over the limit — story B3's 200 carrying a fact.
  *
  * The `card` is a placeholder for the reason this module's header gives: the seam never sees the
@@ -1189,6 +1415,18 @@ export function installFaultConsole(): void {
           : `[tcms faults] timesheets are now: ${fault}`,
       );
     },
+    /**
+     * How the staffing reads misbehave. `tcmsFaults.staffing(null)` restores them without clearing
+     * anything else, for `tracker()`'s reason.
+     */
+    staffing(fault: StaffingFault | null) {
+      faults.staffing = fault;
+      console.info(
+        fault === null
+          ? '[tcms faults] staffing behaves again'
+          : `[tcms faults] staffing is now: ${fault}`,
+      );
+    },
     only(pathContains: string | null) {
       faults.pathContains = pathContains;
       console.info(`[tcms faults] scoped to paths containing ${JSON.stringify(pathContains)}`);
@@ -1207,6 +1445,7 @@ export function installFaultConsole(): void {
       faults.release = null;
       faults.import = null;
       faults.time = null;
+      faults.staffing = null;
       console.info('[tcms faults] cleared');
     },
     state: () => ({ ...faults }),
@@ -1216,6 +1455,7 @@ export function installFaultConsole(): void {
   console.info(
     '[tcms faults] available — try tcmsFaults.status(500), .hang(), .expire(), '
       + ".tracker('403'), .issue('conflict'), .rank('conflict'), .wip(), "
-      + ".release('empty'), .importing('midway'), .time('rejected'), .off()",
+      + ".release('empty'), .importing('midway'), .time('rejected'), "
+      + ".staffing('no-profile'), .off()",
   );
 }

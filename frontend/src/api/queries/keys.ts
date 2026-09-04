@@ -10,7 +10,14 @@
  * call site re-deriving the shape and getting it subtly wrong.
  */
 import type { QueryClient } from '@tanstack/react-query';
-import type { AuditFilters, BacklogFilters, BoardFilters, CaseFilters, IssueFilters } from '../types';
+import type {
+  AuditFilters,
+  BacklogFilters,
+  BoardFilters,
+  CaseFilters,
+  DirectoryFilters,
+  IssueFilters,
+} from '../types';
 
 export const keys = {
   me: ['me'] as const,
@@ -706,6 +713,53 @@ export const keys = {
    * to miss the one that is not on screen.
    */
   timeRoot: ['time'] as const,
+
+  /**
+   * Staffing (017 M7) — the company capacity view, the directory, one person, and the vocabulary.
+   *
+   * The **window is inside every key that has one**, for this file's own §250 rule: a capacity view
+   * over September–November and one over the next six months are two different answers, and a key
+   * that carried only `['staffing','capacity']` would serve the first under the second's heading
+   * the moment the range picker moved. Same for the directory's filters, which is what makes the
+   * URL-held skill chips a *cache* key rather than only a query string.
+   *
+   * `myCapacity` sits **under** `capacity` deliberately, at `['staffing','capacity','me',…]`: it is
+   * the same computation over one person, and every write that stales the company view stales it
+   * too. It is also the one read here with no staffing permission on it (017 D-m), which is a fact
+   * about the endpoint and not about where its answer is cached.
+   *
+   * `projectStaffing` sits under `['projects', p, …]` rather than under `['staffing']`, which means
+   * a project-level invalidation ALSO sweeps it. That is wanted — a project's own screen goes stale
+   * for the same reasons the project does — and it is why every staffing write below sweeps both
+   * roots rather than one.
+   */
+  staffing: {
+    capacity: (from: string, to: string) => ['staffing', 'capacity', from, to] as const,
+    myCapacity: (from: string, to: string) => ['staffing', 'capacity', 'me', from, to] as const,
+    people: (filters: DirectoryFilters) => ['staffing', 'people', filters] as const,
+    person: (userId: string, from: string, to: string) =>
+      ['staffing', 'people', userId, from, to] as const,
+    skills: ['staffing', 'skills'] as const,
+    absences: (userId: string) => ['staffing', 'absences', userId] as const,
+    projectStaffing: (projectId: string, from: string, to: string) =>
+      ['projects', projectId, 'staffing', from, to] as const,
+  },
+
+  /**
+   * The prefix root every staffing write sweeps — `timeRoot`'s argument, one module over.
+   *
+   * An allocation written on one project changes that project's staffing screen, the company
+   * capacity view, the directory's free-capacity answer, the allocated person's own capacity tile
+   * on two *other* screens, and the over-allocation panel that reads the peak day. Enumerating
+   * those at each call site is five chances to miss the one that is not on screen — and the one
+   * that is not on screen is precisely the one nothing will refetch.
+   *
+   * It does **not** reach `projectStaffing`, which lives under the project's own prefix. That is
+   * why the writes sweep both, rather than this root being moved to cover it: putting a project's
+   * staffing under `['staffing']` would take it out of reach of every project-level invalidation
+   * the rest of the app already does.
+   */
+  staffingRoot: ['staffing'] as const,
 
   /*
     The prefix roots (§250).

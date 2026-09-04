@@ -10,6 +10,7 @@
  */
 import type { BadgeTone } from '../components/kit/Badge';
 import type {
+  AbsenceKind,
   AggregationPolicy,
   AssignmentVia,
   ArtifactStatus,
@@ -1292,3 +1293,37 @@ export const timesheetStateTones = {
   APPROVED: 'passed',
   REJECTED: 'failed',
 } as const satisfies Record<TimesheetState, BadgeTone>;
+
+/**
+ * Why somebody is away (017 M7).
+ *
+ * **`HOLIDAY` is a member rather than a calendar**, and the label is where a reader meets that
+ * decision: this product has no holiday calendar (017 D-c), so a public holiday is one absence row
+ * per person — which is what actually zeroes that day's capacity everywhere. A shared calendar
+ * would have to be per company *and* per country, and there is no locale model to hang either on.
+ *
+ * `OTHER` reads as *Other* and not as *Unspecified*: somebody chose it, so the label must not imply
+ * they failed to.
+ */
+export const absenceKindLabels = {
+  LEAVE: 'Leave',
+  SICK: 'Sick',
+  HOLIDAY: 'Public holiday',
+  OTHER: 'Other',
+} as const satisfies Record<AbsenceKind, string>;
+
+/**
+ * Badge tones for the four, on the kit's eight.
+ *
+ * All four are `steel` except `SICK`, and the flatness is deliberate: an absence is not a verdict
+ * about anybody, and colouring leave differently from a public holiday would make the timeline read
+ * as a judgement on how people spend their days. `SICK` is `blocked` for the one reason a tone
+ * earns its place here — it is the absence nobody planned, which is the one a staffing reader is
+ * actually looking for when a week goes wrong.
+ */
+export const absenceKindTones = {
+  LEAVE: 'steel',
+  SICK: 'blocked',
+  HOLIDAY: 'steel',
+  OTHER: 'steel',
+} as const satisfies Record<AbsenceKind, BadgeTone>;

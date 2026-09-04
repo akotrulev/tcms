@@ -127,6 +127,12 @@ const TimesheetPage = lazy(() =>
 const ApprovalsPage = lazy(() =>
   import('../features/time/ApprovalsPage').then((m) => ({ default: m.ApprovalsPage })),
 );
+const StaffingPage = lazy(() =>
+  import('../features/staffing/StaffingPage').then((m) => ({ default: m.StaffingPage })),
+);
+const DirectoryPage = lazy(() =>
+  import('../features/staffing/DirectoryPage').then((m) => ({ default: m.DirectoryPage })),
+);
 const TeamBoardPage = lazy(() =>
   import('../features/board/TeamBoardPage').then((m) => ({ default: m.TeamBoardPage })),
 );
@@ -1089,6 +1095,33 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <OrgChartPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            Staffing and the directory (017 M7) — company-wide, so outside the project segment for
+            `/timesheets`' reason: a person's allocation spans every project they are on, and
+            scoping either under the switcher would say the opposite of what the screens answer.
+
+            Both cost `staffing:directory`, which is COMPANY scope, and both are **routed for
+            everybody** as every readable screen in this app is. A Project Manager holds neither
+            company key and is refused by a sentence that names the screen they can use — a
+            project's own Staffing, which arrives in T5.
+          */}
+          <Route
+            path="/staffing"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <StaffingPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/directory"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <DirectoryPage />
               </Suspense>
             }
           />

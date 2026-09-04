@@ -298,12 +298,30 @@ export function joinMeta(...parts: (string | null | undefined | false)[]): strin
  */
 export function pluralNoun(n: number, noun: string): string {
   if (n === 1) return noun;
+  const irregular = IRREGULAR_PLURALS[noun];
+  if (irregular) return irregular;
   // `story` → `stories`, and `day` → `days`. The guard is a *consonant* before the `y`, which is
   // the whole rule: 013's release readiness is the first caller to pass a noun ending in one, and
   // it read "4 storys" on screen until this line existed.
   if (/[^aeiou]y$/.test(noun)) return `${noun.slice(0, -1)}ies`;
   return `${noun}${/(?:s|x|z|ch|sh)$/.test(noun) ? 'es' : 's'}`;
 }
+
+/**
+ * The nouns English does not inflect by suffix, and there is one of them so far.
+ *
+ * ~~"a noun that needs more than that should be passed already-plural rather than handled here"~~ →
+ * **superseded 2026-09-04 (017 T4)**, and by a caller that cannot do that: `EmptyState`'s `noun`
+ * prop is documented as *singular; it is inflected here*, and it is the reader-facing count of what
+ * a filter is hiding. 017's staffing screens count **people**, and every one of them read
+ * *"2 persons exist"* — a word no English speaker writes — with no way to pass the plural in.
+ *
+ * A map rather than a rule, and deliberately not the start of a general inflector: an entry earns
+ * its place by a screen having been seen to read wrongly without it.
+ */
+const IRREGULAR_PLURALS: Record<string, string> = {
+  person: 'people',
+};
 
 /**
  * Releases must sort by precedence, never lexicographically — `4.10.0` comes *after*

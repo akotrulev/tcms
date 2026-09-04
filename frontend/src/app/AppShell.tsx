@@ -35,6 +35,8 @@ import {
   Sun,
   Tag,
   Timer,
+  UserRoundSearch,
+  Users2,
   UserCheck,
   Users,
 } from 'lucide-react';
@@ -561,6 +563,21 @@ function projectNav(
           nothing to refuse, so the entry is not a promise the page has to walk back.
         */
         { label: 'Org chart', to: '/org-chart', icon: <Network className="size-4" /> },
+        /*
+          Staffing and Directory (017 M7), after Org chart because they answer the same shape of
+          question one step further on — who these people are, then who is free and who knows what.
+
+          **Ungated, like every item in this rail, and here the argument has a second half.** Both
+          screens cost `staffing:directory`, which a Project Manager does not hold (017 D-g), so a
+          gate would hide them from one of the roles most likely to look. Hiding would teach a PM
+          that this product cannot answer "who is free next month" — which it can, for the people
+          who own that question — where the refusal they get instead names the screen that answers
+          *theirs*: their own project's Staffing. That is the only refusal in this product that can
+          point at the page the reader actually wants, and it is only reachable if the entry is
+          shown.
+        */
+        { label: 'Staffing', to: '/staffing', icon: <Users2 className="size-4" /> },
+        { label: 'Directory', to: '/directory', icon: <UserRoundSearch className="size-4" /> },
         { label: 'Teams & roles', to: '/admin/teams', icon: <Users className="size-4" /> },
         /*
           Company, beside Teams & roles, for the same reason that one is here: a token belongs to

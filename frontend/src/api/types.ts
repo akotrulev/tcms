@@ -1041,6 +1041,25 @@ export type SelfCapacity = S['SelfCapacity'];
 export type ProjectStaffingPerson = S['ProjectStaffingPerson'];
 export type ProjectStaffingView = S['ProjectStaffingView'];
 
+/**
+ * What `GET /staffing/people` declares — the directory's whole parameter set, held in the URL.
+ *
+ * A type of its own rather than an inline object, for {@link BacklogFilters}' reason:
+ * `useStaffingPeople` spreads it into `qs`, so the keys this type carries **are** the query string
+ * the SPA sends, and `contractParameters.test.ts` reads the type rather than the call site. A field
+ * added here that the contract does not declare is not rejected by Spring — it is *ignored*, and
+ * the screen renders the broader answer under the heading it had already written.
+ *
+ * `skill` is an array and is **ANDed** by the server: a person must hold every one, which is what
+ * "who knows Playwright and Java" means and is why the chips are a set rather than a single value.
+ */
+export interface DirectoryFilters {
+  from?: string;
+  to?: string;
+  skill?: string[];
+  freeFrom?: string;
+}
+
 // enums
 export type LifecycleStatus = S['LifecycleStatus'];
 export type AutomationStatus = S['AutomationStatus'];

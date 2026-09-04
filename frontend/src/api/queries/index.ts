@@ -358,3 +358,27 @@ export {
   useTimesheetPeriod,
   useTimesheetPeriods,
 } from './time';
+
+/*
+  Staffing (017 M7). Fifteen operations, and the split of scopes is the thing to read first: the
+  `/staffing` reads are COMPANY scope behind `staffing:directory` and the `/projects/{id}` ones are
+  PROJECT scope behind `staffing:read`. `useMyCapacity` is the exception at both ends — no staffing
+  permission at all, because it is the caller's own figure (017 D-m).
+*/
+export {
+  useAbsences,
+  useCreateAbsence,
+  useCreateAllocation,
+  useCreateSkill,
+  useDeleteAbsence,
+  useDeleteAllocation,
+  useMyCapacity,
+  useProjectStaffing,
+  usePutPersonSkills,
+  usePutProfile,
+  useSkills,
+  useStaffingCapacity,
+  useStaffingPeople,
+  useStaffingPerson,
+  useUpdateAllocation,
+} from './staffing';
