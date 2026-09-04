@@ -120,6 +120,9 @@ import type {
   PreviewStatusRow,
   PreviewTypeRow,
   SourceProject,
+  TimeEntry,
+  TimesheetPeriod,
+  TimesheetQueueEntry,
 } from '../api/types'
 
 /** A fixed instant, so a body carrying a timestamp does not carry a different one each run. */
@@ -1596,6 +1599,69 @@ export function anImportRunSummary(overrides: Partial<ImportRunSummary> = {}): I
     statusesMapped: 0,
     labelsCreated: 0,
     droppedFieldCount: 0,
+    ...overrides,
+  }
+}
+
+/**
+ * One timesheet row. **Not against an issue by default**, per this file's inert-defaults rule:
+ * `subject` is present only on an ISSUE entry, so the least interesting body the contract admits is
+ * a category one — and a test that is about the issue link says so by passing both.
+ *
+ * `editable: true`, because a fortnight nobody has submitted is what a person is normally looking
+ * at. A test about the lock overrides it, and overrides it on the ROW: the contract serves it per
+ * entry so that one rule has one home, and a fixture that flipped only the period's flag would be
+ * describing a body the server cannot send.
+ */
+export function aTimeEntry(overrides: Partial<TimeEntry> = {}): TimeEntry {
+  return {
+    id: 'te1',
+    periodId: 'tp1',
+    subjectType: 'MEETING',
+    spentOn: '2026-09-01',
+    hours: 1,
+    note: null,
+    editable: true,
+    ...overrides,
+  }
+}
+
+export function aTimesheetPeriod(overrides: Partial<TimesheetPeriod> = {}): TimesheetPeriod {
+  return {
+    id: 'tp1',
+    personId: 'u1',
+    personName: 'Dana Petrov',
+    startsOn: '2026-09-01',
+    endsOn: '2026-09-15',
+    state: 'OPEN',
+    loggedHours: 0,
+    // Zero unless the state is APPROVED (016 D-d) — carried apart from `loggedHours` and never
+    // summed with it, which is why the default here is not a copy of it.
+    approvedHours: 0,
+    submittedAt: null,
+    decidedAt: null,
+    decidedByName: null,
+    decisionNote: null,
+    editable: true,
+    entries: [],
+    ...overrides,
+  }
+}
+
+/**
+ * One row of the approvals queue.
+ *
+ * `projectTotals` is empty by default and that is the honest inert value: it deliberately does not
+ * add up to `period.loggedHours` (a project-less entry has no row, and neither has one against a
+ * project the approver cannot see), so a default that mirrored the period's total would be a claim
+ * the contract does not make.
+ */
+export function aTimesheetQueueEntry(
+  overrides: Partial<TimesheetQueueEntry> = {},
+): TimesheetQueueEntry {
+  return {
+    period: aTimesheetPeriod(),
+    projectTotals: [],
     ...overrides,
   }
 }

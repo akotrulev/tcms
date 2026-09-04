@@ -59,6 +59,8 @@ import type {
   ReleaseVerdict,
   ImportProvider,
   ImportRunStatus,
+  TimeSubjectType,
+  TimesheetState,
 } from '../api/types';
 
 /**
@@ -1238,3 +1240,55 @@ export const trackerUnavailableReasons = {
   UNAVAILABLE:
     'The tracker did not answer, or it will not show you this issue. The link still works.',
 } as const satisfies Record<TrackerIssueAvailability, string>;
+
+/**
+ * What an entry was logged against (016 D-b).
+ *
+ * **Five members, and `TEST_RUN` is deliberately absent.** `timesheet-approvals.html` draws a row
+ * against a test run; `timesheets.html` — the only screen that *creates* an entry — has no such
+ * option in its `Against` select. The two mockups disagree, and the form wins: a kind the queue can
+ * display and the form cannot produce is a row no person can file. Adding it later is one CHECK
+ * member, one enum member, and a compile error here.
+ *
+ * `INTERNAL` reads as `Internal / admin` because that is the mockup's own option text, and because
+ * the bare word is the one a reader would take to mean "not visible to the client".
+ */
+export const timeSubjectLabels = {
+  ISSUE: 'Issue',
+  MEETING: 'Meeting',
+  LEAVE: 'Leave',
+  TRAINING: 'Training',
+  INTERNAL: 'Internal / admin',
+} as const satisfies Record<TimeSubjectType, string>;
+
+/**
+ * The four states of a fortnight.
+ *
+ * `OPEN` is the word on the KPI tile of a period nobody has sent anywhere; the approvals queue says
+ * **Not submitted** for the same state, because there the reader is looking at somebody else's
+ * fortnight and "open" would read as an invitation to act on it. That second sentence is written at
+ * its one call site rather than as a second map here — one state, two audiences, and only one of
+ * them is the label.
+ */
+export const timesheetStateLabels = {
+  OPEN: 'Open',
+  SUBMITTED: 'Submitted',
+  APPROVED: 'Approved',
+  REJECTED: 'Rejected',
+} as const satisfies Record<TimesheetState, string>;
+
+/**
+ * Badge tones for the four, mapped onto the kit's eight rather than the mockups' CSS classes.
+ *
+ * `SUBMITTED` is `retest` and not `steel`: the mockups paint it `b-review`, which is the warning
+ * hue, and what it means on both screens is *waiting on somebody* — the same reading `retest` has
+ * everywhere else in this product. `REJECTED` is `failed` where the mockups say `b-blocked`; the
+ * kit's `blocked` means "something outside stopped this", and a rejection is a decision a named
+ * person made, which is what `failed` reads as here.
+ */
+export const timesheetStateTones = {
+  OPEN: 'plain',
+  SUBMITTED: 'retest',
+  APPROVED: 'passed',
+  REJECTED: 'failed',
+} as const satisfies Record<TimesheetState, BadgeTone>;

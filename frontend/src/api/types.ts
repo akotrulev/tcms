@@ -959,6 +959,42 @@ export interface IssueFilters {
   unparented?: boolean;
 }
 
+// time (016 M6) — the timesheet, the approvals queue and the two rollup grains
+/**
+ * What an entry is logged against (016 D-b). **Five members, and `TEST_RUN` is not one of them.**
+ *
+ * `timesheet-approvals.html` displays a row logged against a test run and `timesheets.html` — the
+ * only screen that *creates* an entry — cannot produce one. The two mockups disagree and the log
+ * form wins, because a kind the queue can display and the form cannot make is a row no person can
+ * file. `lib/labels.ts::timeSubjectLabels` is where a sixth member becomes a compile error.
+ */
+export type TimeSubjectType = S['TimeSubjectType'];
+/**
+ * OPEN is editable by its owner, SUBMITTED by nobody, APPROVED is final, and REJECTED is editable
+ * again and carries the note that sent it back. The whole feature turns on that four-way rule, and
+ * the client never re-derives it: `TimeEntry.editable` and `TimesheetPeriod.editable` are served.
+ */
+export type TimesheetState = S['TimesheetState'];
+export type TimeEntry = S['TimeEntry'];
+export type TimeEntryInput = S['TimeEntryInput'];
+export type TimesheetPeriod = S['TimesheetPeriod'];
+export type TimesheetDecisionInput = S['TimesheetDecisionInput'];
+/** The decision itself, so a caller cannot post a fourth verb the server has no arm for. */
+export type TimesheetDecision = TimesheetDecisionInput['decision'];
+/**
+ * One person's fortnight in the queue, with a total per project — and **`projectTotals` does not
+ * add up to `period.loggedHours`**, deliberately.
+ *
+ * A project-less entry has no row (the contract says the literal em dash is not used, because a dash
+ * in a column of project names is a project called dash), and neither has an entry against a
+ * project the approver cannot see (016 D-i). Any screen showing both numbers has to label them so
+ * the difference does not read as a contradiction.
+ */
+export type TimesheetQueueEntry = S['TimesheetQueueEntry'];
+/** Estimate against approved and pending hours for one issue. Never summed — 016 D-d. */
+export type TimeRollup = S['TimeRollup'];
+export type EpicTimeRollup = S['EpicTimeRollup'];
+
 // enums
 export type LifecycleStatus = S['LifecycleStatus'];
 export type AutomationStatus = S['AutomationStatus'];

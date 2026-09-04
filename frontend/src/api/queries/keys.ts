@@ -666,6 +666,38 @@ export const keys = {
   },
 
   /*
+    Time (016 M6).
+
+    `currentPeriod` is keyed by the **date** rather than by a period id, because the screen opens on
+    "now" and the id is something the answer *contains* — keying by id would need a round trip to
+    build the key for the first render. `approvals` is keyed by the same date for the same reason,
+    and is deliberately **not** under `periods`: a PM approving somebody else's fortnight must not
+    invalidate their own, and the two lists answer different permissions.
+
+    `periods` is both a key and a prefix of `currentPeriod` / `period`, which is wanted: every one
+    of the three renders the same rows, so a write that stales one stales all three.
+  */
+  time: {
+    currentPeriod: (on: string) => ['time', 'periods', 'current', on] as const,
+    periods: ['time', 'periods'] as const,
+    period: (periodId: string) => ['time', 'periods', periodId] as const,
+    approvals: (on: string) => ['time', 'approvals', on] as const,
+    issueRollup: (issueKey: string) => ['time', 'rollup', 'issue', issueKey] as const,
+    epicRollup: (epicKey: string) => ['time', 'rollup', 'epic', epicKey] as const,
+  },
+
+  /**
+   * The prefix root for every time list a write must refresh (§250's argument).
+   *
+   * Every write in the module sweeps this one root rather than a list of narrower keys, and the
+   * reason is 016 D-i: a period spans projects and an approval writes the rollup, so an approve
+   * changes the approver's queue, the owner's own fortnight, that person's history **and** the
+   * per-issue figures on three other screens. Enumerating those at each call site is four chances
+   * to miss the one that is not on screen.
+   */
+  timeRoot: ['time'] as const,
+
+  /*
     The prefix roots (§250).
 
     Every key above that takes a filter object or an id carries it INSIDE the array, so an

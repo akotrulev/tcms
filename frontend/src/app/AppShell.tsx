@@ -34,6 +34,7 @@ import {
   Sparkles,
   Sun,
   Tag,
+  Timer,
   UserCheck,
   Users,
 } from 'lucide-react';
@@ -191,6 +192,41 @@ const ALL_PROJECTS: NavItem = {
   label: 'All projects',
   to: '/',
   icon: <LayoutGrid className="size-4" />,
+  end: true,
+};
+
+/**
+ * The third rail item outside the project frame (016 M6), and the one whose placement is an
+ * argument rather than a convenience.
+ *
+ * A timesheet period is per person and per fortnight and **spans projects** (016 D-i) — the
+ * mockup's own example carries two clients' projects and a project-less meeting in one submission.
+ * So listing it under the switcher would say the opposite of what a period is: that switching
+ * projects changes which hours you are looking at. It belongs with `MY_WORK` above it, which is
+ * personal for the same reason, and it is placed *after* that item and *before* `ALL_PROJECTS`
+ * because the two personal screens read as a pair.
+ *
+ * <h2>No waiting-count badge, and that is a measured omission rather than an oversight</h2>
+ *
+ * `timesheet-approvals.html`'s rail shows a `4` beside this entry behind the mockup's
+ * `SEES_APPROVALS` role gate, and the plan asked for it. There is no honest way to draw it here.
+ * The count comes from `GET /timesheets/approvals`, which **403s** for any caller without
+ * `time:approve`, and `time:approve` is a PROJECT-scope grant — so there is no company-wide
+ * question this shell could ask first. `useCanInCompany` answers about COMPANY-scope grants and
+ * would say no for the Project Managers the badge is for, and `useCan(activeProjectId)` would key a
+ * cross-project count on whichever project happens to be in the switcher, which is the very
+ * statement the placement above exists to avoid.
+ *
+ * Firing the read unconditionally is the option that was rejected: it would raise a refused-request
+ * notification on every page load for the majority of this company, to draw a number on a rail.
+ * The count is therefore on the approvals screen's own subtitle, where the data already is, and the
+ * timesheet screen carries a labelled link to it. Revisit this if the contract ever grows a
+ * company-wide "where may I approve" read; do not revisit it by making the rail guess.
+ */
+const TIMESHEETS: NavItem = {
+  label: 'Timesheets',
+  to: '/timesheets',
+  icon: <Timer className="size-4" />,
   end: true,
 };
 
@@ -816,12 +852,15 @@ function RailContent({
       </div>
 
       {/*
-        Outside the project frame below it, both of them. `MY_WORK` is personal; `ALL_PROJECTS` is
-        what the switcher chooses between — see each one's own note.
+        Outside the project frame below it, all three of them. `MY_WORK` and `TIMESHEETS` are
+        personal; `ALL_PROJECTS` is what the switcher chooses between — see each one's own note.
       */}
       <ul className={cn('m-0 list-none py-2', collapsed ? 'px-0' : 'px-2')}>
         <li>
           <RailLink item={MY_WORK} onNavigate={onNavigate} collapsed={collapsed} />
+        </li>
+        <li>
+          <RailLink item={TIMESHEETS} onNavigate={onNavigate} collapsed={collapsed} />
         </li>
         <li>
           <RailLink item={ALL_PROJECTS} onNavigate={onNavigate} collapsed={collapsed} />

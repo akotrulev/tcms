@@ -41,6 +41,13 @@ const LEVEL_TONE = {
   TASK: 'var(--color-info)',
 } as const;
 
+/** What the glyph says when the payload carries no type name — the level's own word, and nothing more. */
+const LEVEL_WORD = {
+  EPIC: 'Epic',
+  STORY: 'Story',
+  TASK: 'Task',
+} as const;
+
 export function TypeIcon({
   type,
   className,
@@ -60,13 +67,22 @@ export function TypeIcon({
    * Spike — and defaulting the absence to `false` would draw every one of them amber with a `?`.
    * Absent means the payload does not answer, so the glyph falls back to the level's own tone,
    * which is the honest reading and the reason the test below is `=== false` rather than `!`.
+   *
+   * Widened a third time in 016 T4, and this one takes the **name** away: `TimeEntry.subject`
+   * carries `typeLevel` and no type name at all, because a timesheet row denormalises the issue
+   * rather than embedding its type. So the letter and the accessible text fall back to the level's
+   * own word — `Epic` / `Story` / `Task` — and the tooltip is simply absent, which is the one
+   * honest rendering available: the level is a fact this payload states, and the type's name is not
+   * something to invent from it. The header above rules out deriving a colour from an English word;
+   * this is the same rule applied to a word that is not on the wire.
    */
-  type: Pick<IssueTypeRef, 'name' | 'level'> & { countsTowardCompletion?: boolean };
+  type: Pick<IssueTypeRef, 'level'> & { name?: string; countsTowardCompletion?: boolean };
   className?: string;
   'data-testid'?: string;
 }) {
   const spike = type.level === 'STORY' && type.countsTowardCompletion === false;
   const background = spike ? 'var(--color-warning)' : LEVEL_TONE[type.level];
+  const named = type.name ?? LEVEL_WORD[type.level];
 
   return (
     <span
@@ -82,8 +98,8 @@ export function TypeIcon({
       )}
       style={{ background }}
     >
-      <span aria-hidden>{spike ? '?' : type.name.slice(0, 1).toUpperCase()}</span>
-      <span className="sr-only">{type.name}</span>
+      <span aria-hidden>{spike ? '?' : named.slice(0, 1).toUpperCase()}</span>
+      <span className="sr-only">{named}</span>
     </span>
   );
 }

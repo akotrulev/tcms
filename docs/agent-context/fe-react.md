@@ -1,12 +1,16 @@
 # fe-react — orientation cache
 
-**Baseline commit:** `306a36c5` · **Last verified:** 2026-09-04 · **Verdict this run (015 T5):** DELTA
-(014 M4's import screens and 015 T1–T4's contract had moved `openapi.yaml`, `schema.d.ts`,
-`fixtures.ts` and `devFaults.ts` since the baseline below; no `package.json` / lockfile / `tsconfig`
-change, so the version lane held. T5 added the account, repositories and assistant-panel seams
-recorded below.)
+**Baseline commit:** `90667f1e` · **Last verified:** 2026-09-04 · **Verdict this run (016 T4):** DELTA
+(016 T1 had regenerated `schema.d.ts` with 780 lines of `time` since the baseline below, and T2/T3
+are backend-only; no `package.json` / lockfile / `tsconfig` / `vite.config.ts` change, so the version
+lane held. T4 added the time seams recorded below.)
 
 **Session log**
+- 2026-09-04 — 016 T4: `/timesheets` and `/timesheets/approvals`, the time query module, D-b/D-d's
+  labels, the `time` fault arm, `periods.ts`, and the rail entry. Found `CaseGrid.test.tsx` red on a
+  clean `90667f1e` — two selection tests, not this task's (`90667f1e`).
+
+~~**Baseline commit:** `306a36c5` · **Last verified:** 2026-09-04 · **Verdict (015 T5):** DELTA (014 M4's import screens and 015 T1–T4's contract had moved `openapi.yaml`, `schema.d.ts`, `fixtures.ts` and `devFaults.ts`; no version-lane change. T5 added the account, repositories and assistant-panel seams)~~
 - 2026-09-04 — 015 T5: assistant profile + connect, project repositories, the AI-eligible marker on
   three surfaces, the task page's agent-context and pull-request panels, D33's close gate on General
   settings, the help entry. Also repaired six suites 013 had left red (`306a36c5`).
@@ -112,6 +116,17 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 | **ONE settings document, TWO screens** | `features/settings/settingsUpdate.ts::fullSettingsUpdate` — `PUT /projects/{id}/settings` is a full replacement and the server reads an absent boolean as `false`, so a form that saves one switch by sending one switch turns every other one off. Review owns §6g's six controls, **General owns D33's `reviewEnabledIssue`** (mockup + reader expectation), and the field list is written once. This had already bitten: `reviewEnabledIssue` landed on the contract and `ReviewSettingsPage`'s hand-written list was not extended, so saving the review policy silently switched the issue close gate off |
 | `allowedTransitions` is CALLER-SCOPED, and `TransitionMenu` tells the two refusals apart | Under D33 the assignee's DONE moves are dropped from `Issue.allowedTransitions` while the project's workflow still declares the edge. So `workflow.transitions` ∧ ¬`allowedTransitions` ⇒ the close guard, and the row says **needs a second person** instead of the flatly wrong *not from In Progress*. No second read: the workflow document is already on screen for the list itself |
 | The two shapes with a plaintext secret | `IssuedApiToken` (`/api-tokens`) and **`IssuedAssistant`** (`/me/assistants`). Neither may reach the query cache or a list type. `ConnectAssistantPage` is a **route, not a dialog**, deliberately: a modal invites the dismissal that loses an unrecoverable value, and its test asserts a fresh mount on the *same* `QueryClient` cannot get the secret back |
+| **016 M6's seams** | `features/time/` — `TimesheetPage` (`/timesheets`) · `ApprovalsPage` (`/timesheets/approvals`) · `EntryForm` · `EntryTable` · `RejectDialog` · plus `periods.ts`, a pure module with its own `.test.ts`. `api/queries/time.ts` holds all eleven hooks. **Both routes sit OUTSIDE the project segment**, beside `/my-work`: a period spans projects (016 D-i), so scoping one under the switcher would state the opposite |
+| The time keys, and why `approvals` is not under `periods` | `keys.time.currentPeriod(on)` is keyed by the **date**, not the id — the screen opens on "now" and the id is something the *answer* contains, so keying by id would need a round trip to build the key for the first render. `approvals(on)` is deliberately **not** under `periods`: a PM approving somebody else's fortnight must not invalidate their own, and the two answer different permissions. `keys.timeRoot = ['time']` is the sweep **every** write uses, because an approve writes the rollup and therefore stales the approver's queue, the owner's fortnight, their history and the per-issue figures on three other screens |
+| **`GET /timesheets/periods/current` WRITES** | It creates the period row, which is what makes `id` available to Submit on a fortnight nobody has logged into. So there is **no create-a-period hook** in the module and looking for one is looking for something the design removed |
+| `POST /timesheets/entries` ignores `Idempotency-Key` | The contract declares the header and a `200` replay arm; `V9` gave `time_entry` no column to store a key, so `useLogTime` deliberately does **not** send it — asserting a guarantee nothing upstream provides is the worse failure. The guard is client-side single-flight (`isPending` disables the button) and it does **not** survive a timeout. Closes with a column, not with a client change |
+| The lock is SERVED, never derived | `TimesheetPeriod.editable` and `TimeEntry.editable` are both on the wire so one rule has one home. The Add form is present on `period.editable` and the row pencils on `entry.editable`; **nothing in `features/time/` reads `state` to decide either**. A REJECTED period is editable — a rejection *unlocks*, which is the half that reads backwards |
+| `projectTotals` does not add up to `loggedHours`, and the screen says so | A project-less entry has no row (the contract bans the literal em dash — a dash in a column of project names is a project called dash) and neither has one against a project the approver cannot see (D-i). `ApprovalsPage` labels the header `logged` / `so far` and names the remainder as `{n}h not attributed here` with the reason in its title, rather than letting two numbers disagree in silence |
+| Three KPI tiles on Timesheets, and the fourth stays missing | D-j: `Period capacity` needs `person_profile`, `allocation` and `absence`, all M7's. `Tile` from the kit is **not** used — it is a `<button>` that navigates to its rows and none of the three has rows — which is `ReadinessPanels`' precedent one module over |
+| The `time` fault arm | `tcmsFaults.time('rejected')` serves a REJECTED current period with a note (needs a second person otherwise); `time('locked')` answers the three entry writes with the 409 (reachable only through a race, because the form is removed the moment a period locks). `isTimePath` covers `/time/` too, so `only('/time/')` + `status(500)` faults the rollup reads alone |
+| `TypeIcon`'s `name` is OPTIONAL since 016 T4 | `TimeEntry.subject` carries `typeLevel` and no type name, so the glyph and the sr-only text fall back to the level's own word and the tooltip is absent. Third widening of that component, in its own idiom |
+| The rail's Timesheets entry has NO badge, deliberately | The mockup's `SEES_APPROVALS` count needs `GET /timesheets/approvals`, which **403s** without `time:approve` — a **PROJECT-scope** grant with no company-wide "where may I approve" read on the contract. `useCanInCompany` would say no for the PMs it is for; `useCan(activeProjectId)` would key a cross-project count on the switcher, the exact claim the placement avoids. Firing it unconditionally would raise a refused-request notification on every page load for most of the company. The count is on the approvals subtitle instead. Full argument in `AppShell.tsx`'s `TIMESHEETS` comment |
+| `Approve all` and `Remind` are absent from the approvals screen | No batch operation on the contract for the first — it would be N irreversible writes with a partial outcome to word, and there is no un-approve — and no endpoint at all behind the second. Named in `ApprovalsPage`'s header so a reader comparing against the mockup finds the reason |
 | `openapi-typescript` types a **defaulted** property as REQUIRED | Not the contract's `required` array. `IssueInput.agentEligible` and `ProjectSettingsUpdate.reviewEnabledIssue` both carry `default: false` and are absent from `required`, and both came out non-optional — which is why `IssueNewPage` sends `agentEligible: false` on a form that offers no such control. Three call sites were left red by T1 and fixed in T5 |
 
 ## Test-harness rules the suites enforce
@@ -160,6 +175,13 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 - **Stage only the files the task touched** (`git add <paths>`, never `git add -A`).
 
 ## Known unknowns
+
+- **`src/features/cases/CaseGrid.test.tsx` is RED on `master` and predates 016.** Two selection
+  tests — *survives paging* and *select-all reaches the page* — fail with `Number of calls: 0` after
+  a `userEvent.click` on the Radix `Checkbox` at `CaseGrid.tsx:118` / `:126`. Verified failing on a
+  clean checkout at `90667f1e` with the working tree stashed, so it is not 016's. Not investigated:
+  whether the click never reaches the checkbox under jsdom, or `onSelectionChange` genuinely stopped
+  being called. Whoever opens that file next owns it.
 
 - ~~**84 tests fail on a clean checkout, in 18 files, and they are T16 port residue.**~~ → **gone.
   164 test files pass on `71777f9a`**, verified on shanks. Nothing in 011 T6 repaired them

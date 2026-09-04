@@ -121,6 +121,12 @@ const IssueDetailPage = lazy(() =>
   import('../features/tracker/IssueDetailPage').then((m) => ({ default: m.IssueDetailPage })),
 );
 const MyWorkPage = lazy(() => import('../features/board/MyWorkPage').then((m) => ({ default: m.MyWorkPage })));
+const TimesheetPage = lazy(() =>
+  import('../features/time/TimesheetPage').then((m) => ({ default: m.TimesheetPage })),
+);
+const ApprovalsPage = lazy(() =>
+  import('../features/time/ApprovalsPage').then((m) => ({ default: m.ApprovalsPage })),
+);
 const TeamBoardPage = lazy(() =>
   import('../features/board/TeamBoardPage').then((m) => ({ default: m.TeamBoardPage })),
 );
@@ -438,6 +444,36 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <MyWorkPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            016 M6's two screens, and both sit **outside the project segment** — beside `/my-work`
+            and for a sharper version of its reason. A timesheet period is per person and per
+            fortnight and **spans projects** (016 D-i): the mockup's own example carries two clients'
+            projects and a project-less meeting in one submission. Putting either under
+            `/projects/:projectId` would make the header's project switcher look like it changed
+            which hours you are looking at, which is the exact opposite of what a period is.
+
+            `/timesheets/approvals` is a child path rather than a sibling because it is the same
+            subject read from the other side — your fortnight, and everybody's. The queue costs
+            `time:approve` and refuses a caller without it with a sentence of its own; it is routed
+            for everybody, as every readable screen in this app is.
+          */}
+          <Route
+            path="/timesheets"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <TimesheetPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/timesheets/approvals"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <ApprovalsPage />
               </Suspense>
             }
           />

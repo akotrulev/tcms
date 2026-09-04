@@ -278,6 +278,33 @@ my-work.html (the This-week panel) and settings-general.html (the Time panel). T
 
 Depends on: T4.
 
+What T4 landed that this task inherits, and that this plan did not predict:
+- **The two rollup hooks and their keys already exist.** `useIssueTimeRollup(key, enabled)` and
+  `useEpicTimeRollup(key, enabled)` are in `frontend/src/api/queries/time.ts` behind the barrel, both
+  carrying `meta.handled` because a rollup is an optional region on a page about the issue.
+  `keys.time.issueRollup` / `keys.time.epicRollup` are in the one factory. **Do not add them again**
+  and do not add a second keys entry — mount them.
+- **`TypeIcon`'s `name` is optional now.** `TimeEntry.subject` carries `typeLevel` and no type name,
+  so the glyph and its accessible text fall back to the level's own word and the tooltip is absent.
+  Every existing caller passes a full type and is unaffected.
+- **`tcmsFaults.time('rejected' | 'locked')` exists**, and `isTimePath` covers `/time/` as well as
+  `/timesheets` — which is how the estimate-vs-actual panel gets a failure to render. Scope with
+  `tcmsFaults.only('/time/')` and `status(500)` to watch that region fall over on its own.
+- **`frontend/src/api/types.ts` and `frontend/src/test/fixtures.ts` carry the time shapes** —
+  `TimeRollup`, `EpicTimeRollup`, `aTimeEntry`, `aTimesheetPeriod`, `aTimesheetQueueEntry`. There is
+  no rollup factory yet; add one when the panels need it.
+- **`CaseGrid.test.tsx` is red on `master` and predates M6** — two selection tests, `Number of calls:
+  0` on the Radix checkbox click. Verified failing on a clean checkout at `90667f1e`. It is not
+  yours; do not absorb it, and say so in the close-out's built-and-unverified list.
+- **The rail's waiting-count badge was deliberately not built.** `AppShell.tsx`'s `TIMESHEETS`
+  comment carries the argument: the count needs `GET /timesheets/approvals`, which 403s for anyone
+  without `time:approve`, and `time:approve` is PROJECT-scope with no company-wide "where may I
+  approve" read on the contract. The count is on the approvals screen's own subtitle instead. Leave
+  it; if the close-out records anything here, record that.
+- **`Approve all` and `Remind` from `timesheet-approvals.html` are absent**, with the reason in
+  `ApprovalsPage.tsx`'s header: no batch operation on the contract for the first, no endpoint at all
+  for the second.
+
 Traps this task specifically will hit:
 - **All five panels are ABSENT rather than empty** — M1 rendered none of them. Adding them is
   additive; GeneralSettingsPage needs a NEW panel, not a stub filled in.
@@ -1670,13 +1697,21 @@ rejected period. `npm run build`, `npm run lint` and `npm run test:run` green.
 **Stack:** `fe` · **Agent:** `fe-react` · **Skills:** `fe-react-forms`, `fe-react-data-fetching`,
 `fe-react-component-testing`
 
-**Files:**
+**Files** — as landed, which is four files wider than this plan predicted:
 - Create: `frontend/src/features/time/TimesheetPage.tsx`, `ApprovalsPage.tsx`,
-  `EntryForm.tsx`, `EntryTable.tsx`, `RejectDialog.tsx`, and their `.test.tsx` files
+  `EntryForm.tsx`, `EntryTable.tsx`, `RejectDialog.tsx`, plus **`periods.ts`** — D-a's arithmetic as
+  a pure module, because the approvals picker has to step a fortnight the queue may be **empty** of
+  and therefore has no `startsOn` to step from. Tests: `TimesheetPage.test.tsx`,
+  `ApprovalsPage.test.tsx`, `periods.test.ts`
 - Create: `frontend/src/api/queries/time.ts`
 - Modify: `frontend/src/api/queries/index.ts`, `keys.ts`
 - Modify: `frontend/src/lib/labels.ts`, `frontend/src/lib/devFaults.ts`
 - Modify: `frontend/src/app/router.tsx`, `frontend/src/app/AppShell.tsx`
+- Modify, and **not on this plan's original list**: `frontend/src/api/types.ts` (the eight aliases —
+  T1 regenerated `schema.d.ts` and stopped there), `frontend/src/test/fixtures.ts` (three factories,
+  which `contractDoubles` makes mandatory rather than optional), and
+  `frontend/src/features/tracker/TypeIcon.tsx` (a third widening: `name` is optional, because
+  `TimeEntry.subject` carries `typeLevel` and no type name)
 
 - [ ] **Step 1: The keys — into the one factory, never a second**
 
@@ -1747,6 +1782,16 @@ function isTimePath(path: string): boolean {
 Register the arm so `tcmsFaults.only('/timesheets')` scopes to it, following the `issue` arm's
 registration exactly.
 
+**As landed it is a `time(fault)` arm with two modes, not a bare predicate**, because `only()` is a
+substring match that already worked and therefore bought nothing new. `time('rejected')` answers
+`GET /timesheets/periods/current` with a **REJECTED** period carrying a note — the state that
+unlocks a fortnight, and the one a developer cannot reach without a second person holding
+`time:approve`. `time('locked')` answers the three entry writes with the contract's **409**,
+reachable in an ordinary session only through a race, because the screen removes the form the moment
+a period stops being editable. Both path tests are anchored:
+`/timesheets/periods/current` is one segment from `/timesheets/periods/{periodId}`, which reads
+somebody **else's** fortnight.
+
 - [ ] **Step 4: The hooks**
 
 `frontend/src/api/queries/time.ts` — every read and write, with the timeout budget per endpoint
@@ -1791,8 +1836,18 @@ scoping it under the project switcher would state the opposite:
 <Route path="/timesheets/approvals" element={<Suspense fallback={<RouteFallback />}><ApprovalsPage /></Suspense>} />
 ```
 
-In `AppShell.tsx`, a `TIMESHEETS` nav item in the ungrouped block beside `MY_WORK`, carrying the
-waiting-count badge only for a caller holding `time:approve` — the mockup's `SEES_APPROVALS` gate.
+In `AppShell.tsx`, a `TIMESHEETS` nav item in the ungrouped block beside `MY_WORK`, ~~carrying the
+waiting-count badge only for a caller holding `time:approve` — the mockup's `SEES_APPROVALS`
+gate.~~ → **superseded in T4: the item landed, the badge did not.** The count comes from
+`GET /timesheets/approvals`, which 403s for any caller without `time:approve`, and `time:approve` is
+a **PROJECT-scope** grant — so there is no company-wide question the shell can ask first.
+`useCanInCompany` answers about COMPANY-scope grants and would say no for the Project Managers the
+badge is for; `useCan(activeProjectId)` would key a cross-project count on whichever project is in
+the switcher, which is the exact statement the placement outside the project frame exists to avoid.
+Firing the read unconditionally would raise a refused-request notification on every page load for
+most of the company, to draw a number on a rail. The count is on the approvals screen's own subtitle
+instead, where the data already is, and the timesheet screen carries a labelled link to it. Revisit
+if the contract grows a company-wide "where may I approve" read; not by making the rail guess.
 
 - [ ] **Step 7: The component tests**
 

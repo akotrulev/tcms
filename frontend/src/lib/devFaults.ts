@@ -21,6 +21,7 @@
  *     tcmsFaults.wip()            // every card move lands the column over its limit — see below
  *     tcmsFaults.release('empty') // the roadmap is empty — merge day, see below
  *     tcmsFaults.importing('midway') // the source stopped answering during the run — see below
+ *     tcmsFaults.time('rejected')  // your fortnight came back with a note — see below
  *     tcmsFaults.off()
  *
  * ## Why this lives here and not in a mock transport
@@ -160,6 +161,38 @@
  * loud because a developer watching the network tab would otherwise read the placeholder card as a
  * defect in the endpoint.
  *
+ * ## The time module's two switches, and neither can be reached alone (016 T4)
+ *
+ * These land **before the screens that prove them**, for the working agreement above.
+ *
+ *   - `time('rejected')` — `GET /timesheets/periods/current` answers a **REJECTED** period carrying
+ *     a decision note. It is the state the timesheet screen most has to get right and the one a
+ *     developer cannot produce: somebody else has to hold `time:approve`, find your fortnight in
+ *     their queue and send it back. Its correct rendering is the note at the top, the Add form
+ *     **editable again**, and Submit still offered — a rejection *unlocks* a period, which is the
+ *     opposite of what a word like "rejected" suggests and the opposite of what SUBMITTED does.
+ *   - `time('locked')` — the three entry writes answer the contract's **409**. Reachable in an
+ *     ordinary session only through a race, because the screen removes the Add form and the edit
+ *     buttons the moment a period stops being editable: producing it for real needs the period
+ *     submitted in a second tab between this one rendering and the person pressing Add. It is the
+ *     refusal the whole feature turns on, and it has to read as a sentence beside the form rather
+ *     than as a toast that scrolls away.
+ *
+ * **The reads are left alone by `locked`**, for `issue('conflict')`'s reason: a fault that broke the
+ * period read would prove the failed-region branch four other switches already prove, and would
+ * never let the screen render the form the refusal has to appear beside.
+ *
+ * The rollup reads are inside `isTimePath` on purpose even though neither arm fabricates one. The
+ * estimate-vs-actual panel is a *region* inside a screen whose other regions must keep rendering
+ * when it fails, and `tcmsFaults.status(500)` narrowed with `only('/time/')` is the only way to
+ * watch that one `DataRegion` fall over while the issue beside it stays on screen.
+ *
+ * Both path tests are **anchored**, per the rule above: `/timesheets/entries` and
+ * `/timesheets/entries/{entryId}` are the same prefix, and `/timesheets/periods/current` is one
+ * segment away from `/timesheets/periods/{periodId}` — a `rejected` body served for the latter
+ * would answer a *colleague's* period with the caller's own, which is the drifted-body failure
+ * injected by accident and libellous with it.
+ *
  * ## Tree-shaking
  *
  * **This module must stay free of top-level side effects.** Both entry points are called behind a
@@ -194,6 +227,8 @@ export interface FaultState {
   release: ReleaseFault | null;
   /** How an import misbehaves, or `null` for a source system that answers. */
   import: ImportFault | null;
+  /** How the time module misbehaves, or `null` for a fortnight nobody has acted on. */
+  time: TimeFault | null;
 }
 
 /** The five ways somebody else's tracker fails us. See this module's header. */
@@ -233,6 +268,15 @@ export type ReleaseFault = 'untested' | 'empty';
  */
 export type ImportFault = 'unauthorized' | 'forbidden' | 'down' | 'midway' | 'collision' | 'slow';
 
+/**
+ * The two time states a single developer cannot reach.
+ *
+ * **`'rejected'` is not a failure** — it is a 200 carrying the state that unlocks a period, and the
+ * one this module was added for. `'locked'` is the 409 the feature turns on. See this module's
+ * header for why neither is reachable by using the app.
+ */
+export type TimeFault = 'rejected' | 'locked';
+
 const faults: FaultState = {
   status: null,
   retryAfter: null,
@@ -246,6 +290,7 @@ const faults: FaultState = {
   wip: false,
   release: null,
   import: null,
+  time: null,
 };
 
 /**
@@ -345,6 +390,45 @@ function isRunRead(path: string, method: string): boolean {
   return method === 'GET' && /^\/imports\/[^/]+$/.test(withoutQuery(path));
 }
 
+/**
+ * Which requests the time arm applies to — the two path families 016 added.
+ *
+ * The rollup reads are included on purpose, even though neither arm fabricates one: the
+ * estimate-vs-actual panel is a *region* inside a screen whose other regions must keep rendering
+ * when it fails, and a failure it cannot be given is a `DataRegion` nobody has watched fall over.
+ * `only('/time/')` narrows to exactly those two reads; `only('/timesheets')` to the eight above.
+ */
+function isTimePath(path: string): boolean {
+  return path.startsWith('/timesheets') || path.startsWith('/time/');
+}
+
+/**
+ * `GET /timesheets/periods/current`, and only that.
+ *
+ * Anchored for {@link isRankWrite}'s reason, and the collision here is one segment rather than a
+ * prefix: `/timesheets/periods/{periodId}` reads **somebody else's** fortnight, so a `rejected` body
+ * served there would put the caller's own note and hours under a colleague's name.
+ */
+function isCurrentPeriodRead(path: string, method: string): boolean {
+  return method === 'GET' && withoutQuery(path) === '/timesheets/periods/current';
+}
+
+/**
+ * The three entry writes — the create, the amend and the delete.
+ *
+ * The create is matched on the whole path rather than a prefix, for {@link isStartImport}'s reason:
+ * `/timesheets/entries` and `/timesheets/entries/{entryId}` are the same prefix, and only the method
+ * tells the create from the amend.
+ */
+function isEntryWrite(path: string, method: string): boolean {
+  const bare = withoutQuery(path);
+  if (method === 'POST') return bare === '/timesheets/entries';
+  if (method === 'PATCH' || method === 'DELETE') {
+    return /^\/timesheets\/entries\/[^/]+$/.test(bare);
+  }
+  return false;
+}
+
 /** The issue key a path names, decoded — the fabricated bodies have to answer about the right one. */
 function keyIn(path: string, position: number): string {
   return decodeURIComponent(path.split('/')[position] ?? 'ACME-1');
@@ -424,6 +508,16 @@ export function verdictFor(path: string, method = 'GET'): FaultVerdict {
   */
   if (faults.import !== null && applies(path)) {
     const verdict = importVerdict(faults.import, path, method);
+    if (verdict.kind !== 'none') return verdict;
+  }
+
+  /*
+    The time arm, seventh, and scoped by path for every arm above's reason. One of its two states
+    fabricates a whole `TimesheetPeriod`, so a substring match would serve one where a queue — or a
+    rollup — was expected.
+  */
+  if (faults.time !== null && isTimePath(path) && applies(path)) {
+    const verdict = timeVerdict(faults.time, path, method);
     if (verdict.kind !== 'none') return verdict;
   }
 
@@ -802,6 +896,74 @@ function importVerdict(fault: ImportFault, path: string, method: string): FaultV
 }
 
 /**
+ * What the time module does instead of behaving.
+ *
+ * **`rejected` is a `200`, not a failure**, and it is the arm this switch exists for. A fortnight
+ * that came back with a note is the state the timesheet screen most has to word correctly and the
+ * one nobody can produce alone — it takes a second person holding `time:approve`. Served on
+ * `GET /timesheets/periods/current` only, so the history list beside it keeps answering and the
+ * screen renders with the previous-period panel intact.
+ *
+ * The body is a **complete** `TimesheetPeriod` with `editable: true` and `entries: []`. Both of
+ * those are load-bearing rather than convenient: `editable` is what tells the screen a rejection
+ * *unlocks* a period, and an empty entries list is what a person sees when the rejection arrives on
+ * a fortnight they have not started re-working — the row the note is about lives in the period the
+ * approver sent back, which is the one this list links to.
+ *
+ * **`locked` answers the three entry writes and nothing else**, for `issueVerdict`'s reason: the
+ * reads have to keep succeeding or the screen under test never renders the form the refusal has to
+ * appear beside. The `detail` names the state, because a person whose fortnight was *approved* and
+ * one whose fortnight is *waiting* need different next steps — which is exactly the half a plain
+ * `status(409)` cannot fabricate.
+ */
+function timeVerdict(fault: TimeFault, path: string, method: string): FaultVerdict {
+  if (fault === 'locked') {
+    if (!isEntryWrite(path, method)) return { kind: 'none' };
+    return {
+      kind: 'body',
+      status: 409,
+      body: {
+        type: 'timesheet-period-closed',
+        title: 'This period is closed',
+        status: 409,
+        detail:
+          'The fortnight this day falls in is SUBMITTED, so nothing in it can be changed. '
+          + 'A rejected period is editable again; an approved one is final.',
+        permission: null,
+        scope: null,
+        line: null,
+      },
+    };
+  }
+
+  if (!isCurrentPeriodRead(path, method)) return { kind: 'none' };
+  return {
+    kind: 'body',
+    status: 200,
+    body: {
+      id: '00000000-0000-4000-8000-0000000000e1',
+      personId: '00000000-0000-4000-8000-0000000000e2',
+      personName: 'You',
+      startsOn: '2026-09-01',
+      endsOn: '2026-09-15',
+      state: 'REJECTED',
+      loggedHours: 21,
+      // Zero unless the state is APPROVED, which this one is not — a rejected fortnight has had
+      // nothing posted anywhere, and a non-zero here would be the contradiction D-d forbids.
+      approvedHours: 0,
+      submittedAt: '2026-09-16T08:12:00Z',
+      decidedAt: '2026-09-16T09:40:00Z',
+      decidedByName: 'Rae Lindqvist',
+      decisionNote:
+        'the 8h on 24 Aug is against ACME-140 but that epic was on hold that week \u2014 '
+        + 're-point it or drop it.',
+      editable: true,
+      entries: [],
+    },
+  };
+}
+
+/**
  * A card move that landed **and** put its column over the limit — story B3's 200 carrying a fact.
  *
  * The `card` is a placeholder for the reason this module's header gives: the seam never sees the
@@ -1015,6 +1177,18 @@ export function installFaultConsole(): void {
           : `[tcms faults] imports are now: ${fault}`,
       );
     },
+    /**
+     * How the time module misbehaves. `tcmsFaults.time(null)` restores it without clearing anything
+     * else, for `tracker()`'s reason.
+     */
+    time(fault: TimeFault | null) {
+      faults.time = fault;
+      console.info(
+        fault === null
+          ? '[tcms faults] timesheets behave again'
+          : `[tcms faults] timesheets are now: ${fault}`,
+      );
+    },
     only(pathContains: string | null) {
       faults.pathContains = pathContains;
       console.info(`[tcms faults] scoped to paths containing ${JSON.stringify(pathContains)}`);
@@ -1032,6 +1206,7 @@ export function installFaultConsole(): void {
       faults.wip = false;
       faults.release = null;
       faults.import = null;
+      faults.time = null;
       console.info('[tcms faults] cleared');
     },
     state: () => ({ ...faults }),
@@ -1041,6 +1216,6 @@ export function installFaultConsole(): void {
   console.info(
     '[tcms faults] available — try tcmsFaults.status(500), .hang(), .expire(), '
       + ".tracker('403'), .issue('conflict'), .rank('conflict'), .wip(), "
-      + ".release('empty'), .importing('midway'), .off()",
+      + ".release('empty'), .importing('midway'), .time('rejected'), .off()",
   );
 }

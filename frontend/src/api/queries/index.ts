@@ -344,3 +344,16 @@ export {
   useProjectRepositories,
   useUpdateRepository,
 } from './projectRepos';
+export {
+  useAmendTimeEntry,
+  useCurrentTimesheetPeriod,
+  useDecideTimesheet,
+  useDeleteTimeEntry,
+  useEpicTimeRollup,
+  useIssueTimeRollup,
+  useLogTime,
+  useSubmitTimesheet,
+  useTimesheetApprovals,
+  useTimesheetPeriod,
+  useTimesheetPeriods,
+} from './time';
