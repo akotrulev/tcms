@@ -382,7 +382,23 @@ class SchemaConventionTest extends IntegrationTestBase {
                 // — and a column added to a protected table is protected by it, so they do not move
                 // this number. There is NO agent, orchestrator, runner or credential table; V8's
                 // header says why, and that absence is a decision rather than a gap this number covers.
-                .isEqualTo(92);
+                //
+                // 95 since V9 (plan 016, module M6) — timesheet_period, time_entry and
+                // issue_time_rollup. All three are company-owned and none is an exception,
+                // INCLUDING issue_time_rollup: it is a read projection keyed on issue_id alone,
+                // which is the shape where "the primary key already identifies the row" could argue
+                // itself out of a policy — and would be wrong, because the key says WHICH issue and
+                // nothing about WHOSE, and a projection every hours panel reads is exactly where a
+                // missing predicate puts one client's effort in another's report. timesheet_period
+                // is the second one worth reading twice: its rows are one person's fortnight, so
+                // company_id is what stops Acme reading Globex's, and the PER-PERSON half is the
+                // service layer's — the same split tracker_identity and board_swimlane make above.
+                // The module's other change is a column on a table that already carries its policy,
+                // project_settings.track_time, and a column added to a protected table is protected
+                // by it, so it does not move this number. There is NO rate, cost or invoice table:
+                // that is M8, and V9's header says so rather than leaving the absence to be read as
+                // a gap this number covers.
+                .isEqualTo(95);
     }
 
     @Test
