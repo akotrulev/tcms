@@ -2989,7 +2989,7 @@ git commit -m "feat(staffing): the project's staffing, and the person page with 
 **Out of scope:** the two capacity figures on `/timesheets` and My Work. They are T6's, because they
 are M6's screens and the close-out that records whether they landed rides with them.
 
-**Record — landed 2026-09-04 (`30f6c783`).** `npm run build`, `npm run lint` and `npm run test:run` green on
+**Record — landed 2026-09-04 (`21ff78d6`).** `npm run build`, `npm run lint` and `npm run test:run` green on
 shanks; 23 new tests in 4 files, 2800 passing of 2802. The two failures are
 `src/features/cases/CaseGrid.test.tsx`'s selection pair, which 016's close-out recorded as
 pre-existing and which this task did not touch. `packages npm run test:run --workspaces` also run —

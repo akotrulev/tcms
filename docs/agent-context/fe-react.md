@@ -11,7 +11,7 @@ panels.)
 - 2026-09-04 — 017 T5: `/projects/:projectId/staffing`, `/directory/:userId` and its Profile, Skills
   and Absence panels, `AllocationDialog` (the inline 409), `AllocationRow`, `staffingWindow.ts`, and
   the project rail entry. Fixed the window missing from `keys.staffing.absences` and turned
-  `PersonCard`'s disabled `Profile` into a link — see the four rows below (`30f6c783`).
+  `PersonCard`'s disabled `Profile` into a link — see the four rows below (`21ff78d6`).
 
 ~~**Baseline commit:** `ecc71e7d` · **Verdict (017 T4):** DELTA~~
 - 2026-09-04 — 017 T4: `/staffing` and `/directory`, the staffing query module and keys, the
