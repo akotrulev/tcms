@@ -69,7 +69,7 @@ would mean eight edits to three documents that a test pins byte-for-byte. It is 
 | **M3** | Releases, roadmap & readiness | ~~`V5`~~ → `V6` | plan versions, see the roadmap, and answer "can we ship 2.4?" | M2 | done 2026-09-01 @ `55cb4bc0` |
 | **M4** | Jira offramp | ~~`V6`~~ → ~~`V7`~~ → ~~`V8`~~ → `V7` | move a Jira project in, keys intact, with a preview and a report | M1 | done 2026-09-03 @ `ba0031bb` — plan 014 |
 | **M5** | Agent execution | ~~`V7`~~ → ~~`V6`~~ → ~~`V7`~~ → `V8` | connect their own assistant and have it work a task, but never close it | M1 | done 2026-09-04 @ `4f3bbf8b` — plan 015 |
-| **M6** | Time | ~~`V8`~~ → ~~`V10`~~ → `V11` | log hours, submit a period, and have a PM approve it | M1 | not started |
+| **M6** | Time | ~~`V8`~~ → ~~`V10`~~ → ~~`V11`~~ → `V9` | log hours, submit a period, and have a PM approve it | M1 | done 2026-09-04 @ `3471358c` — plan 016 |
 | **M7** | Staffing | ~~`V9` (unchanged)~~ → `V10` | allocate people, see capacity, and find who is free | ~~M6~~ → **M0** (review R11) | not started |
 | **M8** | Billing | ~~`V10`~~ → ~~`V11`~~ → `V12` | price approved time and issue an invoice | M6 · Mc | not started |
 | **M9** | Delivery analytics | none | read burn-up, cycle time and flow | M3 | not started |
@@ -122,6 +122,15 @@ already spent. It was not. Three corrections in a month, from three unrelated ca
 module spending two versions, and a module not having run — and every one of them would have been a
 silently unapplied migration on an already-migrated database, because `out-of-order` is unset and
 Testcontainers builds each test database from scratch. **Read the directory. Every time.**
+
+**And a fourth time, on 2026-09-04, from the same cause as the third read forward instead of
+back — two modules ahead of M6 in the confirmed order simply not having run.** M6 takes **`V9`**,
+not the `V11` this table reserved for it: the order says `… Mc → M7 → M6 …`, and **neither Mc nor M7
+has started**, so the two versions they would have spent were free. `ls` on the day showed
+`V1 … V8`, `V8__agent_execution.sql` being M5's, and `V9` was therefore next. Four corrections in
+five weeks, from four unrelated causes — a reorder, a module spending two versions, a module not
+having run *before* the one that needed the number, and two modules not having run. **The number in
+this column has been wrong more often than it has been right. Read the directory.**
 
 **The plan numbers shifted with it.** `014` is M4's (`014-jira-offramp.md`), not M5's; the projection
 below was made in the confirmed order and a number is taken next-free at start time, never
@@ -762,11 +771,11 @@ altitude is the boundary between them.
 
 | | **M6 Time** (`V8`) | **M7 Staffing** (`V9`) | **M8 Billing** (`V10`) |
 |---|---|---|---|
-| **db** | `time_entry` (`subject_type` + `subject_id` — an issue, a meeting, leave), `timesheet_period` | `person_profile`, `skill`, `person_skill`, `allocation`, `absence` | `rate_card`, `rate_card_entry`, `budget`, `invoice`, `invoice_line`, `expense` |
+| **db** | ~~`V8`~~ → **`V9`** (Mc and M7 unspent). `time_entry` (`subject_type` + `subject_id` — an issue, a meeting, leave, training or admin: **five** members, and `TEST_RUN` is deliberately not one), `timesheet_period`, and **`issue_time_rollup`** — the projection, which the table below did not name. Plus `project_settings.track_time` and, added by T5, `project_settings.trackTime` on the wire | `person_profile`, `skill`, `person_skill`, `allocation`, `absence` | `rate_card`, `rate_card_entry`, `budget`, `invoice`, `invoice_line`, `expense` |
 | **be** | log, submit, approve, reject-with-note; approved hours roll up to story, epic, project as a **`time`-owned projection joined to `issue_fact`** — `time` reads `issue_fact` and never writes it (review R10; the trap scope §3 names) | capacity, allocation percentage, over-allocation flag, absence zeroing capacity everywhere | approved time priced by rate card, budget burn, draft and issue an invoice, lines lock on issue |
-| **fe** | `timesheets.html`, `timesheet-approvals.html` | `staffing.html`, `directory.html` | `billing.html`, `invoice.html`, and the client page's hours-and-invoices table |
+| **fe** | `timesheets.html`, `timesheet-approvals.html`, **and the five additive surfaces T5 added**: the story's Time panel and its `Logged` detail row, the epic's estimate-vs-actual table, the work table's `Logged` column and footer, My Work's This-period figure, and the Track-time toggle on General settings | `staffing.html`, `directory.html` | `billing.html`, `invoice.html`, and the client page's hours-and-invoices table |
 | **Depends on** | M1 | ~~M6~~ → **M0** (review R11: profiles, skills, allocation, absence and capacity read no time entry — allocation is against a project, which is foundation. *Utilisation*, allocated vs logged, is the one figure that needs M6, and it is out of M7 unless M6 has landed) | M6 · Mc |
-| **A person can now** | record where the day went and have it approved | answer "who is free, and when" | turn approved hours into an invoice |
+| **A person can now** | record where the day went and have it approved — **landed 2026-09-04 @ `3471358c`, plan [016-time.md](016-time.md)**, closure below | answer "who is free, and when" | turn approved hours into an invoice |
 
 **The sharpest boundary in the expansion is money, and it needs a test asserting the negative.**
 `billing:*` and `ratecard:read` are Finance and Company Admin only. A Test Engineer with `time:log`
@@ -775,6 +784,76 @@ a rate. Assert that they *lack* it — do not read the matrix carefully and conc
 
 **M8 excludes** fixed-fee and retainer invoicing (D24), and never bills AI-assistant usage — it is a
 cost, not a line.
+
+### M6 closed — 2026-09-04 @ `3471358c`, plan [016-time.md](016-time.md)
+
+**The migration actually taken is `V9`**, not the `V11` this table reserved — struck through above
+rather than deleted. The reason is the reservation warning's own, arriving for the fourth time:
+**neither Mc nor M7 has started**, so the two versions the confirmed order spends before M6 were
+free. `ls` on the day showed `V1 … V8`.
+
+**Five tasks, one stack each:** T1 the contract + both clients + the CLI/MCP verbs, T2 `V9`, T3 the
+`time` module and the money-boundary negative test, T4 the timesheet and approvals screens, T5 the
+five additive surfaces and this close-out.
+
+#### What T5 found that this plan and 016 both had wrong
+
+1. **`trackTime` was never put on the wire, and T5 had to add it.** 016 D-g decided the switch and
+   T2 landed `project_settings.track_time`, T3 mapped it on the entity, and `TimeEntryService` reads
+   it — but no task ever added it to `ProjectSettings` or `ProjectSettingsUpdate`, and
+   `ProjectSettings.java` said so outright: *"It has no setter yet because the toggle's contract
+   field and its `PATCH` arrive with the settings screen."* T5 was cut as `fe` + `docs`, so closing
+   it meant taking a contract + `be` slice inside a frontend session — **a deliberate departure from
+   CLAUDE.md's one-stack rule, taken on the user's decision rather than silently.** The alternative
+   was shipping a module whose central decision was unenforceable and whose toggle did not exist.
+2. **`IssueSummary` carries no logged hours**, so `work-table.html`'s `Logged` column had no source
+   either — and the epic-rollup operation's own description claimed *"a work-table footer the issue
+   list already carries per row"*, which was false. Closed by a **new bulk operation**,
+   `GET /time/rollup/issues?key=…`, served by `time` from its own projection. Chosen over adding
+   `approvedHours` to `IssueSummary` because that would make `tracker` — a leaf — read another
+   leaf's projection on every work-table page load, whether or not the column is drawn.
+3. **The five surfaces are not all behind `trackTime`, and D-g does not say they are.** D-g names
+   the `Logged` column, the story and epic panels, and the log form's picker. **My Work's
+   This-period figure is deliberately ungated**: it is a *person's* fortnight and a period spans
+   projects (D-i), while `trackTime` is one project's decision, and the screen names no project at
+   all. A prompt line saying "all five surfaces" was narrowed to what the decision actually says.
+
+#### Built and unverified
+
+The gates prove it compiles, not that it works. Backend `./gradlew build` on `shanks`: **3901 tests
+green**. Frontend: build clean, lint 0 warnings, **2705 tests in 194 files, 2 failing**. Packages:
+build clean, lint 0 warnings, tests green.
+
+- **The two failures are `src/features/cases/CaseGrid.test.tsx` and they predate this module** —
+  *survives paging* and *select-all reaches the page*, both `Number of calls: 0` after a
+  `userEvent.click` on the Radix `Checkbox`. Verified failing on a clean checkout at `90667f1e`
+  with the working tree stashed. Not absorbed here; whoever opens that file next owns it.
+- **Every screen T4 and T5 built.** Nobody has clicked through the lab. Seven surfaces, and the
+  three the gates can say least about are the **approvals queue** (`POST .../decision` has never
+  been sent to a running server, so the approve-then-rollup path is proven only by
+  `TimeRollupTest` at the service level), the **work table's `Logged` column** (its bulk read is one
+  request whose keys change with every filter, and only a double has answered it), and the
+  **Track-time toggle** (the `PUT` is exercised by `TrackTimeSettingTest` and by an RTL double, and
+  by nothing in between).
+- **`GET /time/rollup/issues` has never served a real page of fifty keys.** Its 200-key cap, its
+  per-project gate loop and its drop-the-unreadable-key rule are asserted at the service level in
+  `TimeRollupTest` and nowhere against HTTP.
+- **`Idempotency-Key` on `POST /timesheets/entries` is declared and not implemented.** `V9` gave
+  `time_entry` no column to store a key, so a retry after a timeout logs the hour twice. Stated in
+  `TimeEntryController`'s header rather than papered over; the fix is a column and a lookup.
+- **`issue_time_rollup` has no reader outside `time`**, by design (D-c). M8 is its second consumer
+  and the first from outside; until then the money boundary is proven only as a negative.
+- **The rail's waiting-count badge was deliberately not built**, and the argument is in
+  `AppShell.tsx`'s `TIMESHEETS` comment: the count needs `GET /timesheets/approvals`, which 403s for
+  anyone without `time:approve`, and `time:approve` is PROJECT-scope with no company-wide "where may
+  I approve" read on the contract. The count is on the approvals screen's own subtitle instead.
+  Revisit if the contract grows that read — not by making the rail guess.
+- **`Approve all` and `Remind` from `timesheet-approvals.html` are absent**, with the reason in
+  `ApprovalsPage.tsx`'s header: no batch operation on the contract for the first, no endpoint at all
+  for the second.
+- **Capacity is absent, not zero** (D-j). The timesheet's KPI row ships with three tiles rather than
+  the mockup's four, and My Work's This-period panel ships with Logged alone and no meter. Both are
+  M7's to complete, and M7's prompt below now says so.
 
 ---
 
@@ -1531,7 +1610,14 @@ Then:
    naming the `release` field M3 must populate.
 ````
 
-### M6 — Time
+### ~~M6 — Time~~ → **done. Do not run this prompt.**
+
+**M6 landed 2026-09-04 at `3471358c`** — `V9__time.sql`, plan
+[016-time.md](016-time.md). Its closure is written up in
+[the M6 section above](#m6--time--m7--staffing--m8--billing): the V actually taken (`V9`, not the
+reserved `V11` — Mc and M7 unspent), the three things this plan and 016 both had wrong, and the
+built-and-unverified list. The block below is kept for the reader who wants to see what was asked
+for against what landed.
 
 ````text
 You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
@@ -1642,7 +1728,35 @@ behaviour.
 
 M0 reads `done` in the status table (2026-08-30 @ 24f997bb) — that gate is satisfied.
 ~~This module touches no tracker file and may run beside M2–M5.~~ Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M7 runs SEVENTH,
-after Mc; task list in docs/plans/009-execution-breakdown.md, phase 7. M7 keeps `V9`.
+after Mc; task list in docs/plans/009-execution-breakdown.md, phase 7. ~~M7 keeps `V9`.~~ → **M6 took
+`V9` on 2026-09-04**, ahead of both Mc and M7, because neither had started. `ls
+backend/src/main/resources/db/migration/` and take the next free number — the table's column has
+been wrong four times in five weeks and is a reservation, not a fact.
+
+**M6 landed 2026-09-04 (`V9`, plan 016-time.md), so utilisation is IN — and M6 left two capacity
+figures deliberately absent for you to complete.** They are absent rather than zero, which is the
+whole point: 016 D-j says a capacity figure M6 would have had to invent is the
+two-contradictory-percentages failure CLAUDE.md records, so M6 removed the tile instead of filling
+it with a lie. Both are additive, and both are frontend work in files M6 already built:
+
+1. **The fourth KPI tile on `/timesheets`** — `timesheets.html`'s `Period capacity 64h`.
+   `features/time/TimesheetPage.tsx` ships **three** tiles (Logged · Approved · Status) in a
+   `md:grid-cols-3`, and its `Kpis` header says the fourth is D-j's absence. Add the tile and widen
+   the grid.
+2. **The Capacity half of My Work's This-period panel** — `my-work.html`'s `Capacity 32h` beside
+   Logged, and the meter under it. `features/board/MyWorkPage.tsx`'s `ThisPeriodPanel` ships Logged
+   alone and no meter, with the reason in the file header. A meter needs a denominator, so it
+   arrives with the capacity figure and not before.
+
+**Note the panel is a PERIOD, not a week** (016 D-a): the timesheet fortnight is semi-monthly and
+nothing configures it, so capacity for that panel is capacity over `period.startsOn … period.endsOn`,
+not over a calendar week. `features/time/periods.ts` owns that arithmetic and is a pure module with
+its own test — read it rather than re-deriving the bounds.
+
+**Utilisation is allocated-vs-logged, and `logged` has two spellings** (016 D-d). `approvedHours`
+and `pendingHours` are separate on the wire and **nothing in the product sums them**. Whichever you
+denominate utilisation over, say which on the screen — every other time figure in the product does,
+and one that did not would be the first.
 
 M0 landed on 2026-08-30 (`V2`, plan 010). Staffing's five keys are split across two scopes and the
 split is load-bearing, not cosmetic:
@@ -1681,7 +1795,8 @@ Then:
    appears at 101%, an absence zeroes that week's capacity on every screen that shows it, and
    "who is free next month with skill X" is answerable from the directory.
 5. Close per "Prompt hand-off protocol": status table, built-and-unverified list, the V actually
-   taken. No module depends on M7; if M6 is done, say in the M9 prompt whether utilisation landed.
+   taken. No module depends on M7; M6 is done, so say in the M9 prompt whether utilisation landed,
+   and record whether the two capacity figures above were completed or left absent again.
 ````
 
 ### M8 — Billing
@@ -1705,6 +1820,61 @@ Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in pa
 closure task rewrites this prompt with the client endpoints and the client page's hours-and-invoices
 slot as they actually landed — trust that rewrite over anything this block says about them today.
 
+**M6 landed 2026-09-04 (`V9__time.sql`, plan 016-time.md). What it actually built, which is not
+everywhere what this plan guessed:**
+
+- **Package `com.tcms.time`**, and it is the module you price. Endpoints as they landed:
+  `GET /timesheets/periods/current?on=` (**this read WRITES** — it creates the period row, which is
+  what makes `id` available to Submit on a fortnight nobody has logged into) ·
+  `GET /timesheets/periods` · `GET /timesheets/periods/{periodId}` ·
+  `POST|GET /timesheets/entries` · `PATCH|DELETE /timesheets/entries/{entryId}` ·
+  `POST /timesheets/periods/{periodId}/submit` · `GET /timesheets/approvals?on=` ·
+  `POST /timesheets/periods/{periodId}/decision` (APPROVE · REJECT with a mandatory note ·
+  WITHDRAW) · `GET /time/rollup/issues/{key}` · `GET /time/rollup/issues?key=…` (the bulk grain,
+  added by T5 for the work table's column) · `GET /time/rollup/epics/{key}`.
+- **The projection is `issue_time_rollup`**, not the unnamed thing the table above described, and
+  **`time.RollupService` is its ONLY writer.** It carries `approved_hours` and `pending_hours` per
+  issue, is **recomputed rather than adjusted** — every call rewrites the affected issues from the
+  entries that exist now — and is maintained **synchronously inside the approving transaction**
+  (016 D-h), not through the outbox: `time` owns both the entries and the rollup, so there is no
+  boundary to cross, and the outbox has a one-minute delivery floor while the story panel has to be
+  right the moment Approve is clicked. **Do not add a second writer**, and do not read it from
+  `tracker` — T5 declined to put `approvedHours` on `IssueSummary` for exactly that reason and added
+  the bulk endpoint instead.
+- **`time` reads `issue_fact` and never writes it** (review R10). `time.IssueFacts` is the only file
+  in the module that names the table, and **`TimeWritesNoIssueFactTest` asserts both halves** —
+  that nothing in the module writes it, and that no second file names it. **You inherit that test
+  and must not weaken it**; a billing read of an issue's title goes through `IssueFacts` or through
+  a new file that replaces it, never around it.
+- **`TimeMoneyBoundaryTest` is the negative you were promised, and it is already green.** A Test
+  Engineer holding `time:log` logs hours and cannot read a rate. **You must not weaken it** — extend
+  it with the Account Manager arm (sees the client and the hours, never a rate) rather than
+  rewriting what is there. UUID prefix `f8` is that class's; `f9` is `TrackTimeSettingTest`'s.
+- **`subject_type` has FIVE members and `TEST_RUN` is not one of them** (016 D-b): `ISSUE`,
+  `MEETING`, `LEAVE`, `TRAINING`, `ADMIN`. Four of the five name no project, which is why a period
+  spans projects and why an invoice cannot assume every hour has one.
+- **D-i is the approval rule, and it is the sharp edge you inherit.** A period is per person per
+  **semi-monthly** range (1st–15th, 16th–end; nothing configures it — D-a) and **spans projects**,
+  while `time:approve` is a **PROJECT**-scope grant. A submitted period reaches an approver when at
+  least one of its entries names a project they may approve for, and **approving it approves the
+  whole period**, including entries against projects they cannot see. So *"these hours were
+  approved"* is not the same claim as *"somebody with authority over this project approved these
+  hours"*, and an invoice line that implies the second is a claim the data does not support. Decide
+  what you do about that explicitly; do not discover it from a client.
+- **Approved and pending are two numbers and nothing sums them** (D-d). `TimeRollup` and
+  `TimesheetPeriod` both carry them apart, no screen renders a bare "hours", and **only APPROVED
+  hours are priceable** — pricing pending hours would bill work nobody has signed for.
+- **`project_settings.track_time` exists and is ON by default** (D-g), on the wire as
+  `ProjectSettings.trackTime` since T5, with the toggle on General settings. Note the asymmetry your
+  own settings work must honour: it is the **one boolean in `ProjectSettingsUpdate` that the server
+  reads as `true` when omitted**, because dropping it would take a project's time surfaces away.
+  `frontend/src/features/settings/settingsUpdate.ts` is the one place the field list is written — a
+  field you add to that document goes there, or two screens will disagree.
+- **`settings-general.html`'s Budget row is yours and is NOT built.** It reads `600h · Edit in
+  Billing`; there is no hours ceiling, no rate and no Billing screen in the product, and T5 said so
+  on the screen rather than rendering a number it could not source. The Time panel it belongs in
+  exists — `GeneralSettingsPage.tsx`'s `TimePanel` — so this is a row to add, not a panel to build.
+
 Then:
 1. Write docs/plans/0NN-billing.md with ep-writing-plans — next free NNN, next free V from the
    migration directory (the table says V12 after the 2026-09-01 shift; the directory is the authority). New `billing` module:
@@ -1714,8 +1884,8 @@ Then:
    arrays, both generated clients, contractBodies.ts ×2, CLI/MCP verbs, the surface doc). One
    commit per task, `git add <paths>` only. Extend the negative test M6 wrote: a Test Engineer
    cannot see what their hours cost; an Account Manager sees the client, the hours and never a
-   rate. Assert that they LACK it — do not read the matrix and conclude it holds. Invoice lines lock
-   on issue.
+   rate. Assert that they LACK it — do not read the matrix and conclude it holds. **Extend
+   `TimeMoneyBoundaryTest`; do not rewrite it.** Invoice lines lock on issue.
 3. Gates on shanks via ~/bin/tcms-remote. Read docs/specs/shanks-runner-details.md first.
 4. Done when: approved hours are priced by the rate card, budget burn is visible, a draft invoice
    is issued and its lines are then immutable, and the two negative permission tests are green.
@@ -1895,12 +2065,12 @@ where it was resolved above; the two that need the owner or a module plan are na
 | R7 | M4's "existing Jira/ADO adapters gain an importer direction" — they are outbound single-issue clients, and an importer in `integration` writing `issue` is a forbidden crossing. | **Resolved** — importer is `tracker.imports` with its own read client; adapters untouched. |
 | R8 | M4's dependency on M1 alone held only if Jira sprints are not turned into labels (M2). | **Resolved** — sprints dropped and reported; label-per-sprint optional if M2 already exists. |
 | R9 | M5's fetch payload included `release`, which is M3. | **Resolved** — nullable from the first contract. |
-| R10 | M6 "roll up … via `issue_fact`" read as `time` writing `issue_fact` — the trap §3 forbids. | **Resolved** — reworded as a `time`-owned projection. |
-| R11 | M7 depended on M6 for nothing it reads. | **Resolved** — M7 depends on M0; utilisation stays out unless M6 landed. |
+| R10 | M6 "roll up … via `issue_fact`" read as `time` writing `issue_fact` — the trap §3 forbids. | **Resolved, and built (M6, 2026-09-04)** — the projection is `issue_time_rollup` and `time.RollupService` is its only writer. The crossing is one file, `time.IssueFacts`, read-only native SQL, and **`TimeWritesNoIssueFactTest` asserts both halves**: that nothing in `com.tcms.time` writes the table, and that no second file in the module names it. It strips comments before it reads, because `time/package-info.java` argues for the rule in prose and names the table repeatedly. |
+| R11 | M7 depended on M6 for nothing it reads. | **Resolved** — M7 depends on M0; utilisation stays out unless M6 landed. **M6 landed 2026-09-04, so utilisation is now in**, and M6 left two capacity figures deliberately absent for M7 to complete (016 D-j) — the fourth KPI tile on `/timesheets` and the Capacity half of My Work's This-period panel. Both are named in M7's prompt. |
 | R12 | M9 "needs no migration" was only true if M1/M3 stored timestamps `issue_fact` was not sketched with. | **Resolved** — four timestamps on `issue_fact` in M1, `release.created_at` in M3. |
 | R13 | M2 did not say what happens to a workflow status added after a board exists. | **Resolved, and built (M2, 2026-09-01)** — auto-claimed by the same-`kind` default column; unique index, not a CHECK. The claim is a **direct call** from `WorkflowService` into `BoardConfigService.claimNewStatus`, same module and same transaction, not an event (012 D-g): an unclaimed status is not a state the data can be in, rather than one it is briefly in. `settings-boards` shows the claim where it landed and lets it be moved. **Unverified end to end** — the screen's test seeds the claim by hand; nothing has driven the workflow `PUT` and read the board back. |
 | R14 | M4: whether the importer may reuse `integration.tracker`'s per-person credential. | **Closed (014 D-a, 2026-09-02)** — neither of the two the review named. The connection is entered per run, carried in the request body, held for the life of the run and **written nowhere**: `import_run` has no secret column at all. Reuse was refused because it does not compile — `tracker`'s `allowedDependencies` does not name `integration`, and `ArchitectureRulesTest` is a hard gate with no exception list. Encrypting it onto `import_run`, which is the option this plan expected to be taken, was refused because `SecretCipher` is in `integration` too: taking it meant a **second AES-GCM key user**, which is the rotation defect that class's own header names. It costs re-typing the token after a browser reload, and `import-connect.html` already promised exactly this under the field. |
-| R15 | The migration numbers ~~`V8 / V9 / V10`~~ → `V11 / V10 / V12` for M6–M8 are wrong the moment a second lane lands anything out of table order. | **Open by design, and it has now bitten twice with no second lane at all** — M5 was placed ahead of M4 (2026-08-30), then M1 turned out to have spent two versions rather than one (2026-09-01), and every number below M2 moved. The reservation warning covers it; the parallel section restates it because that is where it bites hardest. |
+| R15 | The migration numbers ~~`V8 / V9 / V10`~~ → `V11 / V10 / V12` for M6–M8 are wrong the moment a second lane lands anything out of table order. | **Open by design, and it has now bitten FOUR times with no second lane at all** — M5 placed ahead of M4 (2026-08-30); M1 spending two versions rather than one (2026-09-01); M4 begun before M5, so `V7` was free when the table had spent it (2026-09-01); and **M6 taking `V9` rather than the reserved `V11` (2026-09-04), because neither Mc nor M7 — both ahead of it in the confirmed order — had started.** Four causes, none of them a second lane. The reservation warning covers it; the parallel section restates it because that is where it bites hardest. |
 
 ---
 
