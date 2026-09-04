@@ -398,7 +398,24 @@ class SchemaConventionTest extends IntegrationTestBase {
                 // by it, so it does not move this number. There is NO rate, cost or invoice table:
                 // that is M8, and V9's header says so rather than leaving the absence to be read as
                 // a gap this number covers.
-                .isEqualTo(95);
+                //
+                // 100 since V10 (plan 017, module M7) — person_profile, skill, person_skill,
+                // allocation and absence. person_skill is the one to read twice, because it is the
+                // exact shape this class exists for: a JOIN TABLE, whose two parents are both
+                // isolated, so its rows look correct in every test that uses one company and the
+                // missing column is invisible by reading. V1 shipped five of them wrong and the
+                // omission was found by scripting the comparison — this count and the company_id
+                // check above are that script, kept.
+                //
+                // `skill` is the second: a company's vocabulary of words looks like reference data,
+                // which is the shape where "it is only a list of skill names" could argue itself
+                // out of a policy — and would be wrong, because the words are a client's own ("SAP
+                // FI", the tool their product is built on) and the list is a readable inventory of
+                // what a competitor's team can do. There is NO rate, cost or capacity table: rate
+                // and cost are M8, capacity is derived on every read (017 D-a), and V10's header
+                // says both rather than leaving either absence to be read as a gap this number
+                // covers.
+                .isEqualTo(100);
     }
 
     @Test

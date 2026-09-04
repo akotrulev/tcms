@@ -28,7 +28,7 @@ FORCE RLS · React 19 + TanStack Query + Tailwind v4 render kit · `@tcms/client
 | # | Task | Stack | Agent | Deliverable | Est. | Depends on |
 |---|---|---|---|---|---|---|
 | 1 | T1 — The staffing contract, both clients, and the CLI/MCP verbs | `ts` | `tooling-engineer` | **Landed 2026-09-04.** ~~17~~ **15** `staffing` operations and 17 schemas in `openapi.yaml`, both generated clients regenerated, a factory per resource in both `fixtures.ts` (~~`contractBodies.ts`~~ — those are the schema walker and hold no bodies), ~~three~~ **four** CLI verbs and three MCP tools, and the surface doc listing them | ~140k | none |
-| 2 | T2 — `V10`: the five staffing tables | `be` | `data-architect` | `V10__staffing.sql` applied on an empty database and on the lab's `V9` one; `person_profile`, `skill`, `person_skill`, `allocation`, `absence` exist with FORCE RLS; `SchemaConventionTest` green | ~95k | T1 |
+| 2 | T2 — `V10`: the five staffing tables | `be` | `data-architect` | **Landed 2026-09-04.** `V10__staffing.sql` applied on an empty database (Testcontainers) **and on a V9 one** (95 → 100 policies, seed functions untouched); the five tables exist with `FORCE` RLS and V1's predicate; `SchemaConventionTest` green at `100`. **The V the directory gave was `V10`, as predicted** — the first time in five that column was right | ~95k | T1 |
 | 3 | T3 — The `staffing` module: capacity, over-allocation, absence and utilisation | `be` | `be-java` | Every operation T1 declared is served; one person allocated 50%+51% across two projects raises the over-allocation flag; an absence zeroes those days' capacity in the one function every caller uses; `./gradlew build` green | ~150k | T2 |
 | 4 | T4 — The company screens: `/staffing` and `/directory` | `fe` | `fe-react` | `/staffing` renders the allocation timeline, the Over-100% panel and free capacity; `/directory` answers "free next month with skill X" through URL-held filters; both gated on `staffing:directory` | ~140k | T3 |
 | 5 | T5 — The project's staffing, and the person page carrying profile, skills and absence | `fe` | `fe-react` | `/projects/:projectId/staffing` lists this project's allocations and allocates a person at a percentage for a range; `/directory/:userId` carries `member.html`'s Profile, Skills and Absence panels | ~135k | T4 |
@@ -130,7 +130,7 @@ Traps this task will hit:
   the migration's own comment. Do not add one.
 
 When done: run `~/bin/tcms-remote sync` then
-`~/bin/tcms-remote backend ./gradlew test --tests 'com.tcms.schema.SchemaConventionTest'`, then the
+`~/bin/tcms-remote backend ./gradlew test --tests 'com.tcms.tenancy.SchemaConventionTest'`, then the
 full `~/bin/tcms-remote backend ./gradlew build` — read docs/specs/shanks-runner-details.md first,
 because BUILD FAILED with "Could not write XML test results" and zero assertion failures is an fd
 limit, not a red suite. Commit the migration, SchemaConventionTest and the ERD as
@@ -181,6 +181,27 @@ Traps this task will hit:
   staffing:read/allocate and the new readInCompany/holdsInCompany for the three COMPANY keys.
 - Seed person_profile, skills, allocations and one half-day absence in DemoWorkspaceSeeder, or every
   capacity figure in the demo instance is an em dash and the module cannot be demonstrated.
+- V10 LANDED AND IT IS V10 — no renumbering. Two things in it will bite the entity layer. FIRST:
+  skill.name is CITEXT, which reports as Types#OTHER while a String maps to varchar, so
+  `ddl-auto: validate` REFUSES TO START with "found [citext (Types#OTHER)], but expecting
+  [varchar(255)]" unless the field says @Column(columnDefinition = "citext"). AppUser.email and
+  CompanyEmailDomain.domain both carry it; a native query comparing to a parameter casts it, as
+  AppUserRepository's `CAST(:email AS citext)` does. This is a startup failure, not a compile one,
+  so it appears as every @SpringBootTest failing at once. SECOND: there is NO ix_person_profile_user
+  — uq_person_profile UNIQUE (company_id, user_id) is itself that index, and the profile lookup
+  seeks it.
+- person_profile has NO row for most people and that is a real state, not a default of 40 — every
+  hours figure for them is null and the screen reads an em dash (016 D-j's refusal, kept).
+- The schema gate is `com.tcms.tenancy.SchemaConventionTest` (package `tenancy`, not `schema`), and
+  it asserts a policy COUNT — now 100. A sixth staffing table would move it again.
+- THE BACKEND BUILD IS ALREADY RED WHEN YOU START, at exactly four assertions, and closing them is
+  your deliverable rather than a surprise: ContractConventionTest's two pairing checks,
+  ContractEnumTest.everyNamedContractEnumNamesTheServerType and
+  ContractParameterBindingTest.everyOperationIsServedByAHandler. T1 added 17 schemas and 15
+  operations to openapi.yaml with no record and no handler behind them, and no gate between T1 and
+  you could see it — T1's was `packages npm run build`, ci.yml compiles the backend without testing
+  it, and tests.yml is nightly. Verified at fe305a88 by stashing T2's work. A FIFTH failure is a
+  regression you introduced; these four are the job.
 
 When done: run `~/bin/tcms-remote sync` then `~/bin/tcms-remote backend ./gradlew build` — read
 docs/specs/shanks-runner-details.md first. Commit the paths in §T3 step 11 as
@@ -684,6 +705,18 @@ modified; 3 skills; 4 spec sections cited
 > `CaseGrid.test.tsx`'s two selection cases, verified by stashing this work and re-running them at
 > `HEAD`. `ci.yml` runs only the frontend **smoke** set per push, which is how they are sitting
 > there unobserved. Not this task's, and not repaired here.
+>
+> **And this task turned the BACKEND suite red, which T2 found and neither task's own gate could
+> see.** `./gradlew build` fails four assertions — `ContractConventionTest`'s two pairing checks,
+> `ContractEnumTest.everyNamedContractEnumNamesTheServerType` and
+> `ContractParameterBindingTest.everyOperationIsServedByAHandler` — because 17 schemas and 15
+> operations were added to `openapi.yaml` with no record and no handler behind them. **That is T3's
+> to close and it is the expected state between these two tasks**, not a defect: this task is `ts`
+> and its gate was `packages npm run build`, `ci.yml` runs the backend **compile only**, and
+> `tests.yml` runs the full suite nightly on the default branch — so nothing between T1 and T3 was
+> ever going to report it. T2 verified the failures are T1's by stashing its own work and re-running
+> the three classes at `fe305a88`: identical four. **Until T3 lands, `./gradlew build` is red at
+> exactly these four and a fifth failure is somebody's regression.**
 
 **Files:**
 - Modify: `docs/specs/openapi.yaml` (after the `/time/rollup/epics/{key}` block, currently line 9212)
@@ -1485,9 +1518,54 @@ composite index and each carrying a FORCE RLS policy whose predicate is byte-ide
 as the pattern (210 lines); 3 skills; 3 spec sections cited
 **Depends on:** T1 (the wire shapes the columns have to serve)
 
+**LANDED 2026-09-04 — `V10__staffing.sql`, and the version the directory gave was `V10`.** `ls` on
+the day read `V1 … V9`, so for the first time in five weeks that column needed no correction.
+Nothing below this note was rewritten for a version change, because there was none. Three things
+this task landed differently from the draft SQL below, all of them recorded here rather than left
+for a reader to diff:
+
+1. **There is no `ix_person_profile_user`.** The draft listed one on `(company_id, user_id)` beside
+   `CONSTRAINT uq_person_profile UNIQUE (company_id, user_id)` — and a `UNIQUE CONSTRAINT` *is* a
+   btree index, on exactly those columns in exactly that order. The second one would double the write
+   cost of every profile edit and be chosen by the planner never. Every lookup the module makes seeks
+   the constraint's index. Dropped, with the reason written into the migration where the next reader
+   will look for the missing line.
+2. **The gate is `com.tcms.tenancy.SchemaConventionTest`, not `com.tcms.schema.…`** — this plan's own
+   prompt block named a package that does not exist, and the corrected FQN is in the block above.
+   The policy-count assertion moved `95 → 100`.
+3. **`skill.name CITEXT` costs T3 a `columnDefinition`, and that is a startup failure rather than a
+   compile one.** `citext` reports as `Types#OTHER` while a `String` maps to `varchar`, so
+   `ddl-auto: validate` refuses to boot with *"found [citext (Types#OTHER)], but expecting
+   [varchar(255)]"* unless the entity says `@Column(columnDefinition = "citext")` — `AppUser.email`
+   and `CompanyEmailDomain.domain` are the two precedents, and T3's prompt block now carries the
+   trap. The draft's justification for the type ("citext, like every other name in V1") was also
+   wrong on the facts: V1 uses `citext` for two email columns only and `TEXT` + a unique index on
+   `lower(name)` for `team`, `board` and `issue_label`. The type is still the right one here, for the
+   reason the migration now gives — this vocabulary is looked up **by name on the write path** — but
+   it is a departure from the name precedent rather than an instance of it.
+
+**The check Testcontainers structurally cannot do was run.** A throwaway Postgres 17 with the real
+two-role split, migrated `V1 … V9` only — 108 tables, 95 policies, which is the lab's shape — then
+`V10` applied on top of it: all five tables `ENABLE`d and `FORCE`d with one policy each, 100 policies
+total, and `tcms_seed_company_defaults` / `tcms_seed_project_defaults` both still present. That last
+line is the point of §7 below: the only way this file could have broken the seed functions was by
+restating them, and it does not.
+
+**`./gradlew build` is RED at the end of this task and the four failures are T1's, not this one's.**
+`3901 tests completed, 4 failed`: `ContractConventionTest`'s two schema/record pairing checks,
+`ContractEnumTest.everyNamedContractEnumNamesTheServerType` and
+`ContractParameterBindingTest.everyOperationIsServedByAHandler` — T1 put 17 schemas and 15 operations
+into `openapi.yaml` with nothing serving them, and **T3 is what closes all four**. Verified rather
+than assumed: this task's five files were stashed and the three classes re-run at `fe305a88`, giving
+the identical four. Not the fd-limit shape either — `docs/specs/shanks-runner-details.md`'s failure
+prints hundreds of `Could not write XML test results` lines with *zero* assertion failures, and this
+run printed none of those and four assertions. Everything this task owns is green:
+`SchemaConventionTest` all six, and the whole tenancy, RLS and migration surface with it.
+
+
 **Files:**
 - Create: `backend/src/main/resources/db/migration/V10__staffing.sql`
-- Modify: `backend/src/test/java/com/tcms/schema/SchemaConventionTest.java` (the table-count assertion only, if it carries one)
+- Modify: `backend/src/test/java/com/tcms/tenancy/SchemaConventionTest.java` (the policy-count assertion, `95` → `100`) — the package is `tenancy`, not `schema`
 - Modify: `docs/specs/2026-07-30-tcms-erd.md`
 
 - [ ] **Step 1: Re-read the migration directory. Do not skip this.**
@@ -1738,7 +1816,7 @@ END $$;
 
 ```bash
 ~/bin/tcms-remote sync
-~/bin/tcms-remote backend ./gradlew test --tests 'com.tcms.schema.SchemaConventionTest'
+~/bin/tcms-remote backend ./gradlew test --tests 'com.tcms.tenancy.SchemaConventionTest'
 ```
 
 Expected: PASS. If it fails on a policy predicate, the failure text prints both strings — they must
@@ -1775,7 +1853,7 @@ results` and **zero** assertion failures is an fd limit, not a red suite — `ul
 
 ```bash
 git add backend/src/main/resources/db/migration/V10__staffing.sql \
-        backend/src/test/java/com/tcms/schema/SchemaConventionTest.java \
+        backend/src/test/java/com/tcms/tenancy/SchemaConventionTest.java \
         docs/specs/2026-07-30-tcms-erd.md
 git commit -m "feat(staffing): V10 — person_profile, skill, person_skill, allocation, absence"
 ```
