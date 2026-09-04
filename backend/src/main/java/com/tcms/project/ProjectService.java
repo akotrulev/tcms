@@ -431,6 +431,55 @@ public class ProjectService {
     }
 
     /**
+     * <strong>A read gated on a COMPANY-scope key</strong> — {@link #createGranted}'s read-only
+     * sibling, added for 017 M7 (D-l).
+     *
+     * <p>{@code createGranted} was the only company-scope gate here and it is a <em>write</em>, so a
+     * leaf module needing a company-scope read had the choice of misusing it — a read running in a
+     * read-write transaction, reading in the diff as a write, which is exactly what
+     * {@link #readGranted} exists to prevent one scope down — or importing
+     * {@code identity.PermissionEvaluator}, which would put a second answer to "may they" in a
+     * module whose package comment says it has none.
+     *
+     * <p><strong>There is no {@link GateResult.Unreachable} outcome</strong>, and it is
+     * {@code createGranted}'s missing-state argument from the other end: a company-wide question
+     * names no target, so there is nothing whose existence could be concealed and the only honest
+     * refusal is {@link GateResult.Denied}. The type stays {@link GateResult} anyway so the
+     * controller's switch is the same exhaustive shape as every other one, and so a later variant
+     * that <em>does</em> name a target has nowhere to quietly drop the 404 arm.
+     *
+     * @param permission a COMPANY-scope key, constant at the call site — see {@link #writeGranted}.
+     *                   Asking a PROJECT-scope key here is the unreachable row roles spec §43
+     *                   repaired for {@code company:read}, and it would answer false for everybody
+     */
+    @Transactional(readOnly = true)
+    public <T> GateResult<T> readInCompany(UUID userId, String permission, Supplier<T> read) {
+        if (!access.canDoInCompany(userId, permission)) {
+            return new GateResult.Denied<>();
+        }
+        return new GateResult.Allowed<>(read.get());
+    }
+
+    /**
+     * Does this caller hold a COMPANY-scope key? {@link #holds}' company-wide companion.
+     *
+     * <p>For the surfaces whose answer is <em>this key <strong>or</strong> something else</em> and
+     * therefore cannot be expressed as a gate around a read: somebody may always read their own
+     * staffing and record their own absence (017 D-h), so the question there is a boolean the
+     * caller combines with an identity check rather than a wrapper that refuses.
+     *
+     * <p>The two are not interchangeable and the difference is not a detail — see
+     * {@link RequiredPermission}. This one resolves the SYSTEM and COMPANY terms only, which is what
+     * makes a company-scope key mean the company rather than "somewhere".
+     *
+     * @param permission a COMPANY-scope key, constant at the call site as everywhere else here
+     */
+    @Transactional(readOnly = true)
+    public boolean holdsInCompany(UUID userId, String permission) {
+        return access.canDoInCompany(userId, permission);
+    }
+
+    /**
      * A permission and <strong>the scope it has to be held at</strong> — the two gate shapes this
      * class already implements separately, as one value a caller can compute.
      *

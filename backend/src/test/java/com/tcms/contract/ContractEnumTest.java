@@ -220,7 +220,14 @@ class ContractEnumTest {
             // mockups disagree, the log form wins, and this rule is what would fail if somebody
             // added the member to one side only.
             Map.entry("TimeSubjectType", List.of("com.tcms.time.TimeSubjectType")),
-            Map.entry("TimesheetState", List.of("com.tcms.time.TimesheetState")));
+            Map.entry("TimesheetState", List.of("com.tcms.time.TimesheetState")),
+            // 017 M7's one. HOLIDAY is a member because there is NO holiday calendar in this
+            // product (017 D-c): a public holiday is recorded as one person's absence, which is
+            // what actually zeroes capacity, and a company-wide holiday is therefore n rows. The
+            // kind changes nothing about the arithmetic — every member subtracts the same hours —
+            // so a fifth member added to one side only would be a chip nothing can render rather
+            // than a number that goes wrong, which is exactly the divergence this rule is for.
+            Map.entry("AbsenceKind", List.of("com.tcms.staffing.AbsenceKind")));
 
     /**
      * The contract enums with no server type at all, and what checks each instead.

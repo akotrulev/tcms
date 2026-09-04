@@ -924,7 +924,40 @@ class ContractConventionTest {
             Map.entry("TimesheetQueueEntry",
                     List.of(com.tcms.time.TimesheetQueueEntryView.class)),
             Map.entry("TimeRollup", List.of(com.tcms.time.TimeRollupView.class)),
-            Map.entry("EpicTimeRollup", List.of(com.tcms.time.EpicTimeRollupView.class)));
+            Map.entry("EpicTimeRollup", List.of(com.tcms.time.EpicTimeRollupView.class)),
+            // ---- 017 M7's staffing block ----
+            //
+            // FIVE entity/view splits, and every one of the entities carries more than the wire
+            // does — company_id, the audit columns and lock_version, none of which is on a view.
+            // The entities are CLASSES, so no name match proposes them here and the `…View` half of
+            // each pair is what this map names.
+            //
+            // Three shapes have no table behind them at all: PersonCapacity is one person's window
+            // assembled from three tables plus `time`'s approved hours (through TimeFacts),
+            // SelfCapacity is that reduced to the four figures a KPI tile shows, and
+            // ProjectStaffingPerson is the SAME person seen from a project-scope grant, which is
+            // why it names no other project (017 D-f). The last of those is the pairing worth
+            // reading twice: two records serve one concept at two scopes deliberately, and
+            // collapsing them would put a company-wide breakdown behind a per-project key.
+            Map.entry("PersonProfile", List.of(com.tcms.staffing.PersonProfileView.class)),
+            Map.entry("PersonProfileInput", List.of(com.tcms.staffing.PersonProfileInput.class)),
+            Map.entry("Skill", List.of(com.tcms.staffing.SkillView.class)),
+            Map.entry("SkillInput", List.of(com.tcms.staffing.SkillInput.class)),
+            Map.entry("PersonSkillsInput", List.of(com.tcms.staffing.PersonSkillsInput.class)),
+            Map.entry("Absence", List.of(com.tcms.staffing.AbsenceView.class)),
+            Map.entry("AbsenceInput", List.of(com.tcms.staffing.AbsenceInput.class)),
+            Map.entry("Allocation", List.of(com.tcms.staffing.AllocationView.class)),
+            Map.entry("AllocationInput", List.of(com.tcms.staffing.AllocationInput.class)),
+            Map.entry("AllocationPatch", List.of(com.tcms.staffing.AllocationPatch.class)),
+            Map.entry("AllocationSpan", List.of(com.tcms.staffing.AllocationSpanView.class)),
+            Map.entry("PersonCapacity", List.of(com.tcms.staffing.PersonCapacityView.class)),
+            Map.entry("StaffingCapacityView",
+                    List.of(com.tcms.staffing.StaffingCapacityView.class)),
+            Map.entry("SelfCapacity", List.of(com.tcms.staffing.SelfCapacityView.class)),
+            Map.entry("ProjectStaffingPerson",
+                    List.of(com.tcms.staffing.ProjectStaffingPersonView.class)),
+            Map.entry("ProjectStaffingView",
+                    List.of(com.tcms.staffing.ProjectStaffingView.class)));
 
     /**
      * The owners this file cannot name as class literals, because they are package-private.
@@ -1055,6 +1088,21 @@ class ContractConventionTest {
      * an edit rather than an argument.
      */
     private static final Map<String, String> HOMONYMS = Map.of(
+            // 017 M7's two, and they are the cheapest kind of entry this map takes: the collision
+            // is one English word, both records predate the staffing module by many slices, and
+            // neither ever reaches the wire. Reserving a block of display-key numbers IS an
+            // allocation, so renaming them would make them wrong about what they do.
+            "com.tcms.project.ProjectKeys.Allocation",
+            "a reserved block of DISPLAY-KEY NUMBERS — (prefix, firstValue, count) — which is what "
+                    + "allocating means to a sequence. 017's Allocation schema is a percentage of "
+                    + "one person's time on one project, and the two have no component in common",
+
+            "com.tcms.tenancy.DisplayKeys.Allocation",
+            "the same shape one module down, for the company-wide sequence rather than the "
+                    + "project's. The two key allocators are separate because the sequences are; "
+                    + "neither is the staffing module's Allocation and neither is renameable "
+                    + "without making it wrong about the thing it does",
+
             "com.tcms.tracker.imports.SourceProject",
             "what a PROVIDER's API handed back, not what this contract serves. The schema's server "
                     + "type is SourceProjectView, and the two are separate for the reason that "

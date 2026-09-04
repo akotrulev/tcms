@@ -36,6 +36,16 @@ import java.util.UUID;
  * <p>{@code ArchitectureRulesTest.noRecordOutsideApiRepeatsAnApiShape} holds it: a fourth copy,
  * under any name, in any module, fails the build. Measured before this record moved here — exactly
  * two production records had these components, and both are deleted.
+ *
+ * <p><strong>017 M7 is the first record the rule reported that is not a copy of this one.</strong>
+ * {@code staffing.SkillView} has the same two components and serves a different schema: the contract
+ * declares {@code Skill} and {@code TeamRef} separately, generates separate types, and fixes both
+ * sets of member names to {@code id} and {@code name} — so the rule's own "give it the field names
+ * of the concept it is" is not available, and importing this record would make a team's shape
+ * something the staffing module can change. It is recorded in
+ * {@code ArchitectureRulesTest.SHAPE_TWINS_BY_DECISION} with the argument, pinned in both
+ * directions, and the paragraph there says what a <em>third</em> twin would mean: that a minimal
+ * named reference is a shape the contract should compose rather than re-declare.
  */
 public record TeamRef(UUID id, String name) {
 }

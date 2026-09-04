@@ -20,6 +20,17 @@ import com.tcms.project.GateResult;
 import com.tcms.reporting.ReportJobRunner;
 import com.tcms.reporting.ReportJobService;
 import com.tcms.repository.TestCaseDetailView;
+import com.tcms.staffing.AbsenceInput;
+import com.tcms.staffing.AbsenceKind;
+import com.tcms.staffing.AbsenceView;
+import com.tcms.staffing.AllocationInput;
+import com.tcms.staffing.AllocationService;
+import com.tcms.staffing.PersonProfileInput;
+import com.tcms.staffing.PersonProfileView;
+import com.tcms.staffing.PersonSkillsInput;
+import com.tcms.staffing.ProfileService;
+import com.tcms.staffing.SkillInput;
+import com.tcms.staffing.SkillView;
 import com.tcms.tenancy.OutboxEvents;
 import com.tcms.tracker.IssueInput;
 import com.tcms.tracker.IssueService;
@@ -33,7 +44,11 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -63,6 +78,8 @@ public class DemoWorkspaceSeeder {
     private final NotificationChannelService channels;
     private final ApiTokenService apiTokens;
     private final RoleRepository roles;
+    private final ProfileService staffingProfiles;
+    private final AllocationService allocations;
     private final Clock clock;
 
     public DemoWorkspaceSeeder(
@@ -76,6 +93,8 @@ public class DemoWorkspaceSeeder {
             NotificationChannelService channels,
             ApiTokenService apiTokens,
             RoleRepository roles,
+            ProfileService staffingProfiles,
+            AllocationService allocations,
             Clock clock) {
 
         this.docPages = docPages;
@@ -88,6 +107,8 @@ public class DemoWorkspaceSeeder {
         this.channels = channels;
         this.apiTokens = apiTokens;
         this.roles = roles;
+        this.staffingProfiles = staffingProfiles;
+        this.allocations = allocations;
         this.clock = clock;
     }
 
@@ -103,6 +124,9 @@ public class DemoWorkspaceSeeder {
 
         seedDocumentation(cast, projectId, full, report, label);
         seedBoard(cast, projectId, full, report, label);
+        // Before the FULL gate on purpose: the thin company's one project is PARTIAL, and a demo
+        // where only the rich company has capacity figures cannot show that staffing is per company.
+        seedStaffing(cast, projectId, report, label);
 
         if (!full) {
             return;
@@ -323,6 +347,146 @@ public class DemoWorkspaceSeeder {
             }
         }
         report.line(label, created + " issues across the workflow");
+    }
+
+    /**
+     * Profiles, a skill vocabulary, allocations and one half-day absence.
+     *
+     * <p><strong>Without this, every capacity figure in the demo instance is an em dash</strong> —
+     * which is the correct rendering for a person nobody has profiled (016 D-j) and a useless
+     * demonstration of a module whose whole subject is hours. So the demo gives the cast contracted
+     * hours, so that the directory, the company staffing view, the timesheet's capacity tile and My
+     * Work's meter all have something to show.
+     *
+     * <p>Everything here is a find-or-create against what is already there, because
+     * {@code seed-demo-data} is a top-up rather than a reset and it runs once per project — so the
+     * profiles and the vocabulary are written on the first project and found on the rest.
+     *
+     * <p>The absence is <strong>half a day</strong>, deliberately: a whole day and a missing day
+     * render identically on a timeline, and {@code member.html}'s "29 Aug · half day" is the case
+     * that proves the fraction is real (017 D-d).
+     */
+    private void seedStaffing(
+            DemoCast cast, UUID projectId, DemoSeedReport report, String label) {
+
+        UUID admin = cast.adminId();
+        Map<String, UUID> vocabulary = ensureSkills(admin, report);
+        if (vocabulary.isEmpty()) {
+            report.note("no skills could be created, so no staffing profiles were seeded");
+            return;
+        }
+
+        // Contracted hours that are not all the same, so a reader can see that the percentage is of
+        // THEIR capacity: 50% of the part-timer's week is half the hours of 50% of the lead's.
+        profile(admin, cast.lead(), 40, "Test Lead", "Stockholm", 6, report);
+        profile(admin, cast.engineer(), 40, "Test Engineer", "Lisbon", 3, report);
+        profile(admin, cast.tester(), 20, "Test Engineer", "Osaka", 1, report);
+
+        skills(admin, cast.lead(), vocabulary, List.of("Test strategy", "Playwright", "Java"), report);
+        skills(admin, cast.engineer(), vocabulary, List.of("Playwright", "TypeScript"), report);
+        skills(admin, cast.tester(), vocabulary, List.of("Java", "Accessibility"), report);
+
+        LocalDate from = LocalDate.now(clock).withDayOfMonth(1);
+        LocalDate to = from.plusMonths(2).withDayOfMonth(28);
+
+        // The lead at 60 and the engineer at 50 on this project. Two projects in the rich company
+        // therefore put both of them over 100 on the overlapping days, which is the Over-100% panel
+        // having something in it — the one state that screen exists for.
+        allocate(admin, projectId, cast.lead(), 60, from, to, report);
+        allocate(admin, projectId, cast.engineer(), 50, from, to, report);
+
+        halfDayOff(admin, cast.engineer(), from.plusDays(9), report);
+        report.line(label, "staffing — three profiles, " + vocabulary.size()
+                + " skills, two allocations and a half day off");
+    }
+
+    /**
+     * The company's vocabulary, created once and read back by name.
+     *
+     * <p>Read back rather than assumed from the create's own answer: a second run answers
+     * {@code Conflict} for a name that is already there, and a {@code Conflict} carries no id (it is
+     * a refusal, not a lookup). Listing is what makes this idempotent without the seeder inventing a
+     * second find-or-create beside the one the service has.
+     */
+    private Map<String, UUID> ensureSkills(UUID admin, DemoSeedReport report) {
+        for (String name : List.of(
+                "Test strategy", "Playwright", "Java", "TypeScript", "Accessibility")) {
+            staffingProfiles.createSkill(admin, new SkillInput(name));
+        }
+        Map<String, UUID> byName = new LinkedHashMap<>();
+        if (staffingProfiles.listSkills(admin)
+                instanceof GateResult.Allowed<List<SkillView>> allowed) {
+            allowed.value().forEach(skill -> byName.put(skill.name(), skill.id()));
+        } else {
+            report.note("the skill vocabulary was unreadable, so no skills were assigned");
+        }
+        return byName;
+    }
+
+    private void profile(
+            UUID admin, UUID personId, int weeklyHours, String jobTitle, String location,
+            int yearsExperience, DemoSeedReport report) {
+
+        GateResult<ProfileService.Outcome<PersonProfileView>> gate = staffingProfiles.putProfile(
+                admin, personId,
+                new PersonProfileInput((double) weeklyHours, jobTitle, location,
+                        LocalDate.now(clock).minusYears(yearsExperience)));
+
+        if (!(gate instanceof GateResult.Allowed<ProfileService.Outcome<PersonProfileView>> allowed)
+                || !(allowed.value() instanceof ProfileService.Outcome.Written)) {
+            report.note("a staffing profile was refused for " + personId);
+        }
+    }
+
+    private void skills(
+            UUID admin, UUID personId, Map<String, UUID> vocabulary, List<String> names,
+            DemoSeedReport report) {
+
+        List<UUID> ids = new ArrayList<>();
+        names.stream().map(vocabulary::get).filter(Objects::nonNull).forEach(ids::add);
+        if (ids.isEmpty()) {
+            report.note("no known skills to assign to " + personId);
+            return;
+        }
+        staffingProfiles.putSkills(admin, personId, new PersonSkillsInput(ids));
+    }
+
+    /**
+     * One allocation, and a re-run's {@code Overlaps} is success rather than a refusal to report.
+     *
+     * <p>017 D-n refuses a second allocation of the same person to the same project over overlapping
+     * days, which is exactly what a second seed run asks for — so the conflict IS the idempotency
+     * here, and reporting it would fill the seed report with refusals that mean "already done".
+     */
+    private void allocate(
+            UUID admin, UUID projectId, UUID personId, int percent,
+            LocalDate from, LocalDate to, DemoSeedReport report) {
+
+        GateResult<AllocationService.Outcome> gate = allocations.create(admin, projectId,
+                new AllocationInput(personId, percent, from, to, null));
+
+        if (gate instanceof GateResult.Allowed<AllocationService.Outcome> allowed
+                && allowed.value() instanceof AllocationService.Outcome.Invalid invalid) {
+            report.note("an allocation was refused: " + invalid.errors());
+        } else if (!(gate instanceof GateResult.Allowed)) {
+            report.note("an allocation was refused on project " + projectId);
+        }
+    }
+
+    /** A half day off, written once — checked by reading, because an absence has no natural key. */
+    private void halfDayOff(UUID admin, UUID personId, LocalDate on, DemoSeedReport report) {
+        if (staffingProfiles.listAbsences(admin, personId, on, on)
+                instanceof GateResult.Allowed<List<AbsenceView>> allowed
+                && !allowed.value().isEmpty()) {
+            return;
+        }
+        GateResult<ProfileService.Outcome<AbsenceView>> gate = staffingProfiles.createAbsence(
+                admin, personId,
+                new AbsenceInput(on, on, AbsenceKind.LEAVE, 0.5, "Half day — dentist"));
+
+        if (!(gate instanceof GateResult.Allowed)) {
+            report.note("the demo absence was refused for " + personId);
+        }
     }
 
     /** The created issue's key, or null if the tracker refused it. */

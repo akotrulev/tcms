@@ -154,11 +154,23 @@ class ModuleStructureTest {
                         `issue_time_rollup` is what it writes instead. `TimeWritesNoIssueFactTest` \
                         asserts both halves over the source text, because a second writer of \
                         `issue_fact` compiles, passes every functional test, and produces two \
-                        silently disagreeing numbers.""")
+                        silently disagreeing numbers. \
+                        017 M7 adds `staffing`, and it inherits `time`'s constraint one module \
+                        further out: it may not import `time` either, so the hours behind \
+                        utilisation are read through `staffing.TimeFacts` — the FIFTH instance of \
+                        the one-file crossing, after `work.BoardFacts`, `execution.CaseFacts`, \
+                        `tracker.release.ReleaseFacts` and `time.IssueFacts`. What is new here is \
+                        the direction the module leans: it takes `identity` for names AND for the \
+                        company's membership list (017 D-k added `PeopleDirectory.membersOf`), and \
+                        `project` for BOTH gate shapes — the project one for `staffing:read` / \
+                        `staffing:allocate` and the company one for the three COMPANY keys, which \
+                        is why `ProjectService` grew `readInCompany` and `holdsInCompany` in the \
+                        same task. `StaffingReadsNoTimeEntryTest` asserts the crossing over source \
+                        text, because SQL is not a Java dependency and this rule cannot see it.""")
                 .containsExactly(
                         "api", "auth", "documentation", "execution", "identity", "integration",
-                        "project", "provisioning", "reporting", "repository", "storage", "tenancy",
-                        "time", "tracker", "work");
+                        "project", "provisioning", "reporting", "repository", "staffing", "storage",
+                        "tenancy", "time", "tracker", "work");
     }
 
     @Test

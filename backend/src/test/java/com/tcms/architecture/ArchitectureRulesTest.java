@@ -385,6 +385,41 @@ class ArchitectureRulesTest {
         rule.check(PRODUCTION);
     }
 
+    /**
+     * The records outside {@code api} that share an {@code api} record's shape and are <strong>not
+     * copies of it</strong> — the population, pinned rather than emptied.
+     *
+     * <p>{@link #UNEXERCISED_BY_DECISION}'s object, at the wire shape, and with the same
+     * both-directions property: a new twin fails the build, and so does deleting or reshaping one of
+     * these without deleting its entry. An argument here cannot outlive the code it is about.
+     *
+     * <p><strong>The rule below offers three resolutions and this is a fourth, so it costs a
+     * paragraph.</strong> Its message says: import {@code api}'s record, or "give it the field names
+     * of the concept it is". Both assume the two records are the same concept or that the names are
+     * free. Neither holds for the entry here — {@code openapi.yaml} declares {@code Skill} and
+     * {@code TeamRef} as two schemas, generates two TypeScript types, and names both members
+     * {@code id} and {@code name}; a record whose components do not match its schema's properties is
+     * a different build failure one file over
+     * ({@code ContractConventionTest.pairedSchemasAndRecordsNameTheSameMembers}). So the two rules
+     * would each demand the repair the other refuses, and the honest answer is to record that a
+     * minimal named reference has exactly two fields and that two unrelated concepts can both reduce
+     * to one.
+     *
+     * <p>What the rule is actually for is untouched by this: it exists so a shape the CONTRACT owns
+     * and more than one module serves does not get written a seventh time. A skill is served by one
+     * module and is not that shape. The bar for an entry here is therefore high and stated: the two
+     * must be different <em>schemas</em> in the contract, not two spellings of one.
+     */
+    private static final Map<String, String> SHAPE_TWINS_BY_DECISION = Map.of(
+            "com.tcms.staffing.SkillView",
+            "a skill and a team both reduce, on the wire, to an id and a name. The contract "
+                    + "declares Skill and TeamRef as separate schemas and generates separate types, "
+                    + "and the component names are fixed by those schemas — so this cannot be "
+                    + "renamed and must not import api.TeamRef, which would make a team's shape a "
+                    + "thing the staffing module can change. If a THIRD such twin appears, the "
+                    + "question to reopen is whether api should hold a named reference the "
+                    + "contract composes rather than three schemas that happen to agree");
+
     @Test
     @DisplayName("no record outside api repeats an api record's shape — the tally, computed")
     void noRecordOutsideApiRepeatsAnApiShape() {
@@ -433,14 +468,16 @@ class ArchitectureRulesTest {
             }
         }
 
-        assertThat(copies)
+        assertThat(copies.keySet())
                 .as("a record outside com.tcms.api has the same components as one inside it, which "
                         + "is the duplication api exists to end (§146, §147). The copy is free to "
                         + "drift from the contract on its own, and the compiler cannot see the two "
                         + "as related — import com.tcms.api's record instead, or, if this really is "
                         + "a different concept that happens to have the same fields, give it the "
-                        + "field names of the concept it is")
-                .isEmpty();
+                        + "field names of the concept it is. Where the contract fixes the names and "
+                        + "the two really are different schemas, SHAPE_TWINS_BY_DECISION is the "
+                        + "fourth answer and it costs a sentence somebody has to defend")
+                .containsExactlyInAnyOrderElementsOf(SHAPE_TWINS_BY_DECISION.keySet());
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.tcms.project;
 
 import com.tcms.api.UserRef;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -55,4 +56,29 @@ public interface PeopleDirectory {
      *         lookup a 500 in §38
      */
     Map<UUID, UserRef> resolve(UUID companyId, Collection<UUID> userIds);
+
+    /**
+     * Every present member of this company, in display-name order.
+     *
+     * <p>Added for {@code staffing}'s directory (017 D-k), which lists <em>everybody</em> —
+     * {@code directory.html}'s "3 of 11 people match" counts members, not people who happen to have
+     * a staffing profile, and most people have no profile at all. No existing port answered it:
+     * {@link #resolve} resolves ids the caller already has, and
+     * {@code identity.AdminDirectoryService.listUsers} gates on admin reach, which an Account
+     * Manager holding only {@code staffing:directory} does not have.
+     *
+     * <p>A {@code REMOVED} membership is left out, the same filter {@code OrgChartService.chartFor}
+     * applies and for the same reason: offboarding is one status update rather than a deletion, so
+     * the row is still there and the person is not.
+     *
+     * <p><strong>This is a naming read, not an access read.</strong> Whoever calls it has already
+     * been gated; it answers "who is here", never "may they" — {@link #resolve}'s rule, and this
+     * method is the easier one to misuse because a list of people looks like a list of people who
+     * may do something.
+     *
+     * @param companyId the active company, passed rather than read from the context for
+     *                  {@link #resolve}'s reason: the caller's scope and this lookup's scope are
+     *                  visibly the same one
+     */
+    List<UserRef> membersOf(UUID companyId);
 }

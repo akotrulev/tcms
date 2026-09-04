@@ -1879,6 +1879,85 @@ the controllers are one deliverable — a split leaving `Capacity` without a cal
 whose acceptance criteria nothing can check.
 **Depends on:** T2 (the tables), T1 (the wire shapes)
 
+> **Landed 2026-09-04, with seven corrections to what this block predicted.** The four failures the
+> prompt named as "the job" are closed and `./gradlew build` is green. **38 source files under
+> `com/tcms/staffing`**, not the 26 this block estimated — the difference is one record per schema
+> (16 of them) plus `CapacityReader` and `StaffingWindow`, which the block folded into the services.
+>
+> 1. **`allocation.percent` is `SMALLINT`, so the entity field is `short` and not `int`** — and this
+>    is the trap list's `citext` warning with a different column. `ddl-auto: validate` refuses to
+>    start with *"found [int2 (Types#SMALLINT)], but expecting [integer (Types#INTEGER)]"*, which
+>    appears as **every `@SpringBootTest` in the suite failing at once** (3317 of 3934 on the first
+>    full run) with the real message buried in a `SchemaManagementException` three causes down. The
+>    wire carries an integer and `Allocation`'s accessors widen, so the narrowing lives in the one
+>    place the column is described. A `columnDefinition = "smallint"` would have been the tempting
+>    fix and is a guess about whether Hibernate's name fallback matches Postgres' `int2`.
+> 2. **`project.PeopleDirectory` stopped being a functional interface**, and two existing tests were
+>    passing it as a lambda: `execution.PeopleResolutionNullKeyTest` and
+>    `repository.CaseOwnersNullKeyTest`. Both now use a named `EmptyDirectory` stub. **Neither method
+>    was given a `default` body** — a default `membersOf` returning `List.of()` would let an
+>    implementation silently answer *"nobody is in this company"*, which is the shape of every
+>    fail-open defect the tenancy layer exists to prevent.
+> 3. **There was a FIFTH architecture failure and it is a decision rather than a regression.**
+>    `staffing.SkillView(UUID id, String name)` has `api.TeamRef`'s exact component set, and
+>    `ArchitectureRulesTest.noRecordOutsideApiRepeatsAnApiShape` reported it. Its message offers
+>    three resolutions and **none of them is available here**: importing `TeamRef` would make a
+>    team's wire shape something this module can change, and "give it the field names of the concept
+>    it is" is refused by the *other* rule — `openapi.yaml` declares `Skill` and `TeamRef` as two
+>    schemas and fixes both members to `id` and `name`, so a rename fails
+>    `ContractConventionTest.pairedSchemasAndRecordsNameTheSameMembers`. The two rules would each
+>    demand the repair the other refuses. So a fourth answer was added in the house shape: a
+>    `SHAPE_TWINS_BY_DECISION` map, pinned in **both** directions, with the argument at the entry and
+>    a matching paragraph on `api.TeamRef` — whose javadoc had claimed since §175 that a copy "under
+>    any name, in any module, fails the build". The bar for a second entry is written down: the two
+>    must be different *schemas* in the contract, and a **third** twin means a minimal named
+>    reference is a shape the contract should compose rather than re-declare.
+> 4. **Two pre-existing records became homonyms of the new `Allocation` schema** —
+>    `project.ProjectKeys.Allocation` and `tenancy.DisplayKeys.Allocation`, both
+>    `(String prefix, long firstValue, int count)`, both *a reserved block of display-key numbers*.
+>    Neither reaches the wire and neither is renameable without making it wrong about what it does
+>    (reserving a block of numbers **is** an allocation), so both are `HOMONYMS` entries. This is the
+>    map's second firing since §175 emptied it, and it cost two sentences exactly as that entry's own
+>    paragraph predicted.
+> 5. **`ModuleStructureTest`'s module list and `ArchitectureRulesTest` both had to be edited**, which
+>    the prompt's "a fifth failure is a regression" line did not anticipate: the detected-module list
+>    is asserted `containsExactly`, so a new package under `com.tcms` reddens it by construction.
+>    That is the rule working — it exists so that whoever adds a module reads the
+>    `allowedDependencies` rule they are now subject to.
+> 6. **`CapacityReader.NOMINAL_WEEK` is the one place this module names 40 hours, and nothing derived
+>    from it reaches the wire.** An unprofiled person still has real allocations, and passing zero
+>    weekly hours would make every day's capacity zero — which `Capacity` correctly excludes from the
+>    peak (being booked on a day you are away is not over-allocation), so somebody unprofiled and
+>    allocated at 150% would have read as *not* over-allocated. That is a wrong answer where a null
+>    hours figure is the right one. So the percentages are computed against a nominal week and every
+>    hours figure for such a person is served as null, which is 016 D-j's refusal kept where it
+>    matters: on the wire. `OverAllocationTest.unprofiledPeopleStillRaiseTheFlag` pins both halves.
+> 7. **`POST /projects/{projectId}/allocations` honours no `Idempotency-Key`, and the shortfall is
+>    recorded at the method rather than closed.** `V10` gave `allocation` no
+>    `created_idempotency_key` column, so the contract's `200` replay arm is declared and
+>    unimplemented — `time.TimeEntryController`'s precedent, stated the same way. What limits the
+>    damage is D-n: a retry with the same range is refused as an overlap, so the duplicate a lost
+>    response can produce is only one whose dates differ from the first. The fix is a column and a
+>    lookup.
+>
+> **Three things this block asked for that landed differently and are worth knowing before T4:**
+>
+> - **`StaffingWindow` clamps a requested range to 366 days** rather than refusing one. `Capacity`
+>   walks a day at a time per person, so the cost of a read is *days × people*; only
+>   `GET /staffing/capacity/me` declares a `400`, so the other three have no honest way to refuse an
+>   enormous range and inventing one would be a response the generated types say cannot happen.
+> - **`totalPercent` on the project screen is the company-wide MEAN daily percentage**, matching
+>   `PersonCapacity.allocatedPercent`, while `overAllocated` is read off the **peak**. Two statistics
+>   on one row, deliberately: a mean is what a row label can carry and a peak is the only thing a
+>   flag can honestly be read from.
+> - **`utilisationPercent` is `0`, not null, for somebody who is allocated and has no approved
+>   hours.** Null is reserved for the person nobody has allocated — the denominator not existing, not
+>   the numerator being zero (D-i). `AbsenceZeroesCapacityTest.allocatedCapacityIsNetOfAbsence` pins
+>   it.
+>
+> **The prompt blocks below need no rewriting.** Every response field name T4, T5 and T6 quote is the
+> contract's and unchanged; the endpoints they name are the ones served.
+
 **Files:**
 - Create: `backend/src/main/java/com/tcms/staffing/` — `package-info.java`, `PersonProfile.java`,
   `Skill.java`, `PersonSkill.java`, `PersonSkillId.java`, `Allocation.java`, `Absence.java`,
@@ -1893,7 +1972,7 @@ whose acceptance criteria nothing can check.
   `OverAllocationTest.java`, `AbsenceZeroesCapacityTest.java`, `AllocationOverlapTest.java`,
   `DirectoryQueryTest.java`, `StaffingReadsNoTimeEntryTest.java`
 
-- [ ] **Step 1: Write the failing capacity test first**
+- [x] **Step 1: Write the failing capacity test first**
 
 `backend/src/test/java/com/tcms/staffing/CapacityTest.java`. Pure JUnit 5 + AssertJ, **no Spring
 context and no database** — `Capacity` is a function of three lists and a range, and the whole point
@@ -2011,7 +2090,7 @@ class CapacityTest {
 }
 ```
 
-- [ ] **Step 2: Run it, and watch it fail for the right reason**
+- [x] **Step 2: Run it, and watch it fail for the right reason**
 
 ```bash
 cd backend && ./gradlew test --tests 'com.tcms.staffing.CapacityTest'
@@ -2020,7 +2099,7 @@ cd backend && ./gradlew test --tests 'com.tcms.staffing.CapacityTest'
 Expected: FAIL, `cannot find symbol: class Capacity`. A failure naming anything else means the test
 file is wrong, not the absent code.
 
-- [ ] **Step 3: Write `Capacity`**
+- [x] **Step 3: Write `Capacity`**
 
 `backend/src/main/java/com/tcms/staffing/Capacity.java`. **Pure — no Spring, no repository, no
 `LocalDate.now()`.** Every date arrives as a parameter, which is the fifth of the untestable seams
@@ -2193,7 +2272,7 @@ final class Capacity {
 }
 ```
 
-- [ ] **Step 4: Run the capacity test to green**
+- [x] **Step 4: Run the capacity test to green**
 
 ```bash
 cd backend && ./gradlew test --tests 'com.tcms.staffing.CapacityTest'
@@ -2201,7 +2280,7 @@ cd backend && ./gradlew test --tests 'com.tcms.staffing.CapacityTest'
 
 Expected: 8 tests, PASS.
 
-- [ ] **Step 5: The module declaration**
+- [x] **Step 5: The module declaration**
 
 `backend/src/main/java/com/tcms/staffing/package-info.java`. Read `time/package-info.java` first —
 the two-rules-stated-first shape is the house pattern and the ArchUnit annotation is what enforces
@@ -2260,7 +2339,7 @@ the allowed list.
 package com.tcms.staffing;
 ```
 
-- [ ] **Step 6: The entities and repositories**
+- [x] **Step 6: The entities and repositories**
 
 Five entities mapping T2's tables, plain UUID foreign keys and no associations (the `identity`
 package comment's rule, followed by `project` and `time`). Five Spring Data interfaces, **each
@@ -2303,7 +2382,7 @@ public interface AllocationRepository extends JpaRepository<Allocation, UUID> {
 }
 ```
 
-- [ ] **Step 7: `TimeFacts` — the only file naming a `time` table**
+- [x] **Step 7: `TimeFacts` — the only file naming a `time` table**
 
 ```java
 package com.tcms.staffing;
@@ -2375,7 +2454,7 @@ class TimeFacts {
 }
 ```
 
-- [ ] **Step 8: The two foundation additions (D-k, D-l)**
+- [x] **Step 8: The two foundation additions (D-k, D-l)**
 
 `com/tcms/project/PeopleDirectory.java` — one method on the port:
 
@@ -2435,7 +2514,7 @@ class TimeFacts {
 `CompanyMembershipRepository.findByCompanyId`, filtering `status != REMOVED` — the same filter
 `OrgChartService.chartFor` applies, and for the same reason.
 
-- [ ] **Step 9: The three services, the two controllers, and the demo seed**
+- [x] **Step 9: The three services, the two controllers, and the demo seed**
 
 `StaffingService` (company reads — directory, capacity, utilisation), `AllocationService` (project
 reads and writes, with D-n's overlap refusal), `ProfileService` (profiles, skills, absences with
@@ -2447,7 +2526,7 @@ a city, an `experience_since`), two or three skills from a shared vocabulary, on
 and — for exactly one person — a half-day absence. **Without this every capacity figure in the demo
 reads as an em dash**, which is correct behaviour and a useless demonstration.
 
-- [ ] **Step 10: The four behaviour tests, against a real Postgres**
+- [x] **Step 10: The four behaviour tests, against a real Postgres**
 
 `OverAllocationTest` (50 + 51 across two projects ⇒ flag, peak 101), `AbsenceZeroesCapacityTest`
 (the same absence reduces the company view, the person read and `/staffing/capacity/me` — three
@@ -2473,7 +2552,7 @@ skill-less and the fully-booked).
     }
 ```
 
-- [ ] **Step 11: Gate and commit**
+- [x] **Step 11: Gate and commit**
 
 ```bash
 ~/bin/tcms-remote sync

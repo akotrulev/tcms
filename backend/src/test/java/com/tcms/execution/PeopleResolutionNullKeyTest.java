@@ -3,6 +3,9 @@ package com.tcms.execution;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
+import com.tcms.api.UserRef;
+import com.tcms.project.PeopleDirectory;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -44,10 +47,33 @@ class PeopleResolutionNullKeyTest {
     @Test
     @DisplayName("ExecutionPeople answers a null-tolerant map when there is nobody to resolve")
     void takesANullKey() {
-        var resolved = new ExecutionPeople(null, (companyId, userIds) -> Map.of())
+        var resolved = new ExecutionPeople(null, new EmptyDirectory())
                 .resolve(UUID.randomUUID(), List.of());
 
         assertThatCode(() -> resolved.get(null)).doesNotThrowAnyException();
         assertThat(resolved.get(null)).isNull();
+    }
+
+    /**
+     * A directory that resolves nobody.
+     *
+     * <p>A class rather than a lambda since 017 D-k gave {@code PeopleDirectory} a second method:
+     * {@code membersOf} is what the staffing directory lists people from, and it belongs on the
+     * port for the reason the port exists — {@code project} may not import {@code identity}. The
+     * interface is therefore no longer functional, and that is a deliberate consequence rather than
+     * a reason to give either method a {@code default} body: a default here would let an
+     * implementation silently answer "nobody is in this company".
+     */
+    private static final class EmptyDirectory implements PeopleDirectory {
+
+        @Override
+        public Map<UUID, UserRef> resolve(UUID companyId, Collection<UUID> userIds) {
+            return Map.of();
+        }
+
+        @Override
+        public List<UserRef> membersOf(UUID companyId) {
+            return List.of();
+        }
     }
 }
