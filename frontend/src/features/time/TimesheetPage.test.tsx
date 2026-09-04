@@ -3,8 +3,9 @@ import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { TimeEntry, TimesheetPeriod } from '../../api/types'
-import { aTimeEntry, aTimesheetPeriod } from '../../test/fixtures'
+import type { SelfCapacity, TimeEntry, TimesheetPeriod } from '../../api/types'
+import { aSelfCapacity, aTimeEntry, aTimesheetPeriod } from '../../test/fixtures'
+import { drivingAFailedRead } from '../../test/renderFailures'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { TimesheetPage } from './TimesheetPage'
@@ -16,16 +17,31 @@ import { TimesheetPage } from './TimesheetPage'
  * SUBMITTED fortnight renders no Add form and no row controls because the payload says `editable:
  * false`, and a REJECTED one renders both because it says `true`, which is the half a reader
  * expects to be the other way round. **The `Against` select removes the Issue field** rather than
- * disabling it, because the contract refuses an `issueKey` on a category entry. And **three KPI
- * tiles**, because the fourth is capacity and capacity is M7's (016 D-j).
+ * disabling it, because the contract refuses an `issueKey` on a category entry. And ~~**three KPI
+ * tiles**, because the fourth is capacity and capacity is M7's (016 D-j).~~ → **four**, since
+ * 2026-09-04 (plan 017): M7 landed the three tables the figure is derived from, and the tile's
+ * absent case is now a person with no `person_profile` row rather than a module with no table.
  *
  * The arms are anchored — `/^\/timesheets\/periods\/current/` cannot catch `/timesheets/periods`
  * one segment above it, and the two answer different shapes (an object and an array), so an
  * unanchored arm would serve a list where a period was expected.
+ *
+ * **The capacity arm is a THIRD endpoint, in a different module** (017 D-m). It is answered by every
+ * test rather than only by the two about the tile: an unanswered arm throws, `DataRegion` renders
+ * its failed state, and `renderFailures` would then fail every test in the file for a read none of
+ * them is about.
  */
 
-function mockReads(period: TimesheetPeriod, history: TimesheetPeriod[] = []) {
+function mockReads(
+  period: TimesheetPeriod,
+  history: TimesheetPeriod[] = [],
+  capacity: SelfCapacity | Error = aSelfCapacity(),
+) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
+    if (path.startsWith('/staffing/capacity/me')) {
+      if (capacity instanceof Error) throw capacity
+      return capacity
+    }
     if (path.startsWith('/timesheets/periods/current')) return period
     if (path.startsWith('/timesheets/periods')) return history
     throw new Error(`unmocked read: ${path}`)
@@ -74,16 +90,63 @@ describe('My timesheet', () => {
     vi.useRealTimers()
   })
 
-  it('ships three KPI tiles, because period capacity is M7’s and is not invented here', async () => {
-    mockReads(aTimesheetPeriod({ loggedHours: 21, entries: [aTimeEntry(ISSUE_ENTRY)] }))
+  it('ships four KPI tiles, and asks staffing for the period’s own window', async () => {
+    mockReads(
+      aTimesheetPeriod({
+        startsOn: '2026-09-01',
+        endsOn: '2026-09-15',
+        loggedHours: 21,
+        entries: [aTimeEntry(ISSUE_ENTRY)],
+      }),
+      [],
+      aSelfCapacity({ from: '2026-09-01', to: '2026-09-15', capacityHours: 64 }),
+    )
     renderPage()
 
     expect(await screen.findByTestId('Timesheet.Kpi.Logged')).toHaveTextContent('21.0h')
+    expect(await screen.findByTestId('Timesheet.Kpi.Capacity')).toHaveTextContent('64h')
     expect(screen.getByTestId('Timesheet.Kpi.Approved')).toBeInTheDocument()
     expect(screen.getByTestId('Timesheet.Kpi.Status')).toHaveTextContent('Open')
-    // The absence is the assertion. A fourth tile here would be a capacity figure this module has
-    // no table to compute from, contradicted by M7's real one the week after.
-    expect(screen.queryByText(/capacity/i)).toBeNull()
+
+    /*
+      The window is the LOADED PERIOD's, not a fortnight this screen derived. `periods.ts` is
+      navigation and labelling only (016 D-a), and both bounds are required on this operation, so a
+      re-derived range is not a wrong label — it is a different answer under the right one.
+    */
+    expect(vi.mocked(api.get).mock.calls.map((call) => call[0])).toContain(
+      '/staffing/capacity/me?from=2026-09-01&to=2026-09-15',
+    )
+  })
+
+  it('reads an em dash and “no profile recorded” for a person nobody has profiled', async () => {
+    mockReads(
+      aTimesheetPeriod({ loggedHours: 21 }),
+      [],
+      // The five nulls arrive together and `hasProfile` is what tells them from a failed read.
+      // `0h` here would claim somebody wrote down zero contracted hours; `40h` would be the
+      // invention 016 D-j refused.
+      aSelfCapacity({ hasProfile: false, capacityHours: null, absenceHours: null }),
+    )
+    renderPage()
+
+    const tile = await screen.findByTestId('Timesheet.Kpi.Capacity')
+    expect(tile).toHaveTextContent('—')
+    expect(tile).toHaveTextContent('no profile recorded')
+    expect(tile).not.toHaveTextContent('0h')
+  })
+
+  it('leaves the logged hours on screen when the capacity read fails', async () => {
+    // The subject IS a failed read: the capacity tile is a second endpoint in a different module
+    // (017 D-m), and a staffing outage must not blank a figure `time` served correctly.
+    drivingAFailedRead()
+    mockReads(aTimesheetPeriod({ loggedHours: 21 }), [], new Error('staffing is down'))
+    renderPage()
+
+    await screen.findByTestId('Timesheet.Kpi.Capacity.Region.Error')
+    expect(screen.getByTestId('Timesheet.Kpi.Logged')).toHaveTextContent('21.0h')
+    expect(screen.getByTestId('Timesheet.Kpi.Status')).toHaveTextContent('Open')
+    // Not the person-shaped sentence: the truth here is a fact about the network.
+    expect(screen.queryByText('no profile recorded')).toBeNull()
   })
 
   it('logs against an issue, a meeting and leave from the one form', async () => {

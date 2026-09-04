@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { useAnnounce } from '../../a11y/useAnnounce';
-import { useCurrentTimesheetPeriod, useMyWork } from '../../api/queries';
-import type { BoardCard } from '../../api/types';
+import { useCurrentTimesheetPeriod, useMyCapacity, useMyWork } from '../../api/queries';
+import type { BoardCard, TimesheetPeriod } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import {
@@ -14,7 +14,8 @@ import {
   TableHeaderCell,
   TableRow,
 } from '../../components/kit';
-import { Button } from '../../components/ui';
+import { Button, Skeleton } from '../../components/ui';
+import { NO_PROFILE, capacityLabel } from '../staffing/capacityCopy';
 import { cn } from '../../lib/cn';
 import { formatDate, formatHours, plural } from '../../lib/format';
 /*
@@ -90,11 +91,19 @@ function annotatable(card: BoardCard): card is Annotatable {
  *
  *   - **it is a period, not a week.** 016 D-a makes the timesheet fortnight semi-monthly and
  *     nothing configures it, so a panel headed "This week" would report a figure over a range the
- *     product does not have. It names its own dates instead.
- *   - **the `Capacity 32h` tile and the meter under it are absent** (016 D-j), not zero. Capacity
+ *     product does not have. It names its own dates instead. **This bullet is unchanged and still
+ *     correct** — the capacity below is asked for over the same period, never over a week.
+ *   - ~~**the `Capacity 32h` tile and the meter under it are absent** (016 D-j), not zero. Capacity
  *     is computed from `person_profile`, `allocation` and `absence` — all three are M7's tables and
  *     M7 has not started — and a figure this module invented is the two-contradictory-percentages
- *     failure CLAUDE.md records. A meter needs a denominator, so the meter goes with it.
+ *     failure CLAUDE.md records. A meter needs a denominator, so the meter goes with it.~~ →
+ *     **superseded 2026-09-04 (plan 017).** M7 landed those three tables (`V10`) and
+ *     `staffing.Capacity` derives the figure, so the denominator exists and the meter arrives with
+ *     it. The reasoning is kept because it was right about the state it refused to invent: a person
+ *     with no `person_profile` row still reads `—` and *no profile recorded*, and the meter is
+ *     absent for them rather than drawn against a made-up 40. The capacity read is `staffing`'s
+ *     (017 D-m) and has its **own** `DataRegion` inside this panel, so a staffing outage takes the
+ *     capacity figure and the meter and leaves the logged hours alone.
  *
  * **It is not behind `trackTime`**, and that is not an oversight: 016 D-g's switch is a *project's*
  * decision and a period spans projects (D-i), so no one project's switch can speak for a figure
@@ -456,13 +465,16 @@ function NoteCell({
 }
 
 /**
- * `my-work.html`'s "This week", as the fortnight the product actually keeps (016 D-a, D-j).
+ * `my-work.html`'s "This week", as the fortnight the product actually keeps (016 D-a).
  *
- * **Logged alone.** The figure is `TimesheetPeriod.loggedHours` — everything in the period,
- * whatever anybody has decided about it — and the label says so, because 016 D-d rules out a bare
- * "hours" and this one is deliberately not the approved figure: it is the person's own view of
- * their own fortnight, where what they have written down is the useful number and approval is
- * somebody else's step.
+ * **Logged and Capacity, with the meter under them** — `my-work.html`'s own `g2` row.
+ * ~~Logged alone (016 D-j).~~ → superseded 2026-09-04 (plan 017); the file header carries the
+ * reason the second figure was absent and why the absence ended.
+ *
+ * The logged figure is `TimesheetPeriod.loggedHours` — everything in the period, whatever anybody
+ * has decided about it — and the label says so, because 016 D-d rules out a bare "hours" and this
+ * one is deliberately not the approved figure: it is the person's own view of their own fortnight,
+ * where what they have written down is the useful number and approval is somebody else's step.
  *
  * Its own region, so a failed timesheet read empties this panel and leaves the two tables and the
  * notes exactly where they were. `useCurrentTimesheetPeriod` is a **write** — it creates the period
@@ -479,30 +491,145 @@ function ThisPeriodPanel() {
           testId={`${TEST_ID}.Period.Region`}
           state={{ ...period, refetch: () => void period.refetch() }}
         >
-          {(loaded) => (
-            <>
-              <span
-                data-testid={`${TEST_ID}.Period.Logged`}
-                className="block font-mono text-[26px] leading-[1.1] font-medium tracking-[-.02em] tabular-nums text-ink"
-              >
-                {formatHours(loaded.loggedHours)}
-              </span>
-              <span className="mt-1.5 block text-[12.5px] text-ink-2">Logged</span>
-              <span className="mt-[3px] block text-[11.5px] text-ink-4">
-                {formatPeriodRange(loaded.startsOn, loaded.endsOn, 'short')}
-              </span>
-              <RouterLink
-                to="/timesheets"
-                data-testid={`${TEST_ID}.Period.Open`}
-                className="mt-3 inline-block text-[12.5px] text-steel no-underline hover:underline"
-              >
-                Open my timesheet →
-              </RouterLink>
-            </>
-          )}
+          {(loaded) => <PeriodFigures period={loaded} />}
         </DataRegion>
       </div>
     </Panel>
+  );
+}
+
+/**
+ * The two figures and the meter — a **second** read, over the loaded period's own bounds.
+ *
+ * <h2>The window is the period, and it comes off the payload</h2>
+ *
+ * `period.startsOn` / `period.endsOn`, never `periods.ts`' arithmetic: that module is navigation
+ * and labelling only (016 D-a), and a second endpoint asked over a client-derived fortnight could
+ * be answered for a range this panel is not labelled with. `GET /staffing/capacity/me` makes both
+ * bounds **required**, unlike every other window in that module, so there is no defaulted answer to
+ * fall back on if one were dropped.
+ *
+ * <h2>The capacity read is its own region, nested inside this one</h2>
+ *
+ * Capacity is `staffing`'s and the hours are `time`'s (017 D-m). One region over both would let a
+ * staffing outage blank the logged hours — a number a different module served correctly — so the
+ * failure is scoped to the half that could not be answered.
+ *
+ * The **meter renders off the same loaded payload and is absent without it**: no capacity figure
+ * means no denominator, which is a bar with nothing to be a fraction of. That covers all three
+ * absent cases at once — the read failed, the read is still in flight, or it answered for somebody
+ * with no `person_profile` row — and none of them may be drawn as a bar against a made-up 40.
+ */
+function PeriodFigures({ period }: { period: TimesheetPeriod }) {
+  const capacity = useMyCapacity(period.startsOn, period.endsOn);
+  const hours = capacity.data?.hasProfile === true ? capacity.data.capacityHours : null;
+
+  return (
+    <>
+      <div className="grid gap-3.5 sm:grid-cols-2">
+        <PeriodFigure
+          testId={`${TEST_ID}.Period.Logged`}
+          value={formatHours(period.loggedHours)}
+          label="Logged"
+        />
+        <DataRegion
+          testId={`${TEST_ID}.Period.Capacity.Region`}
+          state={{ ...capacity, refetch: () => void capacity.refetch() }}
+          skeleton={<Skeleton className="h-[46px]" />}
+        >
+          {(loaded) => (
+            <PeriodFigure
+              testId={`${TEST_ID}.Period.Capacity`}
+              value={capacityLabel(loaded.capacityHours, loaded.hasProfile)}
+              label="Capacity"
+              detail={loaded.hasProfile ? undefined : NO_PROFILE}
+            />
+          )}
+        </DataRegion>
+      </div>
+
+      {hours !== null && hours > 0 && (
+        <PeriodMeter logged={period.loggedHours} capacity={hours} />
+      )}
+
+      <span className="mt-3 block text-[11.5px] text-ink-4">
+        {formatPeriodRange(period.startsOn, period.endsOn, 'short')}
+      </span>
+      <RouterLink
+        to="/timesheets"
+        data-testid={`${TEST_ID}.Period.Open`}
+        className="mt-3 inline-block text-[12.5px] text-steel no-underline hover:underline"
+      >
+        Open my timesheet →
+      </RouterLink>
+    </>
+  );
+}
+
+/** One of the panel's two figures. The kit's `Tile` is a `<button>` and neither of these has rows. */
+function PeriodFigure({
+  testId,
+  value,
+  label,
+  detail,
+}: {
+  testId: string;
+  value: string;
+  label: string;
+  detail?: string;
+}) {
+  return (
+    <div data-testid={testId}>
+      <span className="block font-mono text-[26px] leading-[1.1] font-medium tracking-[-.02em] tabular-nums text-ink">
+        {value}
+      </span>
+      <span className="mt-1.5 block text-[12.5px] text-ink-2">{label}</span>
+      {detail && <span className="mt-[3px] block text-[11.5px] text-ink-4">{detail}</span>}
+    </div>
+  );
+}
+
+/**
+ * `my-work.html`'s `meter tall` — logged against capacity, clamped, with a tone above it.
+ *
+ * **Clamped at 100% and re-toned rather than overflowing.** A bar drawn at 140% either runs out of
+ * its track or silently rescales the one beside it; the honest rendering of "you have logged more
+ * than your contracted hours" is a full bar in the over tone plus the percentage said in words
+ * next to it, which is the number a reader would act on anyway.
+ *
+ * `aria-hidden` on the track, because the two figures above it and the caption beside it already
+ * say everything the bar does — a `progressbar` role here would announce a third reading of the
+ * same fact.
+ */
+function PeriodMeter({ logged, capacity }: { logged: number; capacity: number }) {
+  const percent = Math.round((logged / capacity) * 100);
+  const over = percent > 100;
+
+  return (
+    <div className="mt-3" data-testid={`${TEST_ID}.Period.Meter`}>
+      {/* `.meter.tall` from `assets/tcms-mock.css`, on the app's own tokens: 9px, `--color-overlay-3`
+          as the track (`wash-3` here) and `.done` / `.risk` as the two fills. */}
+      <span aria-hidden className="flex h-[9px] overflow-hidden rounded-full bg-wash-3">
+        <span
+          className="block h-full"
+          style={{
+            width: `${Math.min(percent, 100)}%`,
+            backgroundColor: over ? 'var(--color-danger)' : 'var(--color-success)',
+          }}
+        />
+      </span>
+      <span
+        className={cn(
+          'mt-1.5 block text-[11.5px]',
+          over ? 'text-[color:var(--color-danger)]' : 'text-ink-4',
+        )}
+        data-testid={`${TEST_ID}.Period.Meter.Caption`}
+      >
+        {over ?
+          `${percent}% of your capacity — more than your contracted hours`
+        : `${percent}% of your capacity`}
+      </span>
+    </div>
   );
 }
 

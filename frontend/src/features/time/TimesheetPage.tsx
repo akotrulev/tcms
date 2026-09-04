@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
+import type { UseQueryResult } from '@tanstack/react-query';
 import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 import {
@@ -6,15 +7,17 @@ import {
   useCurrentTimesheetPeriod,
   useDeleteTimeEntry,
   useLogTime,
+  useMyCapacity,
   useSubmitTimesheet,
   useTimesheetPeriods,
 } from '../../api/queries';
-import type { TimeEntry, TimeEntryInput, TimesheetPeriod } from '../../api/types';
+import type { SelfCapacity, TimeEntry, TimeEntryInput, TimesheetPeriod } from '../../api/types';
 import { DataRegion, GridSkeleton } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { Badge, Banner, TableFoot } from '../../components/kit';
-import { Button } from '../../components/ui';
+import { Button, Skeleton } from '../../components/ui';
+import { NO_PROFILE, capacityLabel } from '../staffing/capacityCopy';
 import { plural } from '../../lib/format';
 import { timesheetStateLabels, timesheetStateTones } from '../../lib/labels';
 import { EntryForm } from './EntryForm';
@@ -25,13 +28,33 @@ import { formatPeriodRange, nextPeriod, periodContaining, previousPeriod, todayI
  * `timesheets.html` — one person's own fortnight, and the only screen in the product that creates
  * a time entry.
  *
- * <h2>Three KPI tiles, not four, and the fourth is absent rather than invented (016 D-j)</h2>
+ * <h2>~~Three KPI tiles, not four, and the fourth is absent rather than invented (016 D-j)~~ →
+ * superseded 2026-09-04 (plan 017). Four tiles, and the fourth is a figure that now exists</h2>
  *
- * The mockup shows a `Period capacity 64h` tile. Capacity is computed from `person_profile`,
+ * ~~The mockup shows a `Period capacity 64h` tile. Capacity is computed from `person_profile`,
  * `allocation` and `absence` — all three are M7's tables and M7 has not started — so there is no
  * figure to put there that this module would not be making up. A capacity number invented here is
  * the "two contradictory percentages on one screen" failure CLAUDE.md records, and it would be
- * contradicted by M7's real one the week after. It is therefore missing, and stays missing.
+ * contradicted by M7's real one the week after. It is therefore missing, and stays missing.~~
+ *
+ * The old reasoning is kept rather than deleted because it was right, and because what changed is
+ * its **premise** and not its argument: M7 landed those three tables on 2026-09-04 (`V10`, plan
+ * 017), and `staffing.Capacity` derives the figure from them on every read. So nothing here is
+ * invented — and D-j's actual refusal survives in the one state that would otherwise be a `40h`
+ * somebody made up: where the caller has no `person_profile` row the tile reads `—` and *no
+ * profile recorded*, never `0h` and never a default week.
+ *
+ * <h2>The capacity figure is a SECOND read, and it is `staffing`'s (017 D-m)</h2>
+ *
+ * `TimesheetPeriod` cannot carry `capacityHours`, because `time` cannot compute it — capacity comes
+ * from `person_profile`, `allocation` and `absence`, none of which this module owns. So the screen
+ * makes two reads, and the second is its **own** `DataRegion` inside the tile: a staffing outage
+ * empties that one tile and leaves the logged hours, which are this module's and were fine, exactly
+ * where they were.
+ *
+ * The window it asks for is **this period's own `startsOn` / `endsOn`, off the loaded payload** —
+ * `periods.ts` is for navigation and labelling only (016 D-a), and re-deriving a fortnight here to
+ * hand to a second endpoint is the thing that file's header forbids.
  *
  * <h2>The screen never opens a period, because the read creates one</h2>
  *
@@ -275,11 +298,12 @@ export function TimesheetPage() {
 }
 
 /**
- * Logged · Approved · Status. **Three, and the fourth is D-j's absence** — see the file header.
+ * Logged · Period capacity · Approved · Status. ~~**Three, and the fourth is D-j's absence.**~~ →
+ * superseded 2026-09-04 (plan 017): **four**, in the order `timesheets.html` draws them.
  *
  * `Tile` from the kit is deliberately not used, for `ReadinessTiles`' reason: it is a `<button>`
- * that navigates to its rows, and none of these three has rows to navigate to. The entries are the
- * table directly below, and a status is not a list.
+ * that navigates to its rows, and none of these four has rows to navigate to. The entries are the
+ * table directly below, a capacity is a computation, and a status is not a list.
  */
 function Kpis({
   period,
@@ -288,14 +312,26 @@ function Kpis({
   period: TimesheetPeriod;
   previous: TimesheetPeriod | null;
 }) {
+  /*
+    The period's OWN bounds, off the loaded payload — not `periodContaining(on)`. `periods.ts` is
+    navigation and labelling only (016 D-a): the server decides where a fortnight starts, and a
+    second read asked over a client-derived range could be answered for a window the tile beside it
+    is not labelled with.
+
+    The hook is here rather than in the page body because this is where the loaded period is, and
+    `Kpis` renders only inside the outer region's loaded branch.
+  */
+  const capacity = useMyCapacity(period.startsOn, period.endsOn);
+
   return (
-    <div className="mb-4 grid gap-3 md:grid-cols-3">
+    <div className="mb-4 grid gap-3 md:grid-cols-4">
       <KpiTile
         testId={`${TEST_ID}.Kpi.Logged`}
         label="Logged this period"
         value={`${period.loggedHours.toFixed(1)}h`}
         detail="everything in it, whatever anybody has decided about it"
       />
+      <CapacityTile state={capacity} />
       {/*
         The PREVIOUS period's approved hours, which is what the mockup's tile counts and says. This
         one's `approvedHours` is zero until somebody approves it (D-d), so a tile reading "Approved"
@@ -322,6 +358,49 @@ function Kpis({
         detail={STATUS_DETAIL[period.state]}
       />
     </div>
+  );
+}
+
+/**
+ * `timesheets.html`'s `Period capacity 64h` — the tile 016 D-j left out, in its own region.
+ *
+ * <h2>Its own `DataRegion`, and that is the whole point of it being a component</h2>
+ *
+ * The figure comes from `staffing`, the three beside it from `time` (017 D-m). One region over the
+ * four would let a staffing outage blank `Logged this period` — a number a different module served
+ * correctly — so the failure is scoped to the tile that could not be answered, and the other three
+ * stay on screen. `DataRegion` also owns the *third* state `capacityCopy.ts` names: a read that did
+ * not answer is a fact about the network, and printing *no profile recorded* over it would be this
+ * screen telling the reader a fact about a person instead.
+ *
+ * <h2>`—` is not `0h`, and it is not `40h`</h2>
+ *
+ * {@link capacityLabel} consults `hasProfile` as well as the hours, because the server sends the
+ * two nulls together and either alone is enough to know there is no number. A person nobody has
+ * profiled has no contracted hours on record — {@link NO_PROFILE} is the sentence for that, spelled
+ * once in the shared layer so this tile, My Work's meter, the timeline, the directory card and the
+ * person page cannot end up with five wordings of the same absence.
+ */
+function CapacityTile({ state }: { state: UseQueryResult<SelfCapacity> }) {
+  return (
+    <DataRegion
+      testId={`${TEST_ID}.Kpi.Capacity.Region`}
+      state={{ ...state, refetch: () => void state.refetch() }}
+      skeleton={<Skeleton className="h-[84px] rounded-[8px]" />}
+    >
+      {(loaded) => (
+        <KpiTile
+          testId={`${TEST_ID}.Kpi.Capacity`}
+          label="Period capacity"
+          value={capacityLabel(loaded.capacityHours, loaded.hasProfile)}
+          detail={
+            loaded.hasProfile
+              ? 'contracted hours over this period, net of absence'
+              : NO_PROFILE
+          }
+        />
+      )}
+    </DataRegion>
   );
 }
 

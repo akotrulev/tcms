@@ -2,8 +2,8 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { BoardCard } from '../../api/types'
-import { aTimesheetPeriod } from '../../test/fixtures'
+import type { BoardCard, SelfCapacity } from '../../api/types'
+import { aSelfCapacity, aTimesheetPeriod } from '../../test/fixtures'
 import { createTestQueryClient } from '../../test/queryClient'
 import { TestProviders } from '../../test/TestProviders'
 import { Board } from './BoardPage'
@@ -75,14 +75,29 @@ const card = (partial: Partial<BoardCard> & Pick<BoardCard, 'id' | 'title'>): Bo
  * Records every **board** path requested, so a test can assert what was actually asked of the
  * server.
  *
- * The timesheet arm is answered and deliberately **not** recorded: 016 T5 put a "This period" panel
- * on the rail, and the assertion below is about the board — that it is asked for once, with `mine`
- * and no project. Pushing an unrelated screen's read into that list would make the assertion about
- * the whole page instead of about the one property it exists to pin.
+ * The timesheet and staffing arms are answered and deliberately **not** recorded: 016 T5 put a
+ * "This period" panel on the rail and 017 T6 gave it its capacity half, and the assertion below is
+ * about the board — that it is asked for once, with `mine` and no project. Pushing another screen's
+ * reads into that list would make the assertion about the whole page instead of about the one
+ * property it exists to pin.
+ *
+ * The staffing arm is answered in **every** test rather than only in the panel's own: the default
+ * branch returns `items`, so an unanswered capacity read would hand a `BoardCard[]` to a region
+ * expecting a `SelfCapacity` — a drifted body, which trips the region's boundary and fails every
+ * test in the file through `renderFailures` for a read none of them is about.
  */
-function mockBoard(items: BoardCard[], paths: string[] = [], period = aTimesheetPeriod()) {
+function mockBoard(
+  items: BoardCard[],
+  paths: string[] = [],
+  period = aTimesheetPeriod(),
+  capacity: SelfCapacity | Error = aSelfCapacity(),
+) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/timesheets/periods/current')) return period
+    if (path.startsWith('/staffing/capacity/me')) {
+      if (capacity instanceof Error) throw capacity
+      return capacity
+    }
     paths.push(path)
     return items
   }) as unknown as typeof api.get)
@@ -430,32 +445,80 @@ describe('The project board keeps its columns', () => {
  *
  * 1. **It is a period, not a week** (016 D-a). The timesheet fortnight is semi-monthly and nothing
  *    configures it, so a panel headed "This week" would report a figure over a range the product
- *    does not have.
- * 2. **There is no Capacity tile and no meter** (016 D-j). Capacity needs `person_profile`,
+ *    does not have. **Unchanged by 017**, and the capacity beside it is asked for over that same
+ *    period — the assertion on the requested path is what pins it.
+ * 2. ~~**There is no Capacity tile and no meter** (016 D-j). Capacity needs `person_profile`,
  *    `allocation` and `absence`, all three M7's, and a figure this module invented is the
  *    two-contradictory-percentages failure. Absent, not zero — and the absence is what is asserted,
- *    because a `Capacity 0h` tile is the exact thing a well-meaning port adds back.
+ *    because a `Capacity 0h` tile is the exact thing a well-meaning port adds back.~~ →
+ *    **superseded 2026-09-04 (plan 017).** M7 landed all three tables, so the figure exists and the
+ *    meter has its denominator. What survives of D-j is the state it refused to invent, and it is
+ *    still asserted: a person with no `person_profile` row reads `—` and *no profile recorded*, and
+ *    **the meter is absent for them** rather than drawn against a made-up 40.
+ * 3. **The capacity read is its own region** (017 D-m). A staffing outage empties that figure and
+ *    the meter and leaves the logged hours, which are a different module's, on screen.
  */
-describe('This period (016 M6)', () => {
-  it('shows the logged hours for the fortnight, over its own dates', async () => {
+describe('This period (016 M6, completed by 017 M7)', () => {
+  it('shows Logged beside Capacity, with the meter under them, over the period’s own dates', async () => {
     mockBoard(
       [card({ id: 'OLB-1', title: 'Anything' })],
       [],
       aTimesheetPeriod({ loggedHours: 21, startsOn: '2026-09-01', endsOn: '2026-09-15' }),
+      aSelfCapacity({ from: '2026-09-01', to: '2026-09-15', capacityHours: 32 }),
     )
     renderPage()
 
     expect(await screen.findByTestId('MyWork.Period.Logged')).toHaveTextContent('21h')
+    expect(await screen.findByTestId('MyWork.Period.Capacity')).toHaveTextContent('32h')
+    expect(screen.getByTestId('MyWork.Period.Meter.Caption')).toHaveTextContent('66% of your capacity')
     expect(screen.getByTestId('MyWork.Period.Open')).toHaveAttribute('href', '/timesheets')
     // The label is the range, not "this week" — the two are different quantities.
     expect(screen.getByTestId('MyWork.Period')).toHaveTextContent('This period')
+
+    /*
+      Asked over the PERIOD, off the loaded payload. `periods.ts` owns the fortnight arithmetic for
+      navigation and labelling only (016 D-a), and both bounds are required on this operation, so a
+      re-derived week here would be a different answer under the same heading.
+    */
+    expect(vi.mocked(api.get).mock.calls.map((call) => call[0])).toContain(
+      '/staffing/capacity/me?from=2026-09-01&to=2026-09-15',
+    )
   })
 
-  it('has no Capacity figure and no meter, because M7 owns both (D-j)', async () => {
-    mockBoard([card({ id: 'OLB-1', title: 'Anything' })], [], aTimesheetPeriod({ loggedHours: 21 }))
+  it('reads an em dash with no meter for a person nobody has profiled', async () => {
+    mockBoard(
+      [card({ id: 'OLB-1', title: 'Anything' })],
+      [],
+      aTimesheetPeriod({ loggedHours: 21 }),
+      aSelfCapacity({ hasProfile: false, capacityHours: null, absenceHours: null }),
+    )
     renderPage()
 
-    await screen.findByTestId('MyWork.Period.Logged')
-    expect(screen.queryByText(/capacity/i)).toBeNull()
+    const capacity = await screen.findByTestId('MyWork.Period.Capacity')
+    expect(capacity).toHaveTextContent('—')
+    expect(capacity).toHaveTextContent('no profile recorded')
+    // The meter is the assertion. A bar needs a denominator, and there is none — drawing one
+    // against a defaulted 40 is the exact figure 016 D-j refused to invent.
+    expect(screen.queryByTestId('MyWork.Period.Meter')).toBeNull()
+    expect(screen.getByTestId('MyWork.Period.Logged')).toHaveTextContent('21h')
+  })
+
+  it('keeps the logged hours when the capacity read fails, and draws no meter', async () => {
+    // The subject IS a failed read: capacity is `staffing`'s and the hours are `time`'s (017 D-m),
+    // and one region over both would let one module's outage blank the other's number.
+    drivingAFailedRead()
+    mockBoard(
+      [card({ id: 'OLB-1', title: 'Anything' })],
+      [],
+      aTimesheetPeriod({ loggedHours: 21 }),
+      new Error('staffing is down'),
+    )
+    renderPage()
+
+    await screen.findByTestId('MyWork.Period.Capacity.Region.Error')
+    expect(screen.getByTestId('MyWork.Period.Logged')).toHaveTextContent('21h')
+    expect(screen.queryByTestId('MyWork.Period.Meter')).toBeNull()
+    // Not the person-shaped sentence: what failed is the network, not somebody's profile.
+    expect(screen.queryByText('no profile recorded')).toBeNull()
   })
 })

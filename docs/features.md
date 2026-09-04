@@ -410,11 +410,14 @@ Logging hours against work, and having somebody sign for them. Landed 2026-09-04
 
 **What is deliberately absent, with the module that lands it:**
 
-- **Capacity.** `timesheets.html` shows a `Period capacity 64h` tile and `my-work.html` a
+- ~~**Capacity.** `timesheets.html` shows a `Period capacity 64h` tile and `my-work.html` a
   `Capacity 32h` figure beside Logged. Both need person profiles, allocations and absences, which
   are M7's tables. The tile row ships with three tiles rather than four and My Work's panel ships
   with Logged alone and no meter, because a capacity figure this module would have to invent is
-  worse than a missing one
+  worse than a missing one~~ → **landed 2026-09-04 with Staffing (plan 017).** The timesheet shows
+  four tiles and My Work shows Capacity beside Logged with the meter under it. What the old
+  reasoning got right is still true and still visible: a person with no staffing profile reads `—`
+  and *no profile recorded*, never `0h` and never a defaulted week
 - **Budget and burn.** `settings-general.html`'s Budget row reads `600h · Edit in Billing`; there is
   no hours ceiling, no rate and no Billing screen. M8's
 - **Approve-all and Remind on the approvals queue.** There is no batch operation on the contract for
@@ -423,6 +426,64 @@ Logging hours against work, and having somebody sign for them. Landed 2026-09-04
 - **A waiting-count badge on the rail.** The count needs a read that refuses anybody without
   approval rights on a project, and there is no company-wide "where may I approve" question to ask
   first. The count is on the approvals screen's own subtitle instead
+
+## Staffing
+
+Who is on what, at what percentage, and who is free. Landed 2026-09-04 (plan 017, M7).
+
+**Four screens, and two of them answer different questions for different people:**
+
+- **`/staffing` — the company's capacity**, one bar per person per project over a date window you
+  pick, plus the people over 100%, who has capacity left, and utilisation. Behind
+  `staffing:directory`, which Instance Admin, Company Admin, Account Manager and Finance hold
+- **`/directory` — the skills directory.** Filter by skill and by a *free from* date, both held in
+  the URL so the answer is shareable, and read "3 of 11 people match" against the whole company
+  rather than against the filtered list. Same permission
+- **`/projects/:projectId/staffing` — this project's people.** Allocate somebody at a percentage
+  over a range, change it, remove it. Behind `staffing:read` on that project, with the writes behind
+  `staffing:allocate` — which is what a Project Manager holds, and they hold neither company key
+- **`/directory/:userId` — one person**, carrying their Profile, Skills and Absence panels. Reached
+  from the directory's `Profile` button, and open to that person about themselves whether or not
+  they hold `staffing:directory`. **There is no member page under Teams** — `member.html` draws
+  these three panels on a screen this product does not have, so they live on the directory's own
+  detail view rather than having Staffing port another module's screen
+
+**What the screens do, and what they deliberately do not:**
+
+- **A profile is contracted weekly hours, a job title, a location and the date the person's
+  experience started.** The directory shows "6 years"; what is stored is the date, so the figure is
+  right every year rather than on the day somebody typed it
+- **Capacity is computed on every read and stored nowhere.** A working day is Monday to Friday,
+  daily capacity is the weekly hours over five, and there is no public-holiday calendar: a holiday
+  is recorded as an absence, which is per person and is already the thing that zeroes capacity
+- **An allocation is a percentage over a date range, against one project.** A person allocated to
+  two projects over the same days is the ordinary case; **the same person twice on the same project
+  over overlapping days is refused** with the conflicting range named, rather than silently merged
+- **Over-allocation is flagged, never blocked.** The flag fires at 101% and above, and it is the
+  **peak day** rather than a month's sum — somebody at 100% for the first half of a month and 100%
+  for the second is not over-allocated, though a monthly total would call them 200%. Nothing stops
+  you allocating over 100%; the product's job here is to say so
+- **The project screen names no other project.** It shows each person's company-wide total and the
+  flag — enough to know not to add to somebody already at 130% — and not what the other 80% is.
+  A Project Manager's grant is on their own projects, and listing the rest by name would disclose
+  projects they cannot open. The breakdown is on the company view, under the company permission
+- **An absence zeroes capacity everywhere it is shown** — the company view, the directory, the
+  timesheet's capacity tile and My Work's meter, because all four read the same computation. It
+  carries a fraction of a day, so a half day is a half day and not a whole one
+- **Recording your own absence needs no permission at all.** `staffing:absence` is what it costs to
+  record somebody *else's*. A product where telling it you are away on Thursday was an administrative
+  act would be a product where nobody did, which would make every capacity figure here a lie by
+  omission. Contracted hours and skills are the opposite — `staffing:profile` even on your own row,
+  because they are what the whole company's figures are denominated over
+- **Utilisation is approved hours ÷ allocated capacity, and the screen says so.** Approved rather
+  than logged: hours nobody has accepted are not yet a fact about the money, which is why Finance
+  holds the key that shows this. A person nobody has allocated reads *not allocated* rather than
+  `0%` — those are different things, and only one of them is somebody being idle
+- **A person with no profile reads `—`, not `0h` and not a default week.** Nobody has recorded their
+  contracted hours; that is a real state with something to go and do about it, and inventing 40 for
+  it would put two contradictory numbers on the same screen
+- **Also on the command line and over MCP** — the directory, one project's allocations, allocating
+  somebody, and recording absence. Maintaining a profile or a skill set is deliberately screen-only
 
 ## Teams and People
 
