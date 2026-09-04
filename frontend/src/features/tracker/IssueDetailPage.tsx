@@ -1,19 +1,26 @@
 import { useEffect } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import { useAnnounce } from '../../a11y/useAnnounce';
-import { useIssue, useProjectWorkflow, useSetIssueWatch } from '../../api/queries';
+import {
+  useIssue,
+  useIssueTimeRollup,
+  useProjectSettings,
+  useProjectWorkflow,
+  useSetIssueWatch,
+} from '../../api/queries';
 import { useCurrentUserId } from '../../auth/useAuth';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { Panel } from '../../components/PageHeader';
 import { Badge } from '../../components/kit';
 import { Button } from '../../components/ui';
-import { formatDate, formatDateTime } from '../../lib/format';
+import { formatDate, formatDateTime, formatHours } from '../../lib/format';
 import { priorityLabels } from '../../lib/labels';
 import { CommentFeed } from './CommentFeed';
 import { EpicPanels } from './EpicPanels';
 import { StatusBadge } from './StatusBadge';
 import { StoryPanels, ClosingThisStory } from './StoryPanels';
+import { EpicTimePanel, StoryTimePanel } from './TimePanels';
 import { AssistantRailPanel, TaskPanels } from './TaskPanels';
 import { TransitionMenu } from './TransitionMenu';
 import { AiEligibleMarker } from './AiEligibleMarker';
@@ -66,6 +73,30 @@ export function IssueDetailPage() {
 function IssueBody({ issue }: { issue: ReturnType<typeof useIssue>['data'] & {} }) {
   const workflow = useProjectWorkflow(issue.projectId);
   const watch = useSetIssueWatch(issue.key);
+  /*
+    016 D-g's switch, read here rather than in the two time panels below so one answer gates both
+    of them and the `Logged` row in Details. The settings GET is deliberately ungated on
+    `project:settings` — the contract says so, for exactly this shape of question — so a Test
+    Engineer reading a story gets an answer rather than a 403 that would hide the panel from the
+    people it is for.
+
+    **Withheld until that read answers, rather than defaulted to on.** A panel that appears and
+    then vanishes on a project with tracking off is a layout shift and a wrong claim held for a
+    beat, which is worse than a panel that arrives late. A read that FAILS falls back to on, because
+    016 D-g's column default is on and hiding a feature because a second read broke is the worse of
+    the two errors.
+  */
+  const settings = useProjectSettings(issue.projectId);
+  const tracksTime = !settings.isPending && (settings.data?.trackTime ?? true);
+  /*
+    The same query the rail's Time panel mounts, so this costs no second request — it is read here
+    only because the `Logged` row belongs in the Details list and TanStack answers both callers from
+    one cache entry. It is a story-level figure: `story.html` is where the mockup puts the row.
+  */
+  const storyRollup = useIssueTimeRollup(
+    issue.key,
+    tracksTime && issue.type.level === 'STORY',
+  );
   const me = useCurrentUserId();
   // The non-throwing reader: a test that mounts no auth provider gets `undefined`, which reads as
   // "not watching" rather than throwing on a screen that has nothing to do with the session.
@@ -152,6 +183,9 @@ function IssueBody({ issue }: { issue: ReturnType<typeof useIssue>['data'] & {} 
             is read here rather than encoded in three routes.
           */}
           {issue.type.level === 'EPIC' && <EpicPanels issue={issue} />}
+          {issue.type.level === 'EPIC' && (
+            <EpicTimePanel epicKey={issue.key} enabled={tracksTime} />
+          )}
           {issue.type.level === 'STORY' && <StoryPanels issue={issue} />}
           {issue.type.level === 'TASK' && <TaskPanels issue={issue} />}
 
@@ -164,6 +198,10 @@ function IssueBody({ issue }: { issue: ReturnType<typeof useIssue>['data'] & {} 
           </Panel>
 
           {issue.type.level === 'STORY' && <ClosingThisStory issue={issue} />}
+
+          {issue.type.level === 'STORY' && (
+            <StoryTimePanel issueKey={issue.key} enabled={tracksTime} />
+          )}
 
           {/*
             The assistant panel is a TASK's, and it is where the flag is set as well as read: a
@@ -205,7 +243,23 @@ function IssueBody({ issue }: { issue: ReturnType<typeof useIssue>['data'] & {} 
               )}
               {issue.estimateHours != null && (
                 <Term label="Estimate">
-                  <Identifier variant="muted">{`${issue.estimateHours}h`}</Identifier>
+                  <Identifier variant="muted">{formatHours(issue.estimateHours)}</Identifier>
+                </Term>
+              )}
+              {/*
+                `story.html`'s `14h (approved)`. The qualifier is not optional decoration — 016 D-d
+                says no screen renders a bare "hours", because approved and pending are different
+                numbers and a reader cannot act on one that does not say which it is.
+
+                Absent rather than zero when the rollup has not answered: the panel beside it owns
+                the failed state, and a `0h` here would be a claim nobody has made.
+              */}
+              {storyRollup.data && (
+                <Term label="Logged">
+                  <Identifier variant="muted" testId={`${TEST_ID}.Details.Logged`}>
+                    {formatHours(storyRollup.data.approvedHours)}
+                  </Identifier>
+                  <span className="ml-1.5 text-[11.5px] text-ink-4">(approved)</span>
                 </Term>
               )}
               {issue.startDate && <Term label="Start">{formatDate(issue.startDate)}</Term>}

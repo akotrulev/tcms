@@ -79,6 +79,59 @@ public class RollupService {
     }
 
     /**
+     * {@code GET /time/rollup/issues?key=…} — the work table's {@code Logged} column, in one read.
+     *
+     * <h2>Unreadable and unknown keys are dropped, not refused</h2>
+     *
+     * <p>The caller is a table drawing a column beside rows it already holds, so a key it may not
+     * read is one cell without a figure — while a 403 for the whole request would take the column
+     * off the screen for every other row. A dropped key is rendered as <em>no figure</em> and never
+     * as {@code 0h}: zero is the claim that somebody looked and nobody had logged anything.
+     *
+     * <p>The gate is asked once per distinct project rather than once per key, because
+     * {@code issue:read} is a project-scope grant and fifty keys on one project are one question.
+     * Order follows the keys as given, so the client can zip the answer against its own rows.
+     */
+    @Transactional(readOnly = true)
+    public List<TimeRollupView> forIssues(UUID userId, List<String> issueKeys) {
+        List<IssueFacts.IssueSubject> found = issues.byKeys(new LinkedHashSet<>(issueKeys));
+        if (found.isEmpty()) {
+            return List.of();
+        }
+
+        Map<UUID, Boolean> readable = new HashMap<>();
+        Map<String, IssueFacts.IssueSubject> allowed = new HashMap<>();
+        for (IssueFacts.IssueSubject subject : found) {
+            boolean granted = readable.computeIfAbsent(
+                    subject.projectId(), projectId -> mayRead(userId, projectId));
+            if (granted) {
+                allowed.put(subject.issueKey(), subject);
+            }
+        }
+        if (allowed.isEmpty()) {
+            return List.of();
+        }
+
+        Map<UUID, IssueTimeRollup> stored = storedFor(
+                allowed.values().stream().map(IssueFacts.IssueSubject::issueId).toList());
+
+        List<TimeRollupView> views = new ArrayList<>();
+        for (String key : new LinkedHashSet<>(issueKeys)) {
+            IssueFacts.IssueSubject subject = allowed.get(key);
+            if (subject == null) {
+                continue;
+            }
+            IssueTimeRollup row = stored.get(subject.issueId());
+            views.add(new TimeRollupView(
+                    subject.issueKey(),
+                    hours(subject.estimateHours()),
+                    approvedOf(row),
+                    pendingOf(row)));
+        }
+        return views;
+    }
+
+    /**
      * {@code GET /time/rollup/epics/{key}} — the epic panel, totals and a row per counted child.
      *
      * <p><strong>The totals cover the epic and its counted children together</strong>, and the table
@@ -162,6 +215,14 @@ public class RollupService {
             row.restate(projectId, approved, pending, now);
             rollups.save(row);
         }
+    }
+
+    private boolean mayRead(UUID userId, UUID projectId) {
+        return switch (projects.readGranted(userId, projectId, READ_ISSUE, project -> Boolean.TRUE)) {
+            case GateResult.Allowed<Boolean> allowed -> allowed.value();
+            case GateResult.Denied<Boolean> ignored -> false;
+            case GateResult.Unreachable<Boolean> ignored -> false;
+        };
     }
 
     private Map<UUID, IssueTimeRollup> storedFor(Collection<UUID> issueIds) {

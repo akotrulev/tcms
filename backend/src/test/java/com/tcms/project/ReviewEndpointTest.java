@@ -237,6 +237,10 @@ class ReviewEndpointTest extends IntegrationTestBase {
                     new ReviewSettings(
                             true, true, true, true, requiredPeers, authorMayApprove,
                             EditAfterApproval.RETAIN, false, false),
+                    // 016 D-g's default. Nothing in this class reads it — it travels beside
+                    // ReviewSettings rather than inside it, because time tracking is not a review
+                    // setting — and `true` is what a project actually carries.
+                    true,
                     null,
                     at);
             projectSettings.saveAndFlush(row);

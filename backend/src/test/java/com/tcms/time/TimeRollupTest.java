@@ -8,6 +8,7 @@ import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.AfterEach;
@@ -43,10 +44,13 @@ class TimeRollupTest extends TimeTestBase {
     private static final UUID DANA_GRANT = UUID.fromString("f7003000-0000-4000-8000-000000000001");
     private static final UUID PAULA_GRANT = UUID.fromString("f7003000-0000-4000-8000-000000000002");
 
+    private static final UUID OTHER_PROJECT = UUID.fromString("f7001000-0000-4000-8000-000000000002");
+
     private static final UUID EPIC = UUID.fromString("f7004000-0000-4000-8000-000000000001");
     private static final UUID STORY = UUID.fromString("f7004000-0000-4000-8000-000000000002");
     private static final UUID SIBLING = UUID.fromString("f7004000-0000-4000-8000-000000000003");
     private static final UUID UNESTIMATED = UUID.fromString("f7004000-0000-4000-8000-000000000004");
+    private static final UUID UNREADABLE = UUID.fromString("f7004000-0000-4000-8000-000000000005");
 
     private static final LocalDate DAY = LocalDate.of(2026, 9, 7);
 
@@ -69,6 +73,9 @@ class TimeRollupTest extends TimeTestBase {
         });
         inCompany(ACME, () -> tx.executeWithoutResult(status -> {
             seedProject(PROJECT, ACME, "RUP", "Rollup Project", now);
+            // Same company, and Dana holds no grant on it. That is the second gate — company
+            // membership is not project visibility — and it is what the bulk read has to drop.
+            seedProject(OTHER_PROJECT, ACME, "OTH", "Somebody Else's Project", now);
             member(ACME, DANA, "Dana Engineer", now);
             member(ACME, PAULA, "Paula Manager", now);
         }));
@@ -83,6 +90,8 @@ class TimeRollupTest extends TimeTestBase {
         issueFact(ACME, PROJECT, SIBLING, "RUP-119", "Saved cards", "STORY", EPIC,
                 new BigDecimal("8.00"));
         issueFact(ACME, PROJECT, UNESTIMATED, "RUP-120", "Address validation", "STORY", EPIC, null);
+        issueFact(ACME, OTHER_PROJECT, UNREADABLE, "OTH-1", "Not Dana's", "STORY", null,
+                new BigDecimal("4.00"));
     }
 
     @AfterEach
@@ -184,6 +193,60 @@ class TimeRollupTest extends TimeTestBase {
                             .as("a null estimate read as zero would highlight every unestimated row")
                             .isFalse();
                 });
+    }
+
+    @Test
+    @DisplayName("the bulk read answers a row per readable key, in the order asked")
+    void theBulkReadAnswersInTheOrderAsked() {
+        UUID period = log("RUP-118", 14.0);
+        logOn("RUP-119", 3.0, DAY);
+        submit(period);
+        approve(period);
+
+        List<TimeRollupView> rows = scoped(
+                () -> rollups.forIssues(DANA, List.of("RUP-119", "RUP-118")));
+
+        assertThat(rows).extracting(TimeRollupView::issueKey)
+                .as("the client zips the answer against the rows it is already drawing")
+                .containsExactly("RUP-119", "RUP-118");
+        assertThat(rows).filteredOn(row -> row.issueKey().equals("RUP-118"))
+                .singleElement()
+                .satisfies(row -> {
+                    assertThat(row.approvedHours()).isEqualTo(14.0);
+                    assertThat(row.pendingHours()).isZero();
+                    assertThat(row.estimateHours()).isEqualTo(16.0);
+                });
+    }
+
+    @Test
+    @DisplayName("an issue with no entries is a row with zeros, and an unknown key is no row at all")
+    void anUnloggedIssueIsAZeroRowAndAnUnknownKeyIsAbsent() {
+        List<TimeRollupView> rows = scoped(
+                () -> rollups.forIssues(DANA, List.of("RUP-118", "RUP-404")));
+
+        assertThat(rows).extracting(TimeRollupView::issueKey).containsExactly("RUP-118");
+        assertThat(rows).singleElement().satisfies(row -> {
+            assertThat(row.approvedHours()).isZero();
+            assertThat(row.pendingHours()).isZero();
+            assertThat(row.estimateHours())
+                    .as("the estimate is the tracker's and is there before anybody logs an hour")
+                    .isEqualTo(16.0);
+        });
+    }
+
+    @Test
+    @DisplayName("a key on a project the caller cannot read is dropped, not a refusal of the whole read")
+    void anUnreadableKeyIsDroppedRatherThanRefusingTheRead() {
+        List<TimeRollupView> rows = scoped(
+                () -> rollups.forIssues(DANA, List.of("RUP-118", "OTH-1")));
+
+        assertThat(rows).extracting(TimeRollupView::issueKey)
+                .as("one unreadable key must not take the column off the screen for the rest")
+                .containsExactly("RUP-118");
+
+        assertThat(scoped(() -> rollups.forIssues(DANA, List.of("OTH-1"))))
+                .as("and when none of them is readable the answer is empty, still not a refusal")
+                .isEmpty();
     }
 
     @Test

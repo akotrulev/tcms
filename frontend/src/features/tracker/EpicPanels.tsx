@@ -21,10 +21,17 @@ import { TypeIcon } from './TypeIcon';
 /**
  * `epic.html`'s body — completion, the goal, the linked specification, and the children.
  *
- * **Absent (D-f):** the target-release chip (M3), the `Labels` row in Details (M2), and the whole
- * "Estimate vs actual" panel (M6). None renders as an empty box: an epic with a blank Release
- * reads as an epic nobody scheduled, which is a statement about this epic in a product that has
- * no releases at all.
+ * **Absent (D-f):** the target-release chip (M3) and the `Labels` row in Details (M2). Neither
+ * renders as an empty box: an epic with a blank Release reads as an epic nobody scheduled, which
+ * is a statement about this epic in a product that has no releases at all.
+ *
+ * ~~and the whole "Estimate vs actual" panel (M6).~~ → **landed 2026-09-04 (plan 016, T5)** as
+ * `TimePanels.tsx`'s {@link EpicTimePanel}, mounted by `IssueDetailPage` **below** this file's
+ * panels rather than inside them: it reads `GET /time/rollup/epics/{key}` and this component takes
+ * the issue it was given, so a second read inside it would make an optional region a property of
+ * the whole body. The `Logged` column `epic.html` draws on the children table above is deliberately
+ * still absent — `IssueChild` carries an estimate and no hours, and the panel below answers the
+ * same question per row with the figures the server actually sends.
  *
  * The **note under the meter is rendered from the basis the server sent**, not written as a fixed
  * sentence about estimates. The mockup's note assumes `ESTIMATE`; an epic counted by heads needs

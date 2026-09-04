@@ -224,6 +224,32 @@ export function useIssueTimeRollup(issueKey: string, enabled = true): UseQueryRe
   });
 }
 
+/**
+ * The work table's `Logged` column and its footer — one read for the rows on screen.
+ *
+ * **A key the caller cannot read comes back absent, not as `0h`** (the operation's own rule), so
+ * the caller looks each row up by key and renders nothing where there is no answer. Zero is a
+ * different claim: it says somebody looked and nobody had logged an hour.
+ *
+ * `meta.handled` and its own region, for {@link useIssueTimeRollup}'s reason — a table whose rows
+ * arrived must not turn into an error page because an optional column failed.
+ */
+export function useIssueTimeRollups(
+  issueKeys: readonly string[],
+  enabled = true,
+): UseQueryResult<TimeRollup[]> {
+  return useQuery({
+    queryKey: keys.time.issueRollups(issueKeys),
+    queryFn: ({ signal }) =>
+      api.get<TimeRollup[]>(`/time/rollup/issues${qs({ key: [...issueKeys] })}`, {
+        signal,
+        timeoutMs: TIMEOUTS.interactive,
+      }),
+    enabled: enabled && issueKeys.length > 0,
+    meta: { handled: true },
+  });
+}
+
 /** The epic panel — totals, and a row per counted child. Optional for {@link useIssueTimeRollup}'s reason. */
 export function useEpicTimeRollup(epicKey: string, enabled = true): UseQueryResult<EpicTimeRollup> {
   return useQuery({

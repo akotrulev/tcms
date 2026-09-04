@@ -32,7 +32,11 @@ import { TypeIcon } from './TypeIcon';
  * **What is absent (D-f):**
  *
  *   - the review-gate warning and the "Request approval to close" button — M5;
- *   - the whole "Time" panel and the `Logged` row — M6;
+ *   - ~~the whole "Time" panel and the `Logged` row — M6;~~ → **landed 2026-09-04 (plan 016, T5)**
+ *     as `TimePanels.tsx`'s {@link StoryTimePanel}, mounted on the **rail** beside
+ *     {@link ClosingThisStory} rather than in this body, and the `Logged` row in
+ *     `IssueDetailPage`'s Details list. Both are behind the project's `trackTime` (016 D-g) and
+ *     both label the figure `(approved)`, because D-d rules out a bare "hours";
  *   - the Release row in Details (M3's field, and **still absent** — see below) and the Labels row (M2);
  *   - the "3 proposed by claude-code" button on Sub-tasks — M5;
  *   - ~~the **"Linked test cases" panel**, which is H7 and lands in M3's `t18`.~~ → **landed

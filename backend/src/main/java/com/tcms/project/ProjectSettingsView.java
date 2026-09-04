@@ -30,12 +30,23 @@ public record ProjectSettingsView(
         EditAfterApproval editAfterApproval,
         boolean requireApprovedCaseForRun,
         boolean reviewEnabledIssue,
+        boolean trackTime,
         UserRef updatedBy,
         Instant updatedAt) {
 
-    /** Assembled from the value every consumer reads, so the wire cannot disagree with the gate. */
+    /**
+     * Assembled from the value every consumer reads, so the wire cannot disagree with the gate.
+     *
+     * <p>{@code trackTime} is passed beside {@link ReviewSettings} rather than read out of it: it
+     * is 016 D-g's switch and not a review setting, and that value crosses two module boundaries
+     * as the review policy alone.
+     */
     ProjectSettingsView(
-            UUID projectId, ReviewSettings settings, UserRef updatedBy, Instant updatedAt) {
+            UUID projectId,
+            ReviewSettings settings,
+            boolean trackTime,
+            UserRef updatedBy,
+            Instant updatedAt) {
 
         this(
                 projectId,
@@ -48,6 +59,7 @@ public record ProjectSettingsView(
                 settings.editAfterApproval(),
                 settings.requireApprovedCaseForRun(),
                 settings.reviewEnabledIssue(),
+                trackTime,
                 updatedBy,
                 updatedAt);
     }

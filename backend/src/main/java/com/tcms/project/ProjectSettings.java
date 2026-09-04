@@ -120,9 +120,15 @@ public class ProjectSettings {
      * "feature nobody discovers" D-g exists to prevent, arriving through the mapping instead of
      * through the schema.
      *
-     * <p>It has no setter yet because the toggle's contract field and its {@code PATCH} arrive with
-     * the settings screen. What reads it today is {@code time.TimeEntryService}, which refuses an
-     * issue on a project whose tracking is off.
+     * <p>~~It has no setter yet because the toggle's contract field and its {@code PATCH} arrive
+     * with the settings screen.~~ → <strong>superseded 2026-09-04 (016 T5)</strong>: it is written
+     * by {@link #apply}, off {@code ProjectSettingsUpdate.trackTime}, and General settings carries
+     * the toggle. It is deliberately <em>not</em> part of {@link ReviewSettings} — that value
+     * crosses two module boundaries as the review policy, and time tracking is not a review
+     * setting — so it travels beside it rather than inside it.
+     *
+     * <p>What reads it is {@code time.TimeEntryService}, which refuses an issue on a project whose
+     * tracking is off, and the four surfaces the SPA hides when it is.
      */
     @Column(name = "track_time", nullable = false)
     private boolean trackTime;
@@ -161,10 +167,15 @@ public class ProjectSettings {
         created.companyId = companyId;
         created.createdAt = now;
         created.updatedAt = now;
-        created.trackTime = true;
-        created.apply(defaults(), null, now);
+        created.apply(defaults(), DEFAULT_TRACK_TIME, null, now);
         return created;
     }
+
+    /**
+     * 016 D-g's default, named because three files have to agree on it: {@code V9}'s column
+     * default, this mapping, and the service's reading of an omitted {@code trackTime}.
+     */
+    static final boolean DEFAULT_TRACK_TIME = true;
 
     /**
      * Replaces every setting at once.
@@ -174,7 +185,7 @@ public class ProjectSettings {
      * absent/null/empty rules for a shape where "leave this one alone" has no user-facing meaning —
      * nothing here is a list and nothing here is clearable.
      */
-    void apply(ReviewSettings settings, UUID actorId, Instant now) {
+    void apply(ReviewSettings settings, boolean tracksTime, UUID actorId, Instant now) {
         this.reviewEnabledCase = settings.reviewEnabledCase();
         this.reviewEnabledSuite = settings.reviewEnabledSuite();
         this.reviewEnabledPlan = settings.reviewEnabledPlan();
@@ -184,6 +195,7 @@ public class ProjectSettings {
         this.editAfterApproval = settings.editAfterApproval();
         this.requireApprovedCaseForRun = settings.requireApprovedCaseForRun();
         this.reviewEnabledIssue = settings.reviewEnabledIssue();
+        this.trackTime = tracksTime;
         this.updatedBy = actorId;
         this.updatedAt = now;
     }

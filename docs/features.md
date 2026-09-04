@@ -349,7 +349,10 @@ not arrive here, and a change made here does not go back. (The per-project track
   not have yet
 - **What cannot come across is named before it is lost, not after.** Story points, sprints, epic
   colour, flags, service-desk request types, time tracking and every custom field — each with the
-  number of values it holds and one sentence saying why. **It cannot be recovered from this product
+  number of values it holds and one sentence saying why. **`time tracking` on that list means the
+  source system's worklogs**, and it stays on it now that this product tracks time of its own (M6,
+  2026-09-04): the importer carries no worklog across, so a project's history of hours starts on the
+  day it is imported and the list is what says so before the confirm rather than after. **It cannot be recovered from this product
   later**, so the list is shown before the confirm and kept in the report word for word
 - **Sprints are dropped and counted**, with an option to keep each one as a label instead. Off by
   default: a project with sixty sprints becomes sixty labels nobody chose. The sprint row stays in
@@ -371,6 +374,55 @@ not arrive here, and a change made here does not go back. (The per-project track
 - **Jira Cloud, Jira Data Center and Azure DevOps**, through one port. Also reachable from the
   command line: `tcms import list` and `tcms import show` print a past run and its dropped fields.
   Starting one is deliberately not available there, or to an agent over MCP
+
+## Time
+
+Logging hours against work, and having somebody sign for them. Landed 2026-09-04 (plan 016, M6).
+
+- **A timesheet is a semi-monthly period** — the 1st to the 15th, and the 16th to the end of the
+  month — and nothing configures it. One shape per instance means a person moving between projects
+  has one fortnight, not several, and an approver comparing two people is comparing the same range
+- **An hour is logged against an issue, a meeting, leave, training or admin.** Four of the five
+  categories name no project, which is why a period spans projects: the mockup's own example carries
+  two projects and a project-less meeting in one submission
+- **The period is submitted whole and approved whole.** Submitting locks it; approving is final;
+  **rejecting unlocks it** and leaves the note on it, which is the only route back to work that was
+  sent back
+- **Approving is a project-scope grant over a period that spans projects.** A submitted period
+  reaches an approver when *at least one* of its entries names a project they may approve for, and
+  approving it approves the whole period, including entries against projects they cannot see. That
+  is the sharp edge, and it is stated rather than hidden: per-project partial approval would make
+  "this period is locked" untrue for half a timesheet
+- **Approved and pending hours are two numbers and nothing sums them.** Approved hours are a fact
+  somebody signed for; pending hours are a claim nobody has checked. Every figure in the product
+  says which of the two it is — the story's Time panel, the epic's estimate-vs-actual table, the
+  work table's `Logged` column and its footer, and the timesheet's own tiles
+- **The figures reach the work.** A story shows its estimate against its approved hours; an epic
+  shows a row per counted child with the drift and highlights the ones over estimate; the work table
+  carries a `Logged` column and a footer total over the rows on screen
+- **Time tracking is a per-project switch, on by default.** Turning it off hides the `Logged` column
+  and both time panels and refuses new entries against that project's issues. It **deletes nothing**
+  — every hour already logged and approved is kept, and turning it back on shows them again
+- **Nobody sees what an hour costs, from any of these screens.** There is no rate, no cost and no
+  bill anywhere in the product, and each screen that shows hours says so rather than leaving the
+  absence to be discovered
+- **Also on the command line and over MCP** — logging, listing and submitting a period
+
+**What is deliberately absent, with the module that lands it:**
+
+- **Capacity.** `timesheets.html` shows a `Period capacity 64h` tile and `my-work.html` a
+  `Capacity 32h` figure beside Logged. Both need person profiles, allocations and absences, which
+  are M7's tables. The tile row ships with three tiles rather than four and My Work's panel ships
+  with Logged alone and no meter, because a capacity figure this module would have to invent is
+  worse than a missing one
+- **Budget and burn.** `settings-general.html`'s Budget row reads `600h · Edit in Billing`; there is
+  no hours ceiling, no rate and no Billing screen. M8's
+- **Approve-all and Remind on the approvals queue.** There is no batch operation on the contract for
+  the first — it would be N irreversible writes with a partial outcome nobody could word, and there
+  is no un-approve — and no endpoint at all behind the second
+- **A waiting-count badge on the rail.** The count needs a read that refuses anybody without
+  approval rights on a project, and there is no company-wide "where may I approve" question to ask
+  first. The count is on the approvals screen's own subtitle instead
 
 ## Teams and People
 

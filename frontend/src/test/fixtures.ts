@@ -120,7 +120,9 @@ import type {
   PreviewStatusRow,
   PreviewTypeRow,
   SourceProject,
+  EpicTimeRollup,
   TimeEntry,
+  TimeRollup,
   TimesheetPeriod,
   TimesheetQueueEntry,
 } from '../api/types'
@@ -164,6 +166,10 @@ export function projectSettings(overrides: Partial<ProjectSettings> = {}): Proje
     // a freshly provisioned project carries (A6 — a one-person company must not dead-end), and it
     // is the state the transition menu is tested in unless a test asks for the other.
     reviewEnabledIssue: false,
+    // 016 D-g's switch, and the one default here that is `true`: it is what a freshly provisioned
+    // project carries, and every screen that hides a time surface hides it on this being false.
+    // A `false` default would test four screens in the state almost no project is in.
+    trackTime: true,
     ...overrides,
   }
 }
@@ -1644,6 +1650,42 @@ export function aTimesheetPeriod(overrides: Partial<TimesheetPeriod> = {}): Time
     decisionNote: null,
     editable: true,
     entries: [],
+    ...overrides,
+  }
+}
+
+/**
+ * One issue's estimate against its hours (016 D-d).
+ *
+ * **Every figure is zero and the estimate is null by default**, which is the panel's own empty
+ * state rather than a convenience: an issue nobody has estimated and nobody has logged against is
+ * the ordinary case, and a fixture carrying hours would let a test pass while asserting nothing
+ * about which of the two numbers it read. `approvedHours` and `pendingHours` are separate on
+ * purpose and nothing in the product sums them.
+ */
+export function aTimeRollup(overrides: Partial<TimeRollup> = {}): TimeRollup {
+  return {
+    issueKey: 'ACME-1',
+    estimateHours: null,
+    approvedHours: 0,
+    pendingHours: 0,
+    ...overrides,
+  }
+}
+
+/**
+ * An epic's totals and a row per counted child.
+ *
+ * `children: []` by default, and an epic with no children is a real state the panel renders — it
+ * is what a freshly cut epic looks like, not a load that failed.
+ */
+export function anEpicTimeRollup(overrides: Partial<EpicTimeRollup> = {}): EpicTimeRollup {
+  return {
+    epicKey: 'ACME-100',
+    estimateHours: 0,
+    approvedHours: 0,
+    pendingHours: 0,
+    children: [],
     ...overrides,
   }
 }

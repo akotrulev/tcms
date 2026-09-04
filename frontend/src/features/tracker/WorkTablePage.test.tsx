@@ -16,7 +16,9 @@ import {
   aStatusRef,
   anIssueSummary,
   anIssueType,
+  aTimeRollup,
   boardContents,
+  projectSettings,
 } from '../../test/fixtures'
 import { WorkTablePage } from './WorkTablePage'
 
@@ -69,7 +71,10 @@ function renderPage(route = '/projects/p1/work') {
   )
 }
 
-function mockReads(issues = [anIssueSummary({ key: 'ACME-118', title: 'Guest checkout' })]) {
+function mockReads(
+  issues = [anIssueSummary({ key: 'ACME-118', title: 'Guest checkout' })],
+  time: { settings?: unknown; rollups?: unknown; failRollups?: boolean } = {},
+) {
   const paths: string[] = []
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     paths.push(path)
@@ -79,6 +84,18 @@ function mockReads(issues = [anIssueSummary({ key: 'ACME-118', title: 'Guest che
       return aProjectWorkflow({ statuses: [READY, REVIEW], types: [STORY, SPIKE] })
     }
     if (/^\/projects\/[^/]+\/members$/.test(path)) return []
+    /*
+      016 T5's two reads. `settings` gates the `Logged` column on D-g, and `/time/rollup/issues` is
+      the column itself — one request for the rows on screen, because `IssueSummary` carries an
+      estimate and no hours. Both anchored ahead of the project arm for the collision reason above.
+    */
+    if (/^\/projects\/[^/]+\/settings$/.test(path)) {
+      return time.settings ?? projectSettings({ projectId: 'p1' })
+    }
+    if (path.startsWith('/time/rollup/issues')) {
+      if (time.failRollups) throw new Error('the rollup read failed')
+      return time.rollups ?? []
+    }
     /*
       The board view's four reads (012 T7). They are here rather than in a second helper because the
       switcher renders one of two views under one header, so a test that switches views crosses both
@@ -295,8 +312,11 @@ describe('The column picker (D-f)', () => {
 
     expect(await screen.findByTestId('WorkTable.Columns.status')).toBeInTheDocument()
     expect(screen.queryByTestId('WorkTable.Columns.release')).toBeNull()
-    expect(screen.queryByTestId('WorkTable.Columns.logged')).toBeNull()
     expect(screen.queryByTestId('WorkTable.Columns.labels')).toBeNull()
+    // ~~and `logged`~~ → it landed in 016 T5, and it is offered here because this project's
+    // fixture tracks time. The case where it is NOT offered is D-g's, asserted with the column
+    // itself further down.
+    expect(await screen.findByTestId('WorkTable.Columns.logged')).toBeInTheDocument()
   })
 
   it('ignores a column a later release named, rather than drawing an empty header', async () => {
@@ -308,5 +328,83 @@ describe('The column picker (D-f)', () => {
     await screen.findByTestId('WorkTable.Table')
     expect(screen.getByTestId('WorkTable.Header.summary')).toBeInTheDocument()
     expect(screen.queryByTestId('WorkTable.Header.release')).toBeNull()
+  })
+})
+
+/**
+ * `work-table.html`'s `Logged` column and its footer (016 T5), and the three things about it that
+ * a naive port gets wrong.
+ *
+ * 1. **A missing rollup row is a dash, never `0h`.** Zero says somebody looked and nobody had
+ *    logged an hour; the rollup having no row for a key says nothing of the sort. This is the one
+ *    the column would fail silently on, because both spellings render.
+ * 2. **The footer says `approved`.** 016 D-d: pending hours are a different number and nothing in
+ *    the product sums them, so a footer figure that did not name which it was would be the one
+ *    total on the screen nobody could check.
+ * 3. **`trackTime` off takes the column and the picker entry away**, rather than drawing a column
+ *    of dashes (D-g).
+ */
+describe('The Logged column (016 M6)', () => {
+  it('shows approved hours per row, and a dash where the rollup has no row at all', async () => {
+    mockReads(
+      [
+        anIssueSummary({ key: 'ACME-118', title: 'Guest checkout', estimateHours: 16 }),
+        anIssueSummary({ key: 'ACME-131', title: 'Saved card list', estimateHours: 3 }),
+      ],
+      { rollups: [aTimeRollup({ issueKey: 'ACME-118', estimateHours: 16, approvedHours: 14 })] },
+    )
+    renderPage()
+
+    const cells = await screen.findAllByTestId('WorkTable.Row.Logged')
+    expect(cells).toHaveLength(1)
+    await waitFor(() => expect(cells[0]).toHaveTextContent('14h'))
+    // ACME-131 has no row: the cell is the em dash the other absent columns use, not `0h`.
+    expect(screen.queryByText('0h')).toBeNull()
+  })
+
+  it('totals the approved hours in the footer, and says that is what they are', async () => {
+    mockReads(
+      [
+        anIssueSummary({ key: 'ACME-118', title: 'Guest checkout', estimateHours: 16 }),
+        anIssueSummary({ key: 'ACME-121', title: 'One-page address', estimateHours: 12 }),
+      ],
+      {
+        rollups: [
+          aTimeRollup({ issueKey: 'ACME-118', approvedHours: 14 }),
+          aTimeRollup({ issueKey: 'ACME-121', approvedHours: 9 }),
+        ],
+      },
+    )
+    renderPage()
+
+    const foot = await screen.findByTestId('WorkTable.Foot')
+    expect(foot).toHaveTextContent('Est 28h')
+    // Awaited: the estimate total is on the issue list and lands with the rows, the logged total
+    // is a second read that lands after them. A bare assertion here reads `Logged 0h approved`
+    // and would have passed against a footer that never summed anything.
+    await waitFor(() => expect(foot).toHaveTextContent('Logged 23h approved'))
+  })
+
+  it('drops the column, its picker entry and the footnote when the project does not track time', async () => {
+    mockReads([anIssueSummary({ key: 'ACME-118', title: 'Guest checkout' })], {
+      settings: projectSettings({ projectId: 'p1', trackTime: false }),
+    })
+    renderPage()
+
+    await screen.findByTestId('WorkTable.Table')
+    expect(screen.queryByTestId('WorkTable.Header.logged')).toBeNull()
+    expect(screen.queryByTestId('WorkTable.Row.Logged')).toBeNull()
+    expect(screen.getByTestId('WorkTable.MoneyBoundary')).toHaveTextContent(/Time tracking is off/)
+  })
+
+  it('keeps the table when the rollup read fails — an optional column cannot fail the page', async () => {
+    drivingAFailedRead() // only the rollup 500s; the issue list answered
+    mockReads([anIssueSummary({ key: 'ACME-118', title: 'Guest checkout' })], {
+      failRollups: true,
+    })
+    renderPage()
+
+    expect(await screen.findByTestId('WorkTable.Row.Title')).toHaveTextContent('Guest checkout')
+    expect(screen.queryByTestId('WorkTable.Row.Logged')).toBeNull()
   })
 })

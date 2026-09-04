@@ -684,6 +684,16 @@ export const keys = {
     approvals: (on: string) => ['time', 'approvals', on] as const,
     issueRollup: (issueKey: string) => ['time', 'rollup', 'issue', issueKey] as const,
     epicRollup: (epicKey: string) => ['time', 'rollup', 'epic', epicKey] as const,
+    /*
+      The work table's whole `Logged` column, keyed on the keys it asked for.
+
+      It sits under `['time','rollup','issue']` on purpose, so it shares the prefix with the single
+      grain above: the two answer the same figures at different widths, and a write that stales one
+      must stale the other. It is NOT keyed per issue and then read row by row — fifty rows would be
+      fifty requests, and TanStack would refetch all fifty on every filter change.
+    */
+    issueRollups: (issueKeys: readonly string[]) =>
+      ['time', 'rollup', 'issue', 'bulk', [...issueKeys].sort().join(',')] as const,
   },
 
   /**

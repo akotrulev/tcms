@@ -30,7 +30,7 @@ const TEST_ID = 'GeneralSettings';
  * |---|---|---|
  * | Client select | Mc | `Project` carries no client, so the control could only ever say "None". An empty "Client: —" is exactly the nagging `solo-overview.html` rules out |
  * | ~~"Closing work" review toggles~~ | ~~M5~~ | → **landed in 015 T5.** `review_enabled_issue` exists and `TransitionService` reads it, so the toggle changes behaviour |
- * | "Time" panel | M6 | There is no hours ceiling and no logged time to show a burn against |
+ * | ~~"Time" panel~~ | ~~M6~~ | → **landed 2026-09-04 (016 T5)** as {@link TimePanel}. Its *Budget* row did **not**: that row reads `Edit in Billing`, and there is no hours ceiling, no rate and no Billing screen — M8's, all three |
  *
  * What lands is **Identity**, **Closing work** and the **Issue types** list.
 
@@ -106,6 +106,15 @@ export function GeneralSettingsPage() {
           >
             {(current) => (
               <ClosingWorkPanel projectId={projectId} settings={current} canEdit={canEdit} />
+            )}
+          </DataRegion>
+
+          <DataRegion
+            testId={`${TEST_ID}.Time`}
+            state={{ ...settings, refetch: () => void settings.refetch() }}
+          >
+            {(current) => (
+              <TimePanel projectId={projectId} settings={current} canEdit={canEdit} />
             )}
           </DataRegion>
 
@@ -198,6 +207,90 @@ function ClosingWorkPanel({
         <span className="text-[11.5px] leading-[1.55] text-ink-4">
           A new project ships with this <strong>off</strong>, so a one-person company is not
           dead-ended by a rule written for a team.
+        </span>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * 016 D-g's switch — `settings-general.html`'s Time panel, minus its Budget row.
+ *
+ * **On by default**, and it is the only switch in this document that is. `work-table.html` says
+ * *"Logged hours are here because this project has time tracking on"*, and a product whose
+ * timesheet is empty on every project until somebody finds a switch is a feature nobody discovers.
+ *
+ * **Off hides and does not delete**, which is what the consequence line says on the screen rather
+ * than only in a decision document: the `Logged` column, the story's Time panel and the epic's
+ * estimate-vs-actual table all go, new entries against this project's issues are refused, and every
+ * hour already logged, approved and rolled up stays exactly where it is. Somebody turning it off to
+ * tidy a screen must be able to read, before they click, that they are not destroying a timesheet.
+ *
+ * **The mockup's Budget row is deliberately not built.** It reads `600h` beside an `Edit in
+ * Billing` button, and there is no hours ceiling on the contract, no rate anywhere in the product,
+ * and no Billing screen to send anybody to — all three are M8's. A row rendering a number this
+ * build cannot source, behind a link to a screen that does not exist, is two failures at once.
+ *
+ * Saved on the switch, like {@link ClosingWorkPanel} beside it and for the same reason: one control
+ * and no second decision to make with it. It goes through `fullSettingsUpdate` because the `PUT` is
+ * a whole-document replacement — a form here that sent one field would switch off every review
+ * setting the Review screen owns.
+ */
+function TimePanel({
+  projectId,
+  settings,
+  canEdit,
+}: {
+  projectId: string;
+  settings: ProjectSettings;
+  canEdit: boolean;
+}) {
+  const save = useUpdateProjectSettings(projectId);
+
+  return (
+    <section
+      className="rounded-[10px] border border-line bg-panel"
+      data-testid={`${TEST_ID}.Time.Panel`}
+    >
+      <div className="border-b border-line px-3.5 py-2.5">
+        <h2 className="m-0 text-[13.5px] font-semibold text-ink">Time</h2>
+      </div>
+
+      <div className="px-3.5">
+        <SettingRow
+          label="Track time on this project"
+          description="Engineers log hours against its issues, and the Logged figures appear on the work table, the story and the epic."
+          consequence={
+            settings.trackTime
+              ? 'Turning it off hides those figures and refuses new entries against this project. It deletes nothing — every hour already logged and approved is kept, and turning it back on shows them again.'
+              : 'Off. Hours recorded before it was switched off are still there and still approved; nothing on this project can be logged against until it is switched back on.'
+          }
+          control={
+            <Switch
+              checked={settings.trackTime}
+              disabled={!canEdit || save.isPending}
+              onCheckedChange={(checked) =>
+                save.mutate(fullSettingsUpdate(settings, { trackTime: checked }))
+              }
+              aria-label="Track time on this project"
+              data-testid={`${TEST_ID}.trackTime`}
+            />
+          }
+        />
+      </div>
+
+      {save.isError && (
+        <div className="px-3.5 pb-3">
+          <Banner tone="bad" data-testid={`${TEST_ID}.Time.Failed`}>
+            <span role="alert">The switch did not save. It shows what the server holds.</span>
+          </Banner>
+        </div>
+      )}
+
+      <div className="border-t border-line px-3.5 py-2.5">
+        <span className="text-[11.5px] leading-[1.55] text-ink-4">
+          The mockup&rsquo;s <strong>Budget</strong> row is not here: there is no hours ceiling and
+          no rate in this build, and what an hour costs is on no screen anybody can reach.
         </span>
       </div>
     </section>

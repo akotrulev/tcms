@@ -10721,6 +10721,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/time/rollup/issues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The same rollup for a page of issues at once
+         * @description Requires `issue:read` on each key's own project, and serves `work-table.html`'s `Logged`
+         *     column and its footer total. One request for the rows on screen, rather than one per row.
+         *
+         *     **A key the caller cannot read, or that names nothing, is simply absent from the answer**
+         *     — not a 403 and not a 404. The caller is a table drawing a column beside rows it already
+         *     holds, so one unreadable key among fifty is a cell with no figure in it, and failing the
+         *     whole read would take the column off the screen for the other forty-nine. A missing row
+         *     is rendered as *no figure*, never as `0h`: zero is the claim that nobody logged anything.
+         *
+         *     The figures are `issue_time_rollup`'s own, so this operation reads nothing outside the
+         *     `time` module — which is why it exists at all rather than `IssueSummary` growing an
+         *     `approvedHours` field, a crossing that would make the tracker's list query read another
+         *     module's projection on every page load whether or not the column is shown.
+         */
+        get: operations["listIssueTimeRollups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/time/rollup/epics/{key}": {
         parameters: {
             query?: never;
@@ -10737,8 +10769,10 @@ export interface paths {
          *     because three grains that can disagree about the same hours is three answers (D-c).
          *
          *     There is deliberately **no project grain**: the project figure the mockups show is
-         *     `settings-general.html`'s budget row, which is M8's, and `work-table.html`'s footer
-         *     total, which the issue list already carries per row.
+         *     `settings-general.html`'s budget row, which is M8's. ~~`work-table.html`'s footer total,
+         *     which the issue list already carries per row.~~ → **superseded 2026-09-04**: it does not
+         *     — `IssueSummary` carries `estimateHours` and no logged hours — so that footer is summed
+         *     on the client from `GET /time/rollup/issues` above, over the rows on screen.
          */
         get: operations["getEpicTimeRollup"];
         put?: never;
@@ -11849,6 +11883,18 @@ export interface components {
              *     The status ladder is unaffected either way.
              */
             reviewEnabledIssue: boolean;
+            /**
+             * @description 016 D-g — "Track time on this project". **On by default**, and the only switch in
+             *     this document that is. `work-table.html` says *"Logged hours are here because this
+             *     project has time tracking on"*, and a product whose timesheet is empty on every
+             *     project until somebody finds a switch is a feature nobody discovers.
+             *
+             *     Off hides the `Logged` column on the work table and the time panels on the story and
+             *     the epic, and refuses a new entry against an issue in this project. It **deletes
+             *     nothing** — hours already recorded stay recorded, stay approved and stay in the
+             *     rollup, because turning a screen off is not a reason to lose somebody's timesheet.
+             */
+            trackTime: boolean;
             /** @description Null for a project nobody has configured — which is most of them. */
             updatedBy?: components["schemas"]["UserRef"] | null;
             /** Format: date-time */
@@ -11860,6 +11906,12 @@ export interface components {
          *     is the only safe reading, since a dropped field that turned a gate ON could stop a
          *     release. `requiredPeerReviews` and `editAfterApproval` are **required**, because
          *     0 and RETAIN are meaningful values a dropped field would silently assert.
+         *
+         *     **`trackTime` is the one exception and defaults to `true`**, for the same reason read
+         *     the other way round: the safe reading of an absent switch is the one that does not
+         *     destroy something. A dropped `reviewEnabledCase` reopens a gate; a dropped `trackTime`
+         *     would take a project's `Logged` column and both time panels away and refuse its next
+         *     entry — so an omission here reads as "leave it on", which is also 016 D-g's default.
          */
         ProjectSettingsUpdate: {
             /** @default false */
@@ -11878,6 +11930,8 @@ export interface components {
             requireApprovedCaseForRun: boolean;
             /** @default false */
             reviewEnabledIssue: boolean;
+            /** @default true */
+            trackTime: boolean;
         };
         /**
          * @description What switching review **off** — or raising `requiredPeerReviews` — would land on (005
@@ -23148,6 +23202,38 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listIssueTimeRollups: {
+        parameters: {
+            query: {
+                /**
+                 * @description Repeated once per issue — `?key=ACME-118&key=ACME-121`. At least one and at most
+                 *     200; the cap is the page size a table can ask for, and a longer list is a 400 rather
+                 *     than a query whose `IN` list nobody bounded.
+                 */
+                key: string[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description A rollup per readable key, in the order the keys were given. Shorter than the request
+             *     when a key was unreadable or unknown.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeRollup"][];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
         };
     };
     getEpicTimeRollup: {

@@ -101,6 +101,27 @@ class IssueFacts {
     }
 
     /**
+     * The subjects behind a set of keys, for the work table's {@code Logged} column.
+     *
+     * <p>Deleted issues are excluded, matching {@link #byKey} rather than {@link #byIds}: this
+     * answers a question about rows a table is drawing now, and the tracker's own list does not
+     * draw a deleted issue either. A key naming nothing simply has no row in the result, which is
+     * the operation's documented behaviour — one unreadable key must not cost the column.
+     */
+    List<IssueSubject> byKeys(Collection<String> issueKeys) {
+        if (issueKeys.isEmpty()) {
+            return List.of();
+        }
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = entities.createNativeQuery(
+                        SUBJECT_COLUMNS
+                                + " WHERE f.issue_key IN (:issueKeys) AND f.deleted_at IS NULL")
+                .setParameter("issueKeys", issueKeys)
+                .getResultList();
+        return rows.stream().map(IssueFacts::toSubject).toList();
+    }
+
+    /**
      * The counted children of an epic, for the estimate-vs-actual table.
      *
      * <p>{@code counts_toward_completion} is how a spike is excluded without importing

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { useAnnounce } from '../../a11y/useAnnounce';
-import { useMyWork } from '../../api/queries';
+import { useCurrentTimesheetPeriod, useMyWork } from '../../api/queries';
 import type { BoardCard } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
@@ -16,13 +16,14 @@ import {
 } from '../../components/kit';
 import { Button } from '../../components/ui';
 import { cn } from '../../lib/cn';
-import { formatDate, plural } from '../../lib/format';
+import { formatDate, formatHours, plural } from '../../lib/format';
 /*
   The tone comes from what a status MEANS, never from its name: a status a project invented has no
   tone of its own (D2). Aliased because `CardStatus` below reads it as a table rather than as a
   label map.
 */
 import { issueStatusKindTones as STATUS_TONE } from '../../lib/labels';
+import { formatPeriodRange, todayIso } from '../time/periods';
 import { CardNoteDialog } from './CardNoteDialog';
 import { linkFor } from './cardLink';
 
@@ -84,7 +85,21 @@ function annotatable(card: BoardCard): card is Annotatable {
  * (`[]` vs 404) and this one, naming no project, cannot fail to make.
  *
  * **Absent, with the module that lands each (D-f):** the `AI` tags and the "My assistant" panel
- * (M5), the "This week" hours KPI (M6).
+ * (M5). ~~the "This week" hours KPI (M6).~~ → **landed 2026-09-04 (plan 016, T5)** as
+ * {@link ThisPeriodPanel}, with two differences from `my-work.html` that are both decisions:
+ *
+ *   - **it is a period, not a week.** 016 D-a makes the timesheet fortnight semi-monthly and
+ *     nothing configures it, so a panel headed "This week" would report a figure over a range the
+ *     product does not have. It names its own dates instead.
+ *   - **the `Capacity 32h` tile and the meter under it are absent** (016 D-j), not zero. Capacity
+ *     is computed from `person_profile`, `allocation` and `absence` — all three are M7's tables and
+ *     M7 has not started — and a figure this module invented is the two-contradictory-percentages
+ *     failure CLAUDE.md records. A meter needs a denominator, so the meter goes with it.
+ *
+ * **It is not behind `trackTime`**, and that is not an oversight: 016 D-g's switch is a *project's*
+ * decision and a period spans projects (D-i), so no one project's switch can speak for a figure
+ * that adds up somebody's whole fortnight. This screen names no project either — that is the point
+ * of it — so there is nothing here to read the switch from.
  */
 export function MyWorkPage() {
   const items = useMyWork();
@@ -281,6 +296,8 @@ function MyWorkBody({
       </div>
 
       <div className="flex flex-col gap-3.5">
+        <ThisPeriodPanel />
+
         <Panel
           title="My notes"
           hint="private to me"
@@ -435,6 +452,57 @@ function NoteCell({
         <span className="text-ink-4">&mdash;</span>
       )}
     </TableCell>
+  );
+}
+
+/**
+ * `my-work.html`'s "This week", as the fortnight the product actually keeps (016 D-a, D-j).
+ *
+ * **Logged alone.** The figure is `TimesheetPeriod.loggedHours` — everything in the period,
+ * whatever anybody has decided about it — and the label says so, because 016 D-d rules out a bare
+ * "hours" and this one is deliberately not the approved figure: it is the person's own view of
+ * their own fortnight, where what they have written down is the useful number and approval is
+ * somebody else's step.
+ *
+ * Its own region, so a failed timesheet read empties this panel and leaves the two tables and the
+ * notes exactly where they were. `useCurrentTimesheetPeriod` is a **write** — it creates the period
+ * row so Submit has an id — which is why the link below it can always reach a real timesheet.
+ */
+function ThisPeriodPanel() {
+  const today = todayIso();
+  const period = useCurrentTimesheetPeriod(today);
+
+  return (
+    <Panel title="This period" testId={`${TEST_ID}.Period`}>
+      <div className="px-3.5 py-3.5">
+        <DataRegion
+          testId={`${TEST_ID}.Period.Region`}
+          state={{ ...period, refetch: () => void period.refetch() }}
+        >
+          {(loaded) => (
+            <>
+              <span
+                data-testid={`${TEST_ID}.Period.Logged`}
+                className="block font-mono text-[26px] leading-[1.1] font-medium tracking-[-.02em] tabular-nums text-ink"
+              >
+                {formatHours(loaded.loggedHours)}
+              </span>
+              <span className="mt-1.5 block text-[12.5px] text-ink-2">Logged</span>
+              <span className="mt-[3px] block text-[11.5px] text-ink-4">
+                {formatPeriodRange(loaded.startsOn, loaded.endsOn, 'short')}
+              </span>
+              <RouterLink
+                to="/timesheets"
+                data-testid={`${TEST_ID}.Period.Open`}
+                className="mt-3 inline-block text-[12.5px] text-steel no-underline hover:underline"
+              >
+                Open my timesheet →
+              </RouterLink>
+            </>
+          )}
+        </DataRegion>
+      </div>
+    </Panel>
   );
 }
 

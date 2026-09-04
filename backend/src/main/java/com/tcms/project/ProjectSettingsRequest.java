@@ -1,7 +1,7 @@
 package com.tcms.project;
 
 /**
- * The settings form's submission — a full replacement of all nine values.
+ * The settings form's submission — a full replacement of all ten values.
  *
  * <p><strong>Boxed types, so "not sent" and "sent false" are distinguishable in this class</strong>
  * even though the service goes on to treat them alike. A primitive {@code boolean} field would make
@@ -22,6 +22,12 @@ package com.tcms.project;
  * §6g calls gating <em>"powerful and genuinely obstructive"</em> and requires it to be an explicit
  * choice, so a client that dropped the field must land on <em>off</em>. An absent switch that turned
  * a gate <em>on</em> would be the one reading of a missing field that can stop a release.
+ *
+ * <p><strong>{@code trackTime} is the one boolean that collapses to {@code true}</strong> (016 D-g),
+ * and it is the same rule read the other way round: the safe reading of an omitted switch is the one
+ * that does not take something away. A dropped review opt-in reopens a gate somebody can close
+ * again; a dropped {@code trackTime} would remove a project's {@code Logged} column and both time
+ * panels and refuse its next entry. So an omission here means "leave it on".
  */
 public record ProjectSettingsRequest(
         Boolean reviewEnabledCase,
@@ -32,5 +38,6 @@ public record ProjectSettingsRequest(
         Boolean authorMayApproveOwnWork,
         String editAfterApproval,
         Boolean requireApprovedCaseForRun,
-        Boolean reviewEnabledIssue) {
+        Boolean reviewEnabledIssue,
+        Boolean trackTime) {
 }

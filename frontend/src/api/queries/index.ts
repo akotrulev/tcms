@@ -351,6 +351,7 @@ export {
   useDeleteTimeEntry,
   useEpicTimeRollup,
   useIssueTimeRollup,
+  useIssueTimeRollups,
   useLogTime,
   useSubmitTimesheet,
   useTimesheetApprovals,

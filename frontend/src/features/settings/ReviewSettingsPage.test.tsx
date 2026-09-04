@@ -47,6 +47,11 @@ function settings(overrides: Partial<ProjectSettings> = {}): ProjectSettings {
     reviewEnabledIssue: false,
     // B1's fourth subject (005 S9b). Off — this file is not about doc review.
     reviewEnabledDoc: false,
+    // 016 D-g's switch. **On**, and pinned here for `reviewEnabledIssue`'s reason exactly inverted:
+    // this form does not offer it either, and saving THIS form must not switch it OFF. It is the
+    // one field in the document whose default is on, so it is the one a dropped field silently
+    // flips in the destructive direction.
+    trackTime: true,
     requiredPeerReviews: 0,
     authorMayApproveOwnWork: false,
     editAfterApproval: 'RETAIN',
@@ -171,6 +176,11 @@ describe('ReviewSettingsPage', () => {
       editAfterApproval: 'RE_REVIEW',
       // The one that was toggled.
       requireApprovedCaseForRun: false,
+      // 016 D-g's switch, carried through the same way — and this is the field where carrying it
+      // matters most: the server reads an omitted `trackTime` as ON, so a form that dropped it
+      // would *look* correct here and be the one field whose omission is invisible in a test that
+      // asserted containment instead of the whole body. Asserted `true`, which is what was read.
+      trackTime: true,
     })
   })
 

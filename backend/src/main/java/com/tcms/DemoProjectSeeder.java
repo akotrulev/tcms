@@ -155,12 +155,17 @@ public class DemoProjectSeeder {
      * project answers the same is a screen nobody can tell is wired up.
      */
     private void applySettings(DemoCast cast, UUID projectId, boolean full) {
-        // The last flag is D33's review-to-close gate, and it follows `full` for this method's own
+        // The ninth flag is D33's review-to-close gate, and it follows `full` for this method's own
         // reason: the thin project is the one-person-company path (A6), where an assignee closes
         // their own work, and the full project is where a lead can see the refusal actually fire.
+        //
+        // The tenth is 016 D-g's `trackTime`, and it is the one that does NOT follow `full`: it is
+        // `true` on both, because a demo instance where half the projects have no Logged column and
+        // no time panels is a demo of a feature nobody can find. The disagreement this method exists
+        // to create is about review policy, and adding a second axis to it hides the first.
         settings.update(cast.adminId(), projectId, new ProjectSettingsRequest(
                 full, full, false, false, full ? 1 : 0, false,
-                full ? "REQUIRES_REREVIEW" : "ALLOWED", full, full));
+                full ? "REQUIRES_REREVIEW" : "ALLOWED", full, full, true));
     }
 
     /** The project-scoped {@code feature} tree, two levels deep. */

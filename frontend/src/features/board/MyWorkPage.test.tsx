@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
 import type { BoardCard } from '../../api/types'
+import { aTimesheetPeriod } from '../../test/fixtures'
 import { createTestQueryClient } from '../../test/queryClient'
 import { TestProviders } from '../../test/TestProviders'
 import { Board } from './BoardPage'
@@ -70,9 +71,18 @@ const card = (partial: Partial<BoardCard> & Pick<BoardCard, 'id' | 'title'>): Bo
   return { ...base, ...partial }
 }
 
-/** Records every path requested, so a test can assert what was actually asked of the server. */
-function mockBoard(items: BoardCard[], paths: string[] = []) {
+/**
+ * Records every **board** path requested, so a test can assert what was actually asked of the
+ * server.
+ *
+ * The timesheet arm is answered and deliberately **not** recorded: 016 T5 put a "This period" panel
+ * on the rail, and the assertion below is about the board — that it is asked for once, with `mine`
+ * and no project. Pushing an unrelated screen's read into that list would make the assertion about
+ * the whole page instead of about the one property it exists to pin.
+ */
+function mockBoard(items: BoardCard[], paths: string[] = [], period = aTimesheetPeriod()) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
+    if (path.startsWith('/timesheets/periods/current')) return period
     paths.push(path)
     return items
   }) as unknown as typeof api.get)
@@ -410,5 +420,42 @@ describe('The project board keeps its columns', () => {
     expect(
       within(screen.getByTestId('Board.Column.In Progress')).getByText('Underway'),
     ).toBeTruthy()
+  })
+})
+
+/**
+ * `my-work.html`'s "This week" panel, as the fortnight the product actually keeps (016 T5).
+ *
+ * Two decisions are pinned here rather than left to a reader of the file:
+ *
+ * 1. **It is a period, not a week** (016 D-a). The timesheet fortnight is semi-monthly and nothing
+ *    configures it, so a panel headed "This week" would report a figure over a range the product
+ *    does not have.
+ * 2. **There is no Capacity tile and no meter** (016 D-j). Capacity needs `person_profile`,
+ *    `allocation` and `absence`, all three M7's, and a figure this module invented is the
+ *    two-contradictory-percentages failure. Absent, not zero — and the absence is what is asserted,
+ *    because a `Capacity 0h` tile is the exact thing a well-meaning port adds back.
+ */
+describe('This period (016 M6)', () => {
+  it('shows the logged hours for the fortnight, over its own dates', async () => {
+    mockBoard(
+      [card({ id: 'OLB-1', title: 'Anything' })],
+      [],
+      aTimesheetPeriod({ loggedHours: 21, startsOn: '2026-09-01', endsOn: '2026-09-15' }),
+    )
+    renderPage()
+
+    expect(await screen.findByTestId('MyWork.Period.Logged')).toHaveTextContent('21h')
+    expect(screen.getByTestId('MyWork.Period.Open')).toHaveAttribute('href', '/timesheets')
+    // The label is the range, not "this week" — the two are different quantities.
+    expect(screen.getByTestId('MyWork.Period')).toHaveTextContent('This period')
+  })
+
+  it('has no Capacity figure and no meter, because M7 owns both (D-j)', async () => {
+    mockBoard([card({ id: 'OLB-1', title: 'Anything' })], [], aTimesheetPeriod({ loggedHours: 21 }))
+    renderPage()
+
+    await screen.findByTestId('MyWork.Period.Logged')
+    expect(screen.queryByText(/capacity/i)).toBeNull()
   })
 })

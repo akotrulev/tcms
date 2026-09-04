@@ -240,6 +240,24 @@ export function formatCount(n: number | null | undefined): string {
 }
 
 /**
+ * Hours, as every time surface in the product spells them — `14h`, `0.5h`, `21.5h`.
+ *
+ * **One decimal, and a whole number carries none**, because `time_entry.hours` is a quarter-hour
+ * grain and `14.0h` beside `16h` reads as more precision than either figure has. `toFixed(1)` on
+ * its own gives the first spelling, a bare number the second, and having both on one screen is how
+ * two columns of the same quantity come to look like two different quantities.
+ *
+ * **`null` is the em dash and never `0h`** (016 D-d's neighbour rule): zero is the claim that
+ * somebody looked and nobody had logged an hour, and an issue the rollup has no row for has made
+ * no such claim. The one place that must not use this is a figure whose absence has already been
+ * handled — a caller rendering its own "no run yet" words.
+ */
+export function formatHours(hours: number | null | undefined): string {
+  if (hours === null || hours === undefined) return EM_DASH;
+  return `${Number.isInteger(hours) ? hours : hours.toFixed(1)}h`;
+}
+
+/**
  * `1 result` / `3 results` / `4 switches`.
  *
  * The sibilant rule is here because the naive `+ 's'` produced **"4 switchs"** in `lib/flake.ts`'s

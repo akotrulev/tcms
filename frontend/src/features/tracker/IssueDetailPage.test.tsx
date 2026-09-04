@@ -14,8 +14,11 @@ import {
   aUserRef,
   anIssue,
   anIssueDocLink,
+  anEpicTimeRollup,
   anIssueSummary,
   anIssueType,
+  aTimeRollup,
+  projectSettings,
 } from '../../test/fixtures'
 import { IssueDetailPage } from './IssueDetailPage'
 
@@ -53,8 +56,12 @@ type Arms = {
   comments?: unknown
   docLinks?: unknown
   testCases?: unknown
+  settings?: unknown
+  rollup?: unknown
+  epicRollup?: unknown
   failIssue?: boolean
   failDocLinks?: boolean
+  failRollup?: boolean
 }
 
 /**
@@ -70,6 +77,21 @@ function mockReads(arms: Arms) {
     }
     if (/^\/projects\/[^/]+\/workflow$/.test(path)) {
       return aProjectWorkflow({ statuses: ALL, types: [EPIC_TYPE, STORY_TYPE, TASK_TYPE] })
+    }
+    // 016 T5. The settings read is what the two time panels are gated on (D-g), and the two rollup
+    // arms are what they render. Anchored ahead of the issue arms for the sub-resource reason the
+    // header gives — and served on EVERY case, because an unmocked read here throws and the panels
+    // are unconditional on a story and an epic.
+    if (/^\/projects\/[^/]+\/settings$/.test(path)) {
+      return arms.settings ?? projectSettings({ projectId: 'p1' })
+    }
+    if (/^\/time\/rollup\/issues\//.test(path)) {
+      if (arms.failRollup) throw new Error('the rollup read failed')
+      return arms.rollup ?? aTimeRollup()
+    }
+    if (/^\/time\/rollup\/epics\//.test(path)) {
+      if (arms.failRollup) throw new Error('the rollup read failed')
+      return arms.epicRollup ?? anEpicTimeRollup()
     }
     if (/^\/issues\/[^/]+\/comments$/.test(path)) return arms.comments ?? []
     // 013 T6's `LinkedCasesPanel`, on every story. Anchored ahead of the detail arm like its
@@ -477,5 +499,150 @@ describe('Watching', () => {
     await waitFor(() =>
       expect(put).toHaveBeenCalledWith('/issues/ACME-118/watchers', { watching: false }, expect.anything()),
     )
+  })
+})
+
+/**
+ * 016 M6's two panels on the two screens that carry them, and the three claims about them a static
+ * render cannot make.
+ *
+ * 1. **No figure is a bare "hours"** (D-d). The `Logged` row in Details says `(approved)` and the
+ *    epic panel says `approved hours only`, because approved and pending are different numbers and
+ *    a reader cannot act on one that does not say which it is.
+ * 2. **`trackTime` off removes them, and removes them rather than emptying them** (D-g). An empty
+ *    Time panel would say this story has no hours; absence says this project does not work that way.
+ * 3. **A failed rollup costs the panel and not the page.** Both hooks carry `meta.handled` and both
+ *    panels are their own region, so the description, the sub-tasks and the transition menu are
+ *    still on screen when the rollup 500s.
+ */
+describe('Time on the story and the epic (016 M6)', () => {
+  it('labels the Details row (approved), because a bare "hours" is what D-d rules out', async () => {
+    mockReads({
+      issue: anIssue({ key: 'ACME-118', type: STORY_TYPE, status: PROGRESS, estimateHours: 16 }),
+      rollup: aTimeRollup({ issueKey: 'ACME-118', estimateHours: 16, approvedHours: 14 }),
+    })
+    renderPage('ACME-118')
+
+    expect(await screen.findByTestId('Issue.Details.Logged')).toHaveTextContent('14h')
+    expect(await screen.findByTestId('Issue.Time.Approved')).toHaveTextContent('14h')
+    expect(screen.getByText('(approved)')).toBeInTheDocument()
+  })
+
+  it('renders pending as its own figure and never folds it into the approved one', async () => {
+    mockReads({
+      issue: anIssue({ key: 'ACME-118', type: STORY_TYPE, status: PROGRESS }),
+      rollup: aTimeRollup({
+        issueKey: 'ACME-118',
+        estimateHours: 16,
+        approvedHours: 6,
+        pendingHours: 4,
+      }),
+    })
+    renderPage('ACME-118')
+
+    expect(await screen.findByTestId('Issue.Time.Approved')).toHaveTextContent('6h')
+    expect(screen.getByTestId('Issue.Time.Pending')).toHaveTextContent('4h')
+    // The failure this pins: a panel that summed them would read 10h and be wrong on every screen
+    // in the product at once.
+    expect(screen.queryByText('10h')).toBeNull()
+  })
+
+  it('leaves the Pending row out entirely when there is none to report', async () => {
+    mockReads({
+      issue: anIssue({ key: 'ACME-118', type: STORY_TYPE, status: PROGRESS }),
+      rollup: aTimeRollup({ issueKey: 'ACME-118', approvedHours: 6 }),
+    })
+    renderPage('ACME-118')
+
+    await screen.findByTestId('Issue.Time.Approved')
+    expect(screen.queryByTestId('Issue.Time.Pending')).toBeNull()
+  })
+
+  it('draws neither panel nor the Logged row when the project does not track time', async () => {
+    mockReads({
+      issue: anIssue({ key: 'ACME-118', type: STORY_TYPE, status: PROGRESS }),
+      settings: projectSettings({ projectId: 'p1', trackTime: false }),
+    })
+    renderPage('ACME-118')
+
+    // The story itself is still there — this is an absence, not a failure.
+    await screen.findByTestId('Story.SubTasks')
+    expect(screen.queryByTestId('Issue.Time')).toBeNull()
+    expect(screen.queryByTestId('Issue.Details.Logged')).toBeNull()
+  })
+
+  it('gives the epic its estimate-vs-actual table, highlighting the over-estimate row', async () => {
+    mockReads({
+      issue: anIssue({ key: 'ACME-100', type: EPIC_TYPE, status: PROGRESS, allowedTransitions: [] }),
+      epicRollup: anEpicTimeRollup({
+        epicKey: 'ACME-100',
+        estimateHours: 24,
+        approvedHours: 21,
+        children: [
+          {
+            issueKey: 'ACME-112',
+            title: 'Cart survives a sign-in',
+            estimateHours: 8,
+            approvedHours: 7,
+            overEstimate: false,
+          },
+          {
+            issueKey: 'ACME-122',
+            title: 'Card capture without a redirect',
+            estimateHours: 16,
+            approvedHours: 19,
+            overEstimate: true,
+          },
+        ],
+      }),
+    })
+    renderPage('ACME-100')
+
+    const rows = await screen.findAllByTestId('Issue.Time.Epic.Row')
+    expect(rows).toHaveLength(2)
+    // The sign is written out, because a bare `3h` in a Drift column is ambiguous in the direction
+    // that matters and colour alone cannot carry it.
+    const drifts = screen.getAllByTestId('Issue.Time.Epic.Drift')
+    expect(drifts[0]).toHaveTextContent('−1h')
+    expect(drifts[1]).toHaveTextContent('+3h')
+    expect(screen.getByTestId('Issue.Time.Epic.Foot')).toHaveTextContent('21h')
+    expect(screen.getByText('approved hours only')).toBeInTheDocument()
+  })
+
+  it('gives an unestimated child no drift at all rather than a drift equal to its hours', async () => {
+    mockReads({
+      issue: anIssue({ key: 'ACME-100', type: EPIC_TYPE, status: PROGRESS, allowedTransitions: [] }),
+      epicRollup: anEpicTimeRollup({
+        epicKey: 'ACME-100',
+        approvedHours: 5,
+        children: [
+          {
+            issueKey: 'ACME-120',
+            title: 'Address validation',
+            estimateHours: null,
+            approvedHours: 5,
+            overEstimate: false,
+          },
+        ],
+      }),
+    })
+    renderPage('ACME-100')
+
+    await screen.findByTestId('Issue.Time.Epic.Row')
+    // `+5h` beside a blank estimate would be a comparison against a number nobody made.
+    expect(screen.queryByTestId('Issue.Time.Epic.Drift')).toBeNull()
+  })
+
+  it('keeps the story on screen when the rollup fails — the panel falls over on its own', async () => {
+    drivingAFailedRead() // the rollup 500s; `tcmsFaults.only('/time/') + status(500)` is the dev switch
+    mockReads({
+      issue: anIssue({ key: 'ACME-118', type: STORY_TYPE, status: PROGRESS }),
+      failRollup: true,
+    })
+    renderPage('ACME-118')
+
+    expect(await screen.findByTestId('Story.SubTasks')).toBeInTheDocument()
+    expect(await screen.findByTestId('Issue.Time.Region.Error')).toBeInTheDocument()
+    expect(screen.queryByTestId('Issue.Details.Logged')).toBeNull()
   })
 })

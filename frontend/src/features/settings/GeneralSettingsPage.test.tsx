@@ -20,9 +20,11 @@ import { GeneralSettingsPage } from './GeneralSettingsPage'
  * story — which needs a `TASK`-level type. So there are six, and the screen names the level of each
  * so a reader can tell `Task` from `Sub-task`.
  *
- * The other three assertions are absences, and an absence is exactly what a naive port gets wrong:
- * the Client select (Mc), the "Closing work" toggles (M5) and the "Time" panel (M6) are not here,
- * and neither is a rename form the API cannot honour.
+ * The other assertions are absences, and an absence is exactly what a naive port gets wrong: the
+ * Client select (Mc) is not here, ~~the "Closing work" toggles (M5) and the "Time" panel (M6)~~ →
+ * both landed, in 015 T5 and 016 T5 — and neither is a rename form the API cannot honour. What is
+ * still absent from the Time panel is the mockup's **Budget** row, which is M8's, and that absence
+ * is asserted below.
  */
 
 const PROJECT_ID = 'p1'
@@ -201,20 +203,18 @@ describe('The panels this screen deliberately does not have', () => {
     expect(screen.queryByText(/attach a client/i)).toBeNull()
   })
 
-  it('offers no time panel, and only one of the mockup’s two closing-work rows', async () => {
-    // ~~M5 and M6.~~ → the review toggle landed in 015 T5, so what is asserted now is the row
-    // beside it: `settings-general.html` draws an uneditable "An assistant may never close —
-    // always on", and the product has no such rule. An assistant acts as its owner, so with the
-    // gate off the same close succeeds for it (A6). A row promising an unconditional block would
-    // be a claim the server contradicts.
+  it('draws only one of the mockup’s two closing-work rows', async () => {
+    // ~~M5 and M6.~~ → the review toggle landed in 015 T5 and the Time panel in 016 T5, so what is
+    // asserted now is the row beside them: `settings-general.html` draws an uneditable "An
+    // assistant may never close — always on", and the product has no such rule. An assistant acts
+    // as its owner, so with the gate off the same close succeeds for it (A6). A row promising an
+    // unconditional block would be a claim the server contradicts.
     mockReads()
     renderPage()
 
     await screen.findByTestId('GeneralSettings.Identity.Name')
 
     expect(screen.queryByText(/An assistant may never close/i)).toBeNull()
-    expect(screen.queryByText(/Track time on this project/i)).toBeNull()
-    expect(screen.queryByText(/Budget/i)).toBeNull()
   })
 })
 
@@ -261,6 +261,7 @@ describe('Require review to close issues', () => {
         authorMayApproveOwnWork: false,
         editAfterApproval: 'RETAIN',
         requireApprovedCaseForRun: false,
+        trackTime: true,
       }),
     )
   })
@@ -279,5 +280,80 @@ describe('Require review to close issues', () => {
     )
     renderPage()
     expect(await screen.findByText(/Currently inert/)).toBeInTheDocument()
+  })
+})
+
+/**
+ * 016 D-g's switch, and the two things about it a reader has to be able to trust.
+ *
+ * **It sends the whole document**, for the reason the block above gives — this is now the third
+ * control on the second of two screens editing one `PUT`.
+ *
+ * **Its `false` does not get lost.** `trackTime` is the one boolean the server reads as `true` when
+ * omitted, so a client that dropped it would silently re-enable tracking on the very save that was
+ * meant to turn it off. The assertion below is on the field being present *and* `false`, which is
+ * what makes the omission a failure rather than an accident that happens to work.
+ */
+describe('Track time on this project', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('is on by default, and switching it off sends trackTime: false in the whole document', async () => {
+    mockReads(
+      SEEDED_TYPES,
+      ['project:read', 'project:settings'],
+      projectSettings({ projectId: PROJECT_ID, requiredPeerReviews: 2, trackTime: true }),
+    )
+    const put = vi.spyOn(api, 'put').mockResolvedValue(
+      projectSettings({ projectId: PROJECT_ID, trackTime: false }) as never,
+    )
+    renderPage()
+
+    const toggle = await screen.findByTestId('GeneralSettings.trackTime')
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+
+    await userEvent.click(toggle)
+
+    await waitFor(() =>
+      expect(put).toHaveBeenCalledWith(`/projects/${PROJECT_ID}/settings`, {
+        reviewEnabledCase: false,
+        reviewEnabledSuite: false,
+        reviewEnabledPlan: false,
+        reviewEnabledDoc: false,
+        reviewEnabledIssue: false,
+        requiredPeerReviews: 2,
+        authorMayApproveOwnWork: false,
+        editAfterApproval: 'RETAIN',
+        requireApprovedCaseForRun: false,
+        trackTime: false,
+      }),
+    )
+  })
+
+  it('says off hides the figures and keeps the hours, rather than only saying it is off', async () => {
+    mockReads(
+      SEEDED_TYPES,
+      ['project:read', 'project:settings'],
+      projectSettings({ projectId: PROJECT_ID, trackTime: false }),
+    )
+    renderPage()
+
+    expect(await screen.findByText(/still there and still approved/i)).toBeInTheDocument()
+  })
+
+  it('does not build the mockup’s Budget row — there is no ceiling, no rate and no Billing', async () => {
+    mockReads(SEEDED_TYPES, ['project:read', 'project:settings'])
+    renderPage()
+
+    await screen.findByTestId('GeneralSettings.trackTime')
+    expect(screen.queryByText(/Edit in Billing/i)).toBeNull()
+    expect(screen.queryByText(/600h/)).toBeNull()
+  })
+
+  it('is read-only for somebody who cannot change the project’s settings', async () => {
+    mockReads(SEEDED_TYPES, ['project:read'])
+    renderPage()
+    await waitFor(() => expect(screen.getByTestId('GeneralSettings.trackTime')).toBeDisabled())
   })
 })

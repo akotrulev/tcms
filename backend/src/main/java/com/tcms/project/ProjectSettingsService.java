@@ -247,6 +247,10 @@ public class ProjectSettingsService {
                         mode,
                         Boolean.TRUE.equals(req.requireApprovedCaseForRun()),
                         Boolean.TRUE.equals(req.reviewEnabledIssue())),
+                // The one boxed boolean that does NOT collapse to false: 016 D-g's default is on,
+                // and an omitted field must not take a project's time surfaces away. `!FALSE.equals`
+                // rather than `TRUE.equals` is the whole difference — null reads as true here.
+                !Boolean.FALSE.equals(req.trackTime()),
                 userId,
                 now);
         settings.saveAndFlush(row);
@@ -278,7 +282,11 @@ public class ProjectSettingsService {
         return settings.findForProject(projectId)
                 .map(row -> view(companyId, row))
                 .orElseGet(() -> new ProjectSettingsView(
-                        projectId, ProjectSettings.defaults(), null, null));
+                        projectId,
+                        ProjectSettings.defaults(),
+                        ProjectSettings.DEFAULT_TRACK_TIME,
+                        null,
+                        null));
     }
 
     private ProjectSettingsView view(UUID companyId, ProjectSettings row) {
@@ -288,7 +296,11 @@ public class ProjectSettingsService {
                         .get(row.getUpdatedBy());
 
         return new ProjectSettingsView(
-                row.getProjectId(), row.toSettings(), editor, row.getUpdatedAt());
+                row.getProjectId(),
+                row.toSettings(),
+                row.tracksTime(),
+                editor,
+                row.getUpdatedAt());
     }
 
     /**

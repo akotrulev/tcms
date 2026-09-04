@@ -1,6 +1,12 @@
 import { useMemo } from 'react';
 import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
-import { useIssues, useProject, useProjectWorkflow } from '../../api/queries';
+import {
+  useIssueTimeRollups,
+  useIssues,
+  useProject,
+  useProjectSettings,
+  useProjectWorkflow,
+} from '../../api/queries';
 import type { IssueSummary } from '../../api/types';
 import type { IssueSort } from '../../api/queries';
 import { DataRegion, GridSkeleton } from '../../components/DataRegion';
@@ -26,7 +32,7 @@ import {
   DropdownMenuTrigger,
 } from '../../components/ui';
 import { cn } from '../../lib/cn';
-import { formatCount, plural } from '../../lib/format';
+import { formatHours, plural } from '../../lib/format';
 import { issueLevels } from '../../lib/labels';
 import { NativeSelect } from '../../components/ui/native-select';
 import { BacklogView } from '../board/BacklogView';
@@ -110,6 +116,13 @@ const COLUMNS = [
   { id: 'assignee', label: 'Assignee', sort: undefined, numeric: false },
   { id: 'due', label: 'Due', sort: 'dueDate' as const, numeric: false },
   { id: 'est', label: 'Est', sort: 'estimateHours' as const, numeric: true },
+  /*
+    016 M6's column. No `sort`, and that is the contract rather than an omission: `GET /issues`
+    orders by key, title, status, dueDate and estimateHours, and the hours are not on the issue
+    list at all — they come from a second read (see `rollups` below). A header offering a sort the
+    server has no parameter for is a control that silently does nothing.
+  */
+  { id: 'logged', label: 'Logged', sort: undefined, numeric: true },
 ] as const;
 
 type ColumnId = (typeof COLUMNS)[number]['id'];
@@ -164,6 +177,40 @@ export function WorkTablePage() {
   }, [params]);
 
   const issues = useIssues(projectId, filters, sort);
+
+  /*
+    016 D-g. `Logged` is the one column whose presence is the project's decision rather than the
+    reader's, so it is filtered out of `visible` here instead of being offered in the picker and
+    then rendering an empty cell — off means this project does not work this way, and a column of
+    dashes says the opposite.
+
+    **Withheld until that read answers**, rather than defaulted to on: a column that appears and
+    then vanishes reflows the whole table, and the picker beside it would offer an entry it then
+    took away. A read that FAILS falls back to on, because D-g's column default is on and losing a
+    feature to a second read's failure is the worse of the two errors.
+  */
+  const settings = useProjectSettings(projectId);
+  const tracksTime = !settings.isPending && (settings.data?.trackTime ?? true);
+  const columns = useMemo(
+    () => (tracksTime ? visible : visible.filter((column) => column !== 'logged')),
+    [visible, tracksTime],
+  );
+
+  /*
+    The whole column in ONE read, keyed on the rows the table is already holding — not one request
+    per row, which would be fifty requests refetched on every filter change.
+
+    `IssueSummary` carries `estimateHours` and no logged hours, so there is no way to draw this from
+    the list alone; `GET /time/rollup/issues` is 016 T5's own addition for exactly this. It is
+    optional: `meta.handled` and a missing row rendered as no figure, so a failed rollup costs the
+    column and not the table.
+  */
+  const rowKeys = useMemo(() => issues.data?.map((issue) => issue.key) ?? [], [issues.data]);
+  const rollups = useIssueTimeRollups(rowKeys, columns.includes('logged'));
+  const loggedByKey = useMemo(
+    () => new Map((rollups.data ?? []).map((row) => [row.issueKey, row.approvedHours])),
+    [rollups.data],
+  );
 
   const current = VIEWS.find((entry) => entry.id === view) ?? VIEWS[2];
 
@@ -316,9 +363,14 @@ export function WorkTablePage() {
                 </NativeSelect>
 
                 {/*
-                  **The `⚙ Columns` picker offers only what this build HAS** (D-f). No Release, no
-                  Logged, no labels — not greyed, absent. The mockup's `AI-eligible` filter chip is
-                  gone for the same reason and from the same rule.
+                  **The `⚙ Columns` picker offers only what this build HAS** (D-f). No Release and
+                  no labels — not greyed, absent. The mockup's `AI-eligible` filter chip is gone for
+                  the same reason and from the same rule.
+
+                  ~~No Logged~~ → **landed 2026-09-04 (016 T5)**, and it is offered here only when
+                  the project tracks time: 016 D-g's switch is the project's decision and this menu
+                  is the reader's, so a project with tracking off does not list a column whose cells
+                  would be dashes.
                 */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -328,10 +380,12 @@ export function WorkTablePage() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start">
                     <DropdownMenuLabel>Columns</DropdownMenuLabel>
-                    {COLUMNS.map((column) => (
+                    {COLUMNS.filter(
+                      (column) => tracksTime || column.id !== 'logged',
+                    ).map((column) => (
                       <DropdownMenuCheckboxItem
                         key={column.id}
-                        checked={visible.includes(column.id)}
+                        checked={columns.includes(column.id)}
                         data-testid={`${TEST_ID}.Columns.${column.id}`}
                         onCheckedChange={(checked) =>
                           setParam((next) => {
@@ -398,7 +452,7 @@ export function WorkTablePage() {
                         >
                           Key
                         </TableHeaderCell>
-                        {COLUMNS.filter((column) => visible.includes(column.id)).map((column) => (
+                        {COLUMNS.filter((column) => columns.includes(column.id)).map((column) => (
                           <TableHeaderCell
                             key={column.id}
                             align={column.numeric ? 'right' : 'left'}
@@ -423,7 +477,12 @@ export function WorkTablePage() {
                     </TableHead>
                     <TableBody>
                       {rows.map((issue) => (
-                        <IssueRow key={issue.key} issue={issue} visible={visible} />
+                        <IssueRow
+                          key={issue.key}
+                          issue={issue}
+                          visible={columns}
+                          loggedHours={loggedByKey.get(issue.key)}
+                        />
                       ))}
                     </TableBody>
                   </Table>
@@ -433,8 +492,33 @@ export function WorkTablePage() {
                   data-testid={`${TEST_ID}.Foot`}
                   summary={`${plural(rows.length, 'issue')}`}
                   sort={`sorted by ${COLUMNS.find((column) => column.sort === sort)?.label ?? 'key'}`}
-                  keys={[`Est ${formatCount(estimateTotal(rows))}h`]}
+                  keys={
+                    columns.includes('logged')
+                      ? [
+                          `Est ${formatHours(estimateTotal(rows))}`,
+                          `Logged ${formatHours(loggedTotal(rows, loggedByKey))} approved`,
+                        ]
+                      : [`Est ${formatHours(estimateTotal(rows))}`]
+                  }
                 />
+
+                {/*
+                  `work-table.html`'s note, minus its link. There is no Billing screen — M8 — so the
+                  half of the sentence that pointed at one would be a promise this build cannot
+                  keep. What is kept is the part that is true today and is the whole point of the
+                  note: the column is here because the project turned it on, and what an hour costs
+                  is on no screen anybody can reach.
+                */}
+                <p
+                  className="mt-3 mb-0 text-[11.5px] leading-[1.55] text-ink-4"
+                  data-testid={`${TEST_ID}.MoneyBoundary`}
+                >
+                  {columns.includes('logged')
+                    ? 'Logged hours are here because this project has time tracking on, and they are '
+                      + 'the approved ones. What an hour costs is not on this screen for anyone.'
+                    : 'Time tracking is off for this project, so there is no Logged column. Hours '
+                      + 'already recorded against these issues are kept.'}
+                </p>
               </>
             )}
           </DataRegion>
@@ -456,7 +540,34 @@ function estimateTotal(rows: readonly IssueSummary[]): number {
   return rows.reduce((total, issue) => total + (issue.estimateHours ?? 0), 0);
 }
 
-function IssueRow({ issue, visible }: { issue: IssueSummary; visible: readonly ColumnId[] }) {
+/**
+ * The approved hours on screen, summed over the rows the rollup answered for.
+ *
+ * **Approved only, and the footer says so.** 016 D-d: pending hours are a different number and
+ * nothing in the product adds them, so a footer reading a mixture would be the one figure on this
+ * screen a reader cannot check against anything.
+ *
+ * A row the rollup has no answer for contributes nothing — it is a key the caller may not read or
+ * an issue nobody has logged against, and both are honestly zero *hours*, which is what a sum
+ * wants. That is not the same as rendering `0h` in the cell, which claims somebody looked.
+ */
+function loggedTotal(
+  rows: readonly IssueSummary[],
+  loggedByKey: ReadonlyMap<string, number>,
+): number {
+  return rows.reduce((total, issue) => total + (loggedByKey.get(issue.key) ?? 0), 0);
+}
+
+function IssueRow({
+  issue,
+  visible,
+  loggedHours,
+}: {
+  issue: IssueSummary;
+  visible: readonly ColumnId[];
+  /** Absent when the rollup has no row for this key — rendered as no figure, never as `0h`. */
+  loggedHours: number | undefined;
+}) {
   return (
     <TableRow data-testid={`${TEST_ID}.Row`}>
       <TableCell>
@@ -536,8 +647,22 @@ function IssueRow({ issue, visible }: { issue: IssueSummary; visible: readonly C
       {visible.includes('est') && (
         <TableCell align="right">
           {issue.estimateHours != null ? (
-            <Identifier variant="muted">{`${issue.estimateHours}h`}</Identifier>
+            <Identifier variant="muted">{formatHours(issue.estimateHours)}</Identifier>
           ) : (
+            <span className="text-ink-4">&mdash;</span>
+          )}
+        </TableCell>
+      )}
+
+      {visible.includes('logged') && (
+        <TableCell align="right">
+          {loggedHours != null ? (
+            <Identifier variant="muted" testId={`${TEST_ID}.Row.Logged`}>
+              {formatHours(loggedHours)}
+            </Identifier>
+          ) : (
+            // Not `0h`. Zero is the claim that somebody looked and nobody had logged an hour; an
+            // absent row is the rollup not having answered for this key at all.
             <span className="text-ink-4">&mdash;</span>
           )}
         </TableCell>
