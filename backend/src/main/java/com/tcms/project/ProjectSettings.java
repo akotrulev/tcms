@@ -111,6 +111,23 @@ public class ProjectSettings {
     private UUID updatedBy;
 
     /**
+     * 016 D-g — "Track time on this project" ({@code settings-general.html}).
+     *
+     * <p><strong>Set true here as well as defaulted true in {@code V9}</strong>, and the duplication
+     * is load-bearing rather than belt-and-braces: Hibernate names every mapped column in its
+     * INSERT, so a Java field left at its own default would write {@code false} straight over the
+     * column default and every new project would arrive with time tracking off. That is the
+     * "feature nobody discovers" D-g exists to prevent, arriving through the mapping instead of
+     * through the schema.
+     *
+     * <p>It has no setter yet because the toggle's contract field and its {@code PATCH} arrive with
+     * the settings screen. What reads it today is {@code time.TimeEntryService}, which refuses an
+     * issue on a project whose tracking is off.
+     */
+    @Column(name = "track_time", nullable = false)
+    private boolean trackTime;
+
+    /**
      * Annotated, not merely mapped — §74's finding, which found {@code lock_version} mapped without
      * {@code @Version} on three entities and the column therefore reading {@code 0} for ever while
      * looking like a guard. Nothing sends an {@code If-Match} for this row today; two admins saving
@@ -144,6 +161,7 @@ public class ProjectSettings {
         created.companyId = companyId;
         created.createdAt = now;
         created.updatedAt = now;
+        created.trackTime = true;
         created.apply(defaults(), null, now);
         return created;
     }
@@ -182,6 +200,11 @@ public class ProjectSettings {
                 editAfterApproval,
                 requireApprovedCaseForRun,
                 reviewEnabledIssue);
+    }
+
+    /** 016 D-g. Off hides the time surfaces; it never deletes an entry already recorded. */
+    public boolean tracksTime() {
+        return trackTime;
     }
 
     public UUID getProjectId() {

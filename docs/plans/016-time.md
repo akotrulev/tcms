@@ -240,6 +240,16 @@ Traps this task specifically will hit:
   scoping it under the project switcher would state the opposite.
 - **No `sx`, no CSS-in-JS, no second stylesheet.** Tailwind utilities and the kit; new enums into
   lib/labels.ts as `satisfies Record<Union, string>`.
+- **T3 left two things this screen has to work around, and both are in its section below.**
+  `POST /timesheets/entries` **ignores `Idempotency-Key`** — `V9` gave `time_entry` no column to
+  store one — so a retry after a timeout logs the hour twice. Do not send the header and assume a
+  replay; make the Add form single-flight on the client until the column exists.
+  And `GET /timesheets/periods/current` **creates the period row**, which is what makes `id`
+  available to the Submit button on a fortnight nobody has logged into yet — so the screen never
+  has to open a period first, and there is no "create period" call to write.
+- **`projectTotals` deliberately does not add up to `loggedHours`.** A project-less entry has no
+  row (the contract says so) and an entry against a project the approver cannot see has none
+  either (016 D-i). Label the tiles so the two numbers do not read as a contradiction.
 
 Gate: ~/bin/tcms-remote sync, then frontend "npm run build && npm run lint && npm run test:run".
 
@@ -1246,7 +1256,7 @@ Engineer **lacks** `ratecard:read` and every `billing:*` key. A test asserts no 
 - Create: `backend/src/test/java/com/tcms/time/`
 - Modify: `backend/src/test/java/com/tcms/architecture/ArchitectureRules.java` (register the module)
 
-- [ ] **Step 1: Declare the module**
+- [x] **Step 1: Declare the module**
 
 `backend/src/main/java/com/tcms/time/package-info.java`:
 
@@ -1290,7 +1300,7 @@ Engineer **lacks** `ratecard:read` and every `billing:*` key. A test asserts no 
 package com.tcms.time;
 ```
 
-- [ ] **Step 2: Write `Periods` and its test first (TDD)**
+- [x] **Step 2: Write `Periods` and its test first (TDD)**
 
 `backend/src/test/java/com/tcms/time/PeriodsTest.java`:
 
@@ -1334,7 +1344,7 @@ final class Periods {
 }
 ```
 
-- [ ] **Step 3: The entities and repositories**
+- [x] **Step 3: The entities and repositories**
 
 Standard JPA, `lock_version` mapped as `@Version`. **Every repository interface carries
 `@Transactional(readOnly = true)` on the interface, not only on methods** — Spring Data gives a
@@ -1352,7 +1362,7 @@ public interface TimeEntryRepository extends JpaRepository<TimeEntry, UUID> {
 }
 ```
 
-- [ ] **Step 4: `IssueFacts` — the one crossing**
+- [x] **Step 4: `IssueFacts` — the one crossing**
 
 ```java
 /**
@@ -1402,7 +1412,7 @@ class IssueFacts {
 }
 ```
 
-- [ ] **Step 5: The editability rule, test first**
+- [x] **Step 5: The editability rule, test first**
 
 `backend/src/test/java/com/tcms/time/TimesheetLifecycleTest.java` — a real Spring context over
 Testcontainers, the house shape:
@@ -1441,7 +1451,7 @@ void aRejectionWithoutANoteIsRefused() {
 }
 ```
 
-- [ ] **Step 6: The rollup, test first**
+- [x] **Step 6: The rollup, test first**
 
 ```java
 @Test
@@ -1468,7 +1478,7 @@ void approvingPostsHoursOntoTheIssueAndRollsUpToTheEpic() {
 `RollupService.apply` recomputes `issue_time_rollup` for every issue an entry in the period names,
 inside the approval transaction (D-h).
 
-- [ ] **Step 7: The money-boundary negative test — write it now, M8 inherits it**
+- [x] **Step 7: The money-boundary negative test — write it now, M8 inherits it**
 
 `backend/src/test/java/com/tcms/time/TimeMoneyBoundaryTest.java`:
 
@@ -1536,7 +1546,7 @@ class TimeMoneyBoundaryTest extends AbstractIntegrationTest {
 }
 ```
 
-- [ ] **Step 8: Assert `issue_fact` is never written**
+- [x] **Step 8: Assert `issue_fact` is never written**
 
 `backend/src/test/java/com/tcms/architecture/TimeWritesNoIssueFactTest.java`:
 
@@ -1578,11 +1588,17 @@ void onlyIssueFactsNamesTheProjection() throws IOException {
 }
 ```
 
-**`backend/build.gradle.kts` already declares `backend/src/**` as a test input** for the cited-files
-rule, so this source-text read needs no new declaration — confirm before relying on it, because a
-rule that is green by cache is worse than no rule.
+~~**`backend/build.gradle.kts` already declares `backend/src/**` as a test input** for the
+cited-files rule, so this source-text read needs no new declaration~~ → **it does not, and the
+sentence's own instruction is what found that.** `inputs.files` names five out-of-source artifacts
+plus exactly two in-source files (`OutboundUrlGuard.java` and `ImportUrlGuard.java`), added for the
+mirror test because a **comment-only** edit to either leaves the bytecode unchanged and `:test`
+`UP-TO-DATE`. No new declaration is needed here anyway, and for a different reason than the one
+predicted: this rule **strips comments before it reads**, so the only edit that can change its
+verdict is one that changes a string literal or a class — which changes the compiled classes on the
+test classpath and invalidates `:test` on its own.
 
-- [ ] **Step 9: Controllers, then the full gate**
+- [x] **Step 9: Controllers, then the full gate**
 
 Controllers are thin: resolve the caller, check the permission, delegate. The queue endpoint
 implements D-i — a period is visible to a caller holding `time:approve` on at least one project its
@@ -1598,13 +1614,48 @@ and zero assertion failures, that is the fd limit, not a red suite** — check
 `grep -c ' FAILED$'` excluding `> Task` lines before believing it, and re-run with the `ulimit`
 already in the command above.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add backend/src/main/java/com/tcms/time backend/src/test/java/com/tcms/time \
         backend/src/test/java/com/tcms/architecture
 git commit -m "feat(time): the time module, the rollup projection, and the money boundary"
 ```
+
+**What T3 landed differently from what this plan predicted**, written here rather than as a
+changelog, because the prompts above and below are the living text and these are the facts they now
+rest on.
+
+- **The commit is wider than the three paths above**, and each addition is a defect this task found
+  rather than scope it took. `docs/specs/openapi.yaml`: `name: on` was a **bare YAML 1.1 boolean**,
+  so snakeyaml — which the backend's contract tests parse the document with — saw a parameter named
+  `true` while the TypeScript generator, on YAML 1.2, saw `on`. Two halves of one contract
+  disagreeing about a name, with nothing failing on either side alone. Quoted; both clients
+  regenerated and **byte-identical**, which is the proof that quoting is not a contract change.
+  `project/ProjectSettings.java`: `track_time` is mapped there, set `true` in `initial(...)` —
+  Hibernate names every mapped column in its INSERT, so a Java field left at its own default writes
+  `false` straight over `V9`'s `DEFAULT true` and D-g's "feature nobody discovers" arrives through
+  the mapping. And the three registration files every module pays: `ModuleStructureTest`'s module
+  list, `ContractConventionTest`'s two pairing maps, `ContractEnumTest`'s owners.
+- **`Idempotency-Key` on `POST /timesheets/entries` is declared and NOT implemented.** The contract's
+  `200` arm is a replay, and answering one needs the key stored beside the row it created — which is
+  what `test_case.created_idempotency_key` does one module over. `V9` gave `time_entry` no such
+  column, so a retry after a timeout logs the hour twice. Stated in `TimeEntryController`'s header
+  rather than papered over; the fix is a column and a lookup, and it is the one part of this surface
+  that is declared and unimplemented.
+- **`GET /timesheets/periods/current` creates the period row.** The contract's summary says "created
+  lazily if it has no rows yet" and its description says the row is created by the first write; `id`
+  is in the schema's `required` array and is what Submit posts to, so the read is what opens it.
+- **`IssueFacts.epicChildren` does not join `issue_time_rollup`**, unlike the snippet in Step 4:
+  the crossing stays a pure read of the foreign table and `RollupService` joins its own projection
+  to it. **`TimeEntryRepository.totalHours` was not written** — `ArchitectureRulesTest`'s
+  every-declared-repository-method-has-a-caller rule reports a query nothing calls, and the period
+  total is summed from the views that were already assembled.
+- **`TimeWritesNoIssueFactTest` strips comments before it reads**, which the plan's snippet did not:
+  `time/package-info.java` states the rule in prose and names the table repeatedly, so a corpus
+  counting prose would report the file arguing for the rule as the file breaking it.
+- **Nothing renders any of this yet.** The eleven operations serve real data and no screen calls
+  them; the timesheets are T4 and the story/epic panels T5.
 
 ---
 

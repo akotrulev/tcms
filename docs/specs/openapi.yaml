@@ -8867,7 +8867,12 @@ paths:
         The period row is created by the first write into it, so a caller who has logged nothing
         gets the derived bounds with an empty `entries` and zero totals rather than a 404.
       parameters:
-        - name: on
+        # Quoted, and it has to be: YAML 1.1 reads a bare `on` as the BOOLEAN true, so
+        # snakeyaml — which the backend's contract tests parse this document with — saw a
+        # parameter named `true` while the TypeScript generator, on YAML 1.2, saw `on`. The two
+        # halves of one contract disagreed about a parameter's name with nothing failing on
+        # either side alone. Quoting is the same document to every parser.
+        - name: "on"
           in: query
           description: |
             Any date inside the wanted period; defaults to today. The bounds are derived from it
@@ -9070,7 +9075,12 @@ paths:
         period as *"Not submitted · 41.0h so far"* with a Remind action beside it, so the state
         is served and the client decides what may be done with it.
       parameters:
-        - name: on
+        # Quoted, and it has to be: YAML 1.1 reads a bare `on` as the BOOLEAN true, so
+        # snakeyaml — which the backend's contract tests parse this document with — saw a
+        # parameter named `true` while the TypeScript generator, on YAML 1.2, saw `on`. The two
+        # halves of one contract disagreed about a parameter's name with nothing failing on
+        # either side alone. Quoting is the same document to every parser.
+        - name: "on"
           in: query
           description: Any date inside the wanted period; defaults to today.
           schema: { type: string, format: date }

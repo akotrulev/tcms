@@ -146,11 +146,19 @@ class ModuleStructureTest {
                         `documentation` is deliberately absent from its allowedDependencies while \
                         `issue_doc_link` mirrors that module's table — `work.BoardFacts`' \
                         resolution, one class naming the foreign tables and nothing else in the \
-                        package doing so.""")
+                        package doing so. \
+                        016 M6 adds `time`, and it is the first module built ON TOP of that \
+                        constraint rather than one that had to discover it: hours are logged \
+                        against an issue through `(subject_type, subject_id)` with no foreign key, \
+                        the whole read crossing is `time.IssueFacts`, and the module's own \
+                        `issue_time_rollup` is what it writes instead. `TimeWritesNoIssueFactTest` \
+                        asserts both halves over the source text, because a second writer of \
+                        `issue_fact` compiles, passes every functional test, and produces two \
+                        silently disagreeing numbers.""")
                 .containsExactly(
                         "api", "auth", "documentation", "execution", "identity", "integration",
                         "project", "provisioning", "reporting", "repository", "storage", "tenancy",
-                        "tracker", "work");
+                        "time", "tracker", "work");
     }
 
     @Test

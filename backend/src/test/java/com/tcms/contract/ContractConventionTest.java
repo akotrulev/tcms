@@ -903,7 +903,28 @@ class ContractConventionTest {
             Map.entry("IssueTestCasesInput",
                     List.of(com.tcms.tracker.release.IssueTestCasesInput.class)),
             Map.entry("CaseVerification",
-                    List.of(com.tcms.tracker.release.CaseVerificationView.class)));
+                    List.of(com.tcms.tracker.release.CaseVerificationView.class)),
+            // ---- 016 M6's time block ----
+            //
+            // Two entity/view splits again, and both entities carry more than the wire does:
+            // TimeEntry holds company_id, person_id, created_by/updated_by and lock_version, none
+            // of which is on TimeEntryView, and TimesheetPeriod holds decided_by as an id where the
+            // view carries decidedByName. `hours` is a NUMERIC(5,2) on one side and a double on the
+            // other, which is the estimate/points split this repo already makes on Issue.
+            //
+            // There is no rollup ENTITY paired here at all: IssueTimeRollup is this module's own
+            // projection and never leaves it — what the two rollup operations serve is assembled
+            // from it plus the tracker's projection, which is why TimeRollup and EpicTimeRollup are
+            // views with no table of their own behind them.
+            Map.entry("TimeEntry", List.of(com.tcms.time.TimeEntryView.class)),
+            Map.entry("TimeEntryInput", List.of(com.tcms.time.TimeEntryInput.class)),
+            Map.entry("TimesheetPeriod", List.of(com.tcms.time.TimesheetPeriodView.class)),
+            Map.entry("TimesheetDecisionInput",
+                    List.of(com.tcms.time.TimesheetDecisionInput.class)),
+            Map.entry("TimesheetQueueEntry",
+                    List.of(com.tcms.time.TimesheetQueueEntryView.class)),
+            Map.entry("TimeRollup", List.of(com.tcms.time.TimeRollupView.class)),
+            Map.entry("EpicTimeRollup", List.of(com.tcms.time.EpicTimeRollupView.class)));
 
     /**
      * The owners this file cannot name as class literals, because they are package-private.
@@ -1519,6 +1540,19 @@ class ContractConventionTest {
             Map.entry("TrackerConnectedMember.hosts[]",
                     List.of(com.tcms.integration.tracker.TrackerConnectedMemberView.HostState.class)),
             Map.entry("Team.projects[]", List.of(com.tcms.identity.TeamView.ProjectRole.class)),
+            // 016 M6's three, and T1 declared `required` on each of them for the reason this map
+            // exists: `required` does not descend, so a nested object without one generates every
+            // property optional in both clients and the whole shape goes soft with nothing failing.
+            //
+            // TimeEntry.subject is denormalised from the tracker's projection rather than $ref'd to
+            // IssueRef or IssueSummary: it carries the project's NAME, which neither of those does,
+            // because a timesheet row is read across projects and "ACME-124" alone does not say
+            // whose fortnight this is.
+            Map.entry("TimeEntry.subject", List.of(com.tcms.time.TimeEntryView.SubjectView.class)),
+            Map.entry("EpicTimeRollup.children[]",
+                    List.of(com.tcms.time.EpicTimeRollupView.ChildView.class)),
+            Map.entry("TimesheetQueueEntry.projectTotals[]",
+                    List.of(com.tcms.time.TimesheetQueueEntryView.ProjectTotalView.class)),
             Map.entry("TestCaseSummary.lastResult",
                     List.of(com.tcms.repository.LastResultView.class)),
             Map.entry("POST /auth/login (request)",

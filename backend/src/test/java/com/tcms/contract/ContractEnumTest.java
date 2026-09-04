@@ -213,7 +213,14 @@ class ContractEnumTest {
             // The type has to exist in the gap or this rule fails on a contract enum whose server
             // type has not arrived yet, which is a red build about sequencing rather than about
             // anything wrong.
-            Map.entry("ImportRunStatus", List.of("com.tcms.tracker.imports.ImportRunStatus")));
+            Map.entry("ImportRunStatus", List.of("com.tcms.tracker.imports.ImportRunStatus")),
+            // 016 M6's two. TimeSubjectType has five members and TEST_RUN is deliberately not one
+            // (016 D-b): timesheet-approvals.html displays a row logged against a test run, and
+            // timesheets.html — the only screen that CREATES an entry — cannot produce one. The two
+            // mockups disagree, the log form wins, and this rule is what would fail if somebody
+            // added the member to one side only.
+            Map.entry("TimeSubjectType", List.of("com.tcms.time.TimeSubjectType")),
+            Map.entry("TimesheetState", List.of("com.tcms.time.TimesheetState")));
 
     /**
      * The contract enums with no server type at all, and what checks each instead.
