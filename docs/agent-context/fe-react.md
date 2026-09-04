@@ -1,11 +1,17 @@
 # fe-react — orientation cache
 
-**Baseline commit:** `90667f1e` · **Last verified:** 2026-09-04 · **Verdict this run (016 T4):** DELTA
-(016 T1 had regenerated `schema.d.ts` with 780 lines of `time` since the baseline below, and T2/T3
-are backend-only; no `package.json` / lockfile / `tsconfig` / `vite.config.ts` change, so the version
-lane held. T4 added the time seams recorded below.)
+**Baseline commit:** `a2bf3b72` · **Last verified:** 2026-09-04 · **Verdict this run (016 T5):** DELTA
+(the only delta since the baseline below was T4's own commit, which that entry already described; no
+`package.json` / lockfile / `tsconfig` / `vite.config.ts` change, so the version lane held. T5 added
+the five additive time surfaces and the seams recorded below.)
 
 **Session log**
+- 2026-09-04 — 016 T5: `TimePanels.tsx`, the `Logged` detail row, the work table's `Logged` column
+  and bulk rollup read, My Work's This-period panel, General settings' Time panel, `formatHours`,
+  and the module close-out in 009. **Took a contract + backend slice inside an `fe` task** — see the
+  `trackTime` row below (`a2bf3b72`).
+
+~~**Baseline commit:** `90667f1e` · **Verdict (016 T4):** DELTA~~
 - 2026-09-04 — 016 T4: `/timesheets` and `/timesheets/approvals`, the time query module, D-b/D-d's
   labels, the `time` fault arm, `periods.ts`, and the rail entry. Found `CaseGrid.test.tsx` red on a
   clean `90667f1e` — two selection tests, not this task's (`90667f1e`).
@@ -124,6 +130,11 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 | `projectTotals` does not add up to `loggedHours`, and the screen says so | A project-less entry has no row (the contract bans the literal em dash — a dash in a column of project names is a project called dash) and neither has one against a project the approver cannot see (D-i). `ApprovalsPage` labels the header `logged` / `so far` and names the remainder as `{n}h not attributed here` with the reason in its title, rather than letting two numbers disagree in silence |
 | Three KPI tiles on Timesheets, and the fourth stays missing | D-j: `Period capacity` needs `person_profile`, `allocation` and `absence`, all M7's. `Tile` from the kit is **not** used — it is a `<button>` that navigates to its rows and none of the three has rows — which is `ReadinessPanels`' precedent one module over |
 | The `time` fault arm | `tcmsFaults.time('rejected')` serves a REJECTED current period with a note (needs a second person otherwise); `time('locked')` answers the three entry writes with the 409 (reachable only through a race, because the form is removed the moment a period locks). `isTimePath` covers `/time/` too, so `only('/time/')` + `status(500)` faults the rollup reads alone |
+| **016 T5's seams** | `features/tracker/TimePanels.tsx` — `StoryTimePanel` (the story **rail**, beside `ClosingThisStory`) and `EpicTimePanel` (the epic **body**, mounted by `IssueDetailPage` *below* `EpicPanels` rather than inside it, because it reads its own endpoint). Plus `IssueDetailPage`'s `Logged` Details row, `WorkTablePage`'s `logged` column + footer, `MyWorkPage`'s `ThisPeriodPanel`, and `GeneralSettingsPage`'s `TimePanel`. `lib/format.ts::formatHours` is the one spelling of an hour (`14h` / `0.5h`, `null` → em dash, never `0h`) |
+| **`trackTime` reached the wire in a FRONTEND task, and that was a decided deviation** | 016 T5 was cut `fe` + `docs`, and D-g's switch had no contract field: T2 landed `project_settings.track_time`, T3 mapped it, `TimeEntryService` read it, and `ProjectSettings.java` said in as many words that the contract field arrives with the settings screen. T5 added it to `ProjectSettings` + `ProjectSettingsUpdate`, both generated copies, `ProjectSettingsView` / `ProjectSettingsRequest` / the entity / the service, and `TrackTimeSettingTest`. **It is the one boolean in `ProjectSettingsUpdate` the server reads as `true` when omitted** — dropping it takes a project's time surfaces away, where dropping a review opt-in reopens a gate somebody can close again. `settingsUpdate.ts::fullSettingsUpdate` carries it anyway; the server's reading is the safety net, not a licence |
+| The bulk rollup, and why it is not a field on `IssueSummary` | **`GET /time/rollup/issues?key=…`** → `TimeRollup[]`, `useIssueTimeRollups(keys, enabled)`, `keys.time.issueRollups(keys)` (under `['time','rollup','issue','bulk', …]` so it shares the single grain's prefix). `IssueSummary` carries `estimateHours` and **no logged hours**, and the epic-rollup operation's own prose claimed otherwise until T5 struck it through. Adding `approvedHours` to `IssueSummary` was refused: `tracker` is a leaf and would then read another leaf's projection on every work-table page load. **A key the caller cannot read comes back ABSENT, not `0h`** — zero is the claim somebody looked |
+| The time surfaces are WITHHELD until `useProjectSettings` answers, not defaulted on | `!settings.isPending && (settings.data?.trackTime ?? true)` on both `IssueDetailPage` and `WorkTablePage`. `?? true` alone made the panel appear and then vanish on a project with tracking off — a layout shift and a wrong claim held for a beat, caught by an RTL assertion that ran before the settings read landed. A **failed** settings read still falls back to on, because D-g's column default is on |
+| **My Work's time figure is NOT behind `trackTime`, deliberately** | D-g names the `Logged` column, the story and epic panels and the log form's picker — not this. A period spans projects (D-i) and `trackTime` is one project's decision, and `MyWorkPage` names no project at all. The panel is headed **"This period"**, not the mockup's "This week": D-a's fortnight is semi-monthly, so a week is a range the product does not have |
 | `TypeIcon`'s `name` is OPTIONAL since 016 T4 | `TimeEntry.subject` carries `typeLevel` and no type name, so the glyph and the sr-only text fall back to the level's own word and the tooltip is absent. Third widening of that component, in its own idiom |
 | The rail's Timesheets entry has NO badge, deliberately | The mockup's `SEES_APPROVALS` count needs `GET /timesheets/approvals`, which **403s** without `time:approve` — a **PROJECT-scope** grant with no company-wide "where may I approve" read on the contract. `useCanInCompany` would say no for the PMs it is for; `useCan(activeProjectId)` would key a cross-project count on the switcher, the exact claim the placement avoids. Firing it unconditionally would raise a refused-request notification on every page load for most of the company. The count is on the approvals subtitle instead. Full argument in `AppShell.tsx`'s `TIMESHEETS` comment |
 | `Approve all` and `Remind` are absent from the approvals screen | No batch operation on the contract for the first — it would be N irreversible writes with a partial outcome to word, and there is no un-approve — and no endpoint at all behind the second. Named in `ApprovalsPage`'s header so a reader comparing against the mockup finds the reason |
@@ -176,7 +187,8 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 
 ## Known unknowns
 
-- **`src/features/cases/CaseGrid.test.tsx` is RED on `master` and predates 016.** Two selection
+- **`src/features/cases/CaseGrid.test.tsx` is RED on `master` and predates 016.** Still red after
+  016 T5 (2 failed of 2705, in 1 file of 194) — untouched by that task, which names no cases file. Two selection
   tests — *survives paging* and *select-all reaches the page* — fail with `Number of calls: 0` after
   a `userEvent.click` on the Radix `Checkbox` at `CaseGrid.tsx:118` / `:126`. Verified failing on a
   clean checkout at `90667f1e` with the working tree stashed, so it is not 016's. Not investigated:
