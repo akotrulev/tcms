@@ -148,7 +148,17 @@ for (const pkg of SHIPPED) {
   // resolve and npm will not resolve them on its behalf (see below).
   const declared = { ...manifestOf('client').dependencies, ...manifestOf(pkg.dir).dependencies };
   delete declared['@tcms/client'];
-  writeManifest(target, (m) => ({ ...m, version: stamp(m.version), dependencies: declared }));
+  // devDependencies are DROPPED, and not merely because a release tarball has no use for them.
+  // `--omit=dev` prunes the dev tree at the end; it does not stop arborist building it first,
+  // peer sets included. So the install below still resolved `vitest` — and on 2026-09-03 the
+  // publication of vitest 5.0.0 made `@vitest/browser-playwright`'s `vitest@*` peer edge crash
+  // npm 10.9.0 with `Cannot read properties of null (reading 'edgesOut')`, reddening this step
+  // on a commit that changed no manifest in this workspace. A tarball's dependency closure must
+  // not be decided by what this repository happens to test with.
+  writeManifest(target, (m) => {
+    const { devDependencies: _dev, ...rest } = m;
+    return { ...rest, version: stamp(m.version), dependencies: declared };
+  });
 
   // Materialize the real registry closure into the staged tree, then bundle ALL of it.
   run('npm', ['install', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund', '--no-package-lock'], target);
