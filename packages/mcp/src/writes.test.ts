@@ -1066,7 +1066,7 @@ describe('registry declarations', () => {
 });
 
 describe('the surface as a whole — surface spec §2 and §4.1', () => {
-  it('is 34 tools', () => {
+  it('is 37 tools', () => {
     // The count is an OUTCOME of "a tool never spans two permissions on its write path", not a
     // target. It is asserted so that a merge or a split has to be a decision somebody records.
     // ~~21~~ → 23 with audit C10: `tcms_list_artifacts` and `tcms_write_artifact`, which arrived
@@ -1100,7 +1100,18 @@ describe('the surface as a whole — surface spec §2 and §4.1', () => {
     // (016 D-e — submitting is logging one step later, not a fifth key) and deciding is
     // `time:approve`, which Test Lead does not hold (D-f), so one tool over both would be listed
     // to every Test Engineer and 403 on half of itself.
-    expect(TOOLS).toHaveLength(34);
+    // ~~34~~ → 37 with 017 T1's staffing verbs, and the gates split two ways again.
+    // `tcms_read_staffing` is the surface's SECOND `any`-gated read: "who is on this project" costs
+    // the PROJECT-scope `staffing:read` and "who in the company has this skill" costs the
+    // COMPANY-scope `staffing:directory`, and neither of the two roles that ask those questions
+    // holds the other's key — so gating it `all` would hide the whole noun from both of them.
+    // On the write half, allocating is `staffing:allocate` (PROJECT) and recording somebody else's
+    // absence is `staffing:absence` (COMPANY), which is a scope boundary and not merely a second
+    // key: one tool over both would be listed to a Project Manager and 403 on half of itself.
+    // Maintaining profiles and the skill vocabulary (`staffing:profile`) has NO tool — the writes
+    // are a person's HR-shaped record, nothing on this surface can obtain the ids they take, and a
+    // tool nobody could reach is the shape §3.3 excludes rather than a gap.
+    expect(TOOLS).toHaveLength(37);
   });
 
   it('names every tool in the tcms_ namespace', () => {

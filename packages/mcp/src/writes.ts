@@ -124,7 +124,7 @@ import {
   str,
   strings,
 } from './input.js';
-import { boardIn, labelIdsIn, releaseIn } from './reads.js';
+import { boardIn, labelIdsIn, memberIdIn, releaseIn } from './reads.js';
 import type { Session } from './session.js';
 import type { ToolDefinition } from './tool.js';
 
@@ -2340,6 +2340,214 @@ const DECISIONS: Record<string, components['schemas']['TimesheetDecisionInput'][
   'withdraw-rejection': 'WITHDRAW_REJECTION',
 };
 
+/* ----------------------------------------------------------------- staffing ---- */
+
+/**
+ * Allocating, and it is one tool because it is one key — `staffing:allocate`, PROJECT scope.
+ *
+ * The company-scope half of staffing (profiles, skills, absences) is not here: those cost
+ * `staffing:profile` and `staffing:absence`, which are COMPANY-scope keys — and this tool's gate is a
+ * PROJECT-scope one, so merging them in would list a tool two thirds of which 403s for the role that
+ * uses the other third. §2's rule, meeting a scope boundary rather than a second key.
+ *
+ * **The `change` arm sends no `If-Match`, and it is not an oversight.** `PATCH …/allocations/{id}`
+ * declares none and `Allocation` carries no `lockVersion` on the wire to precondition on, so closing
+ * it is a contract change on both halves rather than a header here — the wall `tcms_write_release`'s
+ * update meets. What it costs is bounded by the endpoint being a true delta: two callers editing one
+ * allocation lose only the fields they both named, and the set is a percentage, two dates and a note.
+ */
+const writeAllocation: ToolDefinition = {
+  name: 'tcms_write_allocation',
+  title: 'Allocate a person to this project, change the allocation, or remove it',
+  description:
+    'A percentage of a person over a range of dates, on THIS project. `allocate` books somebody, '
+    + '`change` moves the percentage or the range, `remove` takes the booking off. `person` is a '
+    + 'display NAME or an email, resolved against this project\'s members; somebody who is a company '
+    + 'member without a grant here is still allocatable and is named by id. `allocation` ids come '
+    + 'from tcms_read_staffing with `project`. '
+    + '**Two allocations of the same person to the SAME project over overlapping days are refused '
+    + 'with a 409 and never merged** — that is the rule working, not a fault; the same person on two '
+    + 'DIFFERENT projects is the ordinary case and is what over-allocation reports. '
+    + 'Over-allocation is a daily peak, not a monthly sum, so booking 100% for the first half of a '
+    + 'month and 100% for the second is legitimate and is not a conflict. Removing an allocation '
+    + 'leaves the person\'s profile, skills and every other project\'s claim on them untouched. '
+    + '**Nothing here returns or accepts a rate, a cost or an invoice value.**',
+  gate: { mode: 'all', permissions: ['staffing:allocate'] },
+  arms: [
+    { action: 'allocate', kind: 'create', permission: 'staffing:allocate' },
+    { action: 'change', kind: 'edit', permission: 'staffing:allocate' },
+    // `targets` names the row the consent prompt has to show: an allocation has no display key, so
+    // the id is what a person is being asked about, and a prompt naming only the operation is one
+    // nobody can answer.
+    { action: 'remove', kind: 'delete', permission: 'staffing:allocate', targets: ['allocation'] },
+  ],
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['action'],
+    properties: {
+      action: ACTION(['allocate', 'change', 'remove'], 'What to do.'),
+      person: {
+        type: 'string',
+        description: 'Who to allocate — a display name, an email, or their id. Required for allocate; refused for the other two, which name the allocation.',
+      },
+      allocation: {
+        type: 'string',
+        description: 'The allocation id, from tcms_read_staffing with `project`. Required for change and remove.',
+      },
+      percent: { type: 'integer', minimum: 1, maximum: 100, description: 'The share of this person. Required for allocate.' },
+      startsOn: { type: 'string', description: 'First day of the booking, `YYYY-MM-DD`. Required for allocate.' },
+      endsOn: { type: 'string', description: 'Last day of the booking, `YYYY-MM-DD`. Required for allocate.' },
+      note: { type: 'string', description: 'Optional free text — why this booking is what it is.' },
+    },
+  },
+  run: async (session, input) => {
+    const tcms = session.request;
+    const action = requireStr(input, 'action');
+    const projectId = session.projectId();
+
+    if (action === 'allocate') {
+      return session.client.POST('/projects/{projectId}/allocations', {
+        params: { path: { projectId } },
+        body: present({
+          personId: await memberIdIn(session, requireStr(input, 'person')),
+          percent: num(input, 'percent'),
+          startsOn: requireStr(input, 'startsOn'),
+          endsOn: requireStr(input, 'endsOn'),
+          note: str(input, 'note'),
+        }) as components['schemas']['AllocationInput'],
+        tcms: { ...tcms, ...createIntent({ key: session.callId }) },
+      });
+    }
+
+    const path = { projectId, allocationId: requireStr(input, 'allocation') };
+
+    if (action === 'change') {
+      // A true delta: `present` drops what nobody named, so a change of percentage leaves the range
+      // where it was. Sending the whole shape back would move dates the caller never mentioned.
+      const patch = present({
+        percent: num(input, 'percent'),
+        startsOn: str(input, 'startsOn'),
+        endsOn: str(input, 'endsOn'),
+        note: nullableStr(input, 'note'),
+      });
+      if (Object.keys(patch).length === 0) {
+        throw new InputError('Name at least one of percent, startsOn, endsOn or note — a change with nothing in it is not a request.');
+      }
+      return session.client.PATCH('/projects/{projectId}/allocations/{allocationId}', {
+        params: { path },
+        body: patch as components['schemas']['AllocationPatch'],
+        tcms,
+      });
+    }
+
+    if (action !== 'remove') throw new InputError(`Unknown action '${action}'.`);
+
+    await session.client.DELETE('/projects/{projectId}/allocations/{allocationId}', {
+      params: { path }, tcms,
+    });
+    // A 204 has no body. Saying what went and what did not beats an empty success — a caller that
+    // expected the person to leave the project has no other way to learn that they have not.
+    return { removed: path.allocationId, person: 'kept — their profile, skills and other projects are untouched' };
+  },
+};
+
+/**
+ * Absence, and it is its own tool because it is its own key and its own scope.
+ *
+ * `staffing:absence` is COMPANY scope and covers recording somebody else's; **the caller's own needs
+ * no staffing permission at all** (017 D-h). The gate is the `person` form's key, which is the
+ * honest listing rule: a credential that cannot record anybody else's absence has no use for a tool
+ * whose whole purpose is doing it on their behalf, and an agent token is not a person who takes
+ * leave. The declared permission is what a refused caller has to go and ask for.
+ *
+ * An absence is not a note on a calendar: it **removes those hours from every capacity figure in the
+ * product**, and from the utilisation computed against them. The description says so, because a
+ * model relaying "recorded" without it is relaying half of what happened.
+ */
+const writeAbsence: ToolDefinition = {
+  name: 'tcms_write_absence',
+  title: 'Record somebody\'s absence, or remove one that was recorded in error',
+  description:
+    'When somebody is away, which is the thing that zeroes their capacity. `record` files an '
+    + 'absence over a range; `remove` takes one off. `person` is a display name, an email or an id '
+    + 'and defaults to THIS caller — recording your own needs no staffing permission, and recording '
+    + 'somebody else\'s costs staffing:absence. `kind` is LEAVE, SICK, HOLIDAY or OTHER, and HOLIDAY '
+    + 'is how a public holiday is recorded because **this product has no holiday calendar**: a '
+    + 'company-wide holiday is one row per person, so do not expect one call to cover a team. '
+    + '`dayFraction` is the share of each day that is absent — 1 is a whole day, 0.5 a half day — '
+    + 'not a boolean and not a pair of times. '
+    + '**This is not a note on a calendar**: the hours are removed from that person\'s capacity on '
+    + 'every screen and from the utilisation computed against it, so an absence recorded in error '
+    + 'understates capacity everywhere until it is removed. Absence ids come from tcms_read_staffing '
+    + 'with `person`. **Nothing here returns or accepts a rate, a cost or an invoice value.**',
+  gate: { mode: 'all', permissions: ['staffing:absence'] },
+  arms: [
+    { action: 'record', kind: 'create', permission: 'staffing:absence' },
+    // The absence id is what the consent prompt names: an absence has no display key, and a prompt
+    // that named only the operation would be one nobody could answer.
+    { action: 'remove', kind: 'delete', permission: 'staffing:absence', targets: ['absence', 'person'] },
+  ],
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['action'],
+    properties: {
+      action: ACTION(['record', 'remove'], 'What to do.'),
+      person: {
+        type: 'string',
+        description: 'Whose absence — a display name, an email, or their id. Defaults to this caller, whose own absence needs no staffing permission.',
+      },
+      absence: { type: 'string', description: 'The absence id, from tcms_read_staffing with `person`. Required for remove.' },
+      startsOn: { type: 'string', description: 'First day away, `YYYY-MM-DD`. Required for record.' },
+      endsOn: { type: 'string', description: 'Last day away, `YYYY-MM-DD`. Required for record. The same date as startsOn for one day.' },
+      kind: {
+        type: 'string',
+        enum: ['LEAVE', 'SICK', 'HOLIDAY', 'OTHER'],
+        description: 'Why they are away. Defaults to LEAVE. HOLIDAY is a public holiday, recorded per person because there is no calendar.',
+      },
+      dayFraction: {
+        type: 'number',
+        minimum: 0.25,
+        maximum: 1,
+        description: 'The share of each day in the range that is absent. Defaults to 1, a whole day; 0.5 is a half day.',
+      },
+      note: { type: 'string', description: 'Optional free text.' },
+    },
+  },
+  run: async (session, input) => {
+    const tcms = session.request;
+    const action = requireStr(input, 'action');
+
+    // The caller's own when nobody was named, from the session rather than from an argument: a tool
+    // that let one be passed for the default would record somebody's leave against the wrong person.
+    const named = str(input, 'person');
+    const userId = named === undefined ? session.reach.user.id : await memberIdIn(session, named);
+
+    if (action === 'record') {
+      return session.client.POST('/staffing/people/{userId}/absences', {
+        params: { path: { userId } },
+        body: present({
+          startsOn: requireStr(input, 'startsOn'),
+          endsOn: requireStr(input, 'endsOn'),
+          kind: (str(input, 'kind') ?? 'LEAVE') as components['schemas']['AbsenceKind'],
+          dayFraction: num(input, 'dayFraction'),
+          note: str(input, 'note'),
+        }) as components['schemas']['AbsenceInput'],
+        tcms,
+      });
+    }
+
+    if (action !== 'remove') throw new InputError(`Unknown action '${action}'.`);
+
+    const absenceId = requireStr(input, 'absence');
+    await session.client.DELETE('/staffing/people/{userId}/absences/{absenceId}', {
+      params: { path: { userId, absenceId } }, tcms,
+    });
+    return { removed: absenceId, capacity: 'those days are back in this person\'s capacity everywhere it is shown' };
+  },
+};
+
 export const WRITE_TOOLS: readonly ToolDefinition[] = [
   writeCase,
   writeSuite,
@@ -2356,4 +2564,6 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   report,
   writeTimesheet,
   approveTimesheet,
+  writeAllocation,
+  writeAbsence,
 ];

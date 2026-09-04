@@ -33,7 +33,7 @@ import {
   type Command,
   type CommandContext,
 } from './context.js';
-import { fields, show, showAuthor, showDate, table } from './output.js';
+import { fields, show, showAuthor, showDate, table, type Output } from './output.js';
 
 const whoami: Command = {
   name: 'whoami',
@@ -1068,6 +1068,48 @@ async function assigneeIds(
   });
 }
 
+/**
+ * One person's id, from a display name, an email or the id itself.
+ *
+ * {@link assigneeIds}' lookup for a single name, exported because `staffing allocate` needs it and a
+ * second copy in `writes.ts` would be a second answer to *who may this project name*. `GET …/members`
+ * rather than `/users` for that function's reason: it costs `project:read`, which a Project Manager
+ * holds, where the company directory costs a COMPANY-scope key they deliberately do not.
+ *
+ * **What that bounds is worth saying out loud**: this resolves people who already hold a grant on
+ * the project. Allocating somebody who does not is legal — the endpoint validates against company
+ * membership, not project membership — and is spelled by passing their id, which comes from
+ * `tcms staffing directory` and therefore from `staffing:directory`.
+ */
+export async function memberIdOf(context: CommandContext, name: string): Promise<string> {
+  const members = await context.client.GET('/projects/{projectId}/members', {
+    params: { path: { projectId: await projectOf(context) } },
+    tcms: context.request,
+  });
+
+  const found = members.find(
+    (row) => row.displayName.toLowerCase() === name.toLowerCase()
+      || row.email.toLowerCase() === name.toLowerCase()
+      || row.id === name,
+  );
+  if (found) return found.id;
+
+  /*
+    Not a refusal to proceed on a value that looks like an id: a person with no grant on this project
+    is absent from this list and is still allocatable, so an id passed straight through is the
+    documented way to reach them. Only a NAME that resolved to nothing is a mistake, because a name
+    the server cannot resolve is a 400 the caller cannot read.
+  */
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)) return name;
+
+  throw new UsageError(
+    `Nobody called '${name}' holds a grant on this project. It has: `
+      + `${members.map((row) => row.displayName).join(', ') || '(nobody)'}. `
+      + 'Somebody who is a company member without a grant here can still be allocated — pass their '
+      + 'id, which `tcms staffing directory` prints.',
+  );
+}
+
 /** The five filter flags every card-shaped read takes, declared once so the two cannot drift. */
 const FILTER_OPTIONS = {
   label: { type: 'string', multiple: true },
@@ -1857,6 +1899,222 @@ const timeRollup: Command = {
   },
 };
 
+/* ----------------------------------------------------------------- staffing ---- */
+
+/**
+ * `tcms staffing directory --skill Playwright --free-from 2026-10-01` — the company view.
+ *
+ * **It costs `staffing:directory`, which is a COMPANY-scope key**, held by Instance Admin, Company
+ * Admin, Account Manager and Finance — and **not** by a Project Manager, whose staffing keys are the
+ * PROJECT-scope `staffing:read` and `staffing:allocate`. A PM asking for this gets a 403, and the
+ * honest answer to their actual question is the next command down: theirs is *who is on my project*,
+ * and that is `tcms staffing project`.
+ *
+ * `--skill` takes NAMES and repeats, and the names are ANDed — *"who knows Playwright and Java"* is
+ * one question, not two. They are resolved against `GET /staffing/skills` first, because nobody has
+ * a `skill` UUID to paste; an unknown one is refused by listing what the company has, which is
+ * `--column`'s rule one noun over.
+ *
+ * **An hours column is an em dash for somebody with no profile, never `0h`** (017 correction 4).
+ * `show` renders a null as the absence it is, so nothing here has to remember not to default it.
+ */
+const staffingDirectory: Command = {
+  name: 'staffing directory',
+  summary: 'Who has which skills, when they are free, and how much of them is already booked',
+  usage: 'tcms staffing directory [--skill NAME]... [--free-from 2026-10-01] [--from D] [--to D]\n'
+    + '       tcms staffing directory --person u-1   # one person in full',
+  options: {
+    skill: { type: 'string', multiple: true },
+    'free-from': { type: 'string' },
+    from: { type: 'string' },
+    to: { type: 'string' },
+    person: { type: 'string' },
+  },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const window = {
+      ...(first(options['from']) === undefined ? {} : { from: first(options['from']) as string }),
+      ...(first(options['to']) === undefined ? {} : { to: first(options['to']) as string }),
+    };
+
+    const person = first(options['person']);
+    if (person !== undefined) {
+      const found = await client.GET('/staffing/people/{userId}', {
+        params: { path: { userId: person }, query: window },
+        tcms: request,
+      });
+      if (json) return out.json(found);
+      return showPerson(out, found);
+    }
+
+    const skills = all(options['skill']);
+    const freeFrom = first(options['free-from']);
+    const people = await client.GET('/staffing/people', {
+      params: {
+        query: {
+          ...window,
+          ...(skills.length === 0 ? {} : { skill: await skillIds(context, skills) }),
+          ...(freeFrom === undefined ? {} : { freeFrom }),
+        },
+      },
+      tcms: request,
+    });
+    if (json) return out.json(people);
+
+    table(out, people, [
+      { header: 'PERSON', value: (row) => show(row.person.displayName) },
+      { header: 'TITLE', value: (row) => show(row.profile?.jobTitle) },
+      { header: 'LOCATION', value: (row) => show(row.profile?.location) },
+      { header: 'SKILLS', value: (row) => row.skills.map((held) => held.name).join(', ') || '(none)' },
+      // Null for somebody with no profile, and printed as the absence it is. `?? 0` here would say
+      // they have no capacity, where the truth is that nobody has recorded their contracted hours.
+      { header: 'CAPACITY', value: (row) => show(row.capacityHours) },
+      { header: 'BOOKED', value: (row) => `${show(row.allocatedPercent)}%` },
+      { header: 'PEAK', value: (row) => (row.overAllocated ? `${show(row.peakPercent)}% !` : `${show(row.peakPercent)}%`) },
+      { header: 'FREE FROM', value: (row) => show(row.freeFrom) },
+      { header: 'ID', value: (row) => show(row.person.id) },
+    ]);
+
+    if (people.length === 0) {
+      out.line();
+      // A sentence rather than an empty table: a filter matching nobody is an answer, and a bare
+      // zero-row table reads as a request that went wrong.
+      out.line('Nobody in this company matches those terms.');
+    }
+  },
+};
+
+/** One person, printed the way `time list` prints one period — the fields, then the two lists. */
+function showPerson(out: Output, person: components['schemas']['PersonCapacity']): void {
+  fields(out, [
+    ['Person', `${show(person.person.displayName)} <${show(person.person.email)}>`],
+    ['Title', show(person.profile?.jobTitle)],
+    ['Location', show(person.profile?.location)],
+    ['Experience', person.profile?.experienceYears === null || person.profile === null
+      ? '(not recorded)'
+      : `${show(person.profile.experienceYears)} years`],
+    ['Weekly hours', show(person.profile?.weeklyHours)],
+    ['Skills', person.skills.map((held) => held.name).join(', ') || '(none)'],
+    // Already net of absence — no reader subtracts it again, and the label says so because a
+    // second subtraction is the shape two contradictory percentages on one screen take.
+    ['Capacity', `${show(person.capacityHours)}h, net of ${show(person.absenceHours)}h absent`],
+    ['Booked', `${show(person.allocatedPercent)}% mean, peak ${show(person.peakPercent)}% on ${show(person.peakOn)}`],
+    ['Over-allocated', person.overAllocated ? 'yes — the peak day is above 100%' : 'no'],
+    ['Approved hours', show(person.approvedHours)],
+    // Null, not zero, when nobody has allocated them (017 D-i). `0%` would say they are idle.
+    ['Utilisation', person.utilisationPercent === null
+      ? '(nobody has allocated them, so there is nothing to be a share of)'
+      : `${show(person.utilisationPercent)}% — approved hours ÷ allocated capacity`],
+    ['Free from', show(person.freeFrom)],
+  ]);
+
+  out.line();
+  table(out, person.allocations, [
+    { header: 'PROJECT', value: (row) => `${show(row.projectKey)} ${show(row.projectName)}` },
+    { header: 'PERCENT', value: (row) => `${show(row.percent)}%` },
+    { header: 'FROM', value: (row) => show(row.startsOn) },
+    { header: 'TO', value: (row) => show(row.endsOn) },
+  ]);
+
+  if (person.absences.length > 0) {
+    out.line();
+    table(out, person.absences, [
+      { header: 'AWAY', value: (row) => `${show(row.startsOn)} → ${show(row.endsOn)}` },
+      { header: 'KIND', value: (row) => show(row.kind) },
+      { header: 'DAY', value: (row) => (row.dayFraction === 1 ? 'whole day' : `${show(row.dayFraction)} of each day`) },
+      { header: 'NOTE', value: (row) => show(row.note) },
+      { header: 'ID', value: (row) => show(row.id) },
+    ]);
+  }
+}
+
+/**
+ * Skill names to ids, against the company's own vocabulary.
+ *
+ * An unknown name is refused by listing what there is, rather than sent as a filter that silently
+ * matches nobody — a directory answering *"0 of 11 people match"* for a typo is the failure this
+ * lookup exists to prevent, and it is indistinguishable from a real answer.
+ */
+async function skillIds(context: CommandContext, names: readonly string[]): Promise<string[]> {
+  const vocabulary = await context.client.GET('/staffing/skills', { tcms: context.request });
+
+  return names.map((name) => {
+    const found = vocabulary.find(
+      (row) => row.name.toLowerCase() === name.toLowerCase() || row.id === name,
+    );
+    if (!found) {
+      throw new UsageError(
+        `This company has recorded no skill called '${name}'. It has: `
+          + `${vocabulary.map((row) => row.name).join(', ') || '(none)'}.`,
+      );
+    }
+    return found.id;
+  });
+}
+
+/**
+ * `tcms staffing project` — who is on the project in scope, and the ids `staffing allocate` reuses.
+ *
+ * **The read the write half needs, and the reason it exists as its own verb.** `staffing allocate`
+ * takes an allocation's percentage and range and nothing prints an allocation id anywhere else; a
+ * Project Manager holds no `staffing:directory`, so without this the project's own staffing would be
+ * unreadable from the surface that writes it. `time queue` is the same argument one module over.
+ *
+ * Each person carries their **company-wide** total and the over-allocation flag and **no other
+ * project's name** (017 D-f): the total is what makes the flag actionable, and naming the projects
+ * behind it would disclose, through a project-scope grant, staffing this caller cannot see.
+ */
+const staffingProject: Command = {
+  name: 'staffing project',
+  summary: "Who is allocated to this project, at what percentage, and who is already over-booked",
+  usage: 'tcms staffing project [--from 2026-09-01] [--to 2026-11-30] [--project KEY]',
+  options: { from: { type: 'string' }, to: { type: 'string' } },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+
+    const view = await client.GET('/projects/{projectId}/staffing', {
+      params: {
+        path: { projectId: await projectOf(context) },
+        query: {
+          ...(first(options['from']) === undefined ? {} : { from: first(options['from']) as string }),
+          ...(first(options['to']) === undefined ? {} : { to: first(options['to']) as string }),
+        },
+      },
+      tcms: request,
+    });
+    if (json) return out.json(view);
+
+    fields(out, [['Window', `${show(view.from)} → ${show(view.to)}`]]);
+
+    out.line();
+    table(out, view.people, [
+      { header: 'PERSON', value: (row) => show(row.person.displayName) },
+      { header: 'HERE', value: (row) => `${show(row.percentOnThisProject)}%` },
+      // The company-wide total, deliberately without the breakdown behind it (017 D-f).
+      { header: 'TOTAL', value: (row) => `${show(row.totalPercent)}%` },
+      { header: 'OVER', value: (row) => (row.overAllocated ? 'yes' : '') },
+      { header: 'CAPACITY', value: (row) => show(row.capacityHours) },
+      { header: 'ID', value: (row) => show(row.person.id) },
+    ]);
+
+    out.line();
+    table(out, view.allocations, [
+      { header: 'PERSON', value: (row) => show(row.person.displayName) },
+      { header: 'PERCENT', value: (row) => `${show(row.percent)}%` },
+      { header: 'FROM', value: (row) => show(row.startsOn) },
+      { header: 'TO', value: (row) => show(row.endsOn) },
+      { header: 'NOTE', value: (row) => show(row.note) },
+      { header: 'ID', value: (row) => show(row.id) },
+    ]);
+
+    if (view.allocations.length === 0) {
+      out.line();
+      out.line('Nobody is allocated to this project yet. Allocate somebody with: '
+        + 'tcms staffing allocate --person "Dana Petrov" --percent 50 --from 2026-09-01 --to 2026-11-30');
+    }
+  },
+};
+
 export const READS: readonly Command[] = [
   whoami,
   format,
@@ -1889,4 +2147,6 @@ export const READS: readonly Command[] = [
   timeList,
   timeQueue,
   timeRollup,
+  staffingDirectory,
+  staffingProject,
 ];

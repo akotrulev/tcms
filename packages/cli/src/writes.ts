@@ -57,7 +57,7 @@ import {
   type Command,
   type CommandContext,
 } from './context.js';
-import { boardOf, labelIds, releaseOf } from './reads.js';
+import { boardOf, labelIds, memberIdOf, releaseOf } from './reads.js';
 import { fields, show, showAuthor, type Output } from './output.js';
 
 type TestCaseInput = components['schemas']['TestCaseInput'];
@@ -2017,6 +2017,146 @@ const timeApprove: Command = {
   },
 };
 
+/* ----------------------------------------------------------------- staffing ---- */
+
+/**
+ * `tcms staffing allocate --person "Dana Petrov" --percent 50 --from 2026-09-01 --to 2026-11-30`
+ *
+ * **A percentage of a person over a range, on the project in scope**, costing `staffing:allocate`,
+ * which is a PROJECT-scope key. Allocating the same person to a *second* project over the same days
+ * is the ordinary case and is exactly what over-allocation reports; allocating them to **this**
+ * project twice over overlapping days is a `409` rather than a silent merge (017 D-n), because one
+ * bar per person per project is what the timeline draws and merging would change a number somebody
+ * typed.
+ *
+ * `--person` takes a NAME or an email, resolved against this project's members — nobody has a user
+ * UUID to paste. Somebody who is a company member without a grant here is still allocatable and is
+ * named by id; `memberIdOf` says so in its refusal rather than leaving it to be discovered.
+ *
+ * **Changing and removing an allocation have no verb here**, and that is a shortfall recorded rather
+ * than hidden: both are one call on the MCP surface (`tcms_write_allocation`), a person at a terminal
+ * reaches for them rarely, and the read that prints the ids (`tcms staffing project`) exists so the
+ * gap is closeable in one command whenever somebody asks.
+ */
+const staffingAllocate: Command = {
+  name: 'staffing allocate',
+  summary: 'Allocate a person to this project at a percentage, for a range of dates',
+  usage: 'tcms staffing allocate --person "Dana Petrov" --percent 50 --from 2026-09-01 --to 2026-11-30\n'
+    + '       tcms staffing allocate --person dana@acme.test --percent 30 --from 2026-10-01 --to 2026-10-31 --note "handover"',
+  options: {
+    person: { type: 'string' },
+    percent: { type: 'string' },
+    from: { type: 'string' },
+    to: { type: 'string' },
+    note: { type: 'string' },
+    'idempotency-key': { type: 'string' },
+  },
+  write: { kind: 'create', permission: 'staffing:allocate' },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const intent = createIntent({ key: text(options['idempotency-key']) });
+
+    const allocated = await client.POST('/projects/{projectId}/allocations', {
+      params: { path: { projectId: await projectOf(context) } },
+      body: present({
+        personId: await memberIdOf(context, requireOption(context, 'person')),
+        percent: requirePercent(context),
+        startsOn: requireOption(context, 'from'),
+        endsOn: requireOption(context, 'to'),
+        note: text(options['note']),
+      }) as components['schemas']['AllocationInput'],
+      tcms: { ...request, ...intent },
+    });
+
+    reportWrite(out, json, allocated, [
+      [outcome(intent, 'Allocated'), `${show(allocated.person.displayName)} at ${show(allocated.percent)}%`],
+      ['Range', `${show(allocated.startsOn)} → ${show(allocated.endsOn)}`],
+      ['Allocation', show(allocated.id)],
+      // Printed because it is the next decision: this project's percentage is not the whole of what
+      // is on this person, and `staffing project` is the read that says what the rest of it is.
+      ['Company-wide', 'run `tcms staffing project` — the total across every project is what the over-allocation flag reads'],
+    ]);
+  },
+};
+
+/** The percentage flag, refused locally when it is not one the contract would accept. */
+function requirePercent(context: CommandContext): number {
+  const raw = requireOption(context, 'percent');
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 100) {
+    throw new UsageError(`--percent takes a whole percentage between 1 and 100, not '${raw}'.`);
+  }
+  return parsed;
+}
+
+/**
+ * `tcms staffing absence --from 2026-09-24 --to 2026-09-24 --kind LEAVE`
+ *
+ * **Your own absence needs no staffing permission** (017 D-h). The catalogue is precise about it:
+ * `staffing:absence` covers recording one *on somebody else's behalf*, which is what `--person`
+ * turns this into. A product that made recording your own Thursday an administrative act would be
+ * one where nobody records absence, and every capacity figure in the module would then be a lie by
+ * omission. The declared permission below is the one the `--person` form costs, because that is the
+ * arm a refused caller has to go and ask for.
+ *
+ * `--half-day` is `dayFraction: 0.5` and reads as *half day* wherever it is shown (017 D-d). A whole
+ * absence is `1`, which is the default, and neither is a boolean column — a fraction is what lets a
+ * public holiday, a half day and a fortnight of leave be one table.
+ *
+ * **`HOLIDAY` is a kind rather than a calendar.** This product has no holiday table (017 D-c), so a
+ * company-wide holiday is one row per person; the cost is stated here because a person typing it is
+ * the one who pays it.
+ */
+const staffingAbsence: Command = {
+  name: 'staffing absence',
+  summary: 'Record an absence — your own, or somebody else\'s with staffing:absence',
+  usage: 'tcms staffing absence --from 2026-09-24 --to 2026-09-24\n'
+    + '       tcms staffing absence --from 2026-08-29 --to 2026-08-29 --half-day --note "school run"\n'
+    + '       tcms staffing absence --person "Dana Petrov" --from 2026-12-24 --to 2026-12-26 --kind HOLIDAY',
+  options: {
+    person: { type: 'string' },
+    from: { type: 'string' },
+    to: { type: 'string' },
+    kind: { type: 'string' },
+    'half-day': { type: 'boolean' },
+    note: { type: 'string' },
+  },
+  write: { kind: 'create', permission: 'staffing:absence' },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+
+    // The caller's own when `--person` is absent, read from `/me` rather than taken as a default:
+    // a client that guessed an id here would be recording somebody's leave against the wrong person.
+    const named = first(options['person']);
+    const userId = named === undefined
+      ? (await client.GET('/me', { tcms: request })).id
+      : await memberIdOf(context, named);
+
+    const recorded = await client.POST('/staffing/people/{userId}/absences', {
+      params: { path: { userId } },
+      body: present({
+        startsOn: requireOption(context, 'from'),
+        endsOn: requireOption(context, 'to'),
+        kind: (first(options['kind']) ?? 'LEAVE').toUpperCase() as components['schemas']['AbsenceKind'],
+        dayFraction: flag(options['half-day']) ? 0.5 : undefined,
+        note: text(options['note']),
+      }) as components['schemas']['AbsenceInput'],
+      tcms: request,
+    });
+
+    reportWrite(out, json, recorded, [
+      ['Recorded', `${show(recorded.startsOn)} → ${show(recorded.endsOn)}`],
+      ['Kind', show(recorded.kind)],
+      ['Day', recorded.dayFraction === 1 ? 'whole day' : `${show(recorded.dayFraction)} of each day`],
+      ['Absence', show(recorded.id)],
+      // Said out loud because it is the effect nobody asked for and everybody depends on: an
+      // absence does not merely appear on a calendar, it removes those hours from every capacity
+      // figure in the product, and from the utilisation that is computed against them.
+      ['Effect', 'those days\' capacity is gone from every staffing figure — the timeline, the free-capacity panel and utilisation'],
+    ]);
+  },
+};
+
 export const WRITES: readonly Command[] = [
   caseEdit,
   caseProposal,
@@ -2051,4 +2191,6 @@ export const WRITES: readonly Command[] = [
   timeLog,
   timeSubmit,
   timeApprove,
+  staffingAllocate,
+  staffingAbsence,
 ];

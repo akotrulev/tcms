@@ -120,7 +120,15 @@ import type {
   PreviewStatusRow,
   PreviewTypeRow,
   SourceProject,
+  Absence,
+  Allocation,
   EpicTimeRollup,
+  PersonCapacity,
+  PersonProfile,
+  ProjectStaffingView,
+  SelfCapacity,
+  Skill,
+  StaffingCapacityView,
   TimeEntry,
   TimeRollup,
   TimesheetPeriod,
@@ -1706,4 +1714,134 @@ export function aTimesheetQueueEntry(
     projectTotals: [],
     ...overrides,
   }
+}
+
+/* ----------------------------------------------------------------- staffing ---- */
+
+/**
+ * Somebody's contracted hours, and the one value in this file that is not the least interesting the
+ * contract admits.
+ *
+ * `weeklyHours: 40` rather than `0`, because a profile exists precisely to record contracted hours
+ * and a person contracted for none is not a body this product produces. The absence this file's rule
+ * is really about is the *missing profile*, which is `profile: null` on `aPersonCapacity` — a
+ * separate state, and the one that must never render as `0h` or as a default of 40 (017 correction 4).
+ *
+ * `experienceSince` is a date and `experienceYears` is derived from it server-side (017 D-b). The two
+ * agree here, and a test that changes one changes both.
+ */
+export function aPersonProfile(overrides: Partial<PersonProfile> = {}): PersonProfile {
+  return {
+    personId: 'u1',
+    weeklyHours: 40,
+    jobTitle: null,
+    location: null,
+    experienceSince: null,
+    experienceYears: null,
+    ...overrides,
+  }
+}
+
+export function aSkill(overrides: Partial<Skill> = {}): Skill {
+  return { id: 'sk1', name: 'Playwright', ...overrides }
+}
+
+/**
+ * One absence. `dayFraction: 1` is a whole day, which is the ordinary one; `member.html`'s *half
+ * day* is `0.5` and a test about it says so (017 D-d).
+ */
+export function anAbsence(overrides: Partial<Absence> = {}): Absence {
+  return {
+    id: 'ab1',
+    personId: 'u1',
+    startsOn: '2026-08-29',
+    endsOn: '2026-08-29',
+    kind: 'LEAVE',
+    dayFraction: 1,
+    note: null,
+    ...overrides,
+  }
+}
+
+export function anAllocation(overrides: Partial<Allocation> = {}): Allocation {
+  return {
+    id: 'al1',
+    projectId: 'p1',
+    personId: 'u1',
+    person: aUserRef(),
+    percent: 50,
+    startsOn: '2026-09-01',
+    endsOn: '2026-11-30',
+    note: null,
+    ...overrides,
+  }
+}
+
+/**
+ * One person over one window, with a profile and **nothing allocated** — which is the emptiest body
+ * the contract admits for somebody who exists, and is deliberately not the emptiest body it admits
+ * at all.
+ *
+ * `utilisationPercent` is `null` and that is the default rather than a scenario: allocated capacity
+ * is zero here, and 017 D-i is explicit that `0%` would claim this person is idle when the true
+ * statement is that nobody has planned their time. A test about utilisation names both numbers.
+ *
+ * The no-profile state is `aPersonCapacity({ profile: null, capacityHours: null, absenceHours: null,
+ * allocatedCapacityHours: null, approvedHours: null })` — five nulls together, because they arrive
+ * together, and a fixture carrying only the first would describe a body the server cannot send.
+ */
+export function aPersonCapacity(overrides: Partial<PersonCapacity> = {}): PersonCapacity {
+  return {
+    person: aUserRef(),
+    profile: aPersonProfile(),
+    skills: [],
+    capacityHours: 80,
+    absenceHours: 0,
+    allocatedPercent: 0,
+    allocatedCapacityHours: 0,
+    freePercent: 100,
+    peakPercent: 0,
+    peakOn: null,
+    overAllocated: false,
+    approvedHours: 0,
+    utilisationPercent: null,
+    freeFrom: '2026-09-01',
+    allocations: [],
+    absences: [],
+    ...overrides,
+  }
+}
+
+/**
+ * The company view. `overAllocated` is served as its own list rather than filtered on the client, so
+ * the panel and the row badge above it cannot disagree — and it is empty here beside an empty
+ * `people`, which is the only pair that is self-consistent by default.
+ */
+export function aStaffingCapacityView(
+  overrides: Partial<StaffingCapacityView> = {},
+): StaffingCapacityView {
+  return { from: '2026-09-01', to: '2026-11-30', people: [], overAllocated: [], ...overrides }
+}
+
+/**
+ * The caller's own capacity (017 D-m). `hasProfile` is served explicitly so a screen can say *no
+ * profile recorded* rather than *failed to load* — the two are identical from a null alone.
+ */
+export function aSelfCapacity(overrides: Partial<SelfCapacity> = {}): SelfCapacity {
+  return {
+    from: '2026-09-01',
+    to: '2026-09-15',
+    capacityHours: 80,
+    absenceHours: 0,
+    allocatedPercent: 0,
+    hasProfile: true,
+    ...overrides,
+  }
+}
+
+/** This project's staffing. No row names another project (017 D-f). */
+export function aProjectStaffingView(
+  overrides: Partial<ProjectStaffingView> = {},
+): ProjectStaffingView {
+  return { from: '2026-09-01', to: '2026-11-30', allocations: [], people: [], ...overrides }
 }

@@ -35,6 +35,8 @@ import {
   declaredHeadersOf,
 } from '../../client/src/test/contractBodies.js';
 import {
+  absence,
+  allocation,
   board,
   boardSummary,
   cardMoveResult,
@@ -42,6 +44,7 @@ import {
   casePage,
   caseStatus,
   caseSummary,
+  currentUser,
   docBlock,
   docPage,
   docPageSummary,
@@ -96,6 +99,12 @@ const WATCHED = ['idempotency-key', 'if-match'] as const;
  * operation — not a header this file could start sending.
  */
 const CREATE_WITHOUT_A_KEY: Record<string, string> = {
+  'staffing absence': 'POST …/absences declares no Idempotency-Key, and the parameter\'s own scope '
+    + 'is the reason: it deduplicates within `(company, project, key)` and an absence is not '
+    + 'addressed to a project. What a lost response costs is a duplicate row over the same days, '
+    + 'which double-counts nothing — capacity is computed per DAY from the absences covering it '
+    + '(017 D-a) — and which is on the person\'s own list to remove. It is the first entry here '
+    + 'that is a CREATE rather than an edit with nothing to precondition on.',
   'release edit': 'PATCH /releases/{releaseId} declares no If-Match and `Release` carries no '
     + 'lockVersion, so two people renaming one version at once lose a rename.',
   'issue release': 'PATCH /issues/{key} declares no If-Match and `Issue` carries no lockVersion — '
@@ -278,6 +287,27 @@ interface Invocation {
 }
 
 const INVOCATIONS: Record<string, Invocation> = {
+  'staffing allocate': {
+    argv: () => [
+      'staffing', 'allocate', '--person', 'Ana Engineer',
+      '--percent', '50', '--from', '2026-09-01', '--to', '2026-11-30',
+    ],
+    path: '/allocations',
+    routes: { 'POST /allocations': { status: 201, body: allocation() } },
+  },
+  'staffing absence': {
+    // No `--person`, so it records the CALLER's own — the arm that needs no staffing key at all
+    // (017 D-h), which is why the `/me` read is in the routes rather than in `scaffolding`.
+    argv: () => ['staffing', 'absence', '--from', '2026-09-24', '--to', '2026-09-24'],
+    path: '/absences',
+    routes: {
+      'GET /me': { status: 200, body: currentUser() },
+      'POST /absences': {
+        status: 201,
+        body: absence({ startsOn: '2026-09-24', endsOn: '2026-09-24' }),
+      },
+    },
+  },
   'case edit': {
     argv: () => ['case', 'edit', 'TC-42', '--title', 'x'],
     path: '/cases/c-9',

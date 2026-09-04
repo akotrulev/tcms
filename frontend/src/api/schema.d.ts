@@ -10783,6 +10783,332 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/staffing/people": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The skills directory — who has which skills, and when they are free
+         * @description Every present company member, whether or not they have a profile. `skill` may repeat and is
+         *     ANDed: a person must hold all of them, which is what "who knows Playwright and Java"
+         *     means. `freeFrom` keeps only people with a day at under 100% on or after it.
+         *
+         *     Requires `staffing:directory`, which is COMPANY scope — held by Instance Admin, Company
+         *     Admin, Account Manager and Finance, and **not** by Project Manager, whose staffing keys are
+         *     the PROJECT-scope pair. A Project Manager's question is *who is on this project*, and that
+         *     is `GET /projects/{projectId}/staffing`.
+         */
+        get: operations["listStaffingPeople"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staffing/people/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One person's profile, skills, allocations, absences and capacity
+         * @description Requires `staffing:directory` (COMPANY scope), **or** that the caller is this person.
+         *     Somebody may always read their own staffing, which is why this is not a directory-only read.
+         */
+        get: operations["getStaffingPerson"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staffing/people/{userId}/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Create or replace somebody's staffing profile
+         * @description Requires `staffing:profile`, which is COMPANY scope. Creates the row if it is not there,
+         *     which is why it is a `PUT` and not a `POST` plus a `PATCH`: a profile is one row per person
+         *     and the caller has no id to address it by.
+         */
+        put: operations["putPersonProfile"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staffing/people/{userId}/skills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace somebody's whole skill set
+         * @description Requires `staffing:profile` (COMPANY scope). **The payload is the set, not a delta** — a
+         *     chip list is a set, and a body naming one skill takes the others off.
+         */
+        put: operations["putPersonSkills"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staffing/people/{userId}/absences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Somebody's absences in a window
+         * @description Requires `staffing:directory` (COMPANY scope) for anybody else's. The caller's own is
+         *     always readable — knowing when you are away is not an administrative question.
+         */
+        get: operations["listAbsences"];
+        put?: never;
+        /**
+         * Record an absence
+         * @description Requires `staffing:absence` (COMPANY scope) — **unless the person is the caller**, who may
+         *     always record their own (017 D-h). The catalogue text is precise about this: the key covers
+         *     *"record absence on somebody else's behalf"*, and a product that made recording your own
+         *     Thursday an administrative act would be one where nobody records absence, which would make
+         *     every capacity figure in this module a lie by omission.
+         */
+        post: operations["createAbsence"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staffing/people/{userId}/absences/{absenceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+                absenceId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove an absence
+         * @description Requires `staffing:absence` (COMPANY scope) — unless the person is the caller, who may
+         *     always remove their own. `POST`'s rule, from the other end.
+         */
+        delete: operations["deleteAbsence"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staffing/skills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The company's skill vocabulary
+         * @description Requires `staffing:directory` (COMPANY scope). Name order.
+         */
+        get: operations["listSkills"];
+        put?: never;
+        /**
+         * Add a skill to the vocabulary
+         * @description Requires `staffing:profile` (COMPANY scope). Names are unique per company,
+         *     case-insensitively — `citext`, as every other name-like column in this schema is.
+         *
+         *     **No `Idempotency-Key`, and the omission is the parameter's own scope rather than an
+         *     oversight**: it deduplicates within `(company, project, key)`, and a skill is not addressed
+         *     to a project. The retry it would guard against is already harmless here — a repeated name
+         *     answers `409`, not a second row.
+         */
+        post: operations["createSkill"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staffing/capacity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The company capacity view — allocation, over-allocation, free capacity, utilisation
+         * @description Requires `staffing:directory` (COMPANY scope). `from`/`to` default to the first of this
+         *     month and three months on, which is what `staffing.html`'s *"Next 3 months"* range shows.
+         *
+         *     Over-allocation is a **daily peak**, not a monthly sum (017 D-e): 100% for 1–15 September
+         *     and 100% for 16–30 September is not over-allocation, and a month's sum would report 200%.
+         */
+        get: operations["getStaffingCapacity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staffing/capacity/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's own capacity over a window
+         * @description **No staffing permission at all** — it is the caller's own figure (017 D-m). Serves the
+         *     timesheet's `Period capacity` tile and My Work's This-period meter, both of which pass the
+         *     **period's** bounds and not a week's (016 D-a).
+         *
+         *     It is a staffing read rather than a field on `GET /timesheets/periods/current` because
+         *     capacity is computed from `person_profile`, `allocation` and `absence`, none of which the
+         *     `time` module owns — putting it on the timesheet payload would make `time` serve a number
+         *     it cannot compute.
+         */
+        get: operations["getMyCapacity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/staffing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Who is on this project and at what percentage
+         * @description Requires `staffing:read` on **this project**, which is PROJECT scope — story S1's *"I open
+         *     a project's staffing"*.
+         *
+         *     Each person carries their company-wide total percentage and the over-allocation flag and
+         *     **names no other project** (017 D-f). A Project Manager holds no company-wide key, so
+         *     listing *"Acme Loyalty 50% + Bergstrom Portal 30%"* here would disclose, through a
+         *     project-scope grant, the existence and staffing of projects they cannot see. The total is
+         *     what makes the flag actionable — *this person is already at 130%, do not add to them* — and
+         *     the breakdown is the company view's, under `staffing:directory`.
+         */
+        get: operations["getProjectStaffing"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/allocations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Allocate a person to this project at a percentage for a range
+         * @description Requires `staffing:allocate` on this project (PROJECT scope).
+         *
+         *     **Two allocations of the same person to the same project over overlapping days are refused
+         *     with a `409` rather than merged** (017 D-n): `staffing.html` draws one bar per person per
+         *     project, so an overlap is not a thing a screen can render, and merging them silently would
+         *     change a number somebody typed. The same person on two *different* projects is the ordinary
+         *     case and is exactly what over-allocation exists to report.
+         */
+        post: operations["createAllocation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/allocations/{allocationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                allocationId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove an allocation
+         * @description Requires `staffing:allocate` on this project (PROJECT scope). The person keeps their
+         *     profile, their skills and every other project's claim on them; what goes is this project's.
+         */
+        delete: operations["deleteAllocation"];
+        options?: never;
+        head?: never;
+        /**
+         * Change an allocation's percentage or range
+         * @description Requires `staffing:allocate` on this project (PROJECT scope). A **true delta** — an absent
+         *     field is left alone — and the same overlap rule applies to the result, so a range moved
+         *     onto another allocation of the same person on this project is a `409`.
+         *
+         *     There is deliberately **no `If-Match`**: `Allocation` carries no `lockVersion` on the wire
+         *     and there is nothing to precondition on. What that costs is bounded by the delta — two
+         *     callers editing one allocation lose only the fields they both named — and it is recorded on
+         *     both agent surfaces rather than left for a reader to discover.
+         */
+        patch: operations["updateAllocation"];
+        trace?: never;
+    };
     "/imports/source-projects": {
         parameters: {
             query?: never;
@@ -18837,6 +19163,205 @@ export interface components {
                 hours: number;
             }[];
         };
+        /**
+         * @description Why somebody is away. `HOLIDAY` is how a public holiday is recorded, because there is no holiday calendar in this product (017 D-c) and a per-person row is what actually zeroes capacity. A company-wide holiday is therefore n rows, one per person — the cost is stated rather than discovered, and it is the right trade while the product has no locale model.
+         * @enum {string}
+         */
+        AbsenceKind: "LEAVE" | "SICK" | "HOLIDAY" | "OTHER";
+        Absence: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            personId: string;
+            /** Format: date */
+            startsOn: string;
+            /** Format: date */
+            endsOn: string;
+            kind: components["schemas"]["AbsenceKind"];
+            /**
+             * Format: double
+             * @description The share of each day in the range that is absent. `1` is a whole day, `0.5` the `half day` member.html shows. Not a boolean, so a half day is not a second table (017 D-d), and not a pair of times, which would invent a working-hours-of-day model this product does not have.
+             */
+            dayFraction: number;
+            note: string | null;
+        };
+        AbsenceInput: {
+            /** Format: date */
+            startsOn: string;
+            /** Format: date */
+            endsOn: string;
+            kind: components["schemas"]["AbsenceKind"];
+            /**
+             * Format: double
+             * @default 1
+             */
+            dayFraction: number;
+            note?: string | null;
+        };
+        PersonProfile: {
+            /** Format: uuid */
+            personId: string;
+            /**
+             * Format: double
+             * @description Contracted hours a week. Daily capacity is this over five (017 D-c).
+             */
+            weeklyHours: number;
+            jobTitle: string | null;
+            location: string | null;
+            /**
+             * Format: date
+             * @description A date, not a count of years (017 D-b). directory.html renders "6 years"; a stored integer is correct on the day it is typed and wrong every day after, silently, and nothing in the product would ever tell anybody.
+             */
+            experienceSince: string | null;
+            /** @description Derived from `experienceSince` at read time. Null when that is null. */
+            experienceYears: number | null;
+        };
+        PersonProfileInput: {
+            /** Format: double */
+            weeklyHours: number;
+            jobTitle?: string | null;
+            location?: string | null;
+            /** Format: date */
+            experienceSince?: string | null;
+        };
+        Skill: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
+        SkillInput: {
+            name: string;
+        };
+        PersonSkillsInput: {
+            /** @description The whole set, replacing what is there. Not a delta — a chip list is a set. */
+            skillIds: string[];
+        };
+        /** @description One project's claim on one person, as the timeline draws it. */
+        AllocationSpan: {
+            /** Format: uuid */
+            projectId: string;
+            projectKey: string;
+            projectName: string;
+            percent: number;
+            /** Format: date */
+            startsOn: string;
+            /** Format: date */
+            endsOn: string;
+        };
+        Allocation: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: string;
+            /** Format: uuid */
+            personId: string;
+            person: components["schemas"]["UserRef"];
+            percent: number;
+            /** Format: date */
+            startsOn: string;
+            /** Format: date */
+            endsOn: string;
+            note: string | null;
+        };
+        AllocationInput: {
+            /** Format: uuid */
+            personId: string;
+            percent: number;
+            /** Format: date */
+            startsOn: string;
+            /** Format: date */
+            endsOn: string;
+            note?: string | null;
+        };
+        /** @description A true delta — an absent field is left alone. `required: []` is written out rather than omitted so a reader can tell "nothing is required" from "nobody said". */
+        AllocationPatch: {
+            percent?: number;
+            /** Format: date */
+            startsOn?: string;
+            /** Format: date */
+            endsOn?: string;
+            note?: string | null;
+        };
+        /** @description One person over one window. `capacityHours` is already net of absence — there is no screen that should subtract it a second time, and one that did would contradict this one. */
+        PersonCapacity: {
+            person: components["schemas"]["UserRef"];
+            /** @description Null when nobody has recorded this person's contracted hours. Every hours figure below is then null too — absent, not zero, and not a default of 40 (017, correction 4). */
+            profile: components["schemas"]["PersonProfile"] | null;
+            skills: components["schemas"]["Skill"][];
+            /** Format: double */
+            capacityHours: number | null;
+            /** Format: double */
+            absenceHours: number | null;
+            /** @description The mean daily allocated percentage across the window, which is what the row label shows. */
+            allocatedPercent: number;
+            /** Format: double */
+            allocatedCapacityHours: number | null;
+            /** @description 100 minus allocatedPercent, floored at 0. */
+            freePercent: number;
+            /** @description The highest single day's total in the window (017 D-e). This is what the flag is read off — a month's sum would flag two consecutive half-month allocations at 200%. */
+            peakPercent: number;
+            /** Format: date */
+            peakOn: string | null;
+            /** @description `peakPercent` is 101 or more. */
+            overAllocated: boolean;
+            /**
+             * Format: double
+             * @description APPROVED time only (016 D-d). `approvedHours` and `pendingHours` are separate on the wire and nothing in this product sums them.
+             */
+            approvedHours: number | null;
+            /** @description `approvedHours ÷ allocatedCapacityHours`, as a percentage (017 D-i). **Null, not zero, when allocated capacity is zero** — a person nobody has allocated has no utilisation, and 0% would say they are idle when the true statement is that nobody planned their time. */
+            utilisationPercent: number | null;
+            /**
+             * Format: date
+             * @description The first day in the window on which this person is under 100% allocated, which is what directory.html's "free from 1 Oct" reads. Null when they are full for all of it.
+             */
+            freeFrom: string | null;
+            allocations: components["schemas"]["AllocationSpan"][];
+            absences: components["schemas"]["Absence"][];
+        };
+        StaffingCapacityView: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            people: components["schemas"]["PersonCapacity"][];
+            /** @description The subset with `overAllocated` true, so the panel does not re-filter and cannot disagree with the row badge above it. */
+            overAllocated: components["schemas"]["PersonCapacity"][];
+        };
+        /** @description The caller's own capacity over a window — the one staffing read with no staffing permission on it, because it is about the caller (017 D-m). Serves the timesheet's fourth KPI tile and My Work's This-period meter. */
+        SelfCapacity: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            /**
+             * Format: double
+             * @description Net of absence. Null when the caller has no profile — the tile then reads em dash.
+             */
+            capacityHours: number | null;
+            /** Format: double */
+            absenceHours: number | null;
+            allocatedPercent: number;
+            /** @description Explicit rather than inferred from a null, so a screen can say *no profile recorded* instead of *failed to load*. The two look identical without it. */
+            hasProfile: boolean;
+        };
+        /** @description A person on THIS project. Carries their company-wide total percentage and the flag, and **names no other project** (017 D-f) — the breakdown is the company view's, under `staffing:directory`. */
+        ProjectStaffingPerson: {
+            person: components["schemas"]["UserRef"];
+            percentOnThisProject: number;
+            totalPercent: number;
+            overAllocated: boolean;
+            /** Format: double */
+            capacityHours: number | null;
+        };
+        ProjectStaffingView: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            allocations: components["schemas"]["Allocation"][];
+            people: components["schemas"]["ProjectStaffingPerson"][];
+        };
     };
     responses: {
         /**
@@ -23259,6 +23784,443 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listStaffingPeople: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+                /** @description Repeated once per skill id, and ANDed — a person must hold every one. */
+                skill?: string[];
+                freeFrom?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The people who match, in name order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonCapacity"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getStaffingPerson: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The person. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonCapacity"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putPersonProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PersonProfileInput"];
+            };
+        };
+        responses: {
+            /** @description The profile as stored. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonProfile"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putPersonSkills: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PersonSkillsInput"];
+            };
+        };
+        responses: {
+            /** @description The skills they now hold, in name order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Skill"][];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listAbsences: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The absences overlapping the window, earliest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Absence"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createAbsence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AbsenceInput"];
+            };
+        };
+        responses: {
+            /** @description The absence as recorded. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Absence"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteAbsence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+                absenceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listSkills: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every skill this company has recorded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Skill"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createSkill: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SkillInput"];
+            };
+        };
+        responses: {
+            /** @description The skill. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Skill"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getStaffingCapacity: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Everybody, plus the over-allocated subset. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffingCapacityView"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getMyCapacity: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's capacity, net of absence. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SelfCapacity"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getProjectStaffing: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description This project's allocations and the people behind them. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectStaffingView"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createAllocation: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description A key identifying one **user intent**, not one attempt. A create carrying a key that has
+                 *     already succeeded answers **200** with the resource that intent created, instead of creating
+                 *     a second one — so pressing Save again after a timeout is safe. (It said "the case" until
+                 *     §136; the parameter has been shared by six other creates since `V14`, and by report generation since `V66`.)
+                 *
+                 *     The client generates it once per intent (the SPA does so when the editor mounts) and reuses
+                 *     it across retries. A key generated per attempt is the mistake that makes the header look
+                 *     right and do nothing.
+                 *
+                 *     Scoped to the project the request is addressed to, which is the scope the uniqueness
+                 *     constraint behind it uses. Optional: omitted, every call creates. At most 200 characters.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AllocationInput"];
+            };
+        };
+        responses: {
+            /** @description A replay — the `Idempotency-Key` had already recorded this allocation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Allocation"];
+                };
+            };
+            /** @description The allocation. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Allocation"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deleteAllocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                allocationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateAllocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                allocationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AllocationPatch"];
+            };
+        };
+        responses: {
+            /** @description The allocation as stored. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Allocation"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     listSourceProjects: {

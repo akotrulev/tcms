@@ -27,7 +27,7 @@ FORCE RLS · React 19 + TanStack Query + Tailwind v4 render kit · `@tcms/client
 
 | # | Task | Stack | Agent | Deliverable | Est. | Depends on |
 |---|---|---|---|---|---|---|
-| 1 | T1 — The staffing contract, both clients, and the CLI/MCP verbs | `ts` | `tooling-engineer` | 17 `staffing` operations in `openapi.yaml`, both generated clients regenerated, both `contractBodies.ts` copies carrying the new bodies byte-identically, three CLI verbs and three MCP tools that call them, and the surface doc listing them | ~140k | none |
+| 1 | T1 — The staffing contract, both clients, and the CLI/MCP verbs | `ts` | `tooling-engineer` | **Landed 2026-09-04.** ~~17~~ **15** `staffing` operations and 17 schemas in `openapi.yaml`, both generated clients regenerated, a factory per resource in both `fixtures.ts` (~~`contractBodies.ts`~~ — those are the schema walker and hold no bodies), ~~three~~ **four** CLI verbs and three MCP tools, and the surface doc listing them | ~140k | none |
 | 2 | T2 — `V10`: the five staffing tables | `be` | `data-architect` | `V10__staffing.sql` applied on an empty database and on the lab's `V9` one; `person_profile`, `skill`, `person_skill`, `allocation`, `absence` exist with FORCE RLS; `SchemaConventionTest` green | ~95k | T1 |
 | 3 | T3 — The `staffing` module: capacity, over-allocation, absence and utilisation | `be` | `be-java` | Every operation T1 declared is served; one person allocated 50%+51% across two projects raises the over-allocation flag; an absence zeroes those days' capacity in the one function every caller uses; `./gradlew build` green | ~150k | T2 |
 | 4 | T4 — The company screens: `/staffing` and `/directory` | `fe` | `fe-react` | `/staffing` renders the allocation timeline, the Over-100% panel and free capacity; `/directory` answers "free next month with skill X" through URL-held filters; both gated on `staffing:directory` | ~140k | T3 |
@@ -54,25 +54,41 @@ You are `tooling-engineer` working in the tcms repo. Read CLAUDE.md first.
 
 Read, in this order: docs/plans/017-staffing.md §T1 and its "Decisions this plan takes" · CLAUDE.md ·
 docs/specs/openapi.yaml lines 8857-9260 (the /timesheets and /time blocks, as the pattern) ·
-frontend/src/api/contractBodies.ts · packages/cli/src/reads.ts around `timesheet` ·
+packages/client/src/test/fixtures.ts around `timesheetPeriod` (the factory shape, which is where the
+bodies live — NOT contractBodies.ts) · packages/cli/src/reads.ts around `timesheet` ·
 packages/mcp/src/reads.ts around `tcms_read_timesheet` ·
 docs/specs/2026-07-30-tcms-roles-permissions-naming.md §A3's two Staffing tables.
 
-Deliver: 17 `staffing`-tagged operations in docs/specs/openapi.yaml, each schema carrying its
-`required` array; frontend/src/api/schema.d.ts and packages/client/src/schema.ts regenerated from it;
-both contractBodies.ts copies carrying the new bodies with the shared region still byte-identical;
-three CLI verbs and three MCP tools that call the new operations; and
-docs/specs/2026-08-08-mcp-tool-and-command-surface.md listing all six.
+**This task LANDED on 2026-09-04.** The block is kept because the next reader of this plan is
+looking for what the contract is, and it is rewritten to what was actually done rather than to what
+was predicted — §T1 carries the five corrections in full.
+
+Deliver: ~~17~~ **15** `staffing`-tagged operations over twelve path items in docs/specs/openapi.yaml
+and **17 schemas**, each carrying its `required` array; frontend/src/api/schema.d.ts and
+packages/client/src/schema.ts regenerated from it; a factory per new resource in BOTH
+`src/test/fixtures.ts` copies; ~~three~~ **four** CLI verbs and three MCP tools that call the new
+operations; and docs/specs/2026-08-08-mcp-tool-and-command-surface.md listing all seven.
 
 Traps this task will hit:
 - `required` does NOT descend. Every inline nested object needs its own array, and a schema without
   one makes every generated property optional — which typechecks and is wrong everywhere.
-- There are TWO generated clients and TWO contractBodies copies. `npm run gen:api` runs in
-  `frontend/` and again in `packages/client/`. The contractBodies shared region is compared
-  BYTE-FOR-BYTE by contractPairing.test.ts — paste, do not retype.
+- ~~The contractBodies shared region is compared BYTE-FOR-BYTE — paste, do not retype.~~ →
+  **it needs no change at all, and 016 T1 recorded the same finding one plan earlier.** Both
+  `contractBodies.ts` copies are the schema WALKER; the marked region is `violationsOf` and its
+  helpers and holds no response bodies. The bodies are factories in `frontend/src/test/fixtures.ts`
+  and `packages/client/src/test/fixtures.ts`, which are NOT byte-identical to each other — the
+  frontend spells `aPersonCapacity(overrides): PersonCapacity` against a named type and the package
+  spells `personCapacity(overrides): Schemas['PersonCapacity']`.
+- There are still TWO generated clients. `npm run gen:api` runs in `frontend/` and again in
+  `packages/client/`; `schemaFreshness.test.ts` compares the two and fails on a half-done pass.
 - `staffing:directory`, `staffing:profile` and `staffing:absence` are COMPANY scope; `staffing:read`
   and `staffing:allocate` are PROJECT scope. Say so in each operation's description. Getting this
-  backwards produces a permission row the evaluator can never reach (roles spec §43).
+  backwards produces a permission row the evaluator can never reach (roles spec §43). It also
+  decides the tool gates: `tcms_read_staffing` is `any` of the two READ keys because neither role
+  that asks holds the other's.
+- `declaredPermissionsOf` reads the gate out of the operation's **prose**, matching
+  ``Requires `x:y` `` — so a write operation whose description does not spell it that way silently
+  asserts nothing in both `writeConformance.test.ts` files.
 - Nothing on this surface returns a rate or a cost. Say that in the MCP tool descriptions, as
   `tcms_read_timesheet` does.
 
@@ -142,6 +158,14 @@ GET /staffing/people?skill=&freeFrom= answers "who is free next month with skill
 ./gradlew build green with ArchUnit and StaffingReadsNoTimeEntryTest passing.
 
 Traps this task will hit:
+- T1 landed FIFTEEN operations, not seventeen — seventeen is the schema count. The twelve path items
+  and the exact shapes are in openapi.yaml, which is the authority; §T1's landed note lists the four
+  places the plan's draft YAML and the shipped contract differ.
+- POST /projects/{projectId}/allocations declares Idempotency-Key and a 200 replay; POST
+  /staffing/skills and POST /staffing/people/{userId}/absences deliberately do NOT, because the
+  dedupe scope is (company, project, key) and neither is addressed to a project. Do not invent a
+  company-scope idempotency scope to close that — the shortfall is recorded on both agent surfaces
+  with what it costs, and a duplicate absence row double-counts nothing (capacity is per DAY).
 - EVERY repository interface carries @Transactional(readOnly = true) ON THE INTERFACE. Spring Data
   gives a transaction only to inherited CRUD methods, so a derived or @Query method otherwise runs
   with no company set and every RLS-protected read returns ZERO ROWS — fail-closed and silent.
@@ -190,6 +214,18 @@ Traps this task will hit:
   profile recorded" — never 0h and never the failed state.
 - ONE keys factory, frontend/src/api/queries/keys.ts. Never add a second. Filters go INSIDE the key
   array, and staffingRoot exists so writes do not hand-spell a prefix.
+- T1 already landed the types and the fixtures — do NOT re-add either. frontend/src/api/types.ts
+  exports AbsenceKind, Absence, AbsenceInput, PersonProfile, PersonProfileInput, Skill, SkillInput,
+  PersonSkillsInput, AllocationSpan, Allocation, AllocationInput, AllocationPatch, PersonCapacity,
+  StaffingCapacityView, SelfCapacity, ProjectStaffingPerson and ProjectStaffingView.
+  frontend/src/test/fixtures.ts has aPersonProfile, aSkill, anAbsence, anAllocation, aPersonCapacity,
+  aStaffingCapacityView, aSelfCapacity and aProjectStaffingView. The no-profile state is
+  aPersonCapacity({ profile: null, capacityHours: null, absenceHours: null,
+  allocatedCapacityHours: null, approvedHours: null }) — five nulls, because the server sends them
+  together and a fixture carrying only the first describes a body it cannot send.
+- The contract landed FIFTEEN operations, not seventeen. GET /staffing/capacity is the company view,
+  GET /staffing/people is the directory, GET /staffing/people/{userId} is one person, and
+  GET /staffing/skills is the vocabulary the skill filter is built from.
 - Never build your own QueryClient in a test — only createTestQueryClient's has the caches. A render
   that trips an error boundary FAILS unless it calls renderingIntoAnErrorBoundary() and says why.
 - Anchor path-keyed mock arms (/^\/staffing\/people\/[^/]+$/) so a sub-resource is not caught by a
@@ -279,6 +315,10 @@ Traps this task will hit:
   periods.ts is for navigation and labelling only and re-deriving bounds here breaks its own rule.
 - The capacity read is its OWN DataRegion nested in the panel. One region over both would make a
   staffing outage blank the logged hours, which are a different module's and were fine.
+- GET /staffing/capacity/me requires BOTH `from` and `to` — they are not optional on that operation.
+  The response is SelfCapacity: from, to, capacityHours, absenceHours, allocatedPercent, hasProfile.
+  `hasProfile` is what tells "no profile recorded" from "failed to load"; the fixture is
+  aSelfCapacity() in frontend/src/test/fixtures.ts and T1 landed it.
 - capacityLabel/utilisationLabel live in features/staffing/capacityCopy.ts (T4). Do not write a
   second copy of "what does an em dash mean here" in these two files.
 - Rewrite the two file headers in the SUPERSEDED style — struck through with "→ superseded
@@ -534,11 +574,14 @@ what over-allocation exists to report.
 | `docs/specs/openapi.yaml` | `staffing` tag; 17 operations; 17 schemas, every one with its `required` array |
 | `frontend/src/api/schema.d.ts` | regenerated — `npm run gen:api` in `frontend/` |
 | `packages/client/src/schema.ts` | regenerated — `npm run gen:api` in `packages/client/` |
-| `frontend/src/api/contractBodies.ts` | the shared region (lines 124–457) gains the staffing bodies |
-| `packages/client/src/test/contractBodies.ts` | the same bytes, region at lines 67–400 |
-| `packages/cli/src/reads.ts` · `writes.ts` · `commands.ts` | `staffing directory`, `staffing allocate`, `staffing absence` |
-| `packages/mcp/src/reads.ts` · `writes.ts` · `tools.ts` | `tcms_read_staffing`, `tcms_write_allocation`, `tcms_write_absence` |
-| `docs/specs/2026-08-08-mcp-tool-and-command-surface.md` | the three verbs and the three tools |
+| `frontend/src/api/types.ts` | one `export type` per schema, so a screen names a shape |
+| `frontend/src/test/fixtures.ts` · `packages/client/src/test/fixtures.ts` | a factory per resource — **not** paired, each in its own idiom |
+| ~~`frontend/src/api/contractBodies.ts`~~ · ~~`packages/client/src/test/contractBodies.ts`~~ | ~~the shared region gains the staffing bodies~~ → **untouched: they are the schema walker and hold no bodies** |
+| `packages/cli/src/reads.ts` · `writes.ts` | `staffing directory`, `staffing project`, `staffing allocate`, `staffing absence` |
+| `packages/mcp/src/reads.ts` · `writes.ts` | `tcms_read_staffing`, `tcms_write_allocation`, `tcms_write_absence` |
+| `packages/cli/src/writeConformance.test.ts` · `packages/mcp/src/writeConformance.test.ts` · `packages/mcp/src/writes.test.ts` | the three registry checks a new verb may not pass |
+| `frontend/src/features/help/sections.tsx` | the shipped guide, pinned both ways by `guideCopies.test.ts` |
+| `docs/specs/2026-08-08-mcp-tool-and-command-surface.md` | §3.9 and §6's staffing table — four verbs and three tools |
 
 **Schema (T2)**
 
@@ -584,11 +627,13 @@ what over-allocation exists to report.
 
 ## T1 — The staffing contract, both clients, and the CLI/MCP verbs
 
-**Deliverable:** 17 `staffing`-tagged operations in `docs/specs/openapi.yaml`, each schema carrying
-its `required` array; `frontend/src/api/schema.d.ts` and `packages/client/src/schema.ts` regenerated
-from it; both `contractBodies.ts` copies carrying the new bodies with the shared region still
-byte-identical; three CLI verbs and three MCP tools that call the new operations; and
-`docs/specs/2026-08-08-mcp-tool-and-command-surface.md` listing all six.
+**Deliverable:** ~~17~~ **15** `staffing`-tagged operations over twelve path items in
+`docs/specs/openapi.yaml` and **17 schemas**, each carrying its `required` array;
+`frontend/src/api/schema.d.ts` and `packages/client/src/schema.ts` regenerated from it; a factory per
+new resource in both `src/test/fixtures.ts` copies (~~both `contractBodies.ts` copies carrying the
+new bodies byte-identically~~ — see correction 2); ~~three~~ **four** CLI verbs and three MCP tools
+that call the new operations; and `docs/specs/2026-08-08-mcp-tool-and-command-surface.md` listing all
+seven.
 **Stack:** `ts`
 **Agent:** `tooling-engineer`
 **Est. context:** ~140k — 1 spec file modified (19,825 lines, read in the `/timesheets` region only),
@@ -596,18 +641,70 @@ byte-identical; three CLI verbs and three MCP tools that call the new operations
 modified; 3 skills; 4 spec sections cited
 **Depends on:** none
 
+> **Landed 2026-09-04, with five corrections to what this block predicted.** They are written into
+> the steps below rather than appended as a note.
+>
+> 1. **Fifteen operations, not seventeen.** Seventeen is the number of **schemas**, and step 3 below
+>    listed fifteen operations when this plan was written — the deliverable line had counted the
+>    wrong column. The twelve path items are `/staffing/people`, `…/{userId}`, `…/profile`,
+>    `…/skills`, `…/absences`, `…/absences/{absenceId}`, `/staffing/skills`, `/staffing/capacity`,
+>    `/staffing/capacity/me`, `/projects/{projectId}/staffing`, `/projects/{projectId}/allocations`
+>    and `…/allocations/{allocationId}`.
+> 2. **`contractBodies.ts` needed no change, and 016 T1 recorded the same thing one plan earlier.**
+>    Both copies are the schema *walker* — the marked region is `violationsOf` and its helpers, and
+>    it holds no response bodies at all. The bodies belong in the two `src/test/fixtures.ts` files,
+>    which are **not** byte-identical to each other and are not paired: the frontend's spells
+>    `aPersonCapacity(overrides): PersonCapacity` against a named type from `api/types.ts` and the
+>    package's spells `personCapacity(overrides): Schemas['PersonCapacity']`. So the byte-for-byte
+>    trap this block warned about does not apply to this task at all, and `contractPairing.test.ts`
+>    is green because nothing in that region moved. Steps 5 and 6 are one step.
+> 3. **Four CLI verbs, not three — `staffing project` is the fourth**, and the argument is
+>    `time queue`'s exactly (016 T1's own second correction). `staffing allocate` is a PROJECT-scope
+>    write held by a Project Manager, who holds **no** `staffing:directory` — so without a
+>    project-scope read the verb that allocates would have had no read behind it on the only surface
+>    that can call it, and nothing would have printed an allocation id anywhere. This block's own
+>    step-7 comment already named the command (*"that is `tcms staffing project`"*) while its
+>    deliverable line counted three. The registry now holds 68 commands.
+> 4. **Five files outside the predicted list moved with the registries**, four of them found by an
+>    existing check rather than by reading: `frontend/src/api/types.ts` (the staffing type exports
+>    the SPA's fixtures are typed against), `frontend/src/features/help/sections.tsx` (pinned both
+>    ways by `guideCopies.test.ts` in **both** packages, including its `N tools` prose — 34 → 37),
+>    both `writeConformance.test.ts` (a write arm with no `INVOCATIONS` entry fails rather than
+>    skips) and `mcp/src/writes.test.ts`'s tool count.
+> 5. **Two company-scope creates carry no `Idempotency-Key`, and it is the parameter's own scope
+>    that says so.** It deduplicates within `(company, project, key)`, and neither `POST
+>    /staffing/skills` nor `POST …/absences` is addressed to a project. `POST
+>    /projects/{projectId}/allocations` is, and carries it. The absence shortfall is recorded in the
+>    `CREATE_WITHOUT_A_KEY` map on **both** agent surfaces with what a lost response actually costs:
+>    a duplicate row over the same days, which double-counts nothing, because capacity is computed
+>    per DAY from the absences covering it (D-a). T3 must not invent a company-scope idempotency
+>    scope to close it.
+>
+> **Two frontend tests were already red on `master` before this task and still are** —
+> `CaseGrid.test.tsx`'s two selection cases, verified by stashing this work and re-running them at
+> `HEAD`. `ci.yml` runs only the frontend **smoke** set per push, which is how they are sitting
+> there unobserved. Not this task's, and not repaired here.
+
 **Files:**
 - Modify: `docs/specs/openapi.yaml` (after the `/time/rollup/epics/{key}` block, currently line 9212)
 - Modify: `frontend/src/api/schema.d.ts` (generated — `npm run gen:api`)
 - Modify: `packages/client/src/schema.ts` (generated — `cd packages/client && npm run gen:api`)
-- Modify: `frontend/src/api/contractBodies.ts` (shared region, lines 124–457)
-- Modify: `packages/client/src/test/contractBodies.ts` (shared region, lines 67–400)
+- Modify: `frontend/src/api/types.ts` — the staffing type exports, so a screen and a fixture name a
+  shape rather than reaching into `schema.d.ts`
+- ~~Modify: `frontend/src/api/contractBodies.ts` (shared region, lines 124–457)~~
+- ~~Modify: `packages/client/src/test/contractBodies.ts` (shared region, lines 67–400)~~ →
+  **superseded: those two are the schema walker and hold no bodies.**
 - Modify: `frontend/src/test/fixtures.ts`, `packages/client/src/test/fixtures.ts`
-- Modify: `packages/cli/src/reads.ts`, `packages/cli/src/writes.ts`, `packages/cli/src/commands.ts`
-- Modify: `packages/mcp/src/reads.ts`, `packages/mcp/src/writes.ts`, `packages/mcp/src/tools.ts`
+- Modify: `packages/cli/src/reads.ts`, `packages/cli/src/writes.ts`
+  (`commands.ts` needs no change — it is `[...READS, ...WRITES]`)
+- Modify: `packages/mcp/src/reads.ts`, `packages/mcp/src/writes.ts`
+  (`tools.ts` needs no change, for the same reason)
+- Modify: `packages/cli/src/writeConformance.test.ts`, `packages/mcp/src/writeConformance.test.ts`,
+  `packages/mcp/src/writes.test.ts` — the three checks a registry change is not allowed to pass
+- Modify: `frontend/src/features/help/sections.tsx` — the shipped guide, pinned both ways
 - Modify: `docs/specs/2026-08-08-mcp-tool-and-command-surface.md`
 
-- [ ] **Step 1: Add the `staffing` tag**
+- [x] **Step 1: Add the `staffing` tag**
 
 `docs/specs/openapi.yaml`, after `- name: time` (currently line 58):
 
@@ -622,7 +719,7 @@ modified; 3 skills; 4 spec sections cited
       can never reach (roles spec §43), so the split is load-bearing rather than tidy.
 ```
 
-- [ ] **Step 2: Add the seventeen schemas**
+- [x] **Step 2: Add the seventeen schemas**
 
 Under `components.schemas`, alphabetically among the existing ones. **Every one carries `required`,
 including the inline nested objects — `required` does not descend.**
@@ -896,10 +993,26 @@ including the inline nested objects — `required` does not descend.**
           items: { $ref: '#/components/schemas/ProjectStaffingPerson' }
 ```
 
-- [ ] **Step 3: Add the seventeen operations**
+- [x] **Step 3: Add the FIFTEEN operations** (seventeen was the schema count — correction 1)
 
 After the `/time/rollup/epics/{key}` block. `403` bodies use the existing `Problem` response refs —
 copy the `responses:` blocks from `/timesheets/approvals` rather than inventing new ones.
+
+**Four departures from the YAML below, all made while writing it and all in the file that shipped.**
+The block is left as drafted rather than re-pasted, because the contract itself is the authority and
+a plan that copies it twice has two of them:
+
+1. **Every operation declares `401`** (`$ref: Unauthorized`), which the draft omitted and every other
+   operation in this document carries.
+2. **Every `404` is `$ref: NotFound`**, not an inline `description:`. That response is bodiless *by
+   decision* (§148, §6t) and `ErrorBodyPolicyTest` compares the declaration against the source of
+   every handler — an inline one would have been a second spelling of a settled rule.
+3. **Path-level `parameters:` blocks** carry `userId`, `projectId` and `allocationId` once per path
+   item rather than once per operation, which is what `/timesheets/periods/{periodId}` does and what
+   `declaredHeadersOf` merges.
+4. **`POST /projects/{projectId}/allocations` declares `Idempotency-Key` and a `200` replay**; the
+   two company-scope creates deliberately do not. See correction 5 — the parameter's dedupe scope is
+   `(company, project, key)`, and only the allocation create is addressed to a project.
 
 ```yaml
   /staffing/people:
@@ -1210,7 +1323,7 @@ copy the `responses:` blocks from `/timesheets/approvals` rather than inventing 
         '404': { description: No such allocation on this project. }
 ```
 
-- [ ] **Step 4: Regenerate both clients**
+- [x] **Step 4: Regenerate both clients**
 
 ```bash
 cd frontend && npm run gen:api
@@ -1220,175 +1333,103 @@ cd ../packages/client && npm run gen:api
 Expected: both files change; nothing else in `frontend/src` or `packages/*/src` does.
 `packages/client/src/schemaFreshness.test.ts` is what fails if only one was regenerated.
 
-- [ ] **Step 5: Add the contract bodies to BOTH copies, byte-identically**
+- [x] **Step 5: Add a factory per new resource to BOTH `fixtures.ts` files**
 
-Inside the marked region of `frontend/src/api/contractBodies.ts` (lines 124–457) and the same region
-of `packages/client/src/test/contractBodies.ts` (lines 67–400). The region is compared byte-for-byte
-by `contractPairing.test.ts` — **edit one, edit both, and paste rather than retype.**
+~~Inside the marked region of `frontend/src/api/contractBodies.ts` … edit one, edit both, and paste
+rather than retype.~~ → **superseded, see correction 2.** Those two files are the schema walker and
+hold no bodies; the region is unchanged by this task. What the doubles serve comes from the two
+`src/test/fixtures.ts` files, which are **not** paired and are written in each file's own idiom.
 
-```ts
-export const aPersonProfileBody = {
-  personId: 'u1',
-  weeklyHours: 40,
-  jobTitle: 'Test Lead',
-  location: 'Stockholm',
-  experienceSince: '2020-09-01',
-  experienceYears: 6,
-};
+`frontend/src/test/fixtures.ts` gains `aPersonProfile`, `aSkill`, `anAbsence`, `anAllocation`,
+`aPersonCapacity`, `aStaffingCapacityView`, `aSelfCapacity` and `aProjectStaffingView`, each typed to
+the contract and never cast. `packages/client/src/test/fixtures.ts` gains the same eight as
+`personProfile`, `skill`, `absence`, `allocation`, `personCapacity`, `staffingCapacityView`,
+`selfCapacity` and `projectStaffingView`, plus three `IDS` entries (`allocation`, `absence`, `skill`).
 
-export const aSkillBody = { id: 'sk1', name: 'Playwright' };
+Two defaults are decisions rather than values, and both are written into the factories' own comments:
 
-export const anAbsenceBody = {
-  id: 'ab1',
-  personId: 'u1',
-  startsOn: '2026-08-29',
-  endsOn: '2026-08-29',
-  kind: 'LEAVE',
-  dayFraction: 0.5,
-  note: null,
-};
+- **`weeklyHours: 40` is the one non-inert default in either file.** A profile exists to record
+  contracted hours and nobody is contracted for none. The absence that matters is the *missing
+  profile*, which is `profile: null` with four hours figures nulled beside it — a different state,
+  and the one that must never render as `0h` or as an invented 40 (correction 4 above).
+- **`utilisationPercent: null` is the default, not a scenario.** Allocated capacity is zero in the
+  inert body, and D-i is explicit that `0%` claims the person is idle where the true statement is
+  that nobody has planned their time.
 
-export const anAllocationBody = {
-  id: 'al1',
-  projectId: 'p1',
-  personId: 'u1',
-  person: aUserRefBody,
-  percent: 50,
-  startsOn: '2026-09-01',
-  endsOn: '2026-11-30',
-  note: null,
-};
+- [x] **Step 6: The staffing type exports**
 
-/*
-  A person with a profile and one allocation. `utilisationPercent` is a NUMBER here and null in
-  `aPersonCapacityWithoutProfileBody` below, because both are real states and a fixture that only
-  ever carried one of them is how the null branch ships untested (017 D-i).
-*/
-export const aPersonCapacityBody = {
-  person: aUserRefBody,
-  profile: aPersonProfileBody,
-  skills: [aSkillBody],
-  capacityHours: 480,
-  absenceHours: 4,
-  allocatedPercent: 50,
-  allocatedCapacityHours: 240,
-  freePercent: 50,
-  peakPercent: 50,
-  peakOn: '2026-09-01',
-  overAllocated: false,
-  approvedHours: 180,
-  utilisationPercent: 75,
-  freeFrom: '2026-09-01',
-  allocations: [
-    {
-      projectId: 'p1',
-      projectKey: 'ACME',
-      projectName: 'Acme Storefront',
-      percent: 50,
-      startsOn: '2026-09-01',
-      endsOn: '2026-11-30',
-    },
-  ],
-  absences: [anAbsenceBody],
-};
+`frontend/src/api/types.ts`, in the block after `time`'s: one `export type X = S['X']` per schema, so
+a screen and a fixture name a shape rather than reaching into the generated file. Three carry the
+doc comment the rest do not need — `AbsenceKind` (why `HOLIDAY` is a member and not a calendar),
+`PersonProfile` (a date, not a count of years) and `PersonCapacity` (which nulls mean what).
 
-export const aPersonCapacityWithoutProfileBody = {
-  ...aPersonCapacityBody,
-  profile: null,
-  capacityHours: null,
-  absenceHours: null,
-  allocatedCapacityHours: null,
-  approvedHours: null,
-  utilisationPercent: null,
-};
+- [x] **Step 7: Four CLI verbs**
 
-export const aStaffingCapacityViewBody = {
-  from: '2026-09-01',
-  to: '2026-11-30',
-  people: [aPersonCapacityBody],
-  overAllocated: [],
-};
-
-export const aSelfCapacityBody = {
-  from: '2026-09-01',
-  to: '2026-09-15',
-  capacityHours: 64,
-  absenceHours: 0,
-  allocatedPercent: 50,
-  hasProfile: true,
-};
-
-export const aProjectStaffingViewBody = {
-  from: '2026-09-01',
-  to: '2026-11-30',
-  allocations: [anAllocationBody],
-  people: [
-    {
-      person: aUserRefBody,
-      percentOnThisProject: 50,
-      totalPercent: 130,
-      overAllocated: true,
-      capacityHours: 480,
-    },
-  ],
-};
-```
-
-- [ ] **Step 6: Add the fixtures**
-
-`frontend/src/test/fixtures.ts` and `packages/client/src/test/fixtures.ts`, in the existing style —
-inert defaults, ids that are not UUIDs.
-
-```ts
-export function aPersonCapacity(overrides: Partial<PersonCapacity> = {}): PersonCapacity {
-  return { ...(aPersonCapacityBody as PersonCapacity), ...overrides };
-}
-
-export function anAllocation(overrides: Partial<Allocation> = {}): Allocation {
-  return { ...(anAllocationBody as Allocation), ...overrides };
-}
-
-export function aSelfCapacity(overrides: Partial<SelfCapacity> = {}): SelfCapacity {
-  return { ...(aSelfCapacityBody as SelfCapacity), ...overrides };
-}
-```
-
-- [ ] **Step 7: Three CLI verbs**
-
-`packages/cli/src/reads.ts` — one read, following `timesheet`'s shape exactly:
+`packages/cli/src/reads.ts` — `staffing directory` (`staffing:directory`, COMPANY) and
+`staffing project` (`staffing:read`, PROJECT). `packages/cli/src/writes.ts` — `staffing allocate`
+(`create`, `staffing:allocate`) and `staffing absence` (`create`, `staffing:absence`).
+`commands.ts` needs no edit: `COMMANDS` is `[...READS, ...WRITES]`.
 
 ```ts
 /**
- * `tcms staffing directory --skill Playwright --free-from 2026-10-01`
+ * `tcms staffing directory --skill Playwright --free-from 2026-10-01` — the company view.
  *
- * The company view, and it needs `staffing:directory` — a COMPANY-scope key held by Account
- * Manager and Finance and NOT by a Project Manager, whose staffing keys are per project. A PM
- * asking for this gets a 403 naming the project verb instead, which is the honest answer: their
- * question is "who is on my project", and that is `tcms staffing project <KEY>`.
+ * **It costs `staffing:directory`, which is a COMPANY-scope key** … A PM asking for this gets a 403,
+ * and the honest answer to their actual question is the next command down: theirs is *who is on my
+ * project*, and that is `tcms staffing project`.
  */
-export const staffingDirectory: Command = {
-  name: 'staffing directory',
-  summary: 'Who has which skills, and when they are free',
-  // …flags: --skill (repeatable, matched by name), --free-from, --from, --to, --json
-};
 ```
 
-`packages/cli/src/writes.ts` — two writes, `staffing allocate` and `staffing absence`.
-`packages/cli/src/commands.ts` — register all three.
-`writeConformance.test.ts` is what fails if a write verb does not declare its confirmation.
+Four things in there are decisions rather than spellings, and each is in the code's own comment:
+`--skill` takes NAMES, repeats and is ANDed, resolved against `GET /staffing/skills` first (an
+unresolved name filtered server-side answers *nobody matches* for a typo, which is indistinguishable
+from a real answer); `--person` on the writes takes a name or an email against `…/members`, with a
+company member who has no grant here still allocatable by id; `staffing absence` with no `--person`
+records the caller's own and needs no staffing key (D-h), reading `/me` for the id rather than
+guessing one; and an hours column prints an em dash where there is no profile, never `0h`.
 
-- [ ] **Step 8: Three MCP tools**
+`memberIdOf` is exported from `reads.ts` for `writes.ts` — `assigneeIds`' lookup for one person,
+exported rather than copied so the two do not become two answers to *who may this project name*.
 
-`packages/mcp/src/reads.ts` — `tcms_read_staffing`; `writes.ts` — `tcms_write_allocation` and
-`tcms_write_absence`; `tools.ts` — register. The description text must say what
-`tcms_read_timesheet`'s does about money: **nothing on this surface returns a rate or a cost.**
+- [x] **Step 8: Three MCP tools**
 
-- [ ] **Step 9: The surface doc**
+`packages/mcp/src/reads.ts` — `tcms_read_staffing`; `writes.ts` — `tcms_write_allocation`
+(`allocate` · `change` · `remove`) and `tcms_write_absence` (`record` · `remove`). `tools.ts` needs
+no edit, for `commands.ts`' reason.
 
-`docs/specs/2026-08-08-mcp-tool-and-command-surface.md` gains a `Staffing` section listing the three
-CLI verbs and three MCP tools with their keys and scopes.
+`tcms_read_staffing` is the surface's **second `any`-gated read**, and the gate is a SCOPE split
+rather than an owner/approver one: `staffing:directory` is COMPANY and `staffing:read` is PROJECT,
+and neither role that asks holds the other's key, so gating it `all` would hide the whole noun from
+both. It carries a `narrow(held)` sentence naming the half this credential reaches.
 
-- [ ] **Step 10: Gate**
+Each description says the four things a model relaying half of them would get wrong — a null hours
+figure is *unknown*, not 0 and not 40; `utilisationPercent` is null, not zero, when nobody has
+allocated them; over-allocation is the highest single DAY and not a month's sum; and an absence is
+not a note on a calendar but the thing that removes those hours from every capacity figure there is.
+All three end with `tcms_read_timesheet`'s sentence: **nothing on this surface returns a rate or a
+cost.** Measured at 1140, 1010 and 1039 bytes against the host's 2KB ceiling.
+
+**`staffing:profile` gets no tool**, and it is a decision rather than a gap: both its writes take a
+user UUID, and §3.3 of the surface doc puts the company directory outside this surface — so nothing
+here can obtain one. It is the `tcms_review_verdict` assignees exclusion, one module over.
+
+- [x] **Step 9: The three registry checks, and the shipped guide**
+
+None of these was in this block's file list and all four fail loudly rather than silently:
+
+- `packages/cli/src/writeConformance.test.ts` — an `INVOCATIONS` entry per new write command, plus a
+  `CREATE_WITHOUT_A_KEY` entry for `staffing absence` (correction 5). It is the first CREATE in that
+  map rather than an edit with nothing to precondition on.
+- `packages/mcp/src/writeConformance.test.ts` — five new arms, five entries, plus
+  `tcms_write_allocation.change` (no `If-Match`; `Allocation` carries no `lockVersion` on the wire)
+  and `tcms_write_absence.record` in the by-decision map.
+- `packages/mcp/src/writes.test.ts` — `expect(TOOLS).toHaveLength(34)` → `37`, with the reason
+  written beside it in the running notation that file uses.
+- `frontend/src/features/help/sections.tsx` — the two terminal blocks, the Reading/Writing lists and
+  **the `N tools` prose**, all three pinned by `guideCopies.test.ts` in both packages, in both
+  directions.
+
+- [x] **Step 10: Gate**
 
 ```bash
 ~/bin/tcms-remote sync
@@ -1401,17 +1442,30 @@ CLI verbs and three MCP tools with their keys and scopes.
 Expected: all green. `contractPairing.test.ts`, `schemaFreshness.test.ts`, `citedFiles.test.ts` and
 `matrixCopies.test.ts` are the four most likely to catch a slip here.
 
-- [ ] **Step 11: Commit**
+**Run 2026-09-04, on `shanks`:** packages build clean; `test:run --workspaces` **535 tests green**
+(client 138, cli 168, mcp 229); `lint --workspaces` 0 warnings across all three; frontend `build`
+and `lint` clean. The frontend's **full** `test:run` is 2703 green and **2 red**, both in
+`CaseGrid.test.tsx`'s selection block and both **pre-existing on `master`** — verified by stashing
+this work and re-running that file at `HEAD`. See the landed note above.
+
+- [x] **Step 11: Commit**
 
 ```bash
 git add docs/specs/openapi.yaml docs/specs/2026-08-08-mcp-tool-and-command-surface.md \
-        frontend/src/api/schema.d.ts frontend/src/api/contractBodies.ts frontend/src/test/fixtures.ts \
-        packages/client/src/schema.ts packages/client/src/test/contractBodies.ts \
-        packages/client/src/test/fixtures.ts \
-        packages/cli/src/reads.ts packages/cli/src/writes.ts packages/cli/src/commands.ts \
-        packages/mcp/src/reads.ts packages/mcp/src/writes.ts packages/mcp/src/tools.ts
+        docs/plans/017-staffing.md \
+        frontend/src/api/schema.d.ts frontend/src/api/types.ts frontend/src/test/fixtures.ts \
+        frontend/src/features/help/sections.tsx \
+        packages/client/src/schema.ts packages/client/src/test/fixtures.ts \
+        packages/cli/src/reads.ts packages/cli/src/writes.ts \
+        packages/cli/src/writeConformance.test.ts \
+        packages/mcp/src/reads.ts packages/mcp/src/writes.ts \
+        packages/mcp/src/writeConformance.test.ts packages/mcp/src/writes.test.ts
 git commit -m "feat(staffing): the staffing contract, both clients, and the CLI/MCP verbs"
 ```
+
+~~`frontend/src/api/contractBodies.ts`, `packages/client/src/test/contractBodies.ts`,
+`packages/cli/src/commands.ts`, `packages/mcp/src/tools.ts`~~ — none of the four changed, for the
+reasons in corrections 2 and the file list.
 
 **Out of scope:** nothing is served yet. Every operation here 404s until T3, because no controller
 exists — which is the honest not-implemented state, not a stub returning an empty array.

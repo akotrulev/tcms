@@ -43,6 +43,8 @@ import {
   declaredPermissionsOf,
 } from '../../client/src/test/contractBodies.js';
 import {
+  absence,
+  allocation,
   artifact,
   board,
   boardSummary,
@@ -69,6 +71,7 @@ import {
   projectWorkflow,
   timeEntry,
   timesheetPeriod,
+  userRef,
   release as releaseFixture,
   releaseSummary,
   suite,
@@ -122,6 +125,19 @@ const CREATE_WITHOUT_A_KEY: Record<string, string> = {
     + 'narrowest of the three: the arm sends one field that only ever goes from empty to a URL, so '
     + 'two callers racing it lose a link to a pull request that is still in the history as a '
     + '`issue.pr_url_set` row.',
+  'tcms_write_allocation.change':
+    'PATCH …/allocations/{allocationId} declares no If-Match, and `Allocation` carries no '
+    + '`lockVersion` on the wire to precondition on — the wall the entries above meet, and it '
+    + 'arrives with the schema rather than after it (017 T1). Bounded by the endpoint being a TRUE '
+    + 'delta: two people editing one allocation lose only the fields they both named, and the set '
+    + 'is a percentage, two dates and a note.',
+  'tcms_write_absence.record':
+    'POST …/absences declares no Idempotency-Key, and the parameter\'s own scope is the reason: it '
+    + 'deduplicates within `(company, project, key)` and an absence is not addressed to a project. '
+    + 'What a lost response costs is a duplicate absence row over the same days, which '
+    + 'double-counts nothing — capacity is computed per DAY from the absences covering it (017 D-a), '
+    + 'so a second identical row removes the same hours the first did, and it is visible on the '
+    + 'person\'s own absence list to remove.',
   'tcms_write_artifact.edit':
     'PATCH …/artifacts/{artifactId} declares no If-Match, so two callers correcting one register '
     + 'row race and the later write wins silently. It cannot simply be added: the endpoint would '
@@ -321,6 +337,9 @@ const RELEASE = releaseFixture();
 /** The version → id lookup every release-naming arm makes, method-keyed like the board routes. */
 const RELEASES = { 'GET /releases': { status: 200, body: [releaseSummary()] } } as const;
 
+/** The name → id lookup the allocate arm makes, so `person` may be typed rather than pasted. */
+const MEMBERS = { 'GET /members': { status: 200, body: [userRef()] } } as const;
+
 /** The four `TestCaseInput` requires, plus the step a STRUCTURED case needs to be acceptable. */
 const PROPOSABLE = {
   title: 'Sign out clears the session',
@@ -361,6 +380,41 @@ const REPORT_JOB = {
  * deciding whether a fixture is shaped like the resource and this table only has to be *reachable*.
  */
 const INVOCATIONS: Record<string, Invocation> = {
+  'tcms_write_allocation.allocate': {
+    tool: 'tcms_write_allocation',
+    input: { action: 'allocate', person: 'Ana Engineer', percent: 50, startsOn: '2026-09-01', endsOn: '2026-11-30' },
+    path: '/allocations',
+    routes: {
+      ...MEMBERS,
+      'POST /allocations': { status: 201, body: allocation() },
+    },
+  },
+  'tcms_write_allocation.change': {
+    tool: 'tcms_write_allocation',
+    input: { action: 'change', allocation: 'al-1', percent: 30 },
+    path: '/allocations/al-1',
+    routes: { 'PATCH /allocations/al-1': { status: 200, body: allocation({ percent: 30 }) } },
+  },
+  'tcms_write_allocation.remove': {
+    tool: 'tcms_write_allocation',
+    input: { action: 'remove', allocation: 'al-1' },
+    path: '/allocations/al-1',
+    routes: { 'DELETE /allocations/al-1': { status: 204 } },
+  },
+  'tcms_write_absence.record': {
+    tool: 'tcms_write_absence',
+    // No `person`, so it records the CALLER's own — the arm that needs no staffing key at all
+    // (017 D-h), and the one a session can always reach.
+    input: { action: 'record', startsOn: '2026-09-24', endsOn: '2026-09-24' },
+    path: '/absences',
+    routes: { 'POST /absences': { status: 201, body: absence({ startsOn: '2026-09-24', endsOn: '2026-09-24' }) } },
+  },
+  'tcms_write_absence.remove': {
+    tool: 'tcms_write_absence',
+    input: { action: 'remove', absence: 'ab-1' },
+    path: '/absences/ab-1',
+    routes: { 'DELETE /absences/ab-1': { status: 204 } },
+  },
   'tcms_write_case.propose': {
     tool: 'tcms_write_case',
     input: { action: 'propose', testCase: PROPOSABLE },

@@ -1193,6 +1193,40 @@ async function memberIdsIn(session: Session, names: readonly string[]): Promise<
 }
 
 /**
+ * One person's id, from a display name, an email, or the id itself.
+ *
+ * {@link memberIdsIn}'s lookup for a single person, exported because `tcms_write_allocation` needs
+ * it and a second copy would be a second answer to *who may this project name*.
+ *
+ * **What it bounds is worth stating**: this resolves people who already hold a grant on the project.
+ * Allocating somebody who does not is legal — the endpoint validates against COMPANY membership —
+ * and is spelled by passing their id, which a directory read prints. So a value shaped like a UUID
+ * goes straight through and only an unresolvable NAME is refused.
+ */
+export async function memberIdIn(session: Session, name: string): Promise<string> {
+  const members = await session.client.GET('/projects/{projectId}/members', {
+    params: { path: { projectId: session.projectId() } },
+    tcms: session.request,
+  });
+
+  const found = members.find(
+    (row) => row.displayName.toLowerCase() === name.toLowerCase()
+      || row.email.toLowerCase() === name.toLowerCase()
+      || row.id === name,
+  );
+  if (found) return found.id;
+
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)) return name;
+
+  throw new InputMismatch(
+    `Nobody called '${name}' holds a grant on this project. It has: `
+      + `${members.map((row) => row.displayName).join(', ') || '(nobody)'}. `
+      + 'A company member with no grant here can still be allocated — pass their id, which a '
+      + 'directory read prints.',
+  );
+}
+
+/**
  * The board a card verb acts on, named or defaulted.
  *
  * Omitting it is right for the common case — every project is seeded one board, and naming it
@@ -1459,6 +1493,135 @@ const readTimeRollup: ToolDefinition = {
   },
 };
 
+/* ----------------------------------------------------------------- staffing ---- */
+
+/**
+ * The second `any`-gated READ, and the gate is the shape of the two questions this noun carries.
+ *
+ * *Who in the company has this skill and when are they free* is `staffing:directory`, a COMPANY-scope
+ * key held by Instance Admin, Company Admin, Account Manager and Finance. *Who is on this project and
+ * at what percentage* is `staffing:read`, a PROJECT-scope key held by Project Manager and up. They are
+ * different questions with different answers and neither role holds the other's key, so gating this
+ * `all` would hide the whole noun from both of them — which is §2's failure arriving through the gate
+ * rather than through a merge. {@link ToolDefinition.narrow} says which half this credential reaches.
+ *
+ * `skill` takes NAMES and is ANDed, resolved against the company vocabulary first (§4.4): nobody has
+ * a skill UUID, and an unresolved name filtered server-side would answer *nobody matches* for a typo.
+ */
+const readStaffing: ToolDefinition = {
+  name: 'tcms_read_staffing',
+  title: 'Who is allocated where, who has which skills, and when anybody is free',
+  description:
+    'Two questions, two gates. With `project`, who is allocated to THIS project and at what '
+    + 'percentage, which costs staffing:read; each person also carries their COMPANY-WIDE total and '
+    + 'the over-allocation flag and deliberately **names no other project**, so do not report the '
+    + 'total as if it were all on this one. With nothing, the company directory — every member, '
+    + 'their skills, their capacity and when they are next free — which costs staffing:directory; '
+    + '`skill` filters by skill NAME and repeats, ANDed, and `freeFrom` keeps only people with a day '
+    + 'under 100% on or after it. `person` reads one person in full. '
+    + '**A null hours figure means nobody has recorded that person\'s contracted hours — report it '
+    + 'as unknown, never as 0 and never as 40.** utilisationPercent is null, not zero, when nobody '
+    + 'has allocated them at all. capacityHours is ALREADY net of absence; do not subtract absence '
+    + 'from it again. Over-allocation is the highest single DAY (peakPercent, peakOn), not a month\'s '
+    + 'sum: 100% for the first half of a month and 100% for the second is not over-allocated. '
+    + '**Nothing on this surface returns a rate, a cost or an invoice value.**',
+  gate: { mode: 'any', permissions: ['staffing:directory', 'staffing:read'] },
+  narrow: (held) => {
+    const company = held.has('staffing:directory');
+    const project = held.has('staffing:read');
+    if (company && project) return undefined;
+    return company
+      ? 'This credential holds staffing:directory and not staffing:read, so `project` will be refused — it reads the company directory and capacity.'
+      : 'This credential holds staffing:read and not staffing:directory, so only `project` will answer; the company directory, the skills list and one person in full are all refused.';
+  },
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      project: {
+        type: 'boolean',
+        description: 'Read THIS project\'s allocations instead of the company directory. Costs staffing:read.',
+      },
+      person: {
+        type: 'string',
+        description: 'One person in full — profile, skills, allocations, absences and capacity. Their id, from a directory read. Costs staffing:directory unless it is this caller.',
+      },
+      skill: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Skill NAMES, repeated and ANDed — a person must hold every one. Unknown names are refused with the vocabulary.',
+      },
+      freeFrom: {
+        type: 'string',
+        description: 'Keep only people with a day under 100% allocated on or after this date, `YYYY-MM-DD`.',
+      },
+      from: { type: 'string', description: 'Window start, `YYYY-MM-DD`. Defaults to the first of this month.' },
+      to: { type: 'string', description: 'Window end, `YYYY-MM-DD`. Defaults to three months on.' },
+      ...PAGING_PROPERTIES,
+    },
+  },
+  run: async (session, input) => {
+    const tcms = session.request;
+    const from = str(input, 'from');
+    const to = str(input, 'to');
+    const range = { ...(from === undefined ? {} : { from }), ...(to === undefined ? {} : { to }) };
+
+    if (bool(input, 'project')) {
+      return session.client.GET('/projects/{projectId}/staffing', {
+        params: { path: { projectId: session.projectId() }, query: range },
+        tcms,
+      });
+    }
+
+    const person = str(input, 'person');
+    if (person !== undefined) {
+      return session.client.GET('/staffing/people/{userId}', {
+        params: { path: { userId: person }, query: range },
+        tcms,
+      });
+    }
+
+    const names = strings(input, 'skill') ?? [];
+    const freeFrom = str(input, 'freeFrom');
+    const people = await session.client.GET('/staffing/people', {
+      params: {
+        query: {
+          ...range,
+          ...(names.length === 0 ? {} : { skill: await skillIdsIn(session, names) }),
+          ...(freeFrom === undefined ? {} : { freeFrom }),
+        },
+      },
+      tcms,
+    });
+    // Not paginated on the wire — the client-side window every other list here uses.
+    return window(people, input);
+  },
+};
+
+/**
+ * Skill names to the ids the filter takes, against the company's own vocabulary.
+ *
+ * An unknown name is refused with the list rather than sent through, because a directory answering
+ * *nobody matches* for a misspelling is indistinguishable from a real answer — and a model that
+ * receives it will report that the company has nobody with the skill.
+ */
+export async function skillIdsIn(session: Session, names: readonly string[]): Promise<string[]> {
+  const vocabulary = await session.client.GET('/staffing/skills', { tcms: session.request });
+
+  return names.map((name) => {
+    const found = vocabulary.find(
+      (row) => row.name.toLowerCase() === name.toLowerCase() || row.id === name,
+    );
+    if (!found) {
+      throw new InputMismatch(
+        `This company has recorded no skill called '${name}'. It has: `
+          + `${vocabulary.map((row) => row.name).join(', ') || '(none)'}.`,
+      );
+    }
+    return found.id;
+  });
+}
+
 export const READ_TOOLS: readonly ToolDefinition[] = [
   orient,
   searchCases,
@@ -1477,4 +1640,5 @@ export const READ_TOOLS: readonly ToolDefinition[] = [
   triage,
   readTimesheet,
   readTimeRollup,
+  readStaffing,
 ];

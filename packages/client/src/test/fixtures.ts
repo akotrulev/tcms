@@ -53,6 +53,9 @@ export const IDS = {
   importRun: 'ir-1',
   period: 'tsp-1',
   timeEntry: 'te-1',
+  allocation: 'al-1',
+  absence: 'ab-1',
+  skill: 'sk-1',
 } as const;
 
 /** A fixed instant, so nothing here depends on when the suite runs. */
@@ -1130,6 +1133,123 @@ export function epicTimeRollup(
     children: [],
     ...overrides,
   };
+}
+
+/* ----------------------------------------------------------------- staffing ---- */
+
+/**
+ * Contracted hours, and the one value here that is not the emptiest the contract admits.
+ *
+ * `weeklyHours: 40` rather than zero: a profile exists to record contracted hours, and nobody is
+ * contracted for none. The absence that matters is the **missing profile**, which is
+ * `personCapacity({ profile: null, … })` below — a different state, and the one that must never
+ * render as `0h` or as an invented 40 (017 correction 4).
+ */
+export function personProfile(
+  overrides: Partial<Schemas['PersonProfile']> = {},
+): Schemas['PersonProfile'] {
+  return {
+    personId: IDS.user,
+    weeklyHours: 40,
+    jobTitle: null,
+    location: null,
+    experienceSince: null,
+    experienceYears: null,
+    ...overrides,
+  };
+}
+
+export function skill(overrides: Partial<Schemas['Skill']> = {}): Schemas['Skill'] {
+  return { id: IDS.skill, name: 'Playwright', ...overrides };
+}
+
+/** A whole day off. `member.html`'s *half day* is `dayFraction: 0.5`, named by the test about it. */
+export function absence(overrides: Partial<Schemas['Absence']> = {}): Schemas['Absence'] {
+  return {
+    id: IDS.absence,
+    personId: IDS.user,
+    startsOn: '2026-08-29',
+    endsOn: '2026-08-29',
+    kind: 'LEAVE',
+    dayFraction: 1,
+    note: null,
+    ...overrides,
+  };
+}
+
+export function allocation(overrides: Partial<Schemas['Allocation']> = {}): Schemas['Allocation'] {
+  return {
+    id: IDS.allocation,
+    projectId: IDS.project,
+    personId: IDS.user,
+    person: userRef(),
+    percent: 50,
+    startsOn: '2026-09-01',
+    endsOn: '2026-11-30',
+    note: null,
+    ...overrides,
+  };
+}
+
+/**
+ * One person with a profile and nothing allocated.
+ *
+ * `utilisationPercent: null` is the default rather than a scenario: allocated capacity is zero, and
+ * 017 D-i is explicit that `0%` would claim this person is idle where the true statement is that
+ * nobody has planned their time. The no-profile state nulls five figures together, because the
+ * server sends them together.
+ */
+export function personCapacity(
+  overrides: Partial<Schemas['PersonCapacity']> = {},
+): Schemas['PersonCapacity'] {
+  return {
+    person: userRef(),
+    profile: personProfile(),
+    skills: [],
+    capacityHours: 80,
+    absenceHours: 0,
+    allocatedPercent: 0,
+    allocatedCapacityHours: 0,
+    freePercent: 100,
+    peakPercent: 0,
+    peakOn: null,
+    overAllocated: false,
+    approvedHours: 0,
+    utilisationPercent: null,
+    freeFrom: '2026-09-01',
+    allocations: [],
+    absences: [],
+    ...overrides,
+  };
+}
+
+/** The company view. `overAllocated` is a served subset, never a client-side filter of `people`. */
+export function staffingCapacityView(
+  overrides: Partial<Schemas['StaffingCapacityView']> = {},
+): Schemas['StaffingCapacityView'] {
+  return { from: '2026-09-01', to: '2026-11-30', people: [], overAllocated: [], ...overrides };
+}
+
+/** The caller's own capacity (017 D-m) — the one staffing read with no staffing key on it. */
+export function selfCapacity(
+  overrides: Partial<Schemas['SelfCapacity']> = {},
+): Schemas['SelfCapacity'] {
+  return {
+    from: '2026-09-01',
+    to: '2026-09-15',
+    capacityHours: 80,
+    absenceHours: 0,
+    allocatedPercent: 0,
+    hasProfile: true,
+    ...overrides,
+  };
+}
+
+/** This project's staffing. No row names another project (017 D-f). */
+export function projectStaffingView(
+  overrides: Partial<Schemas['ProjectStaffingView']> = {},
+): Schemas['ProjectStaffingView'] {
+  return { from: '2026-09-01', to: '2026-11-30', allocations: [], people: [], ...overrides };
 }
 
 /**

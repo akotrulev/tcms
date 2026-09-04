@@ -995,6 +995,52 @@ export type TimesheetQueueEntry = S['TimesheetQueueEntry'];
 export type TimeRollup = S['TimeRollup'];
 export type EpicTimeRollup = S['EpicTimeRollup'];
 
+// staffing (017 M7) — the directory, capacity, allocation and absence
+/**
+ * Why somebody is away, and `HOLIDAY` is a member for a reason worth knowing: this product has **no
+ * holiday calendar** (017 D-c). A public holiday is one absence row per person, which is what
+ * actually zeroes that day's capacity everywhere; a shared calendar would have to be per company
+ * *and* per country, and the product has no locale model to hang either on.
+ *
+ * `lib/labels.ts::absenceKindLabels` is where a fifth member becomes a compile error.
+ */
+export type AbsenceKind = S['AbsenceKind'];
+export type Absence = S['Absence'];
+export type AbsenceInput = S['AbsenceInput'];
+/**
+ * Contracted hours, a job title, a location and **a date rather than a count of years** (017 D-b).
+ *
+ * `experienceYears` is derived server-side from `experienceSince` and served beside it, so no client
+ * does the subtraction: an integer stored as "6" is correct on the day it is typed and wrong every
+ * day after, and nothing in the product would ever say so.
+ */
+export type PersonProfile = S['PersonProfile'];
+export type PersonProfileInput = S['PersonProfileInput'];
+export type Skill = S['Skill'];
+export type SkillInput = S['SkillInput'];
+export type PersonSkillsInput = S['PersonSkillsInput'];
+export type AllocationSpan = S['AllocationSpan'];
+export type Allocation = S['Allocation'];
+export type AllocationInput = S['AllocationInput'];
+export type AllocationPatch = S['AllocationPatch'];
+/**
+ * One person over one window, and **every hours figure is nullable** because a person with no
+ * profile is a real state rather than a failed read (017, correction 4).
+ *
+ * Two of those nulls carry their own claim and neither may be rendered as a zero:
+ * `capacityHours: null` says nobody has recorded this person's contracted hours — the tile reads an
+ * em dash, never `0h` and never a default of 40 — and `utilisationPercent: null` says nobody has
+ * allocated them, where `0%` would say they are idle (017 D-i).
+ *
+ * `capacityHours` is already net of absence. No screen subtracts it a second time.
+ */
+export type PersonCapacity = S['PersonCapacity'];
+export type StaffingCapacityView = S['StaffingCapacityView'];
+/** The caller's own capacity — the one staffing read with no staffing permission on it (017 D-m). */
+export type SelfCapacity = S['SelfCapacity'];
+export type ProjectStaffingPerson = S['ProjectStaffingPerson'];
+export type ProjectStaffingView = S['ProjectStaffingView'];
+
 // enums
 export type LifecycleStatus = S['LifecycleStatus'];
 export type AutomationStatus = S['AutomationStatus'];

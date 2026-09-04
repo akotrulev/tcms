@@ -156,7 +156,7 @@ The count below is the **outcome** of this rule, not a target.
 
 ---
 
-## 3. The MCP surface — ~~21~~ ~~26~~ ~~28~~ ~~30~~ 34 tools
+## 3. The MCP surface — ~~21~~ ~~26~~ ~~28~~ ~~30~~ ~~34~~ 37 tools
 
 Namespaced `tcms_*`. `projectId` and `companyId` **do not appear in any schema** (§4.1).
 
@@ -196,6 +196,9 @@ Namespaced `tcms_*`. `projectId` and `companyId` **do not appear in any schema**
 | 32 | `tcms_read_time_rollup` | `issue:read` | `GET /time/rollup/issues/{key}`, `GET /time/rollup/epics/{key}` | 016 T1 — see §3.8 |
 | 33 | `tcms_write_timesheet` | `time:log` | `POST /timesheets/entries`, `POST /timesheets/periods/{id}/submit` | 016 T1 — see §3.8 |
 | 34 | `tcms_approve_timesheet` | `time:approve` | `POST /timesheets/periods/{id}/decision` | 016 T1 — see §3.8 |
+| 35 | `tcms_read_staffing` | **any of** `staffing:directory` / `staffing:read` | `GET /staffing/people`, `…/{userId}`, `GET /staffing/skills`, `GET /projects/{id}/staffing` | 017 T1 — see §3.9 |
+| 36 | `tcms_write_allocation` | `staffing:allocate` | `POST`/`PATCH`/`DELETE /projects/{id}/allocations` | 017 T1 — see §3.9 |
+| 37 | `tcms_write_absence` | `staffing:absence` | `POST`/`DELETE /staffing/people/{userId}/absences` | 017 T1 — see §3.9 |
 
 Eighteen are buildable against today's contract; two need §4.2's contract addition first; one has a
 blocked arm (§5).
@@ -896,6 +899,76 @@ somebody asks for it; the operations exist in the contract because the SPA's edi
 approvals mockup displays such a row and the log form cannot produce one, so the form wins (016
 D-b). Adding it later is one member of an enum and one line of a `CHECK`.
 
+
+### 3.9 The staffing verbs (017 T1) — three tools, because the gates split by SCOPE
+
+Plan 017 (M7). Fifteen operations over twelve path items, tagged `staffing`.
+[The plan](../plans/017-staffing.md) carries the decisions; what follows is only what they do to
+this surface.
+
+**The split here is not two keys, it is two SCOPES**, which is a sharper line than §3.8's and the
+reason the tool count is three rather than one:
+
+| Key | Scope | Held by | Answers |
+|---|---|---|---|
+| `staffing:read` · `staffing:allocate` | `PROJECT` | Instance Admin, Company Admin, **Project Manager** | who is on *this* project, and who goes on it |
+| `staffing:directory` | `COMPANY` | Instance Admin, Company Admin, Account Manager, **Finance** | who in the company has a skill, and when they are free |
+| `staffing:profile` · `staffing:absence` | `COMPANY` | Instance Admin, Company Admin, Account Manager | maintaining people's records, and absence on their behalf |
+
+A Project Manager holds **neither** company key and an Account Manager holds **neither** project
+key, so any tool spanning the two would be listed to both and refuse half of itself for each — §2's
+failure, arriving through a scope boundary rather than through a merge. Roles spec §43 is the
+sharper version of the same rule from the server's side: a COMPANY-scope key granted to a
+PROJECT-scope role is a row the evaluator can never reach.
+
+| Tool | Gate | Wraps |
+|---|---|---|
+| `tcms_read_staffing` | **any of** `staffing:directory` / `staffing:read` | the company directory · one person in full · the skill vocabulary · this project's allocations |
+| `tcms_write_allocation` | `staffing:allocate` | `allocate` · `change` · `remove` |
+| `tcms_write_absence` | `staffing:absence` | `record` · `remove` |
+
+- **`tcms_read_staffing` is the surface's SECOND `any`-gated read**, and it carries a `narrow(held)`
+  sentence naming which half this credential reaches — `tcms_read_timesheet`'s arrangement, applied
+  to a scope split rather than to an owner/approver one.
+- **`skill` takes NAMES and is ANDed**, resolved against `GET /staffing/skills` before the filter is
+  sent (§4.4). Nobody has a skill UUID, and an unresolved name filtered server-side would answer
+  *nobody matches* for a typo — which is indistinguishable from a real answer, and is the one a
+  model will relay as *the company has nobody with this skill*.
+- **`person` takes a display name or an email on the write tools**, resolved against
+  `GET …/members`, which costs `project:read`. A company member with no grant on this project is
+  still allocatable and is named by id — the refusal says so rather than leaving it to be found.
+- **`tcms_write_absence` defaults to the caller**, whose own absence needs no staffing permission at
+  all (017 D-h). The gate is `staffing:absence` because that is what the `person` form costs, and it
+  is what a refused caller has to go and ask for.
+
+**Three things the descriptions say because a model relaying half of them would be wrong:**
+
+- **A null hours figure is unknown, not zero and not forty.** A person with no `person_profile` row
+  has no contracted hours, and every hours figure on them is null (017 correction 4). `0h` claims
+  they have no capacity and `40h` invents one.
+- **`utilisationPercent` is null, not zero, when nobody has allocated them** (017 D-i). `0%` says
+  they are idle; the true statement is that nobody has planned their time.
+- **Over-allocation is the highest single DAY, not a month's sum** (017 D-e). 100% for 1–15
+  September and 100% for 16–30 September is not over-allocation, and a tool that summed the month
+  would report 200% and send somebody to rearrange a schedule that is correct.
+
+**An absence is not a note on a calendar**, and `tcms_write_absence` says so: it removes those hours
+from that person's capacity on every surface that shows one, and from the utilisation computed
+against it. A model that reports *recorded* without that has reported half of what happened — the
+same shape `tcms_approve_timesheet`'s *decided whole* sentence exists for.
+
+**`staffing:profile` has no tool, and that is a decision.** Maintaining somebody's contracted hours,
+job title, location and skill set is `PUT /staffing/people/{userId}/profile` and
+`PUT …/skills`, both of which take a **user UUID** — and §3.3 puts the company directory outside
+this surface, so the only credential that could obtain one is a person's own session. It is the
+`tcms_review_verdict` assignees exclusion again, one module over: a tool taking an id nothing here
+can produce is a tool nobody can call.
+
+**No verb on this surface returns a rate, a cost or an invoice value, and none ever will.** §3.8's
+sentence, unchanged and repeated for the same reason: hours and percentages are on this surface and
+money is not, and multiplying the first by a number the model invented is exactly what an agent
+holding a capacity figure will otherwise try.
+
 ---
 
 ## 4. Cross-cutting rules — all of them in the command core
@@ -1006,9 +1079,9 @@ needing a separate decision. A bulk generation therefore decomposes per item.
 ## 6. The CLI surface
 
 `tcms <noun> <verb>`, one command per operation the `Agent` role can reach — approximately ~~45~~ ~~53~~ 61,
-against the MCP surface's ~~21~~ ~~28~~ ~~30~~ 34. **The registry holds ~~43~~ ~~53~~ ~~55~~ ~~58~~ 64** (`COMMANDS`, measured
-016 T1, eight of them 012's board verbs, ten 013's release verbs, two 014's import reads, three
-015's issue verbs and six this slice's time verbs),
+against the MCP surface's ~~21~~ ~~28~~ ~~30~~ ~~34~~ 37. **The registry holds ~~43~~ ~~53~~ ~~55~~ ~~58~~ ~~64~~ 68** (`COMMANDS`, measured
+017 T1, eight of them 012's board verbs, ten 013's release verbs, two 014's import reads, three
+015's issue verbs, six 016's time verbs and four this slice's staffing verbs),
 and the two numbers have
 never met: the count above is what the
 `Agent` grant *reaches*, the registry is what has been *spelled*, and §6's own struck-through
@@ -1235,6 +1308,53 @@ decisions rather than spellings:
 is M8's surface, gated on `billing:*` and `ratecard:read`. §3.8 carries the argument; it is repeated
 here because a person at a terminal with hours and a spreadsheet is exactly who would otherwise
 supply the missing number themselves.
+
+**The four staffing commands** (017 T1; §3.9 carries the tool split and the reasons). `staffing` is
+the seventh noun the CLI gains, and it is the first whose two reads are split by **scope** rather
+than by what is read or by who is reading:
+
+| Command | Kind | Permission | Reaches |
+|---|---|---|---|
+| `tcms staffing directory [--skill NAME]... [--free-from D] [--from D] [--to D] [--person ID]` | read | `staffing:directory` (COMPANY) | `GET /staffing/people`, `GET /staffing/people/{userId}`, `GET /staffing/skills` |
+| `tcms staffing project [--from D] [--to D]` | read | `staffing:read` (PROJECT) | `GET /projects/{projectId}/staffing` |
+| `tcms staffing allocate --person NAME --percent N --from D --to D [--note T]` | `create` | `staffing:allocate` (PROJECT) | `POST /projects/{projectId}/allocations` |
+| `tcms staffing absence --from D --to D [--person NAME] [--kind K] [--half-day] [--note T]` | `create` | `staffing:absence` (COMPANY) | `POST /staffing/people/{userId}/absences` |
+
+**Four, and plan 017 T1's own prompt said three.** The fourth is `staffing project`, and the
+argument is `time queue`'s exactly: `staffing allocate` is a PROJECT-scope write held by a Project
+Manager, who holds **no** `staffing:directory` — so without a project-scope read the verb that
+allocates would have had no read behind it on the only surface that can call it, and nothing would
+have printed an allocation id anywhere. The plan's own draft comment named the command
+(*"that is `tcms staffing project`"*) while its deliverable line counted three; the command is what
+the reasoning asked for, and §T1 of the plan is corrected rather than this being left as a gap.
+
+Four things about that table are decisions rather than spellings:
+
+- **`--skill` takes NAMES, repeats, and is ANDed.** *"Who knows Playwright and Java"* is one
+  question. The names are resolved against the company's vocabulary first and an unknown one is
+  refused by listing what there is — a directory answering *0 of 11 people match* for a typo is
+  indistinguishable from a real answer, which is the whole failure the lookup prevents.
+- **`--person` on the two writes takes a name or an email**, resolved against this project's
+  members (`project:read`). Somebody who is a company member without a grant here is still
+  allocatable and is named by id, and the refusal says so.
+- **`staffing absence` with no `--person` records the caller's own, and needs no staffing key**
+  (017 D-h). `staffing:absence` is what the `--person` form costs, and it is the permission the
+  command declares because it is what a refused caller must go and ask for. `--half-day` is
+  `dayFraction: 0.5`; a whole absence is `1`, and neither is a boolean column.
+- **`staffing directory` prints an em dash where a person has no profile, never `0h`.** A person
+  nobody has recorded contracted hours for has no capacity figure, and zero is the claim that they
+  have none (017 correction 4).
+
+**Two shortfalls, recorded rather than hidden.** `PATCH` and `DELETE …/allocations/{allocationId}`
+and `DELETE …/absences/{absenceId}` have **no CLI verb** — all three are arms of the MCP tools, a
+person at a terminal reaches for them rarely, and `staffing project` prints the ids so the gap is
+one command wide whenever somebody asks. And **`staffing:profile`'s two writes are on neither
+surface**: they take a user UUID and maintain a person's HR-shaped record, which §3.9 argues is not
+this surface's to hold.
+
+**No staffing command prints or accepts a rate, a cost or an invoice value either.** Utilisation is
+`approved hours ÷ allocated capacity` and says so on its own row; it is not a price, and a person at
+a terminal with a percentage and a spreadsheet is who this sentence is for.
 
 - **Read commands are phase 5, writes are phase 7**, per the plan's order.
 - **`--json` on every command**, so the CLI composes in a shell. Human-readable output is the

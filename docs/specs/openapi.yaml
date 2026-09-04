@@ -56,6 +56,14 @@ tags:
   - name: work
   - name: tracker
   - name: time
+  - name: staffing
+    description: >
+      Who is on a project and at what percentage, who in the company has which skill, and when
+      anybody is free. Two scopes, deliberately: `staffing:read` / `staffing:allocate` are
+      PROJECT-scope and answer "who is on THIS project"; `staffing:directory` /
+      `staffing:profile` / `staffing:absence` are COMPANY-scope and answer the capacity and skills
+      questions. Granting a COMPANY-scope key to a PROJECT-scope role produces a row the evaluator
+      can never reach (roles spec §43), so the split is load-bearing rather than tidy.
 
 # =============================================================================
 # PATHS
@@ -9232,6 +9240,390 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/EpicTimeRollup' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ----------------------------------------------------------- staffing ----
+  # Plan 017 (M7). Fifteen operations over eight path items, tagged `staffing`, and the split of
+  # scopes is the thing to read first: everything under `/staffing` except `capacity/me` is a
+  # COMPANY-scope question (`staffing:directory` / `staffing:profile` / `staffing:absence`), and
+  # everything under `/projects/{projectId}` is a PROJECT-scope one (`staffing:read` /
+  # `staffing:allocate`). Granting a COMPANY key to a PROJECT-scope role is the unreachable row
+  # roles spec §43 repaired for `company:read`, so the split is enforced rather than described.
+  /staffing/people:
+    get:
+      tags: [staffing]
+      operationId: listStaffingPeople
+      summary: The skills directory — who has which skills, and when they are free
+      description: |
+        Every present company member, whether or not they have a profile. `skill` may repeat and is
+        ANDed: a person must hold all of them, which is what "who knows Playwright and Java"
+        means. `freeFrom` keeps only people with a day at under 100% on or after it.
+
+        Requires `staffing:directory`, which is COMPANY scope — held by Instance Admin, Company
+        Admin, Account Manager and Finance, and **not** by Project Manager, whose staffing keys are
+        the PROJECT-scope pair. A Project Manager's question is *who is on this project*, and that
+        is `GET /projects/{projectId}/staffing`.
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+        - name: skill
+          in: query
+          description: Repeated once per skill id, and ANDed — a person must hold every one.
+          schema: { type: array, items: { type: string, format: uuid } }
+          style: form
+          explode: true
+        - { name: freeFrom, in: query, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: The people who match, in name order.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/PersonCapacity' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /staffing/people/{userId}:
+    parameters:
+      - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [staffing]
+      operationId: getStaffingPerson
+      summary: One person's profile, skills, allocations, absences and capacity
+      description: |
+        Requires `staffing:directory` (COMPANY scope), **or** that the caller is this person.
+        Somebody may always read their own staffing, which is why this is not a directory-only read.
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: The person.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PersonCapacity' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /staffing/people/{userId}/profile:
+    parameters:
+      - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+    put:
+      tags: [staffing]
+      operationId: putPersonProfile
+      summary: Create or replace somebody's staffing profile
+      description: |
+        Requires `staffing:profile`, which is COMPANY scope. Creates the row if it is not there,
+        which is why it is a `PUT` and not a `POST` plus a `PATCH`: a profile is one row per person
+        and the caller has no id to address it by.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PersonProfileInput' }
+      responses:
+        '200':
+          description: The profile as stored.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PersonProfile' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /staffing/people/{userId}/skills:
+    parameters:
+      - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+    put:
+      tags: [staffing]
+      operationId: putPersonSkills
+      summary: Replace somebody's whole skill set
+      description: |
+        Requires `staffing:profile` (COMPANY scope). **The payload is the set, not a delta** — a
+        chip list is a set, and a body naming one skill takes the others off.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PersonSkillsInput' }
+      responses:
+        '200':
+          description: The skills they now hold, in name order.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Skill' } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /staffing/people/{userId}/absences:
+    parameters:
+      - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [staffing]
+      operationId: listAbsences
+      summary: Somebody's absences in a window
+      description: |
+        Requires `staffing:directory` (COMPANY scope) for anybody else's. The caller's own is
+        always readable — knowing when you are away is not an administrative question.
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: The absences overlapping the window, earliest first.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Absence' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [staffing]
+      operationId: createAbsence
+      summary: Record an absence
+      description: |
+        Requires `staffing:absence` (COMPANY scope) — **unless the person is the caller**, who may
+        always record their own (017 D-h). The catalogue text is precise about this: the key covers
+        *"record absence on somebody else's behalf"*, and a product that made recording your own
+        Thursday an administrative act would be one where nobody records absence, which would make
+        every capacity figure in this module a lie by omission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AbsenceInput' }
+      responses:
+        '201':
+          description: The absence as recorded.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Absence' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /staffing/people/{userId}/absences/{absenceId}:
+    parameters:
+      - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: absenceId, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      tags: [staffing]
+      operationId: deleteAbsence
+      summary: Remove an absence
+      description: |
+        Requires `staffing:absence` (COMPANY scope) — unless the person is the caller, who may
+        always remove their own. `POST`'s rule, from the other end.
+      responses:
+        '204': { description: Removed. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /staffing/skills:
+    get:
+      tags: [staffing]
+      operationId: listSkills
+      summary: The company's skill vocabulary
+      description: Requires `staffing:directory` (COMPANY scope). Name order.
+      responses:
+        '200':
+          description: Every skill this company has recorded.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Skill' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [staffing]
+      operationId: createSkill
+      summary: Add a skill to the vocabulary
+      description: |
+        Requires `staffing:profile` (COMPANY scope). Names are unique per company,
+        case-insensitively — `citext`, as every other name-like column in this schema is.
+
+        **No `Idempotency-Key`, and the omission is the parameter's own scope rather than an
+        oversight**: it deduplicates within `(company, project, key)`, and a skill is not addressed
+        to a project. The retry it would guard against is already harmless here — a repeated name
+        answers `409`, not a second row.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SkillInput' }
+      responses:
+        '201':
+          description: The skill.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Skill' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /staffing/capacity:
+    get:
+      tags: [staffing]
+      operationId: getStaffingCapacity
+      summary: The company capacity view — allocation, over-allocation, free capacity, utilisation
+      description: |
+        Requires `staffing:directory` (COMPANY scope). `from`/`to` default to the first of this
+        month and three months on, which is what `staffing.html`'s *"Next 3 months"* range shows.
+
+        Over-allocation is a **daily peak**, not a monthly sum (017 D-e): 100% for 1–15 September
+        and 100% for 16–30 September is not over-allocation, and a month's sum would report 200%.
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: Everybody, plus the over-allocated subset.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StaffingCapacityView' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /staffing/capacity/me:
+    get:
+      tags: [staffing]
+      operationId: getMyCapacity
+      summary: The caller's own capacity over a window
+      description: |
+        **No staffing permission at all** — it is the caller's own figure (017 D-m). Serves the
+        timesheet's `Period capacity` tile and My Work's This-period meter, both of which pass the
+        **period's** bounds and not a week's (016 D-a).
+
+        It is a staffing read rather than a field on `GET /timesheets/periods/current` because
+        capacity is computed from `person_profile`, `allocation` and `absence`, none of which the
+        `time` module owns — putting it on the timesheet payload would make `time` serve a number
+        it cannot compute.
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: The caller's capacity, net of absence.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SelfCapacity' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /projects/{projectId}/staffing:
+    parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+    get:
+      tags: [staffing]
+      operationId: getProjectStaffing
+      summary: Who is on this project and at what percentage
+      description: |
+        Requires `staffing:read` on **this project**, which is PROJECT scope — story S1's *"I open
+        a project's staffing"*.
+
+        Each person carries their company-wide total percentage and the over-allocation flag and
+        **names no other project** (017 D-f). A Project Manager holds no company-wide key, so
+        listing *"Acme Loyalty 50% + Bergstrom Portal 30%"* here would disclose, through a
+        project-scope grant, the existence and staffing of projects they cannot see. The total is
+        what makes the flag actionable — *this person is already at 130%, do not add to them* — and
+        the breakdown is the company view's, under `staffing:directory`.
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: This project's allocations and the people behind them.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectStaffingView' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{projectId}/allocations:
+    parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+    post:
+      tags: [staffing]
+      operationId: createAllocation
+      summary: Allocate a person to this project at a percentage for a range
+      description: |
+        Requires `staffing:allocate` on this project (PROJECT scope).
+
+        **Two allocations of the same person to the same project over overlapping days are refused
+        with a `409` rather than merged** (017 D-n): `staffing.html` draws one bar per person per
+        project, so an overlap is not a thing a screen can render, and merging them silently would
+        change a number somebody typed. The same person on two *different* projects is the ordinary
+        case and is exactly what over-allocation exists to report.
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AllocationInput' }
+      responses:
+        '201':
+          description: The allocation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Allocation' }
+        '200':
+          description: A replay — the `Idempotency-Key` had already recorded this allocation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Allocation' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /projects/{projectId}/allocations/{allocationId}:
+    parameters:
+      - { $ref: '#/components/parameters/ProjectId' }
+      - { name: allocationId, in: path, required: true, schema: { type: string, format: uuid } }
+    patch:
+      tags: [staffing]
+      operationId: updateAllocation
+      summary: Change an allocation's percentage or range
+      description: |
+        Requires `staffing:allocate` on this project (PROJECT scope). A **true delta** — an absent
+        field is left alone — and the same overlap rule applies to the result, so a range moved
+        onto another allocation of the same person on this project is a `409`.
+
+        There is deliberately **no `If-Match`**: `Allocation` carries no `lockVersion` on the wire
+        and there is nothing to precondition on. What that costs is bounded by the delta — two
+        callers editing one allocation lose only the fields they both named — and it is recorded on
+        both agent surfaces rather than left for a reader to discover.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AllocationPatch' }
+      responses:
+        '200':
+          description: The allocation as stored.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Allocation' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [staffing]
+      operationId: deleteAllocation
+      summary: Remove an allocation
+      description: |
+        Requires `staffing:allocate` on this project (PROJECT scope). The person keeps their
+        profile, their skills and every other project's claim on them; what goes is this project's.
+      responses:
+        '204': { description: Removed. }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -19820,6 +20212,285 @@ components:
                 type: string
                 description: The literal "—" is not used; a project-less total omits this row.
               hours: { type: number, format: double }
+
+    # -------------------------------------------------------------- staffing ----
+    # Plan 017 (M7). Seventeen schemas, every one carrying its own `required` array — including
+    # `PersonCapacity`, whose sixteen properties are all required and half of them nullable,
+    # because `required` does not descend and a nullable field is a different claim from an absent
+    # one: `capacityHours: null` says nobody recorded this person's contracted hours, and an
+    # omitted `capacityHours` says the server did not answer.
+    AbsenceKind:
+      type: string
+      description: >
+        Why somebody is away. `HOLIDAY` is how a public holiday is recorded, because there is no
+        holiday calendar in this product (017 D-c) and a per-person row is what actually zeroes
+        capacity. A company-wide holiday is therefore n rows, one per person — the cost is stated
+        rather than discovered, and it is the right trade while the product has no locale model.
+      enum: [LEAVE, SICK, HOLIDAY, OTHER]
+
+    Absence:
+      type: object
+      required: [id, personId, startsOn, endsOn, kind, dayFraction, note]
+      properties:
+        id: { type: string, format: uuid }
+        personId: { type: string, format: uuid }
+        startsOn: { type: string, format: date }
+        endsOn: { type: string, format: date }
+        kind: { $ref: '#/components/schemas/AbsenceKind' }
+        dayFraction:
+          type: number
+          format: double
+          minimum: 0.25
+          maximum: 1
+          description: >
+            The share of each day in the range that is absent. `1` is a whole day, `0.5` the
+            `half day` member.html shows. Not a boolean, so a half day is not a second table
+            (017 D-d), and not a pair of times, which would invent a working-hours-of-day model
+            this product does not have.
+        note: { type: string, nullable: true }
+
+    AbsenceInput:
+      type: object
+      required: [startsOn, endsOn, kind]
+      properties:
+        startsOn: { type: string, format: date }
+        endsOn: { type: string, format: date }
+        kind: { $ref: '#/components/schemas/AbsenceKind' }
+        dayFraction: { type: number, format: double, minimum: 0.25, maximum: 1, default: 1 }
+        note: { type: string, nullable: true }
+
+    PersonProfile:
+      type: object
+      required: [personId, weeklyHours, jobTitle, location, experienceSince, experienceYears]
+      properties:
+        personId: { type: string, format: uuid }
+        weeklyHours:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 80
+          description: Contracted hours a week. Daily capacity is this over five (017 D-c).
+        jobTitle: { type: string, nullable: true }
+        location: { type: string, nullable: true }
+        experienceSince:
+          type: string
+          format: date
+          nullable: true
+          description: >
+            A date, not a count of years (017 D-b). directory.html renders "6 years"; a stored
+            integer is correct on the day it is typed and wrong every day after, silently, and
+            nothing in the product would ever tell anybody.
+        experienceYears:
+          type: integer
+          nullable: true
+          description: Derived from `experienceSince` at read time. Null when that is null.
+
+    PersonProfileInput:
+      type: object
+      required: [weeklyHours]
+      properties:
+        weeklyHours: { type: number, format: double, minimum: 0, maximum: 80 }
+        jobTitle: { type: string, nullable: true }
+        location: { type: string, nullable: true }
+        experienceSince: { type: string, format: date, nullable: true }
+
+    Skill:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, minLength: 1, maxLength: 80 }
+
+    SkillInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+
+    PersonSkillsInput:
+      type: object
+      required: [skillIds]
+      properties:
+        skillIds:
+          type: array
+          items: { type: string, format: uuid }
+          description: The whole set, replacing what is there. Not a delta — a chip list is a set.
+
+    AllocationSpan:
+      type: object
+      description: One project's claim on one person, as the timeline draws it.
+      required: [projectId, projectKey, projectName, percent, startsOn, endsOn]
+      properties:
+        projectId: { type: string, format: uuid }
+        projectKey: { type: string }
+        projectName: { type: string }
+        percent: { type: integer, minimum: 1, maximum: 100 }
+        startsOn: { type: string, format: date }
+        endsOn: { type: string, format: date }
+
+    Allocation:
+      type: object
+      required: [id, projectId, personId, person, percent, startsOn, endsOn, note]
+      properties:
+        id: { type: string, format: uuid }
+        projectId: { type: string, format: uuid }
+        personId: { type: string, format: uuid }
+        person: { $ref: '#/components/schemas/UserRef' }
+        percent: { type: integer, minimum: 1, maximum: 100 }
+        startsOn: { type: string, format: date }
+        endsOn: { type: string, format: date }
+        note: { type: string, nullable: true }
+
+    AllocationInput:
+      type: object
+      required: [personId, percent, startsOn, endsOn]
+      properties:
+        personId: { type: string, format: uuid }
+        percent: { type: integer, minimum: 1, maximum: 100 }
+        startsOn: { type: string, format: date }
+        endsOn: { type: string, format: date }
+        note: { type: string, nullable: true }
+
+    AllocationPatch:
+      type: object
+      description: >
+        A true delta — an absent field is left alone. `required: []` is written out rather than
+        omitted so a reader can tell "nothing is required" from "nobody said".
+      required: []
+      properties:
+        percent: { type: integer, minimum: 1, maximum: 100 }
+        startsOn: { type: string, format: date }
+        endsOn: { type: string, format: date }
+        note: { type: string, nullable: true }
+
+    PersonCapacity:
+      type: object
+      description: >
+        One person over one window. `capacityHours` is already net of absence — there is no screen
+        that should subtract it a second time, and one that did would contradict this one.
+      required:
+        [person, profile, skills, capacityHours, absenceHours, allocatedPercent,
+         allocatedCapacityHours, freePercent, peakPercent, peakOn, overAllocated,
+         approvedHours, utilisationPercent, freeFrom, allocations, absences]
+      properties:
+        person: { $ref: '#/components/schemas/UserRef' }
+        profile:
+          allOf: [{ $ref: '#/components/schemas/PersonProfile' }]
+          nullable: true
+          description: >
+            Null when nobody has recorded this person's contracted hours. Every hours figure below
+            is then null too — absent, not zero, and not a default of 40 (017, correction 4).
+        skills:
+          type: array
+          items: { $ref: '#/components/schemas/Skill' }
+        capacityHours: { type: number, format: double, nullable: true }
+        absenceHours: { type: number, format: double, nullable: true }
+        allocatedPercent:
+          type: integer
+          description: The mean daily allocated percentage across the window, which is what the row label shows.
+        allocatedCapacityHours: { type: number, format: double, nullable: true }
+        freePercent: { type: integer, description: '100 minus allocatedPercent, floored at 0.' }
+        peakPercent:
+          type: integer
+          description: >
+            The highest single day's total in the window (017 D-e). This is what the flag is read
+            off — a month's sum would flag two consecutive half-month allocations at 200%.
+        peakOn: { type: string, format: date, nullable: true }
+        overAllocated: { type: boolean, description: '`peakPercent` is 101 or more.' }
+        approvedHours:
+          type: number
+          format: double
+          nullable: true
+          description: >
+            APPROVED time only (016 D-d). `approvedHours` and `pendingHours` are separate on the
+            wire and nothing in this product sums them.
+        utilisationPercent:
+          type: integer
+          nullable: true
+          description: >
+            `approvedHours ÷ allocatedCapacityHours`, as a percentage (017 D-i). **Null, not zero,
+            when allocated capacity is zero** — a person nobody has allocated has no utilisation,
+            and 0% would say they are idle when the true statement is that nobody planned their
+            time.
+        freeFrom:
+          type: string
+          format: date
+          nullable: true
+          description: >
+            The first day in the window on which this person is under 100% allocated, which is what
+            directory.html's "free from 1 Oct" reads. Null when they are full for all of it.
+        allocations:
+          type: array
+          items: { $ref: '#/components/schemas/AllocationSpan' }
+        absences:
+          type: array
+          items: { $ref: '#/components/schemas/Absence' }
+
+    StaffingCapacityView:
+      type: object
+      required: [from, to, people, overAllocated]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        people:
+          type: array
+          items: { $ref: '#/components/schemas/PersonCapacity' }
+        overAllocated:
+          type: array
+          items: { $ref: '#/components/schemas/PersonCapacity' }
+          description: >
+            The subset with `overAllocated` true, so the panel does not re-filter and cannot
+            disagree with the row badge above it.
+
+    SelfCapacity:
+      type: object
+      description: >
+        The caller's own capacity over a window — the one staffing read with no staffing
+        permission on it, because it is about the caller (017 D-m). Serves the timesheet's fourth
+        KPI tile and My Work's This-period meter.
+      required: [from, to, capacityHours, absenceHours, allocatedPercent, hasProfile]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        capacityHours:
+          type: number
+          format: double
+          nullable: true
+          description: Net of absence. Null when the caller has no profile — the tile then reads em dash.
+        absenceHours: { type: number, format: double, nullable: true }
+        allocatedPercent: { type: integer }
+        hasProfile:
+          type: boolean
+          description: >
+            Explicit rather than inferred from a null, so a screen can say *no profile recorded*
+            instead of *failed to load*. The two look identical without it.
+
+    ProjectStaffingPerson:
+      type: object
+      description: >
+        A person on THIS project. Carries their company-wide total percentage and the flag, and
+        **names no other project** (017 D-f) — the breakdown is the company view's, under
+        `staffing:directory`.
+      required: [person, percentOnThisProject, totalPercent, overAllocated, capacityHours]
+      properties:
+        person: { $ref: '#/components/schemas/UserRef' }
+        percentOnThisProject: { type: integer }
+        totalPercent: { type: integer }
+        overAllocated: { type: boolean }
+        capacityHours: { type: number, format: double, nullable: true }
+
+    ProjectStaffingView:
+      type: object
+      required: [from, to, allocations, people]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        allocations:
+          type: array
+          items: { $ref: '#/components/schemas/Allocation' }
+        people:
+          type: array
+          items: { $ref: '#/components/schemas/ProjectStaffingPerson' }
 
 security:
   - bearerAuth: []
