@@ -1,6 +1,8 @@
 package com.tcms.crm;
 
+import com.tcms.api.ClientRef;
 import com.tcms.project.ClientDirectory;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -52,5 +54,25 @@ class CrmClientDirectory implements ClientDirectory {
     @Override
     public boolean existsInCompany(UUID clientId) {
         return clients.findById(clientId).isPresent();
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>The same query {@link ClientService#pickableFor} starts from, and deliberately the same
+     * one: "which clients is it meaningful to start something new for" is one question, and two
+     * statements answering it are two orderings and two status filters to keep in step. What that
+     * method adds on top — putting the project's own archived client back so a settings save cannot
+     * silently detach it — is a property of the picker and not of the population, which is why the
+     * addition is there and not here.
+     */
+    @Override
+    public List<ClientRef> activeClients() {
+        List<Client> active = clients.findByStatusOrderByNameAsc(ClientStatus.ACTIVE);
+        List<ClientRef> refs = new ArrayList<>(active.size());
+        for (Client client : active) {
+            refs.add(new ClientRef(client.getId(), client.getName()));
+        }
+        return List.copyOf(refs);
     }
 }

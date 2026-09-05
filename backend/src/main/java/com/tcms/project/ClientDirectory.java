@@ -1,6 +1,8 @@
 package com.tcms.project;
 
+import com.tcms.api.ClientRef;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -63,4 +65,35 @@ public interface ClientDirectory {
      * exists in another client's tenancy (§6t).
      */
     boolean existsInCompany(UUID clientId);
+
+    /**
+     * Every ACTIVE client in the current company, by name — the third question a module that may not
+     * see {@code crm} has had to ask.
+     *
+     * <p>Added by 019 T3 for {@code GET /rate-cards}, which answers <strong>one slot per active
+     * client, card or {@code null}</strong>: {@code billing.html}'s table ends on a Kessler Health
+     * row reading <em>no rate card yet</em> beside a {@code Set} button, and a table built from the
+     * cards alone could not draw it. So the population is the clients, and the cards are what is
+     * joined on — which means the caller needs the clients and {@code billing} may not read them.
+     *
+     * <p><strong>It grew here rather than in {@code billing}</strong>, and that is the decision
+     * rather than the convenience. A {@code billing.ClientFacts} reading the {@code client} table
+     * would have been the {@code *Facts} pattern pointed the wrong way: those five all read
+     * downstream-to-upstream in native SQL, and {@code project} → {@code crm} is the reverse, held
+     * by this interface precisely because ArchUnit cannot see a SQL crossing. A rule that holds only
+     * while the checker is blind is one somebody breaks by reading the code.
+     *
+     * <p>ARCHIVED clients are left out, which is the same filter {@code ClientService.pickableFor}
+     * applies and very nearly the same reason: archiving is how a client stops appearing in the
+     * places you would start something new from, and a rate card is something new. The asymmetry
+     * with the picker is deliberate — that one adds the project's own archived client back, because
+     * dropping it would silently detach the project on the next save. Nothing is silently detached
+     * here: an archived client's existing card is still readable by id, still prices its issued
+     * work, and simply has no row offering to create one.
+     *
+     * <p>Empty is a complete answer, not an empty state — a company building its own products never
+     * records a client (scope D1 rule 2), and {@code GET /rate-cards} answers {@code []} for it with
+     * nothing marked as missing.
+     */
+    List<ClientRef> activeClients();
 }

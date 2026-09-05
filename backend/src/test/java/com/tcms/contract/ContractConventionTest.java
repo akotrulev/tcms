@@ -991,7 +991,42 @@ class ContractConventionTest {
             Map.entry("ClientContact", List.of(com.tcms.crm.ClientContactView.class)),
             Map.entry("ClientContactInput",
                     List.of(com.tcms.crm.ClientContactWriteRequest.class)),
-            Map.entry("ProjectClientInput", List.of(com.tcms.crm.ProjectClientRequest.class)));
+            Map.entry("ProjectClientInput", List.of(com.tcms.crm.ProjectClientRequest.class)),
+            // ---- 019 M8's billing block ----
+            //
+            // The same entity/view split as the two blocks above, for the same reason: `RateCard`,
+            // `RateCardEntry`, `Budget` and `Expense` are entity CLASSES carrying company_id, the
+            // audit columns and — where anything updates them — lock_version, and none of that is
+            // on a wire shape. So each of those four schemas is paired with the `…View` half.
+            //
+            // `Money` is the one entry here with no entity behind it at all. It is a PAIR, always
+            // (019 D-l): a company with a EUR client and a CHF client has no single total, and a
+            // naked amount is the field that eventually gets summed across two of them. It is
+            // NOT in `com.tcms.api` — that package is for shapes two modules serve without
+            // importing each other, and `time` and `staffing` both say in their package comments
+            // that they may never serve an amount, so `billing` is the only module there is.
+            //
+            // `Budget` and `BudgetBurn` are TWO schemas over one row, and the split is 019 D-h
+            // rather than a naming accident: the first is the money view gated on billing:read, the
+            // second is the project view gated on project:read and has no amount member and no
+            // currency member at all. One schema with fields withheld would be a shape whose
+            // meaning depends on who asked, which no reader can check — and BudgetBurnTest asserts
+            // the second over its serialized body for exactly that reason.
+            //
+            // The three `…WriteRequest` records are named for the act and not for the schema, which
+            // is why no name match proposes them — the same reason ClientInput's entry above is
+            // hand-written.
+            Map.entry("Money", List.of(com.tcms.billing.Money.class)),
+            Map.entry("RateCard", List.of(com.tcms.billing.RateCardView.class)),
+            Map.entry("RateCardInput", List.of(com.tcms.billing.RateCardWriteRequest.class)),
+            Map.entry("RateCardEntry", List.of(com.tcms.billing.RateCardEntryView.class)),
+            Map.entry("RateCardEntryInput", List.of(com.tcms.billing.RateCardEntryInput.class)),
+            Map.entry("RateCardSlot", List.of(com.tcms.billing.RateCardSlotView.class)),
+            Map.entry("Budget", List.of(com.tcms.billing.BudgetView.class)),
+            Map.entry("BudgetInput", List.of(com.tcms.billing.BudgetWriteRequest.class)),
+            Map.entry("BudgetBurn", List.of(com.tcms.billing.BudgetBurnView.class)),
+            Map.entry("Expense", List.of(com.tcms.billing.ExpenseView.class)),
+            Map.entry("ExpenseInput", List.of(com.tcms.billing.ExpenseWriteRequest.class)));
 
     /**
      * The owners this file cannot name as class literals, because they are package-private.

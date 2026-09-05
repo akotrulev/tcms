@@ -227,7 +227,21 @@ class ContractEnumTest {
             // kind changes nothing about the arithmetic — every member subtracts the same hours —
             // so a fifth member added to one side only would be a chip nothing can render rather
             // than a number that goes wrong, which is exactly the divergence this rule is for.
-            Map.entry("AbsenceKind", List.of("com.tcms.staffing.AbsenceKind")));
+            Map.entry("AbsenceKind", List.of("com.tcms.staffing.AbsenceKind")),
+            // 019 M8's two. RateCardScope is the ORDER a rate is resolved in and not merely a
+            // label — PERSON, then a ROLE the person actually holds on that project, then
+            // ALL_ROLES (019 D-d) — so a member added to one side only would be a rung the ladder
+            // in PricingService cannot walk, or a rung the wire cannot express. BudgetBasis is
+            // paired with ck_budget_shape in the database, which decides from it whether a
+            // currency is required or forbidden: a third member is a CHECK change before it is a
+            // schema change, and this rule is what says so first.
+            //
+            // InvoiceStatus is deliberately NOT here yet. The contract declares it, nothing serves
+            // it, and the enum arrives with the invoice surface (019 T4) — a placeholder pointing
+            // at a type that does not exist would fail as a ClassNotFoundException naming this
+            // file rather than as the missing handler it actually is.
+            Map.entry("RateCardScope", List.of("com.tcms.billing.RateCardScope")),
+            Map.entry("BudgetBasis", List.of("com.tcms.billing.BudgetBasis")));
 
     /**
      * The contract enums with no server type at all, and what checks each instead.

@@ -181,9 +181,28 @@ class ModuleStructureTest {
                         `PeopleDirectory` and `integration` for `TrackerBindingDirectory`. It also \
                         takes four foundation modules rather than five — `storage` is absent \
                         because nothing here has an attachment, and `client.html`'s Contracts \
-                        panel is built by no module at all.""")
+                        panel is built by no module at all. \
+                        019 M8 adds `billing`, and it is the first module that makes the crossing \
+                        TWICE and the first that had to rename the classes doing it. It may not \
+                        import `time` or `tracker`, so approved hours arrive through \
+                        `billing.ApprovedTimeFacts` (sixth instance) and an issue's key and title \
+                        through `billing.IssueSubjectFacts` (seventh, landing with the invoice \
+                        entries that snapshot them). Neither is called `TimeFacts` or `IssueFacts` \
+                        because `staffing` and `time` already own those SIMPLE names and Spring's \
+                        default bean name is the simple class name — two `@Component`s with one \
+                        name is a ConflictingBeanDefinitionException and a context that does not \
+                        start, which is what \
+                        `ArchitectureRulesTest.springStereotypesHaveDistinctSimpleNames` exists to \
+                        catch (019 D-r). It also runs INTO 018's inversion from the other side: it \
+                        may not import `crm` either, so a client's name comes through \
+                        `project.ClientDirectory` — which grew `activeClients()` for it rather \
+                        than this module growing a `ClientFacts` that would have pointed the \
+                        `*Facts` pattern backwards. Four foundation modules, `storage` absent for \
+                        `crm`'s reason: nothing here has an attachment, `invoice.html`'s Preview \
+                        PDF is not built, and the day either changes this list grows by one entry \
+                        and the growth is the record that it did.""")
                 .containsExactly(
-                        "api", "auth", "crm", "documentation", "execution", "identity",
+                        "api", "auth", "billing", "crm", "documentation", "execution", "identity",
                         "integration", "project", "provisioning", "reporting", "repository",
                         "staffing", "storage", "tenancy", "time", "tracker", "work");
     }

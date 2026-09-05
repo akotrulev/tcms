@@ -16,8 +16,9 @@ the hours and never a rate.
 
 **Architecture:** A new Spring Modulith module `com.tcms.billing` owns seven tables and every read
 that names money. It may import only the five foundation modules, so it reaches `time`'s entries
-through `billing.TimeFacts` and the tracker's issue projection through `billing.IssueFacts` — the
-sixth and seventh instances of the `*Facts` pattern — and it reaches a client's **name** through
+through `billing.ApprovedTimeFacts` and the tracker's issue projection through
+`billing.IssueSubjectFacts` — the sixth and seventh instances of the `*Facts` pattern, and the first
+two that had to be renamed off the pattern's usual spelling (D-r) — and it reaches a client's **name** through
 `project.ClientDirectory`, which `crm` already implements, rather than through a `ClientFacts` of its
 own. **A draft invoice stores no lines**: it is a header plus a live computation over approved time,
 so approving a period recalculates it, and `POST …/issue` is the one transaction that ever writes an
@@ -228,10 +229,15 @@ Traps this task will hit:
   `*Facts` direction and ArchUnit cannot see it, because SQL is not a Java dependency. If
   ClientDirectory lacks a method you need, add it THERE and implement it in crm; that is the pattern,
   not a workaround. Both of those files are outside your module and each edit is a decision to state.
-- **Two `*Facts` classes, each the ONLY file naming its tables** (D-m): billing.TimeFacts names
-  time_entry and timesheet_period; billing.IssueFacts names issue_fact. Nothing else in the package
-  may name any of the four, and nothing may WRITE any of them. issue_time_rollup is deliberately not
-  read — it is per-issue approved hours, and an invoice needs the ENTRIES, not their sum.
+- **Two `*Facts` classes, each the ONLY file naming its tables** (D-m): billing.ApprovedTimeFacts
+  names time_entry and timesheet_period; billing.IssueSubjectFacts names issue_fact. Nothing else in
+  the package may name any of the four, and nothing may WRITE any of them. issue_time_rollup is
+  deliberately not read — it is per-issue approved hours, and an invoice needs the ENTRIES, not their
+  sum. **Neither class may be called `TimeFacts` or `IssueFacts`** — `staffing` and `time` already own
+  those SIMPLE names, Spring's default bean name IS the simple class name, and two of them is a
+  ConflictingBeanDefinitionException that stops the context booting (D-r). **`IssueSubjectFacts` is
+  T4's**, because T3 builds no surface that needs an issue's key or title and a seam with no caller is
+  what §121 deletes (D-s); the crossing test is written in T3 anyway, as *at most* the owner.
 - **Only APPROVED, ISSUE-subject hours are priceable** (D-e). V9's ck_time_entry_subject_shape makes
   project_id NULL for MEETING, LEAVE, TRAINING and INTERNAL, so four of the five subject types can
   never reach a rate card. This is not a filter you apply as a courtesy; it is the shape of the data.
@@ -306,6 +312,22 @@ issued invoice with 409, the client billing summary, the company summary, both n
 and seed-demo-data writing rate cards, budgets and two invoices.
 
 Traps this task will hit:
+- **THE BACKEND SUITE IS RED WHEN YOU START AND IT IS T1's DECLARATION, NOT T3's WORK.** Three
+  `contract` classes fail, and each names exactly what is left for you:
+  `ContractParameterBindingTest.everyDeclaredOperationHasAHandler` lists **seven** unserved
+  operations (`GET /billing/summary`, the five `/invoices…` ones, `GET /clients/{clientId}/billing`),
+  `ContractConventionTest.everyObjectSchemaIsPairedOrExempt` lists **nine** unpaired schemas
+  (`Invoice`, `InvoiceDetail`, `InvoiceLine`, `InvoiceEntry`, `InvoiceDraftInput`, `ExcludedHours`,
+  `ClientBillingRow`, `ClientBillingSummary`, `BillingSummary`) and `ContractEnumTest` lists **one**
+  enum (`InvoiceStatus`). Measured at T3's HEAD, down from sixteen / twenty / one. **Your handlers,
+  records and enum are what turn all three green**, and the pairings are hand-written map entries in
+  those two test files — see T3's block there for the shape and the argument. Read the shrinking list
+  rather than the `BUILD FAILED`. Anything outside those three classes is yours.
+- **`ApprovedTimeFacts` is WIDENED, never joined by a sibling** (D-m). Two files naming `time_entry`
+  fails `BillingReadsAndNeverWritesTest` immediately, which is the rule working. `IssueSubjectFacts`
+  is a different table and is the one new `*Facts` class this task adds — and it may **not** be
+  called `IssueFacts`, because `time.IssueFacts` is a `@Component` and Spring's default bean name is
+  the simple class name (D-r).
 - **A DRAFT STORES NO LINES** (D-c). It is a header — client, period, status — and its lines are
   computed on every read from the approved entries that exist NOW. That is what makes invoice.html's
   promise true ("Approve them and this draft recalculates") without a recalculate endpoint, and it is
@@ -347,11 +369,16 @@ Traps this task will hit:
   close-out that you did not.
 
 Fixture UUID prefixes: grep the whole test tree before taking one; see T3's prompt for why. This plan
-suggests `4c` for BillingMoneyBoundaryTest, `4e` for InvoiceLifecycleTest and `52` for
-ClientBillingSummaryTest; verify all three.
+suggests `4c` for BillingMoneyBoundaryTest and `4e` for InvoiceLifecycleTest. **`52` is NOT free —
+T3's RateCardEndpointTest took it** (T3 used `50`, `51` and `52`); `53` and `54` were free on
+2026-09-05. Verify all of them anyway.
 
 Commit ONE commit staging only backend/src/main/java/com/tcms/billing/,
-backend/src/test/java/com/tcms/billing/, backend/src/test/java/com/tcms/time/TimeMoneyBoundaryTest.java,
+backend/src/test/java/com/tcms/billing/,
+backend/src/test/java/com/tcms/architecture/BillingReadsAndNeverWritesTest.java,
+backend/src/test/java/com/tcms/contract/ContractConventionTest.java,
+backend/src/test/java/com/tcms/contract/ContractEnumTest.java,
+backend/src/test/java/com/tcms/time/TimeMoneyBoundaryTest.java,
 backend/src/test/java/com/tcms/crm/CrmCreatesNoLoginTest.java,
 backend/src/main/java/com/tcms/DemoWorkspaceSeeder.java and docs/plans/019-billing.md.
 Message: `feat(billing): the draft as a query, the issue as a record, and the two negatives`.
@@ -715,8 +742,11 @@ where the mockup renders one.
 
 | Class | Reads | Instance |
 |---|---|---|
-| `billing.TimeFacts` | `time_entry`, `timesheet_period` | sixth |
-| `billing.IssueFacts` | `issue_fact` | seventh |
+| `billing.ApprovedTimeFacts` | `time_entry`, `timesheet_period` | sixth |
+| `billing.IssueSubjectFacts` | `issue_fact` | seventh |
+
+**Both are renamed from the `TimeFacts` / `IssueFacts` this plan first wrote, and the rename is
+load-bearing — see D-r.** The second lands with its first caller in T4 — see D-s.
 
 Read-only native SQL, running inside the caller's transaction and therefore under RLS. Nothing else
 in the package may name any of those tables, and nothing may write one — `BillingReadsAndNeverWritesTest`
@@ -794,6 +824,54 @@ Named here so a reviewer can grep for each and find only these lines:
   *"sending is your mail client's job"* — and nothing here records that an invoice was paid.
 - **No PDF.** `invoice.html`'s `Preview PDF` button has no endpoint and no screen draws one.
 
+### D-r — Both `*Facts` classes are renamed, because a bean name is a simple class name
+
+**Found in T3, not predicted by this plan.** `billing.TimeFacts` and `staffing.TimeFacts` are both
+`@Component`, and Spring's default bean name is the **simple** class name — so the two collide into a
+`ConflictingBeanDefinitionException` and the context does not start. Same for `billing.IssueFacts`
+against `time.IssueFacts`. `ArchitectureRulesTest.springStereotypesHaveDistinctSimpleNames` is the
+rule that reports it, and it exists because §131 shipped a collision of exactly this shape —
+`reporting.ResultsChangedHandler` beside `repository.ResultsChangedHandler`, both `@Component`, one
+name in two packages. What that section also records is why the rule reads CLASSES and not a running
+context: both of those beans were `@ConditionalOnProperty` and the suite turned both properties off,
+so the collision could not occur anywhere in the suite and would have occurred exactly once — on the
+first boot of a real deployment.
+
+The `*Facts` pattern had never repeated a name before M8, and M8 repeats two at once. So the classes
+are **`billing.ApprovedTimeFacts`** and **`billing.IssueSubjectFacts`**, each qualified by what it
+reads — which is also true of their contents: every method on the first answers about *approved*
+hours and cannot see a pending one.
+
+Rejected: `@Component("billingTimeFacts")`. It fixes Spring and leaves the ArchUnit rule red, and
+relaxing that rule to read explicit bean names would weaken a check whose whole value is that it
+observes the classes rather than a context — the defect §131 shipped was invisible to every running
+context in the suite.
+
+### D-s — `IssueSubjectFacts` lands with its first caller, and the crossing test does not wait
+
+T3 built no surface that needs an issue's key or title, so the second `*Facts` class would have been
+a seam with no caller — the shape §121 deleted (`CaseFlakeRepository.findQuarantined`) rather than
+kept. It arrives in T4, with the `invoice_line_entry` rows that snapshot those two columns.
+
+`BillingReadsAndNeverWritesTest` is written in T3 all the same and at full strength, because its rule
+is stated as **at most** the owner: a second file naming `issue_fact` fails today, and the file that
+eventually names it must be the one the test already declares. What T3 additionally asserts —
+*exactly* the owner — it asserts for `time_entry` and `timesheet_period`, which is the vacuity guard
+for the crossing that does exist. T4 adds the two time tables' siblings to that list.
+
+### D-t — `GET /budgets` lists the projects that have a budget, and the mockup's fifth row is a join
+
+`Budget.basis` is required and **not** nullable on the contract T1 landed, so a project with no
+budget has no representable row on that path. `billing.html` draws *Internal Platform · None
+(internal) · budget — · 126h approved · no budget set* in the same table as three billed projects,
+which is a screen joining **every project** to **the budgets that exist** — the projects list is
+where the other half of that row comes from, and T5 assembles it.
+
+Recorded rather than resolved by widening the schema: the contract is authoritative over both this
+plan and the mockup, a nullable `basis` would make every consumer branch on an absence that already
+has its own home in `BudgetBurn`, and changing it now is a `ts`-stack task in the middle of a `be`
+one.
+
 ---
 ## File structure
 
@@ -809,8 +887,8 @@ Named here so a reviewer can grep for each and find only these lines:
 | `backend/src/main/resources/db/migration/V12__billing.sql` | seven tables, seven FORCE policies, the reasoning in block comments | T2 |
 | `backend/src/test/java/com/tcms/tenancy/SchemaConventionTest.java` | 102 → 109 | T2 |
 | `com/tcms/billing/package-info.java` | `@ApplicationModule(allowedDependencies = {api, tenancy, identity, project})` and the module's two prohibitions | T3 |
-| `com/tcms/billing/TimeFacts.java` | the **only** file naming `time_entry` / `timesheet_period` | T3 |
-| `com/tcms/billing/IssueFacts.java` | the **only** file naming `issue_fact` | T3 |
+| `com/tcms/billing/ApprovedTimeFacts.java` | the **only** file naming `time_entry` / `timesheet_period` (D-r) | T3 |
+| `com/tcms/billing/IssueSubjectFacts.java` | the **only** file naming `issue_fact` (D-r); lands with its caller (D-s) | T4 |
 | `com/tcms/billing/PricingService.java` | the **one** place a rate is chosen (D-d) | T3 |
 | `com/tcms/billing/RateCard*.java` · `RateCardService` · `RateCardController` | the card, its entries, its five endpoints | T3 |
 | `com/tcms/billing/Budget*.java` · `BudgetService` · `BudgetController` | the budget, the company table and the project-scope burn (D-h) | T3 |
@@ -1693,24 +1771,36 @@ git commit -m "feat(billing): V12 — rate cards, budgets, invoices and expenses
 ladder; the rate-card, budget, budget-burn and expense endpoints serve real rows;
 `GET /projects/{projectId}/budget-burn` serves a percentage and hours to a caller holding
 `project:read` and carries no currency and no amount; `BillingReadsAndNeverWritesTest` asserts that
-`billing.TimeFacts` and `billing.IssueFacts` are each the only file naming their tables and that
-nothing in the package writes one.
+`billing.ApprovedTimeFacts` is the only file naming `time_entry` and `timesheet_period`, that
+`issue_fact` is named by at most the file D-s reserves for it, and that nothing in the package writes
+any of the four.
 **Depends on:** T2 (the tables)
 **Stack:** `be` · **Agent:** `be-java`
 
-**Files:**
-- Create: `backend/src/main/java/com/tcms/billing/package-info.java`, `TimeFacts.java`,
-  `IssueFacts.java`, `PricingService.java`, `RateCard.java`, `RateCardEntry.java`,
-  `RateCardRepository.java`, `RateCardEntryRepository.java`, `RateCardService.java`,
-  `RateCardController.java`, `RateCardView.java`, `RateCardSlotView.java`, `RateCardWriteRequest.java`,
-  `Budget.java`, `BudgetRepository.java`, `BudgetService.java`, `BudgetController.java`,
-  `BudgetView.java`, `BudgetBurnView.java`, `BudgetWriteRequest.java`, `BudgetBasis.java`,
-  `Money.java`, `Expense.java`, `ExpenseRepository.java`, `ExpenseService.java`,
-  `ExpenseController.java`, `ExpenseView.java`, `ExpenseWriteRequest.java`
+**Files** — as landed:
+- Create: `backend/src/main/java/com/tcms/billing/package-info.java`, `ApprovedTimeFacts.java`
+  (D-r), `PersonRoles.java`, `RoleNames.java`, `EntryLabels.java`, `PricingService.java`,
+  `Outcome.java`, `BillingResponses.java`, `Money.java`, `RateCardScope.java`, `BudgetBasis.java`,
+  `RateCard.java`, `RateCardEntry.java`, `RateCardRepository.java`, `RateCardEntryRepository.java`,
+  `RateCardService.java`, `RateCardController.java`, `RateCardView.java`, `RateCardEntryView.java`,
+  `RateCardEntryInput.java`, `RateCardSlotView.java`, `RateCardWriteRequest.java`, `Budget.java`,
+  `BudgetEdit.java`, `BudgetRepository.java`, `BudgetService.java`, `BudgetController.java`,
+  `BudgetView.java`, `BudgetBurnView.java`, `BudgetWriteRequest.java`, `Expense.java`,
+  `ExpenseRepository.java`, `ExpenseService.java`, `ExpenseController.java`, `ExpenseView.java`,
+  `ExpenseWriteRequest.java`
 - Create: `backend/src/test/java/com/tcms/billing/BillingTestBase.java`, `PricingTest.java`,
-  `BudgetBurnTest.java`, `BillingReadsAndNeverWritesTest.java`
-- Possibly modify: `backend/src/main/java/com/tcms/project/ClientDirectory.java` and
-  `backend/src/main/java/com/tcms/crm/CrmClientDirectory.java` — **only** if a method is missing
+  `BudgetBurnTest.java`, `RateCardEndpointTest.java`
+- Create: `backend/src/test/java/com/tcms/architecture/BillingReadsAndNeverWritesTest.java` —
+  **beside its two precedents** (`StaffingReadsNoTimeEntryTest`, `TimeWritesNoIssueFactTest`) rather
+  than under `billing/`, because a family of three structural rules that a reader can find by opening
+  one package is worth more than a staging list that matches the module
+- Modify: `backend/src/main/java/com/tcms/project/ClientDirectory.java` and
+  `backend/src/main/java/com/tcms/crm/CrmClientDirectory.java` — `activeClients()`, which
+  `GET /rate-cards` needs because its population is the clients and not the cards
+- Modify: `backend/src/test/java/com/tcms/contract/ContractConventionTest.java` and
+  `ContractEnumTest.java` — the schema pairings and the two enum owners. **Not predicted by this
+  plan**, and unavoidable: both maps are hand-written by design (a name match *proposes* a pair, a
+  human *accepts* it), so no record this task wrote could pair itself
 
 - [ ] **Step 1: `package-info.java` — the module and its two prohibitions**
 
@@ -1722,8 +1812,8 @@ nothing in the package writes one.
  * <h2>What this module may not do, stated first because both are failures with names</h2>
  *
  * <p>It <strong>reads {@code time}'s entries and the tracker's issue projection, and writes
- * neither.</strong> The whole of the first crossing is {@link com.tcms.billing.TimeFacts} and the
- * whole of the second is {@link com.tcms.billing.IssueFacts}; nothing else here may name
+ * neither.</strong> The whole of the first crossing is {@link com.tcms.billing.ApprovedTimeFacts} and the
+ * whole of the second is {@link com.tcms.billing.IssueSubjectFacts}; nothing else here may name
  * {@code time_entry}, {@code timesheet_period} or {@code issue_fact}, and
  * {@code BillingReadsAndNeverWritesTest} asserts both halves over source text, because ArchUnit
  * cannot see the rule — SQL is not a Java dependency. Sixth and seventh instances of a pattern with
@@ -1769,78 +1859,62 @@ nothing in the package writes one.
 package com.tcms.billing;
 ```
 
-- [ ] **Step 2: `TimeFacts` — the only file naming `time_entry` and `timesheet_period`**
+- [ ] **Step 2: `ApprovedTimeFacts` — the only file naming `time_entry` and `timesheet_period`**
+
+Renamed off `TimeFacts` for D-r's reason. **As landed it has two methods and not three**, both with
+callers in this task:
 
 ```java
 @Component
-class TimeFacts {
+class ApprovedTimeFacts {
 
-    /**
-     * One approved hour, with everything an invoice line needs about it — <strong>as ids, not as
-     * names.</strong>
-     *
-     * <p>{@code personId} and {@code periodDecidedBy} are UUIDs and the caller resolves both
-     * through {@link com.tcms.project.PeopleDirectory}, exactly as {@code crm.ClientService}
-     * resolves an account manager. V1 line 99 is the reason and it is easy to get wrong:
-     * <em>user-facing names come from {@code company_membership.display_name}, NOT from
-     * {@code app_user}</em>. Joining {@code app_user} here would serve the wrong name AND would
-     * make this class name a third module's table, weakening the one claim it exists to hold.
-     */
+    /** One approved hour, as IDS and not as names — V1 line 99 is why nothing joins `app_user`. */
     record ApprovedEntry(
-            UUID timeEntryId,
-            UUID personId,
-            UUID projectId,
-            UUID subjectId,
-            LocalDate spentOn,
-            BigDecimal hours,
-            Instant periodDecidedAt,
-            UUID periodDecidedBy) {
+            UUID timeEntryId, UUID personId, UUID projectId, LocalDate spentOn, BigDecimal hours) {
     }
 
-    /**
-     * Every APPROVED, issue-subject hour on this client's projects inside the window, minus the
-     * ones already on an issued invoice.
-     *
-     * <p>The exclusion is a {@code NOT EXISTS} against {@code invoice_line_entry} — this module's
-     * own table, so the anti-double-billing rule reads as one query rather than as two round trips
-     * a caller has to remember to make in order.
-     *
-     * <p>{@code periodDecidedBy} is the decision on that PERSON'S PERIOD (019 D-f). It is not, and
-     * must never be relabelled as, an approval of this project's hours.
-     */
-    List<ApprovedEntry> approvedFor(Collection<UUID> projectIds, LocalDate from, LocalDate to) { … }
+    /** Every approved, issue-subject hour on these projects, all time — what a budget is worth. */
+    List<ApprovedEntry> approvedOn(Collection<UUID> projectIds) { … }
 
-    /** Unapproved hours in the same window, per person — the amber note's two names and figures. */
-    List<PendingHours> unapprovedFor(Collection<UUID> projectIds, LocalDate from, LocalDate to) { … }
-
-    /** Approved hours on one project, all time — the budget-burn numerator. */
-    BigDecimal approvedHoursOn(UUID projectId) { … }
+    /** The same population summed per project — the burn numerator, and the only figure a
+     *  project:read caller ever sees from this class. */
+    Map<UUID, BigDecimal> approvedHoursOn(Collection<UUID> projectIds) { … }
 }
 ```
 
-The SQL shape for `approvedFor`, so the join is written once and read once:
+The SQL shape, so the join is written once and read once:
 
 ```sql
-SELECT e.id, e.person_id, e.project_id, e.subject_id, e.spent_on, e.hours,
-       p.decided_at, p.decided_by
+SELECT e.id, e.person_id, e.project_id, e.spent_on, e.hours
   FROM time_entry e
   JOIN timesheet_period p ON p.id = e.period_id
  WHERE e.subject_type = 'ISSUE'
    AND e.project_id IN (:projectIds)
-   AND e.spent_on BETWEEN :from AND :to
    AND p.state = 'APPROVED'
-   AND NOT EXISTS (SELECT 1 FROM invoice_line_entry x WHERE x.time_entry_id = e.id)
- ORDER BY e.spent_on DESC, e.person_id
+ ORDER BY e.spent_on, e.person_id
 ```
 
 **Two tables and no third**, which is what lets this class claim to be the only file naming a
-`time`-owned table. It resolves no names: `personId` and `decided_by` come back as UUIDs and
-`project.PeopleDirectory` turns them into names, because **V1 line 99 says user-facing names come
-from `company_membership.display_name`, not from `app_user`** — a join to `app_user` here would be
-both the wrong name and a third module's table.
+`time`-owned table. It resolves no names: `personId` comes back as a UUID and
+`project.PeopleDirectory` turns it into one, because **V1 line 99 says user-facing names come from
+`company_membership.display_name`, not from `app_user`** — a join to `app_user` here would be both
+the wrong name and a third module's table.
 
-Read `V9__time.sql`'s `timesheet_period` block before writing this — the state column's spelling and
-the decision columns' names are that table's, not this plan's, and the plan is not the authority.
+**What this plan's draft put here and T3 did NOT build, because it had no caller** (§121's rule):
+`approvedFor(projectIds, from, to)` with the `NOT EXISTS (… invoice_line_entry …)` exclusion, the
+period's `decidedAt`/`decidedBy` and the entry's `subjectId` on `ApprovedEntry`, and
+`unapprovedFor(...)`. Every one of those is a draft invoice's or the amber note's, and they arrive
+with T4 — which widens this class rather than adding a second one.
+
+**Also landed here, not predicted by this plan:** `PersonRoles`, which answers *which roles is this
+person staffed with on this project* for the ladder's middle rung. It is **not** a `*Facts` class and
+must not become one: `identity` is an allowed dependency, so the crossing the pattern exists for does
+not apply, and it reads `RoleAssignmentRepository.findProjectRoleNames` /
+`findInheritedRoleNames` — the projections the org chart and `Project.myRole` already resolve
+through — rather than writing a second query over `role_assignment`, which is the second answer to
+"who holds what" that plan §6b forbids. It applies roles spec §A1.1's **replace-don't-union**
+override and, unlike `identity.EffectiveRoleNames`, keeps the whole matching SET, because D-d prices
+two roles at the higher of the two.
 
 - [ ] **Step 3: `PricingService` — the one place a rate is chosen**
 
@@ -1922,34 +1996,58 @@ void theProjectScopeBudgetReadCarriesNoMoneyWord() throws JsonProcessingExceptio
 
 - [ ] **Step 5: `BillingReadsAndNeverWritesTest`**
 
-Copied from `staffing.StaffingReadsNoTimeEntryTest` and widened to two classes and four tables.
+Copied from `architecture.StaffingReadsNoTimeEntryTest` and widened to four tables. **It lives in
+`com/tcms/architecture/` beside its two precedents**, not under `billing/` — a family of three
+structural rules a reader finds by opening one package is worth more than a staging list that matches
+the module.
 
 ```java
-@Test
-@DisplayName("exactly one file in com.tcms.billing names each foreign table, and none writes one")
-void exactlyOneFileNamesEachForeignTable() throws IOException {
-    Map<String, String> owner = Map.of(
-            "time_entry", "TimeFacts.java",
-            "timesheet_period", "TimeFacts.java",
-            "issue_fact", "IssueFacts.java",
-            "issue_time_rollup", "<nothing — 019 D-m: it answers a question an invoice does not ask>");
-    // …walk backend/src/main/java/com/tcms/billing, assert the file set naming each table is
-    // exactly {owner}, and that no file in the package contains INSERT INTO / UPDATE / DELETE FROM
-    // against any of the four.
-}
+private static final Map<String, String> OWNERS = new LinkedHashMap<>(Map.of(
+        "time_entry",        "ApprovedTimeFacts.java",
+        "timesheet_period",  "ApprovedTimeFacts.java",
+        "issue_fact",        "IssueSubjectFacts.java",   // D-s: the file lands in T4
+        "issue_time_rollup", ""));                       // D-m: nothing may name it at all
 ```
+
+Three rules: the corpus is not empty; **no** file in the package pairs a write verb with any of the
+four tables; and each table is named by **at most** its owner — plus *exactly* its owner for the two
+`time` tables, which is the vacuity guard for the crossing that exists today. Writing it as *at most*
+is what lets the rule hold at full strength on both sides of D-s: a second file naming `issue_fact`
+fails now, and the file that eventually names it must be the one already declared here.
 
 - [ ] **Step 6: Gate and commit**
 
 ```bash
 ~/bin/tcms-remote sync
-~/bin/tcms-remote backend ./gradlew build
+~/bin/tcms-remote backend "ulimit -n 65535; ./gradlew build"
 git add backend/src/main/java/com/tcms/billing backend/src/test/java/com/tcms/billing \
+        backend/src/main/java/com/tcms/project/ClientDirectory.java \
+        backend/src/main/java/com/tcms/crm/CrmClientDirectory.java \
+        backend/src/test/java/com/tcms/architecture/BillingReadsAndNeverWritesTest.java \
+        backend/src/test/java/com/tcms/architecture/ModuleStructureTest.java \
+        backend/src/test/java/com/tcms/contract/ContractConventionTest.java \
+        backend/src/test/java/com/tcms/contract/ContractEnumTest.java \
         docs/plans/019-billing.md
-# plus backend/src/main/java/com/tcms/project/ClientDirectory.java and
-# backend/src/main/java/com/tcms/crm/CrmClientDirectory.java IF a method was added
 git commit -m "feat(billing): the billing module, the rate ladder, and budget burn without a currency"
 ```
+
+**Four of those paths this plan did not predict, and each is a test that demands the edit rather than
+a file the task chose to touch:**
+
+- `ModuleStructureTest` asserts the detected module set **exactly**, and its failure message says why:
+  adding a module has to be a deliberate edit *"so that whoever adds one also reads the
+  allowedDependencies rule they are now subject to."* The entry carries `billing`'s paragraph.
+- `BillingReadsAndNeverWritesTest` lives beside its two precedents in `architecture/`.
+- `ContractConventionTest.RESPONSE_RECORDS` and `ContractEnumTest.OWNERS` are hand-written **by
+  design** — a name match *proposes* a pair and a human *accepts* it, and the class literals are what
+  make a rename a compile error. Eleven schemas and two enums were accepted here; the remaining nine
+  schemas, one enum and seven operations are T4's, and the shrinking list is the progress signal the
+  T4 prompt names.
+
+**What T3 leaves red, measured rather than assumed:** `ContractEnumTest` (1 — `InvoiceStatus`),
+`ContractConventionTest.everyObjectSchemaIsPairedOrExempt` (9 invoice/summary schemas) and
+`ContractParameterBindingTest.everyDeclaredOperationHasAHandler` (7 operations). Everything else in
+the backend suite is green.
 
 ---
 
@@ -1967,11 +2065,25 @@ rate-card edit; `BillingMoneyBoundaryTest` and the extended `TimeMoneyBoundaryTe
 **Files:**
 - Create: `com/tcms/billing/Invoice.java`, `InvoiceLine.java`, `InvoiceLineEntry.java`, their three
   repositories, `InvoiceService.java`, `InvoiceController.java`, `InvoiceNumbers.java`,
-  `InvoiceView.java`, `InvoiceDetailView.java`, `InvoiceLineView.java`, `InvoiceEntryView.java`,
-  `ExcludedHoursView.java`, `ClientBillingService.java`, `ClientBillingController.java`,
-  `ClientBillingSummaryView.java`, `BillingSummaryService.java`, `BillingSummaryController.java`
+  `InvoiceStatus.java`, `InvoiceView.java`, `InvoiceDetailView.java`, `InvoiceLineView.java`,
+  `InvoiceEntryView.java`, `ExcludedHoursView.java`, `ClientBillingService.java`,
+  `ClientBillingController.java`, `ClientBillingSummaryView.java`, `ClientBillingRowView.java`,
+  `BillingSummaryService.java`, `BillingSummaryController.java`
+- Create: `com/tcms/billing/IssueSubjectFacts.java` — the SEVENTH `*Facts` class, deferred from T3
+  because nothing there needed an issue's key or title (D-s). It is the only file in the package
+  allowed to name `issue_fact`, and `BillingReadsAndNeverWritesTest` already declares that name
+- Modify: `com/tcms/billing/ApprovedTimeFacts.java` — widen it, do not add a second class. It needs
+  `approvedFor(projectIds, from, to)` with the `NOT EXISTS (… invoice_line_entry …)` exclusion,
+  `unapprovedFor(...)` for the amber note and the summary tile, and `subjectId` / the period's
+  `decidedAt` / `decidedBy` on `ApprovedEntry`
 - Create: `backend/src/test/java/com/tcms/billing/InvoiceLifecycleTest.java`,
   `ClientBillingSummaryTest.java`, `BillingMoneyBoundaryTest.java`
+- Modify: `backend/src/test/java/com/tcms/architecture/BillingReadsAndNeverWritesTest.java` — add
+  `issue_fact` to the `ALREADY_CROSSED` list once `IssueSubjectFacts` exists, so the rule stops being
+  *at most* and becomes *exactly* for it too
+- Modify: `backend/src/test/java/com/tcms/contract/ContractConventionTest.java` (nine invoice and
+  summary schemas) and `ContractEnumTest.java` (`InvoiceStatus`). Both maps are hand-written by
+  design and no record can pair itself; T3 added its own eleven and two the same way
 - Modify: `backend/src/test/java/com/tcms/time/TimeMoneyBoundaryTest.java` — **extend only**
 - Modify: `backend/src/test/java/com/tcms/crm/CrmCreatesNoLoginTest.java` — **extend only**
 - Modify: `backend/src/main/java/com/tcms/DemoWorkspaceSeeder.java`
