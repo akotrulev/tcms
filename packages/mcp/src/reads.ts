@@ -1622,6 +1622,80 @@ export async function skillIdsIn(session: Session, names: readonly string[]): Pr
   });
 }
 
+/* ------------------------------------------------------------------ clients ---- */
+
+/** The contract's `status` enum, so a value the model invented does not reach the server. */
+const CLIENT_STATUSES = ['ACTIVE', 'ARCHIVED', 'ALL'] as const;
+
+/**
+ * The company's clients, one client in full, and — the thing an agent most needs told — **what this
+ * noun deliberately does not carry.**
+ *
+ * One gate, `client:read`, unlike its two `any`-gated neighbours: both questions here are COMPANY
+ * scope and the same key answers both, so there is no half of this tool a holder is refused.
+ *
+ * **Zero clients is a first-class answer** (scope D1 rule 2) and the description says so, because an
+ * empty array is the exact shape an agent is most likely to report as a failure or a permissions
+ * problem. A company building its own products never creates one, `project.client` is null for every
+ * project it has, and nothing in the product marks that as missing.
+ *
+ * **No hours, no rate, no invoice.** An Account Manager holds `client:read` and does not hold
+ * `billing:*`; what a client's work is worth is M8's. The sentence is in the description for
+ * `tcms_read_timesheet`'s reason — a tool that stays silent about a boundary invites an agent to go
+ * looking for a field that is gated away from its caller on purpose.
+ */
+const readClient: ToolDefinition = {
+  name: 'tcms_read_client',
+  title: "The company's clients, their contacts and the projects attached to them",
+  description:
+    'With nothing, every client in the company — name, location, status, how many projects name it '
+    + 'and how many contacts it has. With `client` (an id from a list read), that client in full: '
+    + 'its contacts and its projects. `status` filters and defaults to ACTIVE; pass ALL to include '
+    + 'archived ones. '
+    + '**An empty list is a complete answer and not a failure.** A company that builds its own '
+    + 'products has no clients, every project it owns has a null client, and nothing anywhere marks '
+    + 'that as missing — do not report it as an error, a permissions problem or unfinished setup. '
+    + 'A client is a RECORD of an organisation, never an account: nobody at a client can sign in, '
+    + 'and a contact is a name, a role, an email and a phone rather than a user. '
+    + '**Nothing on this surface returns a rate, a cost, an hour or an invoice value** — those are '
+    + 'gated on billing:* and ratecard:read, which the holder of this key need not have.',
+  gate: { mode: 'all', permissions: ['client:read'] },
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      client: {
+        type: 'string',
+        description: 'One client in full, by id — from a list read. Carries its contacts and its projects.',
+      },
+      status: {
+        type: 'string',
+        enum: ['ACTIVE', 'ARCHIVED', 'ALL'],
+        description: 'Which clients to list. Defaults to ACTIVE, as the screen does.',
+      },
+    },
+  },
+  run: async (session, input) => {
+    const tcms = session.request;
+    const clientId = str(input, 'client');
+    if (clientId !== undefined) {
+      return session.client.GET('/clients/{clientId}', { params: { path: { clientId } }, tcms });
+    }
+    /*
+      Narrowed against the contract's enum rather than passed through. `inputSchema` declares the
+      three, but the schema is advice to the model and not a validator on this side — a tool that
+      trusted it would send whatever arrived and turn a hallucinated value into a 400 the agent has
+      to decode.
+    */
+    const asked = str(input, 'status');
+    const status = CLIENT_STATUSES.find((value) => value === asked);
+    return session.client.GET('/clients', {
+      params: { query: status === undefined ? {} : { status } },
+      tcms,
+    });
+  },
+};
+
 export const READ_TOOLS: readonly ToolDefinition[] = [
   orient,
   searchCases,
@@ -1641,4 +1715,5 @@ export const READ_TOOLS: readonly ToolDefinition[] = [
   readTimesheet,
   readTimeRollup,
   readStaffing,
+  readClient,
 ];

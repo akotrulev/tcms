@@ -75,6 +75,9 @@ import {
   release as releaseFixture,
   releaseSummary,
   suite,
+  client as clientFixture,
+  clientContact,
+  clientDetail,
 } from '../../client/src/test/fixtures.js';
 import { WRITE_TOOLS } from './writes.js';
 import { api, agentRoutes, sessionWith, withApi, type Answer, type Api } from './test/harness.js';
@@ -105,6 +108,26 @@ const WATCHED = ['idempotency-key', 'if-match'] as const;
  * report generate (audit E2).
  */
 const CREATE_WITHOUT_A_KEY: Record<string, string> = {
+  'tcms_write_client.record':
+    'POST /clients declares no Idempotency-Key, and the parameter\'s own scope is the reason '
+    + '`tcms_write_absence.record` below gives: it deduplicates within `(company, project, key)` '
+    + 'and a client is addressed to no project. What a lost response costs is bounded by a '
+    + 'CONSTRAINT rather than by a header — `uq_client_name UNIQUE (company_id, name)` means the '
+    + 'retry answers 400 on `name` rather than recording the organisation twice.',
+  'tcms_write_client.contact-add':
+    'POST /clients/{clientId}/contacts, the same scope wall, and this one has no constraint behind '
+    + 'it: `client_contact` is deliberately NOT unique on email, because two people at one client '
+    + 'may share invoices@. So a lost response leaves a duplicate contact — one row, on a list the '
+    + 'client page renders in full, with a delete beside it.',
+  'tcms_write_client.edit':
+    'PUT /clients/{clientId} declares no If-Match and `Client` carries no lockVersion, so two '
+    + 'people editing one client at once lose the earlier edit. This arm reads the record before '
+    + 'writing it, which narrows the window but does not close it — closing it is a contract change '
+    + 'on both the response and the request, as it is for `tcms_write_artifact.edit` below.',
+  'tcms_write_client.contact-edit':
+    'PUT /clients/{clientId}/contacts/{contactId}, the same wall as `tcms_write_client.edit` above '
+    + 'and listed separately rather than covered by implication. Narrower: the loss is one '
+    + 'person\'s phone number or role, on a record the client page shows in full.',
   'tcms_write_issue.update':
     'PATCH /issues/{key} declares no If-Match, and there is nothing to precondition on even if it '
     + 'did: `Issue` carries no `lockVersion` on the wire at all. So closing this is a contract '
@@ -380,6 +403,41 @@ const REPORT_JOB = {
  * deciding whether a fixture is shaped like the resource and this table only has to be *reachable*.
  */
 const INVOCATIONS: Record<string, Invocation> = {
+  'tcms_write_client.record': {
+    tool: 'tcms_write_client',
+    input: { action: 'record', name: 'Acme Retail' },
+    path: '/clients',
+    routes: { 'POST /clients': { status: 201, body: clientFixture() } },
+  },
+  'tcms_write_client.edit': {
+    tool: 'tcms_write_client',
+    input: { action: 'edit', client: 'cl-1', status: 'ARCHIVED' },
+    path: '/clients/cl-1',
+    routes: {
+      // The read the arm makes first: `PUT` is a full replacement, so the arm merges over the
+      // current record rather than blanking what the caller did not name.
+      'GET /clients/cl-1': { status: 200, body: clientDetail() },
+      'PUT /clients/cl-1': { status: 200, body: clientFixture({ status: 'ARCHIVED' }) },
+    },
+  },
+  'tcms_write_client.contact-add': {
+    tool: 'tcms_write_client',
+    input: { action: 'contact-add', client: 'cl-1', name: 'Hanna Lund' },
+    path: '/clients/cl-1/contacts',
+    routes: { 'POST /clients/cl-1/contacts': { status: 201, body: clientContact() } },
+  },
+  'tcms_write_client.contact-edit': {
+    tool: 'tcms_write_client',
+    input: { action: 'contact-edit', client: 'cl-1', contact: 'cc-1', name: 'Hanna Lund' },
+    path: '/clients/cl-1/contacts/cc-1',
+    routes: { 'PUT /clients/cl-1/contacts/cc-1': { status: 200, body: clientContact() } },
+  },
+  'tcms_write_client.contact-remove': {
+    tool: 'tcms_write_client',
+    input: { action: 'contact-remove', client: 'cl-1', contact: 'cc-1' },
+    path: '/clients/cl-1/contacts/cc-1',
+    routes: { 'DELETE /clients/cl-1/contacts/cc-1': { status: 204, body: null } },
+  },
   'tcms_write_allocation.allocate': {
     tool: 'tcms_write_allocation',
     input: { action: 'allocate', person: 'Ana Engineer', percent: 50, startsOn: '2026-09-01', endsOn: '2026-11-30' },

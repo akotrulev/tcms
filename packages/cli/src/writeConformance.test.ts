@@ -67,6 +67,8 @@ import {
   run as runFixture,
   runDetail,
   suite,
+  client as clientFixture,
+  clientContact,
 } from '../../client/src/test/fixtures.js';
 import { COMMANDS } from './commands.js';
 import { EXIT } from './main.js';
@@ -99,6 +101,15 @@ const WATCHED = ['idempotency-key', 'if-match'] as const;
  * operation — not a header this file could start sending.
  */
 const CREATE_WITHOUT_A_KEY: Record<string, string> = {
+  'client create': 'POST /clients declares no Idempotency-Key, and the parameter\'s own scope is '
+    + 'the reason `staffing absence` below gives: it deduplicates within `(company, project, key)` '
+    + 'and a client is addressed to no project. What a lost response costs is bounded by a '
+    + 'CONSTRAINT rather than by a header — `uq_client_name UNIQUE (company_id, name)` means the '
+    + 'retry answers 400 on `name` instead of recording Acme Retail twice.',
+  'client contact-add': 'POST /clients/{clientId}/contacts, same scope wall, and this one has no '
+    + 'constraint behind it: `client_contact` is deliberately NOT unique on email, because two '
+    + 'people at one client may share invoices@. So a lost response leaves a duplicate contact — '
+    + 'one row, on a list the client page renders in full, with a delete beside it.',
   'staffing absence': 'POST …/absences declares no Idempotency-Key, and the parameter\'s own scope '
     + 'is the reason: it deduplicates within `(company, project, key)` and an absence is not '
     + 'addressed to a project. What a lost response costs is a duplicate row over the same days, '
@@ -287,6 +298,20 @@ interface Invocation {
 }
 
 const INVOCATIONS: Record<string, Invocation> = {
+  'client create': {
+    // No `--project`: a client is COMPANY scope, so this is one of the few writes with no project
+    // in its path at all.
+    argv: () => ['client', 'create', '--name', 'Acme Retail'],
+    path: '/clients',
+    routes: { 'POST /clients': { status: 201, body: clientFixture() } },
+  },
+  'client contact-add': {
+    argv: () => ['client', 'contact-add', 'cl-1', '--name', 'Hanna Lund'],
+    path: '/clients/cl-1/contacts',
+    routes: {
+      'POST /clients/cl-1/contacts': { status: 201, body: clientContact() },
+    },
+  },
   'staffing allocate': {
     argv: () => [
       'staffing', 'allocate', '--person', 'Ana Engineer',

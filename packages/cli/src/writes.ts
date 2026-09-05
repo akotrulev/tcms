@@ -2157,6 +2157,127 @@ const staffingAbsence: Command = {
   },
 };
 
+/* ------------------------------------------------------------------ clients ---- */
+
+/**
+ * `tcms client create --name "Acme Retail" --location Stockholm --industry retail`
+ *
+ * **A name is the only required flag** (story C1), and that is the product's rule rather than this
+ * command's convenience: a client with a name and nothing else is a complete client, and
+ * `client-new.html` says so on the form. Location, industry, notes and the account manager can come
+ * later, or never.
+ *
+ * Costs `client:create`, a COMPANY-scope key. **Creating a client creates no account.** There is no
+ * credential flag here and no field on `ClientInput` that could carry one — a client is a record
+ * describing an organisation, not a principal (scope D1), and if a client portal is ever wanted D1
+ * is reopened rather than extended.
+ *
+ * **There is no `client delete` verb**, and the omission is deliberate rather than pending. The only
+ * delete this module has refuses while any project references the client and is a
+ * correct-a-mistake action reachable from the screen; an agent-drivable verb for it would be a way
+ * to lose a record whose whole purpose is to survive. Archiving is `tcms client edit --status
+ * ARCHIVED` when that verb lands.
+ */
+const clientCreate: Command = {
+  name: 'client create',
+  summary: 'Record a client organisation — a name is enough',
+  usage: 'tcms client create --name "Acme Retail"\n'
+    + '       tcms client create --name "Bergstrom AG" --location Zürich --industry logistics',
+  options: {
+    name: { type: 'string' },
+    location: { type: 'string' },
+    industry: { type: 'string' },
+    notes: { type: 'string' },
+  },
+  write: { kind: 'create', permission: 'client:create' },
+  /*
+    NO `--idempotency-key`, and the omission is the contract's rather than this command's. The
+    parameter deduplicates within `(company, project, key)` — its own description says "scoped to
+    the project the request is addressed to" — and a client is addressed to no project. `staffing
+    absence` met this wall first and `writeConformance.test.ts`'s CREATE_WITHOUT_A_KEY records both.
+
+    What a lost response costs here is bounded by a constraint rather than by a header:
+    `uq_client_name UNIQUE (company_id, name)` means a retried create answers 400 on `name` instead
+    of recording Acme Retail twice.
+  */
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+
+    const created = await client.POST('/clients', {
+      body: present({
+        name: requireOption(context, 'name'),
+        location: text(options['location']),
+        industry: text(options['industry']),
+        notes: text(options['notes']),
+      }) as components['schemas']['ClientInput'],
+      tcms: request,
+    });
+
+    reportWrite(out, json, created, [
+      ['Recorded', show(created.name)],
+      ['Client', show(created.id)],
+      // Printed because it is the next decision, and because it is the thing a reader of the
+      // screens is most likely to expect to have happened already: a client with no project
+      // attached to it changes nothing anywhere else in the product.
+      ['Next', 'attach a project to it — the Client field is on project settings, under project:settings'],
+    ]);
+  },
+};
+
+/**
+ * `tcms client contact-add <clientId> --name "Hanna Lund" --email hanna.lund@acme.test`
+ *
+ * Costs `client:edit`, which **Finance does not hold**: an invoice has to name a client, and
+ * maintaining the record is the Account Manager's job.
+ *
+ * **This creates no login, and the sentence is here because it is the one thing a reader might
+ * assume otherwise.** A contact is a name, a role, an email and a phone — no `app_user`, no company
+ * membership, no invitation and no authentication path (scope D1). Nobody at the client can sign in,
+ * see a board, or be granted a permission as a result of this command.
+ *
+ * The client is named by id rather than by a key: a client has no readable key the way a case or an
+ * issue does, and `tcms client list` prints one per row for exactly this.
+ */
+const clientContactAdd: Command = {
+  name: 'client contact-add',
+  summary: 'Add a contact to a client — a record of who to talk to, never a login',
+  usage: 'tcms client contact-add cl-1 --name "Hanna Lund" --role "Product owner" --email hanna.lund@acme.test',
+  options: {
+    name: { type: 'string' },
+    role: { type: 'string' },
+    email: { type: 'string' },
+    phone: { type: 'string' },
+  },
+  write: { kind: 'create', permission: 'client:edit' },
+  /*
+    No `--idempotency-key`, for `client create`'s reason — the parameter is project-scoped and a
+    client is not addressed to a project. The cost is larger here than there, and is stated rather
+    than implied: `client_contact` has no uniqueness constraint at all (two people at one client may
+    share `invoices@`, deliberately), so a lost response leaves a duplicate contact. It is one row
+    on a list the client page renders in full, with a delete beside it.
+  */
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+
+    const added = await client.POST('/clients/{clientId}/contacts', {
+      params: { path: { clientId: requireArg(context, 'client') } },
+      body: present({
+        name: requireOption(context, 'name'),
+        role: text(options['role']),
+        email: text(options['email']),
+        phone: text(options['phone']),
+      }) as components['schemas']['ClientContactInput'],
+      tcms: request,
+    });
+
+    reportWrite(out, json, added, [
+      ['Added', show(added.name)],
+      ['Contact', show(added.id)],
+      ['Note', 'this created a record and no account — nobody at the client can sign in'],
+    ]);
+  },
+};
+
 export const WRITES: readonly Command[] = [
   caseEdit,
   caseProposal,
@@ -2193,4 +2314,6 @@ export const WRITES: readonly Command[] = [
   timeApprove,
   staffingAllocate,
   staffingAbsence,
+  clientCreate,
+  clientContactAdd,
 ];

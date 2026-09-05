@@ -2115,6 +2115,129 @@ const staffingProject: Command = {
   },
 };
 
+/* ------------------------------------------------------------------ clients ---- */
+
+/** The contract's `status` enum, so a typo is refused here rather than decoded from a 400. */
+const CLIENT_STATUSES = ['ACTIVE', 'ARCHIVED', 'ALL'] as const;
+
+/**
+ * `tcms client list` — the company's clients, and how many projects each has.
+ *
+ * **It costs `client:read`**, a COMPANY-scope key held by Instance Admin, Company Admin, Account
+ * Manager and Finance. Finance holds the read and not the edit: an invoice has to name a client, and
+ * maintaining the record is the Account Manager's job.
+ *
+ * **An empty list is an answer, not a failure** (scope D1 rule 2). A company building its own
+ * products never creates a client, and nothing in the product nags, blocks or degrades because of
+ * it — so this prints the explanation rather than an empty table, the way `staffing project` does
+ * for a project nobody is allocated to.
+ *
+ * `--status` defaults to `ACTIVE`, matching the screen. Nothing here carries a rate, a cost or an
+ * hour; what a client's work is worth is M8's.
+ */
+const clientList: Command = {
+  name: 'client list',
+  summary: "The company's client organisations, and how many projects each has",
+  usage: 'tcms client list [--status ACTIVE|ARCHIVED|ALL]',
+  options: { status: { type: 'string' } },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    /*
+      Narrowed against the contract's own enum rather than passed through as a string. `parseArgs`
+      hands back whatever was typed, and a typo would otherwise reach the server as a query value
+      it rejects with a 400 the user has to decode — where naming the three here refuses it with
+      the list.
+    */
+    const typed = first(options['status'])?.toUpperCase();
+    const status = CLIENT_STATUSES.find((value) => value === typed);
+    if (typed !== undefined && status === undefined) {
+      throw new UsageError(`--status must be one of ${CLIENT_STATUSES.join(', ')}.`);
+    }
+
+    const rows = await client.GET('/clients', {
+      params: { query: status === undefined ? {} : { status } },
+      tcms: request,
+    });
+    if (json) return out.json(rows);
+
+    table(out, rows, [
+      { header: 'NAME', value: (row) => show(row.name) },
+      { header: 'LOCATION', value: (row) => show(row.location) },
+      { header: 'STATUS', value: (row) => show(row.status) },
+      { header: 'PROJECTS', value: (row) => show(row.projectCount) },
+      { header: 'CONTACTS', value: (row) => show(row.contactCount) },
+      { header: 'ID', value: (row) => show(row.id) },
+    ]);
+
+    if (rows.length === 0) {
+      out.line();
+      out.line('This company has no clients, which is a complete state rather than an empty one — a');
+      out.line('company building its own products never needs one, and nothing else in the product');
+      out.line('will ask. Record the first with: tcms client create --name "Acme Retail"');
+    }
+  },
+};
+
+/**
+ * `tcms client show <id>` — one client, its contacts and its projects.
+ *
+ * Three sections from one call: `GET /clients/{clientId}` carries all three because `client.html`
+ * renders them together and none of them is paged.
+ *
+ * **No hours and no invoice figures**, and their absence is stated rather than left to be noticed —
+ * that mockup draws them and they are M8's (018 D-g). An Account Manager knows the client and, once
+ * M8 lands, the hours; never a rate.
+ */
+const clientShow: Command = {
+  name: 'client show',
+  summary: 'One client — its details, its contacts and the projects attached to it',
+  usage: 'tcms client show <clientId>',
+  options: {},
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    /*
+      An id and not a key: a client has no readable key the way a case or an issue does, so there is
+      nothing for `resolveId` to resolve. `tcms client list` is where the id comes from, and it
+      prints one per row for exactly this.
+    */
+    const clientId = requireArg(context, 'client');
+
+    const view = await client.GET('/clients/{clientId}', {
+      params: { path: { clientId } },
+      tcms: request,
+    });
+    if (json) return out.json(view);
+
+    fields(out, [
+      ['Name', show(view.client.name)],
+      ['Location', show(view.client.location)],
+      ['Industry', show(view.client.industry)],
+      ['Status', show(view.client.status)],
+      ['Account manager', show(view.client.accountManager?.displayName ?? null)],
+      ['Notes', show(view.client.notes)],
+    ]);
+
+    out.line();
+    out.line(`Projects (${view.projects.length})`);
+    table(out, view.projects, [
+      { header: 'KEY', value: (row) => show(row.key) },
+      { header: 'NAME', value: (row) => show(row.name) },
+      { header: 'ARCHIVED', value: (row) => (row.archived ? 'yes' : 'no') },
+      { header: 'ID', value: (row) => show(row.id) },
+    ]);
+
+    out.line();
+    out.line(`Contacts (${view.contacts.length}) — records, never logins`);
+    table(out, view.contacts, [
+      { header: 'NAME', value: (row) => show(row.name) },
+      { header: 'ROLE', value: (row) => show(row.role) },
+      { header: 'EMAIL', value: (row) => show(row.email) },
+      { header: 'PHONE', value: (row) => show(row.phone) },
+      { header: 'ID', value: (row) => show(row.id) },
+    ]);
+  },
+};
+
 export const READS: readonly Command[] = [
   whoami,
   format,
@@ -2149,4 +2272,6 @@ export const READS: readonly Command[] = [
   timeRollup,
   staffingDirectory,
   staffingProject,
+  clientList,
+  clientShow,
 ];

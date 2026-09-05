@@ -64,6 +64,16 @@ tags:
       `staffing:profile` / `staffing:absence` are COMPANY-scope and answer the capacity and skills
       questions. Granting a COMPANY-scope key to a PROJECT-scope role produces a row the evaluator
       can never reach (roles spec §43), so the split is load-bearing rather than tidy.
+  - name: clients
+    description: >
+      The company's own customers, their contacts, and the projects attached to them. A Client is
+      an ATTRIBUTE of a project and never a level of the hierarchy (scope D1): it carries no
+      isolation semantics and no permission scope, so the two gates stay company filter then
+      project grant. `project.clientId` is nullable forever and there is no synthetic "Internal"
+      client — a company building its own products has no client, and NULL says so. **Zero clients
+      is a first-class state**: every client-shaped surface in the product is absent, not empty,
+      while `GET /clients` answers `[]`, and nothing marks a project as missing one. A client never
+      signs in, and neither does a contact.
 
 # =============================================================================
 # PATHS
@@ -10611,6 +10621,264 @@ paths:
                 items: { $ref: '#/components/schemas/CaseVerification' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------------------------------------------------------------- clients ---
+  /clients:
+    get:
+      tags: [clients]
+      operationId: listClients
+      summary: The company's client organisations
+      description: |
+        Requires `client:read` at company scope — Instance Admin, Company Admin, Account Manager
+        and Finance (roles spec §A3). Finance holds the read and not the edit: an invoice has to
+        name a client, and maintaining the record is the Account Manager's job.
+
+        **An empty array is a first-class answer, not an empty state to be filled in later**
+        (scope D1 rule 2). A company building its own products never creates a client, and every
+        client-shaped surface in the product is absent — not greyed, not empty — while this
+        answers `[]`. This endpoint stays reachable so the first one can be created; it is the
+        only trace of clients such a company ever sees.
+
+        Nothing here carries a rate, a cost or an hour. What a client's work is worth is M8's,
+        gated on `billing:*` and `ratecard:read`.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [ACTIVE, ARCHIVED, ALL], default: ACTIVE }
+          description: |
+            Defaults to `ACTIVE`, which is what `clients.html`'s filter opens on. `ALL` is what a
+            picker asks for when it must still show the client a project is already attached to —
+            archiving hides a client from the list, and a project pointing at one is not thereby
+            pointing at nothing.
+        - name: accountManagerId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Only clients this person owns the relationship with.
+      responses:
+        '200':
+          description: The clients, by name
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Client' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [clients]
+      operationId: createClient
+      summary: Record a client organisation
+      description: |
+        Requires `client:create`.
+
+        **A name is the only required field** (story C1). Location, industry, account manager and
+        notes are optional, and a client with a name and nothing else is a complete client —
+        `client-new.html` says so on the form.
+
+        A client is a record, not a principal. Creating one creates no `app_user`, no
+        `company_membership` and no invitation, and there is no field on `ClientInput` that could
+        ask for one. See `addClientContact` for the same rule one level down.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClientInput' }
+      responses:
+        '201':
+          description: The client as created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Client' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /clients/{clientId}:
+    parameters: [{ $ref: '#/components/parameters/ClientId' }]
+    get:
+      tags: [clients]
+      operationId: getClient
+      summary: One client, its contacts and the projects attached to it
+      description: |
+        Requires `client:read`.
+
+        The contacts and the projects arrive **inside this document** rather than as two more
+        round trips: `client.html` renders all three together and neither is paged.
+
+        **No hours and no invoice figures.** That mockup also draws an "Hours and invoices to
+        date" table, two tiles over it and a rate card panel beside it; all of them are M8's, and
+        this module ships the client page with a named region reserved for them rather than a
+        half-built table (plan 018 D-g). An Account Manager knows the client and — once M8 lands —
+        the hours, and never a rate.
+      responses:
+        '200':
+          description: The client, its contacts and its projects
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [clients]
+      operationId: updateClient
+      summary: Edit a client
+      description: |
+        Requires `client:edit` — which **Finance does not hold**, deliberately: an invoice has to
+        name a client, and editing the record is the Account Manager's job.
+
+        A full replacement of the fields `ClientInput` carries, and it is also the archive control:
+        there is no `/clients/{clientId}/archive` sub-resource, because unlike a project's archive —
+        which freezes issues and is a real state transition — a client's is one column, and the
+        edit form already shows and submits every field.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClientInput' }
+      responses:
+        '200':
+          description: The client as it now stands
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Client' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [clients]
+      operationId: deleteClient
+      summary: Delete a client no project references
+      description: |
+        Requires `client:delete`.
+
+        **`409` while any project references this client**, naming archiving as the alternative
+        (plan 018 D-k). Detaching those projects on the way past would silently leave live work
+        with no customer, and this product already made the opposite call for projects: archiving
+        hides and freezes, and nothing is deleted. The count the refusal is computed from is
+        `Client.projectCount`, which includes archived projects for exactly this reason.
+
+        Its contacts go with it. They are rows describing who to talk to at an organisation this
+        company no longer records, and there was never an account to disable.
+      responses:
+        '204': { description: The client and its contacts are gone }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /clients/{clientId}/contacts:
+    parameters: [{ $ref: '#/components/parameters/ClientId' }]
+    post:
+      tags: [clients]
+      operationId: addClientContact
+      summary: Add a contact to a client
+      description: |
+        Requires `client:edit`. Contacts are read through `GET /clients/{clientId}`, which carries
+        them; there is no list endpoint here because there is no second reader.
+
+        **A contact never becomes a login** (scope D1, story C1). This creates a row of contact
+        information — a name, and optionally a role, an email and a phone — and no `app_user`, no
+        `company_membership`, no invitation and no authentication path. `ClientContactInput` has
+        no credential field, so there is nothing to send even if one were wanted.
+
+        If a client portal is ever wanted, **D1 is reopened rather than extended**: it is a second
+        authentication path and a real confidentiality boundary, and bolting one onto a lookup
+        table is how a tenancy model gets quietly broken.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClientContactInput' }
+      responses:
+        '201':
+          description: The contact as created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientContact' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /clients/{clientId}/contacts/{contactId}:
+    parameters:
+      - { $ref: '#/components/parameters/ClientId' }
+      - name: contactId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    put:
+      tags: [clients]
+      operationId: updateClientContact
+      summary: Edit a contact
+      description: |
+        Requires `client:edit`. Creates no login and touches no identity table, for
+        `addClientContact`'s reason.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClientContactInput' }
+      responses:
+        '200':
+          description: The contact as it now stands
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientContact' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [clients]
+      operationId: deleteClientContact
+      summary: Remove a contact
+      description: |
+        Requires `client:edit`. Removes a record; there was never an account to disable, so there
+        is nothing here to revoke.
+      responses:
+        '204': { description: The contact is gone }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{projectId}/settings/client-options:
+    parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+    get:
+      tags: [clients]
+      operationId: getProjectClientOptions
+      summary: The clients this project may be attached to
+      description: |
+        Requires `project:settings` on this project — **not `client:read`** (scope D1, plan 010
+        D-M0-9). Project Manager is PROJECT-scope, so a company-wide `client:read` would be an
+        inert row for them; and granting `client:read` to the `Company Member` baseline would
+        break the one sentence that role is defined by — "exactly `company:read` and nothing else".
+
+        **It is a separate path from `GET /projects/{projectId}/settings` on purpose.** That
+        document is readable by anyone who can see the project, deliberately, so that a Viewer can
+        find out whether to render the review panel; the client list is not that kind of fact. An
+        array of every client the company has is a claim about the company told to somebody who
+        may not ask (plan 018 D-e).
+
+        Answers `[]` for a company with no clients, which is what makes the Client field on
+        `settings-general.html` **absent** rather than an empty select. Archived clients are
+        excluded, except the one this project already names — a project attached to an archived
+        client keeps naming it, and a picker that dropped it would silently detach on the next save.
+      responses:
+        '200':
+          description: The pickable clients, plus any archived client this project already names
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ClientRef' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 # =============================================================================
 # COMPONENTS
 # =============================================================================
@@ -10625,6 +10893,11 @@ components:
   parameters:
     ProjectId:
       name: projectId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ClientId:
+      name: clientId
       in: path
       required: true
       schema: { type: string, format: uuid }
@@ -11445,6 +11718,20 @@ components:
         - trackTime
       properties:
         projectId: { type: string, format: uuid }
+        client:
+          allOf: [{ $ref: '#/components/schemas/ClientRef' }]
+          nullable: true
+          description: |
+            The project's client, repeated here from `Project` so the `PUT` beside this answers
+            with the field it just saved — a form whose save response omits what it wrote has to
+            invalidate and re-read to show what it did.
+
+            **The picker's OPTIONS are not here.** This document is readable by anyone who can see
+            the project, deliberately, and an array of every client the company has is not that
+            kind of fact: it is `GET /projects/{projectId}/settings/client-options`, gated on
+            `project:settings` (plan 018 D-e).
+
+            Absent from `required` for the reason `Project.client` is.
         reviewEnabledCase:
           type: boolean
           description: |
@@ -11549,9 +11836,19 @@ components:
         destroy something. A dropped `reviewEnabledCase` reopens a gate; a dropped `trackTime`
         would take a project's `Logged` column and both time panels away and refuse its next
         entry — so an omission here reads as "leave it on", which is also 016 D-g's default.
+
+        **`clientId` is required and nullable, and it is the one field here where omission has no
+        safe reading in either direction.** An absent boolean can default to the state that
+        destroys nothing; an absent nullable id cannot, because "leave it alone" and "detach" are
+        the same absence. Reading it as detach would let the Review screen's save quietly unbill a
+        project, and reading it as leave-alone would make this document not a full replacement. So
+        a body without the key is a `400`, and
+        `frontend/src/features/settings/settingsUpdate.ts` — the one place the field list is
+        written — lists it (plan 018 D-d).
       required:
         - requiredPeerReviews
         - editAfterApproval
+        - clientId
       properties:
         reviewEnabledCase: { type: boolean, default: false }
         reviewEnabledSuite: { type: boolean, default: false }
@@ -11563,6 +11860,14 @@ components:
         requireApprovedCaseForRun: { type: boolean, default: false }
         reviewEnabledIssue: { type: boolean, default: false }
         trackTime: { type: boolean, default: true }
+        clientId:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            The client this project is for, or `null` for internal work. **Required** — see this
+            schema's description. A client id belonging to another company answers `400` with a
+            field error here, for `ProjectInput.clientId`'s reason.
 
     ReviewImpact:
       type: object
@@ -11895,6 +12200,23 @@ components:
             listed project always carries a grant — but Viewer is the default, never
             Test Engineer (plan §6b).
           example: Viewer
+        client:
+          allOf: [{ $ref: '#/components/schemas/ClientRef' }]
+          nullable: true
+          description: |
+            The client this project is for, or `null` for internal work (scope D1).
+
+            **`null` is the common case and is not a deficiency.** The owner's own worked example
+            is a company building its own products, so nothing renders a project without a client
+            as missing one, and there is no synthetic "Internal" client row to make the column
+            non-null: that row would put a fake customer on every internal project, pollute every
+            client rollup with a company billing itself, and make "which projects are contracted
+            work?" — the question the column exists to answer — unanswerable.
+
+            **Absent from `required`**, because it is absent from every response a company with no
+            clients ever gets, and that company must not be handed a key whose only possible value
+            is null. A reader that must tell "this project has no client" from "clients are not a
+            thing in this company" asks `GET /clients`.
 
     ProjectInput:
       type: object
@@ -11921,6 +12243,20 @@ components:
             A whole client product or engagement, not a feature area. "Payments" is a Feature
             value or a suite folder, never a project (plan §1).
         description: { type: string, nullable: true, maxLength: 2000 }
+        clientId:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            The client this project is for, optional and `null` when it is internal —
+            `project-new.html`'s Client field, which is itself rendered only when the company has
+            at least one client (scope D1 rule 3).
+
+            A client id belonging to **another company** answers `400` with a field error here,
+            never a `500` from the foreign key: `fk_project_client` is on `id` alone and
+            referential integrity is not subject to RLS, so the service reads the client back
+            through RLS before writing (plan 018 D-l). A constraint violation would be both the
+            wrong status and an oracle for what exists in another client's tenancy.
 
     ProjectArchiveInput:
       type: object
@@ -20491,6 +20827,152 @@ components:
         people:
           type: array
           items: { $ref: '#/components/schemas/ProjectStaffingPerson' }
+
+    # ------------------------------------------------------------- clients ---
+    ClientRef:
+      type: object
+      required: [id, name]
+      description: |
+        A client named from somewhere that is not the client screen — a project card, the project
+        overview's chip, a picker option. Two fields on purpose: anything more would make every
+        project read carry a client record, and none of those places renders one.
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+
+    Client:
+      type: object
+      required: [id, name, status, projectCount, contactCount, createdAt]
+      description: |
+        A company's own customer. **An attribute of a project, never a level of the hierarchy**
+        (scope D1): it carries no isolation semantics and no permission scope, and a client is
+        visible iff you hold `client:read` at company scope or you can see a project that
+        references it. A third gate would have meant a new role-assignment target and a second
+        place authorization is decided, and the rollups this feature wants need neither.
+
+        **No rate, no budget and no invoice figure appears on this schema or any other in this
+        tag.** Those are M8's, and the boundary is the sharpest in the expansion (scope §7).
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, maxLength: 200 }
+        location: { type: string, nullable: true, maxLength: 200 }
+        industry: { type: string, nullable: true, maxLength: 120 }
+        notes: { type: string, nullable: true, maxLength: 4000 }
+        status:
+          type: string
+          enum: [ACTIVE, ARCHIVED]
+          description: |
+            `ARCHIVED` hides the client from the default list and from the project picker — except
+            on a project already attached to it, which keeps naming it. Archiving is what `DELETE`
+            points at when a project references the client (plan 018 D-k).
+        accountManager:
+          allOf: [{ $ref: '#/components/schemas/UserRef' }]
+          nullable: true
+          description: |
+            The company member who owns this relationship. `client-new.html`'s picker opens on
+            "— nobody yet —", which is `null`, and it is the default: a client with no account
+            manager is not incomplete and nothing renders it as missing one.
+        projectCount:
+          type: integer
+          description: |
+            How many projects name this client, **archived projects included**. The count is what
+            `DELETE` refuses on, so a count that quietly excluded archived projects would promise a
+            delete the server then answers `409` to.
+        contactCount: { type: integer }
+        createdAt: { type: string, format: date-time }
+
+    ClientInput:
+      type: object
+      required: [name]
+      description: |
+        The body of `POST /clients` and `PUT /clients/{clientId}`.
+
+        **A name is the only required field** (story C1) — `client-new.html` says so on the form,
+        and a client with a name and nothing else is a complete client. There is no credential
+        field, no invitation field and no way to ask for a login, which is the contract's half of
+        "a client never signs in".
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        location: { type: string, nullable: true, maxLength: 200 }
+        industry: { type: string, nullable: true, maxLength: 120 }
+        notes: { type: string, nullable: true, maxLength: 4000 }
+        accountManagerId:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            A member of this company. Somebody who is not answers `400` with a field error here,
+            never a `404` — the picker is where that message belongs.
+        status:
+          type: string
+          enum: [ACTIVE, ARCHIVED]
+          default: ACTIVE
+          description: |
+            Optional, and `ACTIVE` when omitted, so a create need not mention it. This is also the
+            archive control — see `updateClient` for why there is no archive sub-resource.
+
+    ClientDetail:
+      type: object
+      required: [client, contacts, projects]
+      description: |
+        `client.html` — the client, its contacts and the projects attached to it, in one document,
+        because that screen renders all three together and none of them is paged.
+
+        The hours and invoice figures that mockup also draws are **not here**: they are M8's, and
+        the client page ships a named reserved region rather than a table with three of its five
+        columns missing (plan 018 D-g). Story C3 words the deferral itself — "its projects,
+        contacts, and — once time and billing exist — hours and invoices to date."
+      properties:
+        client: { $ref: '#/components/schemas/Client' }
+        contacts:
+          type: array
+          items: { $ref: '#/components/schemas/ClientContact' }
+        projects:
+          type: array
+          items: { $ref: '#/components/schemas/ClientProject' }
+
+    ClientProject:
+      type: object
+      required: [id, key, name, archived]
+      description: |
+        A project on the client page. Deliberately the four fields `Project` already carries and
+        nothing more: `client.html` also draws Lead, Next release, Hours and Completion, none of
+        which is on any project read shape today — they sit on plan 008 T19's deferred list — and
+        a column over a number the response does not carry is the defect plan 009 §9.3 names.
+      properties:
+        id: { type: string, format: uuid }
+        key: { type: string }
+        name: { type: string }
+        archived: { type: boolean }
+
+    ClientContact:
+      type: object
+      required: [id, name]
+      description: |
+        Contact information, and **not an identity**. There is no `userId` here and there never
+        will be one without reopening scope D1. `email` is not unique across a client's contacts,
+        deliberately: two people at one organisation may share `invoices@`, and a uniqueness rule
+        here would be the first step toward treating this row as an account.
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, maxLength: 200 }
+        role: { type: string, nullable: true, maxLength: 120 }
+        email: { type: string, nullable: true, maxLength: 320 }
+        phone: { type: string, nullable: true, maxLength: 60 }
+
+    ClientContactInput:
+      type: object
+      required: [name]
+      description: |
+        A name is enough — `client.html`'s third contact has no phone, and that is a whole contact.
+
+        **No credential field exists on this schema**, which is the contract's half of "a contact
+        never becomes a login": there is nothing to send.
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        role: { type: string, nullable: true, maxLength: 120 }
+        email: { type: string, nullable: true, maxLength: 320 }
+        phone: { type: string, nullable: true, maxLength: 60 }
 
 security:
   - bearerAuth: []

@@ -2548,6 +2548,173 @@ const writeAbsence: ToolDefinition = {
   },
 };
 
+/* ------------------------------------------------------------------ clients ---- */
+
+/**
+ * Record a client, edit it, archive it, and manage its contacts.
+ *
+ * **Two permissions, and therefore two tools would have been the surface-spec answer** (§2: a tool
+ * never spans two permissions on its write path). It is one here because `record` costs
+ * `client:create` and everything else costs `client:edit`, and the arm table carries the per-arm
+ * permission that `tools/list`'s filter and the refusal copy both read — which is the mechanism §2
+ * exists to protect, applied per arm rather than per tool. {@link ToolDefinition.narrow} tells a
+ * credential holding only one of them which half it reaches, before it tries.
+ *
+ * **There is no delete arm for the client itself**, and the omission is deliberate rather than
+ * pending. `DELETE /clients/{clientId}` exists and refuses while any project references the client;
+ * archiving is what that refusal points at, and it is `edit` with `status: ARCHIVED`. An
+ * agent-drivable delete of an organisation record whose whole purpose is to outlive the work is a
+ * capability nobody asked for. `contact-remove` is a delete, and its target is one row.
+ *
+ * **No rate, no cost, no invoice** — not on the read side and not on the write side.
+ */
+const writeClient: ToolDefinition = {
+  name: 'tcms_write_client',
+  title: 'Record a client, edit it, archive it, or manage its contacts',
+  description:
+    'A client is a RECORD of an organisation this company delivers software for — never an account. '
+    + '`record` creates one and **a name is the only thing required**; everything else can come '
+    + 'later or never, and a client with a name alone is complete. `edit` replaces the fields, and '
+    + 'is also how a client is ARCHIVED (`status: ARCHIVED`) — archiving is what to reach for '
+    + 'instead of deletion, which is refused while any project names the client. `contact-add`, '
+    + '`contact-edit` and `contact-remove` manage who to talk to there. '
+    + '**Nobody at a client can sign in.** None of these arms creates a user, a membership, an '
+    + 'invitation or a credential, and there is no field here that could ask for one — a contact is '
+    + 'a name, a role, an email and a phone. Do not describe adding a contact as giving anyone '
+    + 'access. '
+    + 'Attaching a PROJECT to a client is not done here: it is the Client field on that project\'s '
+    + 'settings, and it costs project:settings. '
+    + '**Nothing here accepts or returns a rate, a cost or an invoice value.**',
+  gate: { mode: 'any', permissions: ['client:create', 'client:edit'] },
+  narrow: (held) => {
+    const create = held.has('client:create');
+    const edit = held.has('client:edit');
+    if (create && edit) return undefined;
+    return create
+      ? 'This credential holds client:create and not client:edit, so only `record` will answer — editing, archiving and every contact arm will be refused.'
+      : 'This credential holds client:edit and not client:create, so `record` will be refused; editing, archiving and the contact arms will answer.';
+  },
+  arms: [
+    { action: 'record', kind: 'create', permission: 'client:create' },
+    { action: 'edit', kind: 'edit', permission: 'client:edit' },
+    { action: 'contact-add', kind: 'create', permission: 'client:edit' },
+    { action: 'contact-edit', kind: 'edit', permission: 'client:edit' },
+    // `targets` names the row the consent prompt shows: a contact has no display key, so the id is
+    // what a person is being asked about.
+    { action: 'contact-remove', kind: 'delete', permission: 'client:edit', targets: ['contact'] },
+  ],
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['action'],
+    properties: {
+      action: ACTION(
+        ['record', 'edit', 'contact-add', 'contact-edit', 'contact-remove'],
+        'What to do.',
+      ),
+      client: {
+        type: 'string',
+        description: 'The client id, from tcms_read_client. Required for everything except `record`.',
+      },
+      contact: {
+        type: 'string',
+        description: 'The contact id, from tcms_read_client with `client`. Required for contact-edit and contact-remove.',
+      },
+      name: {
+        type: 'string',
+        description: 'The organisation\'s name, or the contact\'s. Required for record and contact-add; the only required field on either.',
+      },
+      location: { type: 'string', description: 'Where the client is — free text, e.g. "Stockholm".' },
+      industry: { type: 'string', description: 'What the client does — free text, e.g. "retail".' },
+      notes: { type: 'string', description: 'Free text about the relationship.' },
+      status: {
+        type: 'string',
+        enum: ['ACTIVE', 'ARCHIVED'],
+        description: 'ARCHIVED hides the client from lists and pickers without deleting it. Use this instead of deleting a client that has projects.',
+      },
+      role: { type: 'string', description: 'The contact\'s role at the client, e.g. "Product owner".' },
+      email: { type: 'string', description: 'The contact\'s email. Not a login — no account is created.' },
+      phone: { type: 'string', description: 'The contact\'s phone.' },
+    },
+  },
+  run: async (session, input) => {
+    const tcms = session.request;
+    const action = requireStr(input, 'action');
+
+    if (action === 'record') {
+      return session.client.POST('/clients', {
+        body: present({
+          name: requireStr(input, 'name'),
+          location: str(input, 'location'),
+          industry: str(input, 'industry'),
+          notes: str(input, 'notes'),
+        }) as components['schemas']['ClientInput'],
+        tcms,
+      });
+    }
+
+    const clientId = requireStr(input, 'client');
+
+    if (action === 'edit') {
+      /*
+        A full replacement, not a delta — `PUT /clients/{clientId}` takes the whole `ClientInput`.
+        So the current record is read first and merged under what the caller named: an `edit` that
+        sent only `status` would otherwise blank the location, the industry and the notes, which is
+        the same save-that-discards defect `settingsUpdate.ts` exists to prevent one stack over.
+      */
+      const current = await session.client.GET('/clients/{clientId}', {
+        params: { path: { clientId } },
+        tcms,
+      });
+      return session.client.PUT('/clients/{clientId}', {
+        params: { path: { clientId } },
+        body: {
+          name: str(input, 'name') ?? current.client.name,
+          location: nullableStr(input, 'location') ?? current.client.location,
+          industry: nullableStr(input, 'industry') ?? current.client.industry,
+          notes: nullableStr(input, 'notes') ?? current.client.notes,
+          accountManagerId: current.client.accountManager?.id ?? null,
+          status: (str(input, 'status') ?? current.client.status) as 'ACTIVE' | 'ARCHIVED',
+        } as components['schemas']['ClientInput'],
+        tcms,
+      });
+    }
+
+    if (action === 'contact-add') {
+      return session.client.POST('/clients/{clientId}/contacts', {
+        params: { path: { clientId } },
+        body: present({
+          name: requireStr(input, 'name'),
+          role: str(input, 'role'),
+          email: str(input, 'email'),
+          phone: str(input, 'phone'),
+        }) as components['schemas']['ClientContactInput'],
+        tcms,
+      });
+    }
+
+    const contactId = requireStr(input, 'contact');
+
+    if (action === 'contact-edit') {
+      return session.client.PUT('/clients/{clientId}/contacts/{contactId}', {
+        params: { path: { clientId, contactId } },
+        body: present({
+          name: requireStr(input, 'name'),
+          role: nullableStr(input, 'role'),
+          email: nullableStr(input, 'email'),
+          phone: nullableStr(input, 'phone'),
+        }) as components['schemas']['ClientContactInput'],
+        tcms,
+      });
+    }
+
+    return session.client.DELETE('/clients/{clientId}/contacts/{contactId}', {
+      params: { path: { clientId, contactId } },
+      tcms,
+    });
+  },
+};
+
 export const WRITE_TOOLS: readonly ToolDefinition[] = [
   writeCase,
   writeSuite,
@@ -2566,4 +2733,5 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   approveTimesheet,
   writeAllocation,
   writeAbsence,
+  writeClient,
 ];

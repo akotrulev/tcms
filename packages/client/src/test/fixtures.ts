@@ -56,6 +56,8 @@ export const IDS = {
   allocation: 'al-1',
   absence: 'ab-1',
   skill: 'sk-1',
+  client: 'cl-1',
+  clientContact: 'cc-1',
 } as const;
 
 /** A fixed instant, so nothing here depends on when the suite runs. */
@@ -1277,4 +1279,64 @@ export function casePage(
   overrides: { page?: number; size?: number; total?: number } = {},
 ): ReturnType<typeof page<Schemas['TestCaseSummary']>> & { facets: Schemas['Facet'][] } {
   return { ...page(items, overrides), facets: [] };
+}
+
+/**
+ * A client organisation.
+ *
+ * No rate, no cost and no hours figure — none is on this schema and none is on any other in the
+ * `clients` tag. What a client's work is worth is M8's, gated on `billing:*` and `ratecard:read`
+ * (scope §7).
+ */
+export function client(overrides: Partial<Schemas['Client']> = {}): Schemas['Client'] {
+  return {
+    id: IDS.client,
+    name: 'Acme Retail',
+    location: 'Stockholm',
+    industry: 'retail',
+    notes: null,
+    status: 'ACTIVE',
+    accountManager: null,
+    projectCount: 0,
+    contactCount: 0,
+    createdAt: NOW,
+    ...overrides,
+  };
+}
+
+/** The two fields a project card, an overview chip or a picker option renders. */
+export function clientRef(overrides: Partial<Schemas['ClientRef']> = {}): Schemas['ClientRef'] {
+  return { id: IDS.client, name: 'Acme Retail', ...overrides };
+}
+
+/** A person to talk to, and **not an account** — there is no `userId` on this shape (scope D1). */
+export function clientContact(
+  overrides: Partial<Schemas['ClientContact']> = {},
+): Schemas['ClientContact'] {
+  return {
+    id: IDS.clientContact,
+    name: 'Hanna Lund',
+    role: 'Product owner',
+    email: 'hanna.lund@acme.test',
+    phone: '+46 8 555 0142',
+    ...overrides,
+  };
+}
+
+/** A project on the client page — the four fields `Project` already carries, and no more. */
+export function clientProject(
+  overrides: Partial<Schemas['ClientProject']> = {},
+): Schemas['ClientProject'] {
+  return { id: IDS.project, key: 'ACME', name: 'Acme Storefront', archived: false, ...overrides };
+}
+
+/**
+ * `client.html` in one document. `projects` and `contacts` default to empty, per this module's
+ * rule that a factory's defaults are the server's answer for an **empty** resource: a client
+ * recorded a minute ago has neither.
+ */
+export function clientDetail(
+  overrides: Partial<Schemas['ClientDetail']> = {},
+): Schemas['ClientDetail'] {
+  return { client: client(), contacts: [], projects: [], ...overrides };
 }

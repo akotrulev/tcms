@@ -11800,6 +11800,200 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/clients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The company's client organisations
+         * @description Requires `client:read` at company scope — Instance Admin, Company Admin, Account Manager
+         *     and Finance (roles spec §A3). Finance holds the read and not the edit: an invoice has to
+         *     name a client, and maintaining the record is the Account Manager's job.
+         *
+         *     **An empty array is a first-class answer, not an empty state to be filled in later**
+         *     (scope D1 rule 2). A company building its own products never creates a client, and every
+         *     client-shaped surface in the product is absent — not greyed, not empty — while this
+         *     answers `[]`. This endpoint stays reachable so the first one can be created; it is the
+         *     only trace of clients such a company ever sees.
+         *
+         *     Nothing here carries a rate, a cost or an hour. What a client's work is worth is M8's,
+         *     gated on `billing:*` and `ratecard:read`.
+         */
+        get: operations["listClients"];
+        put?: never;
+        /**
+         * Record a client organisation
+         * @description Requires `client:create`.
+         *
+         *     **A name is the only required field** (story C1). Location, industry, account manager and
+         *     notes are optional, and a client with a name and nothing else is a complete client —
+         *     `client-new.html` says so on the form.
+         *
+         *     A client is a record, not a principal. Creating one creates no `app_user`, no
+         *     `company_membership` and no invitation, and there is no field on `ClientInput` that could
+         *     ask for one. See `addClientContact` for the same rule one level down.
+         */
+        post: operations["createClient"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clientId: components["parameters"]["ClientId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One client, its contacts and the projects attached to it
+         * @description Requires `client:read`.
+         *
+         *     The contacts and the projects arrive **inside this document** rather than as two more
+         *     round trips: `client.html` renders all three together and neither is paged.
+         *
+         *     **No hours and no invoice figures.** That mockup also draws an "Hours and invoices to
+         *     date" table, two tiles over it and a rate card panel beside it; all of them are M8's, and
+         *     this module ships the client page with a named region reserved for them rather than a
+         *     half-built table (plan 018 D-g). An Account Manager knows the client and — once M8 lands —
+         *     the hours, and never a rate.
+         */
+        get: operations["getClient"];
+        /**
+         * Edit a client
+         * @description Requires `client:edit` — which **Finance does not hold**, deliberately: an invoice has to
+         *     name a client, and editing the record is the Account Manager's job.
+         *
+         *     A full replacement of the fields `ClientInput` carries, and it is also the archive control:
+         *     there is no `/clients/{clientId}/archive` sub-resource, because unlike a project's archive —
+         *     which freezes issues and is a real state transition — a client's is one column, and the
+         *     edit form already shows and submits every field.
+         */
+        put: operations["updateClient"];
+        post?: never;
+        /**
+         * Delete a client no project references
+         * @description Requires `client:delete`.
+         *
+         *     **`409` while any project references this client**, naming archiving as the alternative
+         *     (plan 018 D-k). Detaching those projects on the way past would silently leave live work
+         *     with no customer, and this product already made the opposite call for projects: archiving
+         *     hides and freezes, and nothing is deleted. The count the refusal is computed from is
+         *     `Client.projectCount`, which includes archived projects for exactly this reason.
+         *
+         *     Its contacts go with it. They are rows describing who to talk to at an organisation this
+         *     company no longer records, and there was never an account to disable.
+         */
+        delete: operations["deleteClient"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/contacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clientId: components["parameters"]["ClientId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add a contact to a client
+         * @description Requires `client:edit`. Contacts are read through `GET /clients/{clientId}`, which carries
+         *     them; there is no list endpoint here because there is no second reader.
+         *
+         *     **A contact never becomes a login** (scope D1, story C1). This creates a row of contact
+         *     information — a name, and optionally a role, an email and a phone — and no `app_user`, no
+         *     `company_membership`, no invitation and no authentication path. `ClientContactInput` has
+         *     no credential field, so there is nothing to send even if one were wanted.
+         *
+         *     If a client portal is ever wanted, **D1 is reopened rather than extended**: it is a second
+         *     authentication path and a real confidentiality boundary, and bolting one onto a lookup
+         *     table is how a tenancy model gets quietly broken.
+         */
+        post: operations["addClientContact"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/contacts/{contactId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clientId: components["parameters"]["ClientId"];
+                contactId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Edit a contact
+         * @description Requires `client:edit`. Creates no login and touches no identity table, for
+         *     `addClientContact`'s reason.
+         */
+        put: operations["updateClientContact"];
+        post?: never;
+        /**
+         * Remove a contact
+         * @description Requires `client:edit`. Removes a record; there was never an account to disable, so there
+         *     is nothing here to revoke.
+         */
+        delete: operations["deleteClientContact"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/settings/client-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The clients this project may be attached to
+         * @description Requires `project:settings` on this project — **not `client:read`** (scope D1, plan 010
+         *     D-M0-9). Project Manager is PROJECT-scope, so a company-wide `client:read` would be an
+         *     inert row for them; and granting `client:read` to the `Company Member` baseline would
+         *     break the one sentence that role is defined by — "exactly `company:read` and nothing else".
+         *
+         *     **It is a separate path from `GET /projects/{projectId}/settings` on purpose.** That
+         *     document is readable by anyone who can see the project, deliberately, so that a Viewer can
+         *     find out whether to render the review panel; the client list is not that kind of fact. An
+         *     array of every client the company has is a claim about the company told to somebody who
+         *     may not ask (plan 018 D-e).
+         *
+         *     Answers `[]` for a company with no clients, which is what makes the Client field on
+         *     `settings-general.html` **absent** rather than an empty select. Archived clients are
+         *     excluded, except the one this project already names — a project attached to an archived
+         *     client keeps naming it, and a picker that dropped it would silently detach on the next save.
+         */
+        get: operations["getProjectClientOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -12142,6 +12336,19 @@ export interface components {
             /** Format: uuid */
             projectId: string;
             /**
+             * @description The project's client, repeated here from `Project` so the `PUT` beside this answers
+             *     with the field it just saved — a form whose save response omits what it wrote has to
+             *     invalidate and re-read to show what it did.
+             *
+             *     **The picker's OPTIONS are not here.** This document is readable by anyone who can see
+             *     the project, deliberately, and an array of every client the company has is not that
+             *     kind of fact: it is `GET /projects/{projectId}/settings/client-options`, gated on
+             *     `project:settings` (plan 018 D-e).
+             *
+             *     Absent from `required` for the reason `Project.client` is.
+             */
+            client?: components["schemas"]["ClientRef"] | null;
+            /**
              * @description §6g's opt-in for cases. **Off by default.** When false the reviewer apparatus does
              *     not exist for cases in this project — no review is opened, no peer verdict can be
              *     recorded, and the client renders no panel. The **status ladder is unaffected**:
@@ -12238,6 +12445,15 @@ export interface components {
          *     destroy something. A dropped `reviewEnabledCase` reopens a gate; a dropped `trackTime`
          *     would take a project's `Logged` column and both time panels away and refuse its next
          *     entry — so an omission here reads as "leave it on", which is also 016 D-g's default.
+         *
+         *     **`clientId` is required and nullable, and it is the one field here where omission has no
+         *     safe reading in either direction.** An absent boolean can default to the state that
+         *     destroys nothing; an absent nullable id cannot, because "leave it alone" and "detach" are
+         *     the same absence. Reading it as detach would let the Review screen's save quietly unbill a
+         *     project, and reading it as leave-alone would make this document not a full replacement. So
+         *     a body without the key is a `400`, and
+         *     `frontend/src/features/settings/settingsUpdate.ts` — the one place the field list is
+         *     written — lists it (plan 018 D-d).
          */
         ProjectSettingsUpdate: {
             /** @default false */
@@ -12258,6 +12474,13 @@ export interface components {
             reviewEnabledIssue: boolean;
             /** @default true */
             trackTime: boolean;
+            /**
+             * Format: uuid
+             * @description The client this project is for, or `null` for internal work. **Required** — see this
+             *     schema's description. A client id belonging to another company answers `400` with a
+             *     field error here, for `ProjectInput.clientId`'s reason.
+             */
+            clientId: string | null;
         };
         /**
          * @description What switching review **off** — or raising `requiredPeerReviews` — would land on (005
@@ -12528,6 +12751,22 @@ export interface components {
              * @example Viewer
              */
             myRole: string | null;
+            /**
+             * @description The client this project is for, or `null` for internal work (scope D1).
+             *
+             *     **`null` is the common case and is not a deficiency.** The owner's own worked example
+             *     is a company building its own products, so nothing renders a project without a client
+             *     as missing one, and there is no synthetic "Internal" client row to make the column
+             *     non-null: that row would put a fake customer on every internal project, pollute every
+             *     client rollup with a company billing itself, and make "which projects are contracted
+             *     work?" — the question the column exists to answer — unanswerable.
+             *
+             *     **Absent from `required`**, because it is absent from every response a company with no
+             *     clients ever gets, and that company must not be handed a key whose only possible value
+             *     is null. A reader that must tell "this project has no client" from "clients are not a
+             *     thing in this company" asks `GET /clients`.
+             */
+            client?: components["schemas"]["ClientRef"] | null;
         };
         /**
          * @description The body of `POST /projects`. Deliberately three fields: `archived`, `caseCount` and
@@ -12550,6 +12789,19 @@ export interface components {
              */
             name: string;
             description?: string | null;
+            /**
+             * Format: uuid
+             * @description The client this project is for, optional and `null` when it is internal —
+             *     `project-new.html`'s Client field, which is itself rendered only when the company has
+             *     at least one client (scope D1 rule 3).
+             *
+             *     A client id belonging to **another company** answers `400` with a field error here,
+             *     never a `500` from the foreign key: `fk_project_client` is on `id` alone and
+             *     referential integrity is not subject to RLS, so the service reads the client back
+             *     through RLS before writing (plan 018 D-l). A constraint violation would be both the
+             *     wrong status and an oracle for what exists in another client's tenancy.
+             */
+            clientId?: string | null;
         };
         /**
          * @description The body of `PUT /projects/{projectId}/archive`. One field, and it is the target state
@@ -19362,6 +19614,136 @@ export interface components {
             allocations: components["schemas"]["Allocation"][];
             people: components["schemas"]["ProjectStaffingPerson"][];
         };
+        /**
+         * @description A client named from somewhere that is not the client screen — a project card, the project
+         *     overview's chip, a picker option. Two fields on purpose: anything more would make every
+         *     project read carry a client record, and none of those places renders one.
+         */
+        ClientRef: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
+        /**
+         * @description A company's own customer. **An attribute of a project, never a level of the hierarchy**
+         *     (scope D1): it carries no isolation semantics and no permission scope, and a client is
+         *     visible iff you hold `client:read` at company scope or you can see a project that
+         *     references it. A third gate would have meant a new role-assignment target and a second
+         *     place authorization is decided, and the rollups this feature wants need neither.
+         *
+         *     **No rate, no budget and no invoice figure appears on this schema or any other in this
+         *     tag.** Those are M8's, and the boundary is the sharpest in the expansion (scope §7).
+         */
+        Client: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            location?: string | null;
+            industry?: string | null;
+            notes?: string | null;
+            /**
+             * @description `ARCHIVED` hides the client from the default list and from the project picker — except
+             *     on a project already attached to it, which keeps naming it. Archiving is what `DELETE`
+             *     points at when a project references the client (plan 018 D-k).
+             * @enum {string}
+             */
+            status: "ACTIVE" | "ARCHIVED";
+            /**
+             * @description The company member who owns this relationship. `client-new.html`'s picker opens on
+             *     "— nobody yet —", which is `null`, and it is the default: a client with no account
+             *     manager is not incomplete and nothing renders it as missing one.
+             */
+            accountManager?: components["schemas"]["UserRef"] | null;
+            /**
+             * @description How many projects name this client, **archived projects included**. The count is what
+             *     `DELETE` refuses on, so a count that quietly excluded archived projects would promise a
+             *     delete the server then answers `409` to.
+             */
+            projectCount: number;
+            contactCount: number;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        /**
+         * @description The body of `POST /clients` and `PUT /clients/{clientId}`.
+         *
+         *     **A name is the only required field** (story C1) — `client-new.html` says so on the form,
+         *     and a client with a name and nothing else is a complete client. There is no credential
+         *     field, no invitation field and no way to ask for a login, which is the contract's half of
+         *     "a client never signs in".
+         */
+        ClientInput: {
+            name: string;
+            location?: string | null;
+            industry?: string | null;
+            notes?: string | null;
+            /**
+             * Format: uuid
+             * @description A member of this company. Somebody who is not answers `400` with a field error here,
+             *     never a `404` — the picker is where that message belongs.
+             */
+            accountManagerId?: string | null;
+            /**
+             * @description Optional, and `ACTIVE` when omitted, so a create need not mention it. This is also the
+             *     archive control — see `updateClient` for why there is no archive sub-resource.
+             * @default ACTIVE
+             * @enum {string}
+             */
+            status: "ACTIVE" | "ARCHIVED";
+        };
+        /**
+         * @description `client.html` — the client, its contacts and the projects attached to it, in one document,
+         *     because that screen renders all three together and none of them is paged.
+         *
+         *     The hours and invoice figures that mockup also draws are **not here**: they are M8's, and
+         *     the client page ships a named reserved region rather than a table with three of its five
+         *     columns missing (plan 018 D-g). Story C3 words the deferral itself — "its projects,
+         *     contacts, and — once time and billing exist — hours and invoices to date."
+         */
+        ClientDetail: {
+            client: components["schemas"]["Client"];
+            contacts: components["schemas"]["ClientContact"][];
+            projects: components["schemas"]["ClientProject"][];
+        };
+        /**
+         * @description A project on the client page. Deliberately the four fields `Project` already carries and
+         *     nothing more: `client.html` also draws Lead, Next release, Hours and Completion, none of
+         *     which is on any project read shape today — they sit on plan 008 T19's deferred list — and
+         *     a column over a number the response does not carry is the defect plan 009 §9.3 names.
+         */
+        ClientProject: {
+            /** Format: uuid */
+            id: string;
+            key: string;
+            name: string;
+            archived: boolean;
+        };
+        /**
+         * @description Contact information, and **not an identity**. There is no `userId` here and there never
+         *     will be one without reopening scope D1. `email` is not unique across a client's contacts,
+         *     deliberately: two people at one organisation may share `invoices@`, and a uniqueness rule
+         *     here would be the first step toward treating this row as an account.
+         */
+        ClientContact: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            role?: string | null;
+            email?: string | null;
+            phone?: string | null;
+        };
+        /**
+         * @description A name is enough — `client.html`'s third contact has no phone, and that is a whole contact.
+         *
+         *     **No credential field exists on this schema**, which is the contract's half of "a contact
+         *     never becomes a login": there is nothing to send.
+         */
+        ClientContactInput: {
+            name: string;
+            role?: string | null;
+            email?: string | null;
+            phone?: string | null;
+        };
     };
     responses: {
         /**
@@ -19543,6 +19925,7 @@ export interface components {
     };
     parameters: {
         ProjectId: string;
+        ClientId: string;
         SocialProviderKey: components["schemas"]["SocialProvider"];
         /**
          * @description An `attachment` row's id. Scoped by its owner as well as by its id everywhere it is
@@ -25306,6 +25689,254 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listClients: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Defaults to `ACTIVE`, which is what `clients.html`'s filter opens on. `ALL` is what a
+                 *     picker asks for when it must still show the client a project is already attached to —
+                 *     archiving hides a client from the list, and a project pointing at one is not thereby
+                 *     pointing at nothing.
+                 */
+                status?: "ACTIVE" | "ARCHIVED" | "ALL";
+                /** @description Only clients this person owns the relationship with. */
+                accountManagerId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The clients, by name */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Client"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createClient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientInput"];
+            };
+        };
+        responses: {
+            /** @description The client as created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Client"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getClient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clientId: components["parameters"]["ClientId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The client, its contacts and its projects */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateClient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clientId: components["parameters"]["ClientId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientInput"];
+            };
+        };
+        responses: {
+            /** @description The client as it now stands */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Client"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteClient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clientId: components["parameters"]["ClientId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The client and its contacts are gone */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    addClientContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clientId: components["parameters"]["ClientId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientContactInput"];
+            };
+        };
+        responses: {
+            /** @description The contact as created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientContact"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateClientContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clientId: components["parameters"]["ClientId"];
+                contactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientContactInput"];
+            };
+        };
+        responses: {
+            /** @description The contact as it now stands */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientContact"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteClientContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clientId: components["parameters"]["ClientId"];
+                contactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The contact is gone */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getProjectClientOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The pickable clients, plus any archived client this project already names */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientRef"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };

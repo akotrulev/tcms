@@ -1111,7 +1111,19 @@ describe('the surface as a whole — surface spec §2 and §4.1', () => {
     // Maintaining profiles and the skill vocabulary (`staffing:profile`) has NO tool — the writes
     // are a person's HR-shaped record, nothing on this surface can obtain the ids they take, and a
     // tool nobody could reach is the shape §3.3 excludes rather than a gap.
-    expect(TOOLS).toHaveLength(37);
+    // ~~37~~ → 39 with 018 T1's client verbs, and this pair splits for a THIRD reason — neither of
+    // the two above. `tcms_read_client` is `client:read` alone, so its gate needs no `any`: both
+    // questions it answers are COMPANY scope and one key answers both. `tcms_write_client` is
+    // `any` of `client:create` and `client:edit`, which is the first time §2's rule is satisfied
+    // by the ARM table rather than by splitting the tool: `record` costs the first key and the
+    // other four cost the second, and `tools/list`'s filter and the refusal copy both read the
+    // arm, so a credential holding one of them is told by `narrow` which half it reaches instead
+    // of being shown a tool that 403s on part of itself. Splitting would have produced a
+    // one-arm `tcms_record_client` beside a four-arm sibling over the same noun.
+    // Deleting a CLIENT has no arm at all: the endpoint exists and refuses while any project
+    // names the client, archiving is what that refusal points at, and an agent-drivable delete of
+    // an organisation record that is meant to outlive the work is a capability nobody asked for.
+    expect(TOOLS).toHaveLength(39);
   });
 
   it('names every tool in the tcms_ namespace', () => {

@@ -608,6 +608,47 @@ job]"* — that is Finance, and it stays that way.
 
 ## T1 — The client contract, both generated clients, and the CLI/MCP verbs
 
+> **Landed 2026-09-05.** Deliverable met: eight path items, seven schemas plus four project-side
+> additions, both clients regenerated, four CLI commands, two MCP tools (five write arms), the
+> surface doc's new §3.10. Packages 170 + 138 + 234 green on shanks; frontend build, lint at 0
+> warnings, and 2803 tests green.
+>
+> **Six corrections to what this task predicted**, written in place rather than appended:
+>
+> 1. **`settingsUpdate.ts` moved into this task from T5**, and it had to. Marking `clientId`
+>    `required` made that file a **compile error** the moment the contract regenerated — which is
+>    D-d working exactly as designed, one task earlier than the plan expected. The tree must build
+>    at every task boundary, so the field list is edited here.
+> 2. **Three payload-pinning tests moved in with it**, for the same reason: `ReviewSettingsPage`
+>    and `GeneralSettingsPage` assert the whole `PUT` body field for field, so the new field made
+>    them red. They are the tests that exist to catch exactly this, and they caught it.
+> 3. **Neither create arm carries an `Idempotency-Key`**, and this was not foreseen. The parameter
+>    deduplicates within `(company, project, key)` — its own description says *"scoped to the
+>    project the request is addressed to"* — and a client is addressed to **no project**. So both
+>    creates hit the wall `staffing absence` hit first, and both are recorded in
+>    `CREATE_WITHOUT_A_KEY` in both packages with what the omission costs: `client create` is
+>    protected by `uq_client_name` instead, and `contact-add` is protected by nothing, which is
+>    stated rather than implied.
+> 4. **`tcms_write_client` spans two permissions**, which no tool on that surface had done. §2 is
+>    satisfied by the **arm table** — `record` costs `client:create`, the other four `client:edit` —
+>    rather than by splitting the tool, because splitting would have produced a one-arm tool beside
+>    a four-arm sibling over one noun. `narrow(held)` tells a credential holding one key which half
+>    it reaches. Tool count 37 → **39**, recorded in `writes.test.ts`'s running argument.
+> 5. **The `edit` arm reads before it writes.** `PUT /clients/{clientId}` is a full replacement, so
+>    an arm sending only `status` would blank the location, industry and notes — the same
+>    save-that-discards defect `settingsUpdate.ts` prevents one stack over.
+> 6. **`frontend/src/features/help/sections.tsx` is part of a contract commit** and this task's file
+>    list omitted it. The in-app guide is compared to both registries by `guideCopies.test.ts` in
+>    **both** packages, so a verb absent from it reddens them; `git show --stat aaf6ca27` had it.
+>
+> **Confirmed as predicted:** `contractBodies.ts` needed no edit (D-m), no permission key was added
+> or moved (D-o), and no CRM name collided with the OIDC `clientId` (the schemas are `Client` /
+> `ClientRef` / `ClientDetail`, the verbs `client list` / `client show`).
+>
+> **Pre-existing and NOT this task's:** `CaseGrid.test.tsx` fails two selection tests on shanks.
+> Verified by stashing this work, re-syncing and re-running: 2 failed / 13 passed on clean `master`.
+> Untouched here, and out of this module's file set.
+
 **Deliverable:** `docs/specs/openapi.yaml` carries eight client path items and the project-side
 client fields, every schema with its `required` array; `frontend/src/api/schema.d.ts` and
 `packages/client/src/schema.ts` are regenerated from it in the same commit; both fixture files carry

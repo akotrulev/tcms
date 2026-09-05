@@ -28,6 +28,11 @@ import type {
   AgentTaskContext,
   Artifact,
   Assistant,
+  Client,
+  ClientContact,
+  ClientDetail,
+  ClientProject,
+  ClientRef,
   AuditEvent,
   AuthResult,
   Configuration,
@@ -1844,4 +1849,66 @@ export function aProjectStaffingView(
   overrides: Partial<ProjectStaffingView> = {},
 ): ProjectStaffingView {
   return { from: '2026-09-01', to: '2026-11-30', allocations: [], people: [], ...overrides }
+}
+
+/**
+ * A client organisation.
+ *
+ * **The default is a client with projects**, because the interesting assertions in this module are
+ * about a company that has clients; the empty case is asserted by serving `[]` to `GET /clients`
+ * rather than by a fixture, since "no clients" is the absence of a body and not a shape of one.
+ *
+ * No rate, no cost and no hours figure — none of them is on this schema, and none is on any other
+ * in the `clients` tag. What a client's work is worth is M8's (scope §7).
+ */
+export function aClient(overrides: Partial<Client> = {}): Client {
+  return {
+    id: 'cl1',
+    name: 'Acme Retail',
+    location: 'Stockholm',
+    industry: 'retail',
+    notes: null,
+    status: 'ACTIVE',
+    accountManager: null,
+    projectCount: 2,
+    contactCount: 3,
+    createdAt: '2026-03-04T09:00:00Z',
+    ...overrides,
+  }
+}
+
+/** The two fields a project card, an overview chip or a picker option renders. */
+export function aClientRef(overrides: Partial<ClientRef> = {}): ClientRef {
+  return { id: 'cl1', name: 'Acme Retail', ...overrides }
+}
+
+/**
+ * A contact — a person to talk to, and **not an account**. There is no `userId` on this shape and
+ * there never will be one without reopening scope D1.
+ */
+export function aClientContact(overrides: Partial<ClientContact> = {}): ClientContact {
+  return {
+    id: 'cc1',
+    name: 'Hanna Lund',
+    role: 'Product owner',
+    email: 'hanna.lund@acme.test',
+    phone: '+46 8 555 0142',
+    ...overrides,
+  }
+}
+
+/** A project on the client page — the four fields `Project` already carries, and no more. */
+export function aClientProject(overrides: Partial<ClientProject> = {}): ClientProject {
+  return { id: 'p1', key: 'ACME', name: 'Acme Storefront', archived: false, ...overrides }
+}
+
+/**
+ * `client.html` in one document.
+ *
+ * **`projects` and `contacts` default to empty**, per this module's rule that a factory's defaults
+ * are the server's answer for an empty resource: a client recorded a minute ago has neither, and a
+ * test that needs them says so.
+ */
+export function aClientDetail(overrides: Partial<ClientDetail> = {}): ClientDetail {
+  return { client: aClient(), contacts: [], projects: [], ...overrides }
 }

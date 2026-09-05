@@ -156,7 +156,7 @@ The count below is the **outcome** of this rule, not a target.
 
 ---
 
-## 3. The MCP surface — ~~21~~ ~~26~~ ~~28~~ ~~30~~ ~~34~~ 37 tools
+## 3. The MCP surface — ~~21~~ ~~26~~ ~~28~~ ~~30~~ ~~34~~ ~~37~~ 39 tools
 
 Namespaced `tcms_*`. `projectId` and `companyId` **do not appear in any schema** (§4.1).
 
@@ -199,6 +199,8 @@ Namespaced `tcms_*`. `projectId` and `companyId` **do not appear in any schema**
 | 35 | `tcms_read_staffing` | **any of** `staffing:directory` / `staffing:read` | `GET /staffing/people`, `…/{userId}`, `GET /staffing/skills`, `GET /projects/{id}/staffing` | 017 T1 — see §3.9 |
 | 36 | `tcms_write_allocation` | `staffing:allocate` | `POST`/`PATCH`/`DELETE /projects/{id}/allocations` | 017 T1 — see §3.9 |
 | 37 | `tcms_write_absence` | `staffing:absence` | `POST`/`DELETE /staffing/people/{userId}/absences` | 017 T1 — see §3.9 |
+| 38 | `tcms_read_client` | `client:read` | `GET /clients`, `GET /clients/{clientId}` | 018 T1 — see §3.10 |
+| 39 | `tcms_write_client` | **any of** `client:create` / `client:edit` | `POST`/`PUT`/`DELETE /clients…`, `…/contacts…` | 018 T1 — see §3.10 |
 
 Eighteen are buildable against today's contract; two need §4.2's contract addition first; one has a
 blocked arm (§5).
@@ -969,6 +971,62 @@ sentence, unchanged and repeated for the same reason: hours and percentages are 
 money is not, and multiplying the first by a number the model invented is exactly what an agent
 holding a capacity figure will otherwise try.
 
+### 3.10 The client verbs (018 T1) — two tools, and the first tool §2 lets span two keys
+
+Plan 018 (Mc). Eight operations over five path items, tagged `clients`.
+[The plan](../plans/018-clients.md) carries the decisions; what follows is only what they do to
+this surface.
+
+| Tool | Gate | Arms / reads |
+|---|---|---|
+| `tcms_read_client` | `client:read` | the client list · one client in full, with its contacts and its projects |
+| `tcms_write_client` | **any of** `client:create` / `client:edit` | `record` · `edit` · `contact-add` · `contact-edit` · `contact-remove` |
+
+- **`tcms_read_client` needs no `any` gate**, unlike §3.8's and §3.9's reads, and the difference is
+  worth stating because two slices running have now made `any` look like the default for a new
+  noun. Both questions this tool answers are COMPANY scope and `client:read` answers both, so there
+  is no half of it a holder is refused. Finance holds that key and not `client:edit` — an invoice
+  has to name a client, and maintaining the record is the Account Manager's job.
+- **`tcms_write_client` is the first tool on this surface to span two permissions**, and §2 is
+  satisfied by the **arm table** rather than by splitting the tool. `record` costs `client:create`;
+  the other four cost `client:edit`. `tools/list`'s filter and the refusal copy both read the arm,
+  and `narrow(held)` tells a credential holding one key which half it reaches before it tries — so
+  nobody is shown a tool that 403s on part of itself, which is the failure §2 exists to prevent.
+  Splitting would have produced a one-arm `tcms_record_client` beside a four-arm sibling over one
+  noun, which is §2's letter at the cost of its point.
+- **Deleting a CLIENT has no arm**, and that is a decision rather than a gap.
+  `DELETE /clients/{clientId}` exists and answers `409` while any project references the client;
+  archiving is what that refusal points at, and it is `edit` with `status: ARCHIVED`. An
+  agent-drivable delete of an organisation record whose whole purpose is to outlive the work it
+  describes is a capability nobody asked for. `contact-remove` **is** a delete, and its target is
+  one row on a list the client page renders in full.
+- **The `edit` arm reads before it writes.** `PUT /clients/{clientId}` is a full replacement, so an
+  arm that sent only `status` would blank the location, the industry and the notes — the
+  save-that-discards defect `settingsUpdate.ts` exists to prevent one stack over. It narrows the
+  lost-update window rather than closing it; `Client` carries no `lockVersion`, which is recorded
+  in `CREATE_WITHOUT_A_KEY` beside the three other endpoints in the same state.
+- **Neither create arm carries an `Idempotency-Key`**, and §4.2's own scoping is why: the parameter
+  deduplicates within `(company, project, key)` and a client is addressed to no project. `record`
+  is protected by a constraint instead — `uq_client_name UNIQUE (company_id, name)` — and
+  `contact-add` is protected by nothing, which is stated rather than implied.
+- **Attaching a PROJECT to a client is not on this tool.** It is the Client field on that project's
+  settings and costs `project:settings`, a PROJECT-scope key a Project Manager holds and
+  `client:read` is not (plan 010 D-M0-9). The description says so, because it is the first thing an
+  agent holding `client:edit` will look for here.
+- **Zero clients is a first-class answer and `tcms_read_client`'s description says so at length.**
+  An empty array is the exact shape an agent is most likely to report as a failure, a permissions
+  problem or unfinished setup; a company that builds its own products has no clients, every project
+  it owns has a null client, and nothing in the product marks that as missing.
+- **A client never signs in, and neither does a contact.** No arm here creates a user, a membership,
+  an invitation or a credential, and there is no field that could ask for one. Both descriptions
+  say it, because "add a contact" is the one operation on this surface a model is likely to
+  describe as granting somebody access.
+
+**No verb on this surface returns a rate, a cost or an invoice value, and none ever will.** §3.8's
+and §3.9's sentence, unchanged and repeated here for the sharpest instance of it: an Account Manager
+holds `client:read` and does not hold `billing:*`, and `client.html` renders the hours-and-invoices
+table for them with the amounts absent. Those columns are M8's.
+
 ---
 
 ## 4. Cross-cutting rules — all of them in the command core
@@ -1327,6 +1385,33 @@ allocates would have had no read behind it on the only surface that can call it,
 have printed an allocation id anywhere. The plan's own draft comment named the command
 (*"that is `tcms staffing project`"*) while its deliverable line counted three; the command is what
 the reasoning asked for, and §T1 of the plan is corrected rather than this being left as a gap.
+
+**The four client commands** (018 T1; §3.10 carries the tool split and the reasons). `client` is the
+eighth noun the CLI gains, and the first with **no `--project` anywhere in it**: a client is COMPANY
+scope, so none of these four has a project in its path at all.
+
+| Command | Kind | Permission | Reaches |
+|---|---|---|---|
+| `tcms client list [--status ACTIVE\|ARCHIVED\|ALL]` | read | `client:read` (COMPANY) | `GET /clients` |
+| `tcms client show <clientId>` | read | `client:read` (COMPANY) | `GET /clients/{clientId}` |
+| `tcms client create --name N [--location L] [--industry I] [--notes T]` | `create` | `client:create` (COMPANY) | `POST /clients` |
+| `tcms client contact-add <clientId> --name N [--role R] [--email E] [--phone P]` | `create` | `client:edit` (COMPANY) | `POST /clients/{clientId}/contacts` |
+
+**A client is named by ID and not by a key**, which makes it the first noun here with no
+`resolveId` step: a client has no readable key the way a case (`TC-42`) or an issue (`ACME-1`) does,
+so there is nothing to resolve. `tcms client list` prints one id per row for exactly this.
+
+**`client list` prints an explanation when the list is empty**, the way `staffing project` does for
+a project nobody is allocated to — and here the sentence matters more, because an empty list is a
+*complete* state rather than an unfilled one. A company building its own products never records a
+client (scope D1 rule 2), and a bare empty table would read as a failure.
+
+**There is no `client edit` and no `client delete`, and both omissions are deliberate.** Editing and
+archiving are one call on the MCP surface (`tcms_write_client`); a person at a terminal reaches for
+them rarely, and `client show` prints the ids that close the gap in one command whenever somebody
+asks — `staffing allocate`'s recorded shortfall, in the same words. Deleting is different in kind:
+it refuses while any project names the client, archiving is what that refusal points at, and a verb
+for it would be a way to lose a record whose whole purpose is to survive the work.
 
 Four things about that table are decisions rather than spellings:
 

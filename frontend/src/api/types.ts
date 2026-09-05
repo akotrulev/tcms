@@ -1014,6 +1014,24 @@ export type AbsenceInput = S['AbsenceInput'];
  * does the subtraction: an integer stored as "6" is correct on the day it is typed and wrong every
  * day after, and nothing in the product would ever say so.
  */
+/**
+ * A company's own customer — an **attribute of a project, never a level of the hierarchy**
+ * (scope D1). It carries no isolation semantics and no permission scope, so nothing in the client
+ * treats it as a third gate.
+ *
+ * `Project.client` is `null` for internal work, and that is the common case rather than an edge:
+ * the owner's own worked example is a company building its own products. Nothing in this app may
+ * render a null client as a deficiency — no "attach a client" prompt, no marker, no empty column.
+ */
+export type Client = S['Client'];
+export type ClientRef = S['ClientRef'];
+export type ClientInput = S['ClientInput'];
+export type ClientDetail = S['ClientDetail'];
+export type ClientProject = S['ClientProject'];
+export type ClientContact = S['ClientContact'];
+export type ClientContactInput = S['ClientContactInput'];
+export type ClientStatus = NonNullable<S['Client']['status']>;
+
 export type PersonProfile = S['PersonProfile'];
 export type PersonProfileInput = S['PersonProfileInput'];
 export type Skill = S['Skill'];

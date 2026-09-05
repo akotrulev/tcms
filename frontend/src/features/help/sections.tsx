@@ -715,7 +715,9 @@ tcms time list         # your own timesheet for this period — entries, totals,
 tcms time queue        # timesheets waiting on you to approve
 tcms time rollup ACME-1# estimate against approved and pending hours; --epic for the epic grain
 tcms staffing directory# who has which skills, when they are free, and how booked they already are
-tcms staffing project  # who is allocated to this project, and the ids the allocate verb takes`}</Terminal>
+tcms staffing project  # who is allocated to this project, and the ids the allocate verb takes
+tcms client list       # the company's clients — an empty list is an answer, not a failure
+tcms client show cl-1  # one client, its contacts and its projects`}</Terminal>
 
         <H>Writing</H>
         <Terminal>{`tcms case edit         # change a test case
@@ -738,6 +740,8 @@ tcms time submit <period>                    # your period stops being editable,
 tcms time approve <period> [--reject --note TEXT | --withdraw]
 tcms staffing allocate --person "Dana Petrov" --percent 50 --from 2026-09-01 --to 2026-11-30
 tcms staffing absence --from 2026-09-24 --to 2026-09-24   # your own needs no permission
+tcms client create --name "Acme Retail"       # a name is enough; a client never signs in
+tcms client contact-add cl-1 --name "Hanna Lund" --email hanna.lund@acme.test
 tcms review comment    # a remark on an open review`}</Terminal>
 
         <H>Options that apply everywhere</H>
@@ -823,7 +827,7 @@ tcms review comment    # a remark on an open review`}</Terminal>
   {
     id: 'mcp',
     title: 'AI agent access (MCP)',
-    summary: 'Connecting an AI assistant, the 37 tools, and the limits that make it safe.',
+    summary: 'Connecting an AI assistant, the 39 tools, and the limits that make it safe.',
     body: (
       <>
         <P>
@@ -860,17 +864,17 @@ tcms review comment    # a remark on an open review`}</Terminal>
             {
               term: 'Reading — 17',
               detail:
-                'tcms_search_cases · tcms_open_case · tcms_list_suites · tcms_list_library · tcms_list_artifacts · tcms_doc_tree · tcms_open_doc_page · tcms_list_plans · tcms_open_run · tcms_read_issue · tcms_read_board · tcms_read_release · tcms_read_timesheet · tcms_read_time_rollup · tcms_read_staffing · tcms_list_proposals · tcms_triage',
+                'tcms_search_cases · tcms_open_case · tcms_list_suites · tcms_list_library · tcms_list_artifacts · tcms_doc_tree · tcms_open_doc_page · tcms_list_plans · tcms_open_run · tcms_read_issue · tcms_read_board · tcms_read_release · tcms_read_timesheet · tcms_read_time_rollup · tcms_read_staffing · tcms_read_client · tcms_list_proposals · tcms_triage',
             },
             {
               term: 'Writing — 17',
               detail:
-                'tcms_write_case · tcms_write_suite · tcms_write_doc_page · tcms_write_plan · tcms_write_run · tcms_record_result · tcms_review_comment · tcms_review_verdict · tcms_write_issue · tcms_write_backlog · tcms_write_release · tcms_write_artifact · tcms_write_timesheet · tcms_approve_timesheet · tcms_write_allocation · tcms_write_absence · tcms_report',
+                'tcms_write_case · tcms_write_suite · tcms_write_doc_page · tcms_write_plan · tcms_write_run · tcms_record_result · tcms_review_comment · tcms_review_verdict · tcms_write_issue · tcms_write_backlog · tcms_write_release · tcms_write_artifact · tcms_write_timesheet · tcms_approve_timesheet · tcms_write_allocation · tcms_write_absence · tcms_write_client · tcms_report',
             },
           ]}
         />
         <P>
-          The list is workflow-shaped rather than one tool per endpoint: 37 tools over roughly 98 API
+          The list is workflow-shaped rather than one tool per endpoint: 39 tools over roughly 98 API
           paths. Tool definitions cost the model context, so a mirror of the API would be a surface
           only the largest hosts could afford to load.
         </P>

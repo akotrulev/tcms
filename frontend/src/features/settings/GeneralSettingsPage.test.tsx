@@ -262,6 +262,14 @@ describe('Require review to close issues', () => {
         editAfterApproval: 'RETAIN',
         requireApprovedCaseForRun: false,
         trackTime: true,
+        /*
+          018 D-d's field, carried through for the reason the whole document is: it is the one
+          field the contract marks REQUIRED, because "leave it alone" and "detach" are the same
+          absence for a nullable id — so a save here that dropped it would answer 400 rather than
+          silently unbilling the project. `null` is "internal", which is a real value and the
+          common one.
+        */
+        clientId: null,
       }),
     )
   })
@@ -327,6 +335,14 @@ describe('Track time on this project', () => {
         editAfterApproval: 'RETAIN',
         requireApprovedCaseForRun: false,
         trackTime: false,
+        /*
+          018 D-d's field, carried through for the reason the whole document is: it is the one
+          field the contract marks REQUIRED, because "leave it alone" and "detach" are the same
+          absence for a nullable id — so a save here that dropped it would answer 400 rather than
+          silently unbilling the project. `null` is "internal", which is a real value and the
+          common one.
+        */
+        clientId: null,
       }),
     )
   })
