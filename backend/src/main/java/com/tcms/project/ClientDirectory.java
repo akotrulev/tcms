@@ -96,4 +96,28 @@ public interface ClientDirectory {
      * nothing marked as missing.
      */
     List<ClientRef> activeClients();
+
+    /**
+     * This client's contacts, in the order the client page renders them.
+     *
+     * <p>Added by 019 T4 for {@code InvoiceDetail.billTo} (019 D-u). {@code billing} may not import
+     * {@code crm}, and the alternative was a {@code billing.ClientFacts} reading
+     * {@code client_contact} — the {@code *Facts} pattern pointed the wrong way, which is exactly
+     * what {@link #activeClients()} above declines for the {@code client} table one method up.
+     *
+     * <p><strong>The whole list, and not "the billing contact".</strong> {@code client_contact}
+     * carries a free-text {@code role} and no designated-contact column, so a port method that
+     * picked one would be deciding a CRM concept on a billing screen's behalf. Billing takes the
+     * first for a new draft and then <em>stores that id</em>, so an invoice keeps addressing the
+     * person it was raised for even after the client's contacts change — and resolves that stored id
+     * from this same list on every read.
+     *
+     * <p>Ordered by name, which is what makes "the first" a stable answer rather than whichever row
+     * the database returned. Empty is a state and not a blocker: issuing sends nothing, so there is
+     * nothing an absent address prevents.
+     *
+     * <p>Runs inside the caller's transaction, so RLS applies and a client in another company
+     * answers empty rather than answering.
+     */
+    List<ClientContactRef> contactsOf(UUID clientId);
 }

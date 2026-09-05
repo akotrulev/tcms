@@ -988,7 +988,16 @@ class ContractConventionTest {
             Map.entry("ClientInput", List.of(com.tcms.crm.ClientWriteRequest.class)),
             Map.entry("ClientDetail", List.of(com.tcms.crm.ClientDetailView.class)),
             Map.entry("ClientProject", List.of(com.tcms.crm.ClientProjectView.class)),
-            Map.entry("ClientContact", List.of(com.tcms.crm.ClientContactView.class)),
+            // TWO owners, and the second is 019 D-u. `crm` serves this schema on the client page and
+            // `billing` serves it as an invoice's `billTo`, and neither module may import the other
+            // — the `Attachment` case one block up, arrived at from a different direction. It is
+            // NOT in com.tcms.api: putting it there would make crm.ClientContactView a copy of an
+            // api shape, which noRecordOutsideApiRepeatsAnApiShape correctly forbids, and repairing
+            // that means renaming a public wire type across crm for one field on an invoice. The
+            // day a third module needs a client's contact, that rename is the right answer.
+            Map.entry("ClientContact", List.of(
+                    com.tcms.crm.ClientContactView.class,
+                    com.tcms.project.ClientContactRef.class)),
             Map.entry("ClientContactInput",
                     List.of(com.tcms.crm.ClientContactWriteRequest.class)),
             Map.entry("ProjectClientInput", List.of(com.tcms.crm.ProjectClientRequest.class)),
@@ -1026,7 +1035,45 @@ class ContractConventionTest {
             Map.entry("BudgetInput", List.of(com.tcms.billing.BudgetWriteRequest.class)),
             Map.entry("BudgetBurn", List.of(com.tcms.billing.BudgetBurnView.class)),
             Map.entry("Expense", List.of(com.tcms.billing.ExpenseView.class)),
-            Map.entry("ExpenseInput", List.of(com.tcms.billing.ExpenseWriteRequest.class)));
+            Map.entry("ExpenseInput", List.of(com.tcms.billing.ExpenseWriteRequest.class)),
+            // ---- 019 T4's invoice block ----
+            //
+            // `Invoice` is the ONE entry in this file whose entity/view split is not about audit
+            // columns. A DRAFT invoice row carries no seq, no number, no total and NOT ONE
+            // invoice_line (019 D-c), while `InvoiceView` carries `total`, `lineCount` and
+            // `approvedHours` on every row — computed for a draft and read from the stored columns
+            // for an issued one. The entity and the view describe two different things, and pairing
+            // the schema with the entity would compare a wire shape against a row shape the
+            // contract deliberately does not have.
+            //
+            // `InvoiceLine` and `InvoiceEntry` are paired with the views and NOT with InvoiceLine /
+            // InvoiceLineEntry, for the same reason twice over: the entities exist only for an
+            // ISSUED invoice, and a draft's lines and entries are computed and stored nowhere. So
+            // one record serves both states and the entity serves one of them.
+            //
+            // `ExcludedHours` has no entity behind it at all and never will: an excluded hour is an
+            // hour NOT on this invoice, so there is nothing to store. Its `reason` is an INLINE
+            // enum on the schema rather than a named component, which is why ContractEnumTest has
+            // no pairing for `ExcludedReason` and why that type carries no schema's name.
+            //
+            // `ClientBillingRow`, `ClientBillingSummary` and `BillingSummary` are projections over
+            // several tables and have no entity either — the first two are `client.html`'s table and
+            // tiles, the third is `billing.html`'s four tiles, and `billing` is the only module that
+            // may serve any of them.
+            //
+            // `InvoiceDraftInput` is the one …Input in this module named for the schema rather than
+            // for the act, which is why a name match proposes it and the three …WriteRequest records
+            // above had to be written in by hand.
+            Map.entry("InvoiceLine", List.of(com.tcms.billing.InvoiceLineView.class)),
+            Map.entry("InvoiceEntry", List.of(com.tcms.billing.InvoiceEntryView.class)),
+            Map.entry("ExcludedHours", List.of(com.tcms.billing.ExcludedHoursView.class)),
+            Map.entry("Invoice", List.of(com.tcms.billing.InvoiceView.class)),
+            Map.entry("InvoiceDetail", List.of(com.tcms.billing.InvoiceDetailView.class)),
+            Map.entry("InvoiceDraftInput", List.of(com.tcms.billing.InvoiceDraftInput.class)),
+            Map.entry("ClientBillingRow", List.of(com.tcms.billing.ClientBillingRowView.class)),
+            Map.entry("ClientBillingSummary",
+                    List.of(com.tcms.billing.ClientBillingSummaryView.class)),
+            Map.entry("BillingSummary", List.of(com.tcms.billing.BillingSummaryView.class)));
 
     /**
      * The owners this file cannot name as class literals, because they are package-private.

@@ -872,6 +872,119 @@ plan and the mockup, a nullable `basis` would make every consumer branch on an a
 has its own home in `BudgetBurn`, and changing it now is a `ts`-stack task in the middle of a `be`
 one.
 
+### D-u — `ClientContact` gains a second owner in `project`, because `billing` may not import `crm`
+
+**Found in T4, not predicted by this plan.** `InvoiceDetail.billTo` is a `ClientContact`, that schema
+is served by `crm.ClientContactView`, and `billing` may not import `crm` — the same wall D-m draws
+for a client's *name*, one field further in. D-m already prescribes the repair (*"a method is added
+to `ClientDirectory` and implemented in `crm` — two files outside this module, and each edit is a
+decision to state"*), so this is that statement:
+
+| File | Change |
+|---|---|
+| `com/tcms/project/ClientContactRef.java` | **new** — the port's return shape, five fields |
+| `com/tcms/project/ClientDirectory.java` | `+ List<ClientContactRef> contactsOf(UUID)` |
+| `com/tcms/crm/CrmClientDirectory.java` | implements it over the existing `findByClientIdOrderByNameAsc` |
+
+**The port answers with the whole list and not with "the billing contact".** `client_contact` carries
+a free-text `role` and no designated-contact column, so a method that picked one would be deciding a
+CRM concept on a billing screen's behalf. `billing` takes the first for a new draft, **stores that
+id**, and resolves it from the same list on every read — so an invoice keeps addressing the person it
+was raised for after the client adds a contact whose name sorts earlier.
+
+**It is NOT in `com.tcms.api`, and that is the decision rather than the obvious place.** `api` holds
+the shapes more than one module serves, which this now is — but putting it there makes
+`crm.ClientContactView` *a copy of an api shape*, which
+`ArchitectureRulesTest.noRecordOutsideApiRepeatsAnApiShape` correctly forbids, and repairing that
+means renaming a public wire type across `crm`, its detail view, its service and its tests, for one
+field on an invoice. So the pair is pinned instead: `ContractConventionTest` maps `ClientContact` to
+**both** records, which is the `Attachment` precedent — two identical records in two modules that may
+not import each other, kept identical by the schema they both answer to. **The day a third module
+needs a client's contact, the `api` move is the right answer and that entry is where the argument for
+it lives.**
+
+Rejected: serving `billTo: null` unconditionally. The component would still have to exist and have a
+type, `invoice.html` draws *Bill to · Anna Krogh · invoices@acme.test*, and a field that is
+structurally always absent is a promise the contract makes and the server does not keep — the
+`CONTRACT-ONLY` divergence `pairedSchemasAndRecordsNameTheSameMembers` exists to report.
+
+**Found by a rule rather than by reading, and it is worth saying which.** The first cut resolved
+`billTo` from the client's contacts on every read and never touched `invoice.bill_to_id`, so the
+column was written on every row and read by nothing.
+`ArchitectureRulesTest.everyMappedColumnHasAReader` reported it — *"that is not waste, it is an
+unverified value"* — and the repair is the design above, which is also the correct one: an issued
+invoice must not re-address itself.
+
+### D-v — `name: on` is a BOOLEAN in the contract, and the backend was the only reader that could see it
+
+**Found in T4 by the first handler to bind it.** `GET /billing/summary` declares a query parameter
+`on`, unquoted. SnakeYAML — which every backend contract test reads `openapi.yaml` with — is
+**YAML 1.1**, where `on`, `off`, `yes` and `no` are booleans, so that parameter's name parsed as
+`true` and `ContractParameterBindingTest.noHandlerBindsAnUndeclaredQueryParameter` reported the
+handler as binding a parameter the contract does not declare.
+
+**`openapi-typescript` reads YAML 1.2, where it is the string `"on"`, so both generated copies were
+correct the whole time and no consumer could see it.** That is why quoting it is a one-line change
+whose regeneration produces **byte-identical** output in `frontend/src/api/schema.d.ts` and
+`packages/client/src/schema.ts` — verified by running both generators and comparing hashes rather
+than asserted. It is also why no frontend or packages gate could have caught it: the two halves of
+the repo disagreed about the document, and only one of them was wrong.
+
+The comment sits in `openapi.yaml` beside the parameter and names the other three spellings, because
+the next one will be `no` or `off` and it will be found the same way.
+
+### D-w — the crossing rule matches a table name on token boundaries, not as a substring
+
+`BillingReadsAndNeverWritesTest` asked whether a file *contains* `time_entry`. `InvoiceLineEntry.java`
+maps `invoice_line_entry.time_entry_id` — this module's **own** column, whose entire point is that it
+carries no foreign key and reaches nothing (D-b) — so the rule reported the entity as a second file
+naming `time`'s table.
+
+The repair somebody reaches for first is an exemption entry, which would blunt the rule permanently
+for the table it exists to protect. The repair taken is a word-boundary match: `_` is a word
+character, so `time_entry` bounded on both sides does not match `time_entry_id` and still matches
+`FROM time_entry e`. **That makes the rule stricter rather than looser** — nothing reported for a
+real crossing stops being reported — and it is applied to both arms, the namer count and the
+write-verb scan.
+
+### D-x — the demo seeder writes clients and TIME, which 018 deliberately did not
+
+018 shipped `crm` and seeded **no clients**, because inventing customers puts this repository's
+guesses where a reader cannot tell them from a client's own records, and because a company with no
+clients is the case Mc's acceptance criterion is about. **M8 reverses that**, and the reversal is
+stated rather than made quietly: every screen this module builds is a screen about a client's money,
+so a seeded instance with no clients renders a rate-card table with no rows, a budget list with no
+currency, and an invoice list that cannot be reached at all. ~~The demo data is deliberately
+client-less for now~~ → superseded here. The empty-state argument is still true and is still
+demonstrable, because **Kessler Clinic has no rate card and a fourth project has no client at all**.
+
+**It also seeds approved hours, which no seeder did before.** An invoice line is approved time at a
+rate-card rate and nothing else (D24), so a demo with no approved fortnight is a demo where both
+invoices are documents with no lines — written, and saying nothing. The hours go through `time`'s own
+`log` / `submit` / `decide`, so what lands is what a person could have produced, and
+`IssueFactProjection.refresh()` is called first because `issue_fact` is outbox-fed and a seeder
+logging against an issue created seconds ago would otherwise race the projection.
+
+Three clients, and the third is the point of the other two:
+
+| Client | Card | Carries |
+|---|---|---|
+| Acme Retail | EUR — `ALL_ROLES`, `ROLE`, `PERSON`, at three effective dates | the **issued** invoice, last month |
+| Bergstrom Health | CHF — a `ROLE` rung and **no `ALL_ROLES`** | the **draft**, this month |
+| Kessler Clinic | none | `billing.html`'s *no rate card yet* row, with approved hours behind it |
+
+The middle row is the one that took a decision. **A card with no `ALL_ROLES` floor is what gives D-g's
+second bucket real data**: somebody holding neither the named role nor the named person's account has
+approved hours nothing can price. T4 step 8 assumed the *card-less* client would produce that bucket,
+and it cannot — `POST /invoices` refuses a client with no rate card, so those hours are never in any
+draft. A floorless card is a configuration a Finance user could genuinely build, and it is the only
+shape that puts a real `NO_RATE` row on a seeded screen.
+
+**A timesheet period is per person per half month, and that shaped the day plan.** The engineer's
+first-half period is approved on the billed project's pass, so the card-less project logs into the
+*second* half — otherwise its hours would be silently skipped by the re-run guard and the client with
+no card would have none.
+
 ---
 ## File structure
 
@@ -2082,13 +2195,18 @@ rate-card edit; `BillingMoneyBoundaryTest` and the extended `TimeMoneyBoundaryTe
   `issue_fact` to the `ALREADY_CROSSED` list once `IssueSubjectFacts` exists, so the rule stops being
   *at most* and becomes *exactly* for it too
 - Modify: `backend/src/test/java/com/tcms/contract/ContractConventionTest.java` (nine invoice and
-  summary schemas) and `ContractEnumTest.java` (`InvoiceStatus`). Both maps are hand-written by
-  design and no record can pair itself; T3 added its own eleven and two the same way
+  summary schemas, **plus a second owner for `ClientContact`** — D-u) and `ContractEnumTest.java`
+  (`InvoiceStatus`). Both maps are hand-written by design and no record can pair itself; T3 added its
+  own eleven and two the same way
+- Modify, **not predicted by this plan**: `docs/specs/openapi.yaml` (one parameter name quoted —
+  D-v), `com/tcms/project/ClientDirectory.java` + `com/tcms/project/ClientContactRef.java` (new) +
+  `com/tcms/crm/CrmClientDirectory.java` (D-u), and `com/tcms/billing/BudgetService.java` (a
+  package-private `viewsFor`, for `InvoiceDetail.budgetEffect`)
 - Modify: `backend/src/test/java/com/tcms/time/TimeMoneyBoundaryTest.java` — **extend only**
 - Modify: `backend/src/test/java/com/tcms/crm/CrmCreatesNoLoginTest.java` — **extend only**
 - Modify: `backend/src/main/java/com/tcms/DemoWorkspaceSeeder.java`
 
-- [ ] **Step 1: The draft is a query**
+- [x] **Step 1: The draft is a query**
 
 ```java
 /**
@@ -2133,7 +2251,7 @@ public class InvoiceService {
 }
 ```
 
-- [ ] **Step 2: Both exclusion buckets, always**
+- [x] **Step 2: Both exclusion buckets, always**
 
 ```java
     /*
@@ -2149,12 +2267,17 @@ public class InvoiceService {
     */
 ```
 
-- [ ] **Step 3: `InvoiceNumbers`**
+- [x] **Step 3: `InvoiceNumbers`**
 
 ```java
 /**
  * {@code INV-2026-041} (019 D-k). {@code MAX(seq) + 1} for the company inside the issue
- * transaction, with {@code uq_invoice_seq} as the arbiter and <strong>one</strong> retry.
+ * transaction, with {@code uq_invoice_seq} as the arbiter and <strong>one</strong> retry — and the
+ * retry lives in {@code InvoiceService.issue}, not here, because a unique violation aborts the
+ * PostgreSQL transaction and a second attempt inside the same one fails on the abort rather than on
+ * the number. That is why {@code issue} is the one write on this surface with no
+ * {@code @Transactional} of its own: its transaction begins at the gate, so a retry is a second gate
+ * call and therefore a second transaction.
  *
  * <p>{@code key_sequence} was the obvious home and is refused on three counts: its shape is
  * {@code prefix + next_value} and produces {@code TC-1}; widening it costs a CHECK change and a
@@ -2171,7 +2294,7 @@ public class InvoiceService {
 class InvoiceNumbers { … }
 ```
 
-- [ ] **Step 4: The immutability proof**
+- [x] **Step 4: The immutability proof**
 
 ```java
 @Test
@@ -2215,7 +2338,7 @@ void anIssuedInvoiceCannotBeDiscarded() {
 void anHourOnAnIssuedInvoiceIsNeverOfferedToASecondDraft() { … }
 ```
 
-- [ ] **Step 5: `BillingMoneyBoundaryTest` — derived from the contract, asserting the lack**
+- [x] **Step 5: `BillingMoneyBoundaryTest` — derived from the contract, asserting the lack**
 
 ```java
 /**
@@ -2277,7 +2400,7 @@ void theClientBillingSummaryHidesItsAmountsFromAnAccountManager() throws JsonPro
 }
 ```
 
-- [ ] **Step 6: Extend `TimeMoneyBoundaryTest` — add an arm, move nothing**
+- [x] **Step 6: Extend `TimeMoneyBoundaryTest` — add an arm, move nothing**
 
 ```java
     /**
@@ -2301,7 +2424,7 @@ void theClientBillingSummaryHidesItsAmountsFromAnAccountManager() throws JsonPro
     }
 ```
 
-- [ ] **Step 7: Extend `CrmCreatesNoLoginTest` — the sibling, not a replacement**
+- [x] **Step 7: Extend `CrmCreatesNoLoginTest` — the sibling, not a replacement**
 
 ```java
     /**
@@ -2325,13 +2448,21 @@ void theClientBillingSummaryHidesItsAmountsFromAnAccountManager() throws JsonPro
     }
 ```
 
-- [ ] **Step 8: `DemoWorkspaceSeeder.seedBilling`, and then RUN it**
+- [x] **Step 8: `DemoWorkspaceSeeder.seedBilling`, and then RUN it**
 
-Per company: a EUR rate card for one client and a CHF card for another, each with an `ALL_ROLES`
-entry, a `ROLE` entry and a `PERSON` entry at three different effective dates; an `HOURS` budget on
+Per company: a EUR rate card for one client and a CHF card for another, ~~each with an `ALL_ROLES`
+entry, a `ROLE` entry and a `PERSON` entry at three different effective dates~~; an `HOURS` budget on
 one project and a `MONEY` budget on another; **one issued invoice and one draft**; two expenses; and
-**one client left deliberately without a card**, so `billing.html`'s *no rate card yet* row and the
-`NO_RATE` exclusion bucket both have real data behind them.
+**one client left deliberately without a card**, so `billing.html`'s *no rate card yet* row ~~and the
+`NO_RATE` exclusion bucket~~ has real data behind it.
+
+**→ Corrected in flight, and the correction is D-x.** A card-less client cannot produce the
+`NO_RATE` bucket at all: `POST /invoices` refuses a client with no rate card, so those hours are
+never in any draft. The EUR card keeps its three rungs at three effective dates; the **CHF card has a
+`ROLE` rung and no `ALL_ROLES` floor**, which is what puts real hours in that bucket — and the seeder
+also leaves one fortnight submitted-but-unapproved, so `invoice.html`'s amber note has data too. It
+additionally writes **clients and approved TIME**, which no seeder did before and 018 deliberately
+declined; both reversals are argued in D-x.
 
 ```bash
 docker compose run --rm backend seed-demo-data
@@ -2341,7 +2472,29 @@ docker compose run --rm backend seed-demo-data
 because neither checked. **Run it, open `/billing`, and say in T6's close-out what you saw — or say
 that you did not run it.** Do not write the sentence you expect to be true.
 
-- [ ] **Step 9: Gate and commit**
+**→ T4 DID NOT RUN IT, and this is the sentence rather than the one it hoped to write.**
+`docker compose run --rm backend seed-demo-data` needs the backend image, and building it on the
+MacBook fails on the Dockerfile's **first line** — `# syntax=docker/dockerfile:1.7` — with
+`failed to solve: DeadlineExceeded`, twice, and a bare `docker pull docker/dockerfile:1.7` hangs
+indefinitely. Docker Hub is unreachable from this machine; every other image the stack needs
+(`postgres:17`, `keycloak:26.4`, `gradle:8.14-jdk21`) is already cached and only the BuildKit syntax
+frontend is not. Running it on `shanks` instead was **declined rather than blocked**: that host is
+serving the lab deployment (`tcms-backend-1`, image `g1da8a38b`, up and healthy on 8080), and a
+second `docker compose up` in that directory reuses the same project name and the same port.
+
+So `seedBilling` is **written, compiled and reviewed, and unverified against a running instance** —
+which is exactly the "built and unverified" this repository's working agreement asks to be said out
+loud. Two things follow for whoever picks this up:
+
+- **T5 or T6 must run it**, and there is no loss in the deferral: `/billing` does not exist until T5
+  builds it, so "open `/billing` and say what you saw" was never answerable from inside T4.
+- **The specific risks to look for**, because they are the ones a compiler cannot see: that
+  `slotFor` attaches each project to the client it is supposed to and does not move one on a second
+  run; that `logAndSubmit`'s `loggedHours() > 0` guard is enough to keep a re-run from doubling every
+  figure; and that `Bergstrom Health`'s floorless card actually produces a `NO_RATE` row rather than
+  an empty draft. The last one is the one worth opening the invoice for.
+
+- [x] **Step 9: Gate and commit**
 
 ```bash
 ~/bin/tcms-remote sync

@@ -60,11 +60,18 @@ class TimeMoneyBoundaryTest extends TimeTestBase {
 
     private static final UUID LEAD_ROLE = UUID.fromString("10000000-0000-4000-8000-000000000003");
     private static final UUID ENGINEER_ROLE = UUID.fromString("10000000-0000-4000-8000-000000000004");
+    private static final UUID ACCOUNT_MANAGER_ROLE =
+            UUID.fromString("10000000-0000-4000-8000-000000000010");
 
     private static final UUID DANA = UUID.fromString("f8002000-0000-4000-8000-000000000001");
     private static final UUID LEO = UUID.fromString("f8002000-0000-4000-8000-000000000002");
+
+    /** The Account Manager arm, added by 019 T4 — the role that owns the client and not its price. */
+    private static final UUID ANNA = UUID.fromString("f8002000-0000-4000-8000-000000000003");
+
     private static final UUID DANA_GRANT = UUID.fromString("f8003000-0000-4000-8000-000000000001");
     private static final UUID LEO_GRANT = UUID.fromString("f8003000-0000-4000-8000-000000000002");
+    private static final UUID ANNA_GRANT = UUID.fromString("f8003000-0000-4000-8000-000000000003");
 
     private static final UUID STORY = UUID.fromString("f8004000-0000-4000-8000-000000000001");
 
@@ -86,14 +93,20 @@ class TimeMoneyBoundaryTest extends TimeTestBase {
             company(ACME, "money-acme", "Acme", now);
             activeUser(DANA, "dana@money.test", "Dana Engineer", now);
             activeUser(LEO, "leo@money.test", "Leo Lead", now);
+            activeUser(ANNA, "anna@money.test", "Anna Konto", now);
         });
         inCompany(ACME, () -> tx.executeWithoutResult(status -> {
             seedProject(PROJECT, ACME, "MNY", "Storefront", now);
             member(ACME, DANA, "Dana Engineer", now);
             member(ACME, LEO, "Leo Lead", now);
+            member(ACME, ANNA, "Anna Konto", now);
         }));
         grantOnProject(DANA_GRANT, ACME, ENGINEER_ROLE, DANA, PROJECT);
         grantOnProject(LEO_GRANT, ACME, LEAD_ROLE, LEO, PROJECT);
+        // COMPANY scope, because Account Manager is a company role and granting it on one project
+        // would be a grant the seed cannot produce — §A1 draws that boundary and this arm is about
+        // the role as it actually exists.
+        grantInCompany(ANNA_GRANT, ACME, ACCOUNT_MANAGER_ROLE, ANNA);
         seedProjectDefaults(ACME, PROJECT);
         wipeTime(ACME);
         issueFact(ACME, PROJECT, STORY, "MNY-1", "Guest checkout", "STORY", null,
@@ -187,6 +200,43 @@ class TimeMoneyBoundaryTest extends TimeTestBase {
                 .isInstanceOf(GateResult.Denied.class);
         assertThat(scoped(() -> timesheets.queue(LEO, DAY)))
                 .isInstanceOf(GateResult.Denied.class);
+    }
+
+    /**
+     * The Account Manager arm, added by 019 T4.
+     *
+     * <p>This class's four existing arms are untouched, and
+     * {@link #everyMoneyKeyInTheCatalogueIsCoveredByThisTest} above all: it is what makes the
+     * boundary grow-proof, and M8 inheriting a standing test it cannot quietly widen was the whole
+     * reason 016 wrote this file before billing existed. What M8 adds is a fifth arm and not a
+     * rewrite of any of them.
+     *
+     * <p>The behavioural half — that this person is <em>refused</em> every billing path — is
+     * {@code billing.BillingMoneyBoundaryTest}'s, because the services that do the refusing are in
+     * that module and this one may not import it. What is asserted here is the grant, which is what
+     * {@code time} can see and what every refusal over there rests on.
+     */
+    @Test
+    @DisplayName("story M2 — an Account Manager knows the client and the hours and never a rate")
+    void anAccountManagerKnowsTheClientAndTheHoursAndNeverARate() {
+        Set<String> held = heldBy(ANNA);
+
+        assertThat(held).contains("client:read");
+        assertThat(held)
+                .as("the Account Manager owns the client relationship and never sees its price — "
+                        + "roles spec §A3's Money table, asserted rather than read")
+                .doesNotContainAnyElementsOf(MONEY_KEYS);
+        assertThat(held)
+                .as("and they do not hold time:approve either — a period is approved by a Project "
+                        + "Manager or a Company Admin, not by the person who owns the client "
+                        + "relationship. 019 D-f rests on that: the approval an invoice entry "
+                        + "reports is the decision on somebody's FORTNIGHT, and this is one of the "
+                        + "roles it is demonstrably not.")
+                .doesNotContain("time:approve");
+        assertThat(held)
+                .as("nor project:read, which at COMPANY scope would confer it over every project "
+                        + "in the company present and future — V2's own comment above this grant")
+                .doesNotContain("project:read");
     }
 
     // =====================================================================

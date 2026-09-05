@@ -42,11 +42,12 @@ import org.junit.jupiter.api.Test;
  * projection's first outside consumer; this module declines the inheritance, and {@link #OWNERS}
  * records the decision where a later reader will trip over it rather than in prose nothing checks.
  *
- * <p>{@code issue_fact} has a declared owner and <strong>no file yet</strong>, because 019 T3 built
- * no surface that needs an issue's key or title: the class arrives with the invoice entries table
- * that snapshots them (019 T4). The rule below is written as <em>at most</em> the owner, so it holds
- * at full strength on both sides of that: a second file naming the table fails today, and the file
- * that eventually does must be the one named here.
+ * <p><del>{@code issue_fact} has a declared owner and <strong>no file yet</strong>, because 019 T3
+ * built no surface that needs an issue\'s key or title.</del> → <strong>{@code IssueSubjectFacts}
+ * landed in 019 T4</strong> with the invoice entries that snapshot an issue\'s key and title, and it
+ * is the file this rule already named. The rule is written as <em>at most</em> the owner, so it held
+ * at full strength on both sides of that arrival — and {@link #ALREADY_CROSSED} is what turns
+ * <em>at most</em> into <em>exactly</em> now that the crossing exists.
  *
  * <h2>Comments are stripped first, and that is load-bearing rather than tidy</h2>
  *
@@ -66,9 +67,10 @@ class BillingReadsAndNeverWritesTest {
     /**
      * Each foreign table this module is forbidden to write, and the one file allowed to name it.
      *
-     * <p>An empty owner means <em>no file may name this at all</em>. {@code issue_fact}'s owner does
-     * not exist yet and the header says why; naming it here is what makes the eventual file the one
-     * this rule already expects rather than whichever one somebody puts the query in.
+     * <p>An empty owner means <em>no file may name this at all</em>. ~~{@code issue_fact}'s owner
+     * does not exist yet and the header says why~~ → <strong>it exists since 019 T4</strong>, which
+     * is what the entry was written in advance for: the file that eventually named the table is the
+     * one this rule already expected, rather than whichever one somebody put the query in.
      */
     private static final Map<String, String> OWNERS = new LinkedHashMap<>(Map.of(
             "time_entry", "ApprovedTimeFacts.java",
@@ -76,8 +78,36 @@ class BillingReadsAndNeverWritesTest {
             "issue_fact", "IssueSubjectFacts.java",
             "issue_time_rollup", ""));
 
-    /** The two tables the crossing demonstrably exists for today. */
-    private static final List<String> ALREADY_CROSSED = List.of("time_entry", "timesheet_period");
+    /**
+     * The tables a crossing demonstrably exists for — the vacuity guard, which the rule above needs
+     * because <em>at most one namer</em> is satisfied by <em>no namer</em>.
+     *
+     * <p><del>The two time tables.</del> → <strong>three since 019 T4</strong>, when
+     * {@code IssueSubjectFacts} landed with the invoice entries that snapshot an issue's key and
+     * title (019 D-s). {@code issue_time_rollup} is deliberately not here and never will be: it is
+     * on {@link #OWNERS} with an empty owner precisely to assert that nothing reads it.
+     */
+    private static final List<String> ALREADY_CROSSED =
+            List.of("time_entry", "timesheet_period", "issue_fact");
+
+    /**
+     * A table name is matched on <strong>token boundaries, not as a substring</strong> — 019 T4.
+     *
+     * <p>{@code invoice_line_entry.time_entry_id} is this module's OWN column, and the whole point
+     * of it is that it carries no foreign key and joins to nothing (019 D-b). A {@code contains}
+     * check reported {@code InvoiceLineEntry.java} as a second file naming {@code time_entry},
+     * which is the rule firing on a name rather than on a crossing — and the repair somebody
+     * reaching for first would have been an exemption entry, permanently blunting the rule for the
+     * table it exists to protect.
+     *
+     * <p>{@code _} is a word character, so {@code \btime_entry\b} does not match
+     * {@code time_entry_id} and still matches {@code FROM time_entry e}. That is the whole change,
+     * and it makes the rule <em>stricter</em> rather than looser: nothing that was reported for a
+     * real crossing stops being reported.
+     */
+    private static Pattern namesTable(String table) {
+        return Pattern.compile("\\b" + Pattern.quote(table) + "\\b");
+    }
 
     private static final Pattern COMMENT =
             Pattern.compile("/\\*.*?\\*/|//[^\\n]*", Pattern.DOTALL);
@@ -96,7 +126,7 @@ class BillingReadsAndNeverWritesTest {
                         + "nothing")
                 .hasSizeGreaterThan(20);
         assertThat(sources().stream().map(path -> path.getFileName().toString()))
-                .contains("ApprovedTimeFacts.java", "package-info.java");
+                .contains("ApprovedTimeFacts.java", "IssueSubjectFacts.java", "package-info.java");
     }
 
     @Test
@@ -128,7 +158,7 @@ class BillingReadsAndNeverWritesTest {
         for (Path path : sources()) {
             String text = withoutComments(read(path));
             for (String table : OWNERS.keySet()) {
-                if (text.contains(table)) {
+                if (namesTable(table).matcher(text).find()) {
                     namers.get(table).add(path.getFileName().toString());
                 }
             }
@@ -177,7 +207,8 @@ class BillingReadsAndNeverWritesTest {
             while (at >= 0) {
                 String statement = upper.substring(at, Math.min(upper.length(), at + 200));
                 if (OWNERS.keySet().stream()
-                        .anyMatch(table -> statement.contains(table.toUpperCase(Locale.ROOT)))) {
+                        .anyMatch(table -> namesTable(table.toUpperCase(Locale.ROOT))
+                                .matcher(statement).find())) {
                     return true;
                 }
                 at = upper.indexOf(verb, at + 1);

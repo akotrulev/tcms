@@ -5,16 +5,26 @@
  * <h2>What this module may not do, stated first because both are failures with names</h2>
  *
  * <p>It <strong>reads {@code time}'s entries and the tracker's issue projection, and writes
- * neither.</strong> The whole of the first crossing is {@link com.tcms.billing.ApprovedTimeFacts};
- * nothing else here may name {@code time_entry} or {@code timesheet_period}, and nothing may name
- * {@code issue_fact} until the class that owns that crossing arrives with the invoice surface.
- * {@code BillingReadsAndNeverWritesTest} asserts both halves over source text, because ArchUnit
- * cannot see the rule — SQL is not a Java dependency. Sixth instance of a pattern with a name here:
- * {@code work.BoardFacts}, {@code execution.CaseFacts}, {@code tracker.release.ReleaseFacts},
- * {@code time.IssueFacts}, {@code staffing.TimeFacts}.
+ * neither.</strong> The two crossings are {@link com.tcms.billing.ApprovedTimeFacts}, the only file
+ * here that may name {@code time_entry} or {@code timesheet_period}, and
+ * {@link com.tcms.billing.IssueSubjectFacts}, the only one that may name {@code issue_fact}. The
+ * second arrived with 019 T4 and its first caller: T3 built no surface needing an issue's key or
+ * title, and a seam with no caller is the shape §121 deleted rather than kept.
+ * {@code BillingReadsAndNeverWritesTest} asserts both halves for both, over source text, because
+ * ArchUnit cannot see the rule — SQL is not a Java dependency. Sixth and seventh instances of a
+ * pattern with a name here: {@code work.BoardFacts}, {@code execution.CaseFacts},
+ * {@code tracker.release.ReleaseFacts}, {@code time.IssueFacts}, {@code staffing.TimeFacts}.
  *
- * <p><strong>The class is {@code ApprovedTimeFacts} and not {@code TimeFacts}, and the rename is
- * load-bearing rather than a preference</strong> (019 D-r). {@code staffing.TimeFacts} is a
+ * <p><strong>{@code invoice_line_entry.time_entry_id} is this module's own column and not a
+ * crossing</strong>, which is why {@link com.tcms.billing.InvoiceLineEntry} may name it: the whole
+ * point of that column is that it carries no foreign key and joins to nothing. The distinction is a
+ * token boundary rather than a substring, and the rule was widened to see it in 019 T4 — a check
+ * asking whether a file <em>contains</em> {@code time_entry} reported the entity for a column named
+ * after the table it deliberately does not reach.
+ *
+ * <p><strong>The classes are {@code ApprovedTimeFacts} and {@code IssueSubjectFacts} rather than
+ * {@code TimeFacts} and {@code IssueFacts}, and the renames are load-bearing rather than a
+ * preference</strong> (019 D-r). {@code staffing.TimeFacts} and {@code time.IssueFacts} are both
  * {@code @Component}, Spring's default bean name is the simple class name, and two of them collide
  * into a {@code ConflictingBeanDefinitionException} that stops the context booting —
  * {@code ArchitectureRulesTest.springStereotypesHaveDistinctSimpleNames} exists because §131 shipped
@@ -27,8 +37,10 @@
  * downstream-to-upstream, and {@code project} → {@code crm} is the reverse, held by an interface
  * precisely so that a rule ArchUnit cannot check is not the only thing keeping it honest. Where that
  * interface lacked what this module needed it grew a method — see
- * {@link com.tcms.project.ClientDirectory#activeClients()} — rather than this module growing a
- * query.
+ * {@link com.tcms.project.ClientDirectory#activeClients()} and
+ * {@link com.tcms.project.ClientDirectory#contactsOf(java.util.UUID)} — rather than this
+ * module growing a query. The second is 019 T4's, for an invoice's <em>Bill to</em>, and it is the
+ * reason {@link com.tcms.project.ClientContactRef} exists (019 D-u).
  *
  * <h2>{@code issue_time_rollup} is not read, and that is not an oversight</h2>
  *

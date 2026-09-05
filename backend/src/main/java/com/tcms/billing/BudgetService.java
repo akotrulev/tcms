@@ -192,6 +192,55 @@ public class BudgetService {
         });
     }
 
+    /**
+     * The budgets of a named set of projects, <strong>ungated</strong> — {@code invoice.html}'s
+     * <em>Budget effect</em> panel (019 T4).
+     *
+     * <p>Package-private and gating nothing, exactly as {@link RateCardService#cardFor} is: the only
+     * caller is {@link InvoiceService}, which has already refused a caller without
+     * {@code billing:read}, and a second gate here would be a second answer to a question one place
+     * already answered. Callers say so at the call site.
+     *
+     * <p>A project with no budget has no row, which is what makes the panel empty rather than
+     * dashed for an invoice against projects nobody has set a ceiling on — an ordinary state, and
+     * one {@code project-overview.html} draws by drawing no panel at all.
+     */
+    List<BudgetView> viewsFor(Collection<UUID> projectIds) {
+        if (projectIds.isEmpty()) {
+            return List.of();
+        }
+        Map<UUID, Project> byId = new HashMap<>();
+        for (Project project : projects.findAllByOrderByNameAsc()) {
+            if (projectIds.contains(project.getId())) {
+                byId.put(project.getId(), project);
+            }
+        }
+        if (byId.isEmpty()) {
+            return List.of();
+        }
+        List<Budget> rows = budgets.findByProjectIdIn(byId.keySet());
+        List<UUID> budgeted = rows.stream().map(Budget::getProjectId).toList();
+        Map<UUID, BigDecimal> approved = hours.approvedHoursOn(budgeted);
+        Map<UUID, Money> priced = pricedFor(
+                budgeted.stream().map(byId::get).filter(java.util.Objects::nonNull).toList());
+        Map<UUID, String> clientNames = clientNamesOf(byId.values());
+
+        List<BudgetView> views = new ArrayList<>(rows.size());
+        for (Budget budget : rows) {
+            Project project = byId.get(budget.getProjectId());
+            if (project == null) {
+                continue;
+            }
+            views.add(viewOf(
+                    project,
+                    budget,
+                    clientNames,
+                    approved.getOrDefault(project.getId(), BigDecimal.ZERO),
+                    priced.get(project.getId())));
+        }
+        return List.copyOf(views);
+    }
+
     /* ------------------------------------------------------------------ writes --- */
 
     /** {@code PUT /projects/{projectId}/budget} — {@code billing:budget}, a target state. */

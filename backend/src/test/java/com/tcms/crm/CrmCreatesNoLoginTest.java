@@ -6,14 +6,21 @@ import com.tcms.identity.PermissionEvaluator;
 import com.tcms.project.GateResult;
 import com.tcms.tenancy.CompanyContext;
 import com.tcms.tracker.TrackerEndpointTestBase;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -234,6 +241,82 @@ class CrmCreatesNoLoginTest extends TrackerEndpointTestBase {
                 .doesNotContain("invoice")
                 .doesNotContain("budget");
         assertThat(body).contains("acme retail");
+    }
+
+    /**
+     * The sibling 019 T4 added, and it is a sibling rather than a replacement.
+     *
+     * <p>{@link #theClientSurfaceCarriesNoMoneyWord} above is <strong>unchanged by M8 and must stay
+     * that way</strong>: its subject is {@code ClientDetail}, which carries no money word before or
+     * after this module. Deleting or weakening it to accommodate billing would be the boundary
+     * moving because a new module found it inconvenient, which is exactly what writing it before M8
+     * existed was meant to prevent.
+     *
+     * <p>What M8 adds is a <em>separate schema on a separate path</em>, and this records where — so
+     * the next reader of the assertion above does not conclude that the boundary moved, and so a
+     * second money-bearing path under a {@code clients} URL fails here rather than passing
+     * unnoticed.
+     *
+     * <p>Parsed from the document's text rather than from an object model, which is
+     * {@code billing.BillingMoneyBoundaryTest}'s device and the same argument: what is being
+     * asserted is what somebody wrote.
+     */
+    @Test
+    @DisplayName("019 — the one path under a clients URL where a money word is now allowed")
+    void theOnlyClientPathThatMayCarryMoneyIsTheBillingSummary() {
+        List<String> clientPaths = pathsTagged("clients");
+
+        assertThat(clientPaths)
+                .as("no clients-tagged path was found at all — the tag, the document's location or "
+                        + "this parser has moved, and the assertion below would pass over nothing")
+                .hasSizeGreaterThanOrEqualTo(4);
+        assertThat(clientPaths)
+                .as("""
+                        GET /clients/{clientId}/billing is billing's, gated on client:read, and it \
+                        is the only clients-tagged path that may serve an amount — and only to a \
+                        caller holding billing:read, which ClientBillingSummary.amountsVisible \
+                        answers server-side (019 D-i). Every other one is crm's and carries no \
+                        money word at all, which the assertion above is what proves.""")
+                .filteredOn(path -> path.endsWith("/billing"))
+                .singleElement()
+                .isEqualTo("/clients/{clientId}/billing");
+    }
+
+    /** Every path item in the contract whose operations carry this tag. */
+    private static List<String> pathsTagged(String tag) {
+        String contract;
+        try {
+            contract = Files.readString(Path.of("..", "docs", "specs", "openapi.yaml"));
+        } catch (IOException unreadable) {
+            throw new UncheckedIOException(
+                    "the contract is this rule's population, and backend/build.gradle.kts declares "
+                            + "docs/specs/ as a test input so it is on disk", unreadable);
+        }
+        int from = contract.indexOf("\npaths:");
+        int to = contract.indexOf("\ncomponents:");
+        String section = contract.substring(from, to > from ? to : contract.length());
+
+        Pattern pathItem = Pattern.compile("^ {2}(/\\S*):\\s*$");
+        String marker = "tags: [" + tag + "]";
+        List<String> tagged = new java.util.ArrayList<>();
+        String current = null;
+        StringBuilder body = new StringBuilder();
+        for (String line : section.split("\n", -1)) {
+            Matcher header = pathItem.matcher(line);
+            if (header.matches()) {
+                if (current != null && body.indexOf(marker) >= 0) {
+                    tagged.add(current);
+                }
+                current = header.group(1);
+                body.setLength(0);
+            } else if (current != null) {
+                body.append(line).append('\n');
+            }
+        }
+        if (current != null && body.indexOf(marker) >= 0) {
+            tagged.add(current);
+        }
+        return List.copyOf(tagged);
     }
 
     /**

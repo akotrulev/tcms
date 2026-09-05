@@ -10971,7 +10971,13 @@ paths:
         `unapprovedHours` is a plain number, because hours have no currency, and it is the figure
         the mockup labels *excluded from every draft*.
       parameters:
-        - name: on
+        # QUOTED, AND IT HAS TO BE. Unquoted `on` is a BOOLEAN in YAML 1.1, so SnakeYAML — which is
+        # what the backend's contract tests read this file with — parsed this parameter's name as
+        # `true` and reported GET /billing/summary as binding a parameter the contract does not
+        # declare. openapi-typescript reads YAML 1.2, where it is the string "on", so both generated
+        # copies were correct the whole time and no consumer could see it. Found by 019 T4, whose
+        # handler is the first to bind it. `off`, `yes` and `no` are the same trap.
+        - name: "on"
           in: query
           required: false
           schema: { type: string, format: date }

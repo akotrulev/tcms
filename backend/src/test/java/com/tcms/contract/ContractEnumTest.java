@@ -236,10 +236,24 @@ class ContractEnumTest {
             // currency is required or forbidden: a third member is a CHECK change before it is a
             // schema change, and this rule is what says so first.
             //
-            // InvoiceStatus is deliberately NOT here yet. The contract declares it, nothing serves
+            // ~~InvoiceStatus is deliberately NOT here yet. The contract declares it, nothing serves
             // it, and the enum arrives with the invoice surface (019 T4) — a placeholder pointing
             // at a type that does not exist would fail as a ClassNotFoundException naming this
-            // file rather than as the missing handler it actually is.
+            // file rather than as the missing handler it actually is.~~ -> It arrived in 019 T4,
+            // and it is the sharpest member pairing in this map: DRAFT and ISSUED are not two
+            // labels on one row, they are two ROW SHAPES that ck_invoice_issued holds apart (019
+            // D-c). A third member added to the contract without one here would be a state the
+            // database refuses; added here without the contract, a status no client can render.
+            //
+            // There is no SENT, PAID or VOID and none is planned (019 D-q): issuing sends nothing
+            // and nothing in this product records that an invoice was paid.
+            //
+            // ExcludedHours.reason is NOT in this map and could not be: it is an INLINE enum on
+            // that schema rather than a named component, so there is no schema name for
+            // billing.ExcludedReason to be paired with — and everySameNamedProductionEnumIsClaimed
+            // therefore does not see it either. What checks those two members agree is the
+            // serialized body in InvoiceLifecycleTest.
+            Map.entry("InvoiceStatus", List.of("com.tcms.billing.InvoiceStatus")),
             Map.entry("RateCardScope", List.of("com.tcms.billing.RateCardScope")),
             Map.entry("BudgetBasis", List.of("com.tcms.billing.BudgetBasis")));
 

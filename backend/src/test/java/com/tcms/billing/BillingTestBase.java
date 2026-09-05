@@ -172,6 +172,60 @@ public abstract class BillingTestBase extends TrackerEndpointTestBase {
     }
 
     /**
+     * One row of the tracker's issue projection, so an invoice entry has a key and a title to show.
+     *
+     * <p>{@code TimeTestBase} writes the same row for the same reason one module over: the
+     * projection is fed by an outbox event from {@code tracker}, and driving one through the tracker
+     * would make every class here a test of issue creation. What this module reads is the resulting
+     * row, so the row is what the fixture writes.
+     *
+     * <p>{@code ON CONFLICT DO NOTHING} because {@link #wipeBilling} deliberately leaves it: the
+     * subject of an hour is not a billing row, and re-inserting it per test would be the fixture
+     * asserting the tracker's uniqueness rather than anything this module does.
+     */
+    protected void issueFact(
+            UUID companyId, UUID projectId, UUID issueId, String issueKey, String title)
+            throws SQLException {
+
+        try (Connection connection = appConnection(companyId);
+                PreparedStatement statement = connection.prepareStatement("""
+                        INSERT INTO issue_fact (issue_id, company_id, project_id, issue_key, title,
+                                                type_name, type_level, counts_toward_completion,
+                                                status_name, status_kind, created_at,
+                                                status_entered_at)
+                        VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?,
+                                'Story', 'STORY', true, 'Backlog', 'NOT_STARTED', now(), now())
+                        ON CONFLICT (issue_id) DO NOTHING
+                        """)) {
+            statement.setObject(1, issueId);
+            statement.setObject(2, companyId);
+            statement.setObject(3, projectId);
+            statement.setString(4, issueKey);
+            statement.setString(5, title);
+            statement.executeUpdate();
+        }
+    }
+
+    /** One client contact, so an invoice has a {@code billTo} to address (019 D-u). */
+    protected void contact(UUID companyId, UUID contactId, UUID clientId, String name, String email)
+            throws SQLException {
+
+        try (Connection connection = appConnection(companyId);
+                PreparedStatement statement = connection.prepareStatement("""
+                        INSERT INTO client_contact (id, company_id, client_id, name, email)
+                        VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?)
+                        ON CONFLICT (id) DO NOTHING
+                        """)) {
+            statement.setObject(1, contactId);
+            statement.setObject(2, companyId);
+            statement.setObject(3, clientId);
+            statement.setString(4, name);
+            statement.setString(5, email);
+            statement.executeUpdate();
+        }
+    }
+
+    /**
      * Everything a billing class writes, in foreign-key order, plus the time rows behind it.
      *
      * <p>Per test method rather than per class. Every constraint this module leans on is a
@@ -183,7 +237,8 @@ public abstract class BillingTestBase extends TrackerEndpointTestBase {
         try (Connection connection = superuserConnection()) {
             for (String table : List.of(
                     "invoice_line_entry", "invoice_line", "invoice", "expense", "budget",
-                    "rate_card_entry", "rate_card", "time_entry", "timesheet_period")) {
+                    "rate_card_entry", "rate_card", "time_entry", "timesheet_period",
+                    "client_contact")) {
                 try (PreparedStatement statement = connection.prepareStatement(
                         "DELETE FROM " + table + " WHERE company_id = CAST(? AS uuid)")) {
                     statement.setObject(1, companyId);

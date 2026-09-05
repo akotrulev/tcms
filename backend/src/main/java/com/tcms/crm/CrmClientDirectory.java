@@ -1,6 +1,7 @@
 package com.tcms.crm;
 
 import com.tcms.api.ClientRef;
+import com.tcms.project.ClientContactRef;
 import com.tcms.project.ClientDirectory;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -28,9 +29,11 @@ import org.springframework.transaction.annotation.Transactional;
 class CrmClientDirectory implements ClientDirectory {
 
     private final ClientRepository clients;
+    private final ClientContactRepository contacts;
 
-    CrmClientDirectory(ClientRepository clients) {
+    CrmClientDirectory(ClientRepository clients, ClientContactRepository contacts) {
         this.clients = clients;
+        this.contacts = contacts;
     }
 
     @Override
@@ -72,6 +75,31 @@ class CrmClientDirectory implements ClientDirectory {
         List<ClientRef> refs = new ArrayList<>(active.size());
         for (Client client : active) {
             refs.add(new ClientRef(client.getId(), client.getName()));
+        }
+        return List.copyOf(refs);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>The client is resolved first, so a client this caller cannot see answers an empty list
+     * rather than reaching the contacts at all — RLS covers both reads, and asking twice makes the
+     * refusal a fact about the client rather than an accident of the second query returning nothing.
+     *
+     * <p>The same query and the same ordering {@link ClientService#read} renders the contacts panel
+     * from, so an invoice's <em>Bill to</em> and the client page cannot disagree about who is first.
+     */
+    @Override
+    public List<ClientContactRef> contactsOf(UUID clientId) {
+        if (clientId == null || clients.findById(clientId).isEmpty()) {
+            return List.of();
+        }
+        List<ClientContact> found = contacts.findByClientIdOrderByNameAsc(clientId);
+        List<ClientContactRef> refs = new ArrayList<>(found.size());
+        for (ClientContact contact : found) {
+            refs.add(new ClientContactRef(
+                    contact.getId(), contact.getName(), contact.getRole(),
+                    contact.getEmail(), contact.getPhone()));
         }
         return List.copyOf(refs);
     }
