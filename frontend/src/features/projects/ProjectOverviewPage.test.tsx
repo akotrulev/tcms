@@ -3,6 +3,7 @@ import { Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
 import type {
+  ClientRef,
   Issue,
   IssueSummary,
   PermissionKey,
@@ -126,6 +127,8 @@ interface Reads {
   // found it, verified it predated that task, and left it because T1 stages four files and this is
   // a fifth. It blocked every frontend gate in between.
   permissions?: PermissionKey[]
+  /** 018 Mc — the client this project is for, or `null` for internal work (the default). */
+  client?: ClientRef | null
 }
 
 function mockReads({
@@ -152,6 +155,7 @@ function mockReads({
   readiness = aReleaseReadiness(),
   failReadiness = false,
   permissions = ['project:read', 'issue:create'],
+  client = null,
 }: Reads = {}) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
@@ -173,7 +177,7 @@ function mockReads({
       return all
     }
     if (/^\/projects\/[^/]+$/.test(path)) {
-      return aProject({ id: PROJECT_ID, key: 'ACME', name: 'Acme Storefront', caseCount: 154 })
+      return aProject({ id: PROJECT_ID, key: 'ACME', name: 'Acme Storefront', caseCount: 154, client })
     }
     throw new Error(`unmocked read: ${path}`)
   }) as never)
@@ -564,10 +568,13 @@ describe('solo-overview.html is this screen, for a company with no clients', () 
       solo-overview.html. Nothing nags a company that has none — an empty "Client: —" chip is exactly
       the nagging the mockup rules out, and it is what a naive port produces.
 
-      Today this holds because `Project` carries no client field at all (clients are module Mc), so
-      the assertion is here to make Mc's arrival a deliberate decision: a chip added then will fail
-      this test on every project that has no client, which is the moment to decide rather than to
-      discover.
+      ~~Today this holds because `Project` carries no client field at all (clients are module Mc),
+      so the assertion is here to make Mc's arrival a deliberate decision.~~ → **Mc arrived
+      (018 T5), and the decision was made here rather than discovered.** `Project.client` exists
+      now and is `null` on this fixture, which is the common case rather than an edge: a project
+      with no client is internal work and nothing in the product marks it as missing one (scope D1
+      rule 1). The chip is rendered only when the field is non-null, and the test below is the other
+      half — a conditional proven only in its false arm is a conditional proven off.
     */
     mockReads()
     renderPage()
@@ -577,6 +584,24 @@ describe('solo-overview.html is this screen, for a company with no clients', () 
     expect(screen.queryByText(/^Client:/)).toBeNull()
     expect(screen.queryByText(/attach a client/i)).toBeNull()
     expect(screen.queryByText(/None \(internal\)/i)).toBeNull()
+  })
+
+  it('renders the client chip once the project HAS one — project-overview.html', async () => {
+    /*
+      The positive arm of the assertion above, and the reason both live here rather than in
+      `features/clients/ClientAbsence.test.tsx` with the module's three other surfaces: this screen
+      makes thirteen reads behind the mock above, and a second copy of it over there would be
+      thirteen more ways for a client assertion to fail for a reason that has nothing to do with
+      clients.
+    */
+    mockReads({ client: { id: 'cl-acme', name: 'Acme Retail' } })
+    renderPage()
+
+    expect(await screen.findByTestId('ProjectOverview.Client')).toHaveTextContent(
+      'Client: Acme Retail',
+    )
+    // And still no nag beside it: the chip states a fact, it does not invite anything.
+    expect(screen.queryByText(/attach a client/i)).toBeNull()
   })
 
   it('renders the quick-tasks panel for a project whose issues are all parentless', async () => {

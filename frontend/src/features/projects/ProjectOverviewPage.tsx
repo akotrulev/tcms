@@ -111,6 +111,20 @@ export function ProjectOverviewPage() {
           project.data && (
             <>
               <Identifier variant="strong">{project.data.key}</Identifier>
+              {/*
+                The client chip (018 Mc) — and its ABSENCE is an acceptance criterion of this
+                module, not a detail. `solo-overview.html` is this same screen for a company with
+                no clients: *"There is no Client chip in the header, no client column anywhere, and
+                no empty 'attach a client' prompt."* So this is rendered only when the project HAS
+                a client, and there is no "None (internal)" chip beside it — a project without one
+                is internal work, which is the common case, and nothing here marks it as missing
+                anything (scope D1 rule 1).
+              */}
+              {project.data.client && (
+                <span className="text-[13px] text-ink-3" data-testid={`${TEST_ID}.Client`}>
+                  Client: {project.data.client.name}
+                </span>
+              )}
               <span className="text-[13px] text-ink-3">
                 <Identifier variant="muted">{formatCount(project.data.caseCount)}</Identifier>{' '}
                 {pluralNoun(project.data.caseCount, 'case')}

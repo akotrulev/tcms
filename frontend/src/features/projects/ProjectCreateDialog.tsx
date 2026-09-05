@@ -11,11 +11,12 @@ import {
   Textarea,
 } from '../../components/ui';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect, type ChangeEvent } from 'react';
+import { useEffect, useState, type ChangeEvent } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { ApiError } from '../../api/client';
-import { useCreateProject } from '../../api/queries';
+import { useClients, useCreateProject } from '../../api/queries';
+import { useCanInCompany } from '../../auth/useCan';
 import type { Project } from '../../api/types';
 import { describeError } from '../../lib/describeError';
 
@@ -100,6 +101,23 @@ export function ProjectCreateDialog({
   onCreated: (project: Project) => void;
 }) {
   const create = useCreateProject();
+
+  /*
+    018 Mc's Client field. `project:create` is held by Instance Admin and Company Admin, and
+    `client:read` by those two plus Account Manager and Finance — so every caller who can reach this
+    form can read the list, and the `enabled` gate never withholds it from somebody who could use
+    it. It is there so a reader who cannot read clients never fires a 403 for a control they were
+    never meant to see.
+
+    The field renders only when the answer is non-empty: `project-new.html`'s own caption says
+    *"Shown because clients exist. A company with none never sees this field, and its projects are
+    not marked as missing one."*
+  */
+  const clientGate = useCanInCompany();
+  const clients = useClients({ status: 'ACTIVE', enabled: clientGate.can('client:read') });
+  const [clientId, setClientId] = useState('');
+  const companyHasClients = (clients.data?.length ?? 0) > 0;
+
   const {
     register,
     handleSubmit,
@@ -129,6 +147,8 @@ export function ProjectCreateDialog({
         key: values.key.trim(),
         name: values.name.trim(),
         description: values.description?.trim() || null,
+        // `null`, not omitted: "internal" is a real answer and the common one (scope D1 rule 1).
+        clientId: clientId === '' ? null : clientId,
       });
       onCreated(created);
       onClose();
@@ -189,6 +209,28 @@ export function ProjectCreateDialog({
                 {...register('name')}
               />
             </Field>
+            {companyHasClients && (
+              <Field
+                label="Client"
+                htmlFor="project-client"
+                help="Who this project is for. “None (internal)” is a value, not a gap."
+              >
+                <select
+                  id="project-client"
+                  className="w-full rounded-[6px] border border-line bg-panel px-2.5 py-1.5 text-[13px] text-ink"
+                  value={clientId}
+                  onChange={(event) => setClientId(event.target.value)}
+                  data-testid={`${TestId}.Client`}
+                >
+                  <option value="">None (internal)</option>
+                  {(clients.data ?? []).map((client) => (
+                    <option key={client.id} value={client.id}>
+                      {client.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
             <Field
               label="Description"
               htmlFor="project-description"

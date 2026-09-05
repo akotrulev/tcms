@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom';
-import { useProjects } from '../../api/queries';
+import { useClients, useProjects } from '../../api/queries';
+import { useCanInCompany } from '../../auth/useCan';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { Badge, HBar } from '../../components/kit';
@@ -60,6 +61,25 @@ export function ProjectsPage() {
   */
   const showArchived = params.get('archived') !== 'false';
 
+  /*
+    018 Mc's client filter, and the whole of it is conditional on the answer being non-empty.
+
+    A company with no clients must see NO Client control anywhere — not disabled, not showing
+    "None (internal)" alone, not an empty select (scope D1 rule 3). That is the module's acceptance
+    criterion and it is asserted as an absence in this file's test. `enabled` on the permission for
+    the reason `clients.ts` gives: a reader without `client:read` must not fire a 403 for a control
+    they were never meant to see.
+  */
+  const clientGate = useCanInCompany();
+  const clients = useClients({ status: 'ALL', enabled: clientGate.can('client:read') });
+  const companyHasClients = (clients.data?.length ?? 0) > 0;
+  const clientFilter = params.get('client') ?? '';
+
+  const clientNames = useMemo(
+    () => new Map((clients.data ?? []).map((client) => [client.id, client.name])),
+    [clients.data],
+  );
+
   const all = projects.data ?? [];
   /*
     Hidden by default, with a switch — the render draws one, and the audit found the list showing
@@ -71,8 +91,16 @@ export function ProjectsPage() {
     silently missing.
   */
   const archivedCount = all.filter((project) => project.archived).length;
-  const rows = showArchived ? all : all.filter((project) => !project.archived);
-  const hiddenByTheSwitch = all.length > 0 && rows.length === 0;
+  const byArchived = showArchived ? all : all.filter((project) => !project.archived);
+  /*
+    Filtered here rather than server-side, because `GET /projects` declares no client parameter and
+    the list is a picker of a handful of cards — the same reason the archived switch filters here.
+    `clientFilter` is in the URL so the narrowed list can be sent to somebody, this codebase's rule.
+  */
+  const rows =
+    clientFilter === '' ? byArchived : byArchived.filter((project) => project.client?.id === clientFilter);
+  const hiddenByTheSwitch = all.length > 0 && rows.length === 0 && clientFilter === '';
+  const hiddenByTheClient = clientFilter !== '' && rows.length === 0;
   /*
     Guarded at 1 rather than at 0: a list where every project has no cases would divide by zero and
     render `NaN%`-wide bars. One means every bar is empty, which is the truthful drawing of that.
@@ -102,6 +130,44 @@ export function ProjectsPage() {
                 data-testid="Projects.ShowArchived"
               />
               Show archived ({formatCount(archivedCount)})
+            </label>
+          )}
+          {/*
+            The Client filter (018 Mc), and it renders ONLY when the company has at least one
+            client. Not disabled and not empty: an empty "Client: any" is exactly the nagging
+            `solo-overview.html` rules out, and a company building its own products is the owner's
+            own worked example rather than an edge case.
+
+            A native `<select>` rather than the kit's `Combobox`: the list is a handful of names
+            with no search worth having, and the picker has to be reachable in one keystroke beside
+            a switch.
+          */}
+          {companyHasClients && (
+            <label className="flex items-center gap-2 text-[12px] text-ink-3" data-testid="Projects.ClientFilter">
+              Client
+              <select
+                className="rounded-[6px] border border-line bg-panel px-2 py-1 text-[12px] text-ink"
+                value={clientFilter}
+                onChange={(event) =>
+                  setParams(
+                    (current) => {
+                      const next = new URLSearchParams(current);
+                      if (event.target.value === '') next.delete('client');
+                      else next.set('client', event.target.value);
+                      return next;
+                    },
+                    { replace: true },
+                  )
+                }
+                data-testid="Projects.ClientFilter.Select"
+              >
+                <option value="">Any</option>
+                {(clients.data ?? []).map((client) => (
+                  <option key={client.id} value={client.id}>
+                    {client.name}
+                  </option>
+                ))}
+              </select>
             </label>
           )}
           {/*
@@ -149,7 +215,24 @@ export function ProjectsPage() {
         state={{ ...projects, refetch: () => void projects.refetch() }}
         isEmpty={() => rows.length === 0}
         empty={
-          hiddenByTheSwitch
+          hiddenByTheClient
+            ? {
+                kind: 'no-filter-match',
+                title: 'No projects for that client',
+                hidden: byArchived.length,
+                filters: 1,
+                noun: 'project',
+                onClearFilters: () =>
+                  setParams(
+                    (current) => {
+                      const next = new URLSearchParams(current);
+                      next.delete('client');
+                      return next;
+                    },
+                    { replace: true },
+                  ),
+              }
+          : hiddenByTheSwitch
             ? {
                 kind: 'no-filter-match',
                 title: 'Every project you can open is archived',
@@ -204,6 +287,21 @@ export function ProjectsPage() {
                   )}
                 </span>
                 <span className="mb-3 block text-[13px] text-ink-4">{project.description}</span>
+                {/*
+                  018 Mc. Rendered only when the project HAS a client — a project without one is
+                  internal work, which is the common case, and nothing in this product marks it as
+                  missing one (scope D1 rule 1). There is no "None (internal)" line here for that
+                  reason: the mockup's table has a column that must say something in every cell,
+                  and a card has no such obligation.
+                */}
+                {project.client && (
+                  <span
+                    className="mb-3 block text-[12px] text-ink-3"
+                    data-testid="Projects.Card.Client"
+                  >
+                    {clientNames.get(project.client.id) ?? project.client.name}
+                  </span>
+                )}
                 <HBar
                   label="Cases"
                   fraction={project.caseCount / largest}

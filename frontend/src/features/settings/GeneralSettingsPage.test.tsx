@@ -60,6 +60,13 @@ function mockReads(
     if (/^\/projects\/[^/]+$/.test(path)) {
       return aProject({ id: PROJECT_ID, key: 'ACME', name: 'Acme Storefront', caseCount: 12 })
     }
+    /*
+      018 T5's ClientPanel reads this. Answered EMPTY, which is the state every test in this file is
+      about: with no clients the panel does not render at all, so none of these assertions has to
+      account for a control that is not there. The panel's own two arms are asserted in
+      `features/clients/ClientAbsence.test.tsx`, both directions.
+    */
+    if (/\/settings\/client-options$/.test(path)) return []
     throw new Error(`unmocked read: ${path}`)
   }) as never)
 }

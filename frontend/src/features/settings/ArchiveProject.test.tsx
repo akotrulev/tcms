@@ -60,6 +60,13 @@ function mockReads(permissions: PermissionKey[], project: Project = LIVE, projec
     // the same reason as the workflow arm above it.
     if (/^\/projects\/[^/]+\/settings$/.test(path)) return projectSettings({ projectId: 'p1' })
     if (/^\/projects\/[^/]+$/.test(path)) return project
+    /*
+      018 T5's ClientPanel reads this. Answered EMPTY, which is the state every test in this file is
+      about: with no clients the panel does not render at all, so none of these assertions has to
+      account for a control that is not there. The panel's own two arms are asserted in
+      `features/clients/ClientAbsence.test.tsx`, both directions.
+    */
+    if (/\/settings\/client-options$/.test(path)) return []
     throw new Error(`unmocked read: ${path}`)
   }) as never)
 }

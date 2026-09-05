@@ -4,6 +4,8 @@ import {
   useProjectSettings,
   useProjectWorkflow,
   useSetProjectArchived,
+  useProjectClientOptions,
+  useSetProjectClient,
   useUpdateProjectSettings,
 } from '../../api/queries';
 import type { IssueTypeRef, Project, ProjectSettings } from '../../api/types';
@@ -28,7 +30,7 @@ const TEST_ID = 'GeneralSettings';
  *
  * | Mockup panel | Module | Why it is not here |
  * |---|---|---|
- * | Client select | Mc | `Project` carries no client, so the control could only ever say "None". An empty "Client: —" is exactly the nagging `solo-overview.html` rules out |
+ * | ~~Client select~~ | ~~Mc~~ | → **landed 2026-09-05 (018 T4/T5)** as {@link ClientPanel}. The reason it was absent is now the reason it is CONDITIONAL: it renders only when the company has at least one client, so a company with none still sees no "Client: —" |
  * | ~~"Closing work" review toggles~~ | ~~M5~~ | → **landed in 015 T5.** `review_enabled_issue` exists and `TransitionService` reads it, so the toggle changes behaviour |
  * | ~~"Time" panel~~ | ~~M6~~ | → **landed 2026-09-04 (016 T5)** as {@link TimePanel}. Its *Budget* row did **not**: that row reads `Edit in Billing`, and there is no hours ceiling, no rate and no Billing screen — M8's, all three |
  *
@@ -98,6 +100,13 @@ export function GeneralSettingsPage() {
             state={{ ...project, refetch: () => void project.refetch() }}
           >
             {(current) => <IdentityPanel project={current} />}
+          </DataRegion>
+
+          <DataRegion
+            testId={`${TEST_ID}.Client`}
+            state={{ ...project, refetch: () => void project.refetch() }}
+          >
+            {(current) => <ClientPanel projectId={projectId} project={current} canEdit={canEdit} />}
           </DataRegion>
 
           <DataRegion
@@ -292,6 +301,75 @@ function TimePanel({
           The mockup&rsquo;s <strong>Budget</strong> row is not here: there is no hours ceiling and
           no rate in this build, and what an hour costs is on no screen anybody can reach.
         </span>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * `settings-general.html`'s Client row (018 Mc) — story C2's picker.
+ *
+ * <h2>It costs `project:settings`, not `client:read`</h2>
+ *
+ * Plan 010 D-M0-9: Project Manager is PROJECT-scope, so a company-wide `client:read` would be an
+ * inert row for them, and granting it to the `Company Member` baseline would break the one sentence
+ * that role is defined by. So the options come from
+ * `GET /projects/{id}/settings/client-options` — a separate path from the settings document, which
+ * anyone who can see the project may read, because a list of every client the company has is not
+ * that kind of fact.
+ *
+ * <h2>Saved on change, and NOT through the settings document</h2>
+ *
+ * `PUT /projects/{projectId}/client`, one field, the shape `…/archive` already uses. It was briefly
+ * a field on `ProjectSettingsUpdate` and 018 D-d records the reversal: an absent nullable id and an
+ * explicit `null` are the same Java value, so a save from the *Review* screen — which does not
+ * offer this control — would have silently detached the project.
+ *
+ * <h2>Absent, not empty, for a company with no clients</h2>
+ *
+ * The whole panel is conditional on the options being non-empty. This file's own header table has
+ * said why since M1: *"an empty 'Client: —' is exactly the nagging `solo-overview.html` rules out."*
+ */
+function ClientPanel({
+  projectId,
+  project,
+  canEdit,
+}: {
+  projectId: string;
+  project: Project;
+  canEdit: boolean;
+}) {
+  const options = useProjectClientOptions(projectId, canEdit);
+  const save = useSetProjectClient(projectId);
+
+  if ((options.data?.length ?? 0) === 0) return null;
+
+  return (
+    <section className="rounded-[10px] border border-line bg-panel" data-testid={`${TEST_ID}.Client.Panel`}>
+      <div className="border-b border-line px-3.5 py-2.5">
+        <h2 className="m-0 text-[13.5px] font-semibold text-ink">Client</h2>
+      </div>
+      <div className="px-3.5 py-3">
+        <select
+          className="w-full max-w-sm rounded-[6px] border border-line bg-panel px-2.5 py-1.5 text-[13px] text-ink disabled:opacity-60"
+          value={project.client?.id ?? ''}
+          disabled={!canEdit || save.isPending}
+          onChange={(event) =>
+            void save.mutateAsync(event.target.value === '' ? null : event.target.value)
+          }
+          data-testid={`${TEST_ID}.Client.Select`}
+        >
+          <option value="">None (internal)</option>
+          {(options.data ?? []).map((client) => (
+            <option key={client.id} value={client.id}>
+              {client.name}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1.5 mb-0 max-w-[62ch] text-[12px] leading-[1.55] text-ink-4">
+          Who this project is for. <strong>“None (internal)” is a value, not a gap</strong> — a
+          project with no client is not marked as missing one anywhere in the product.
+        </p>
       </div>
     </section>
   );
