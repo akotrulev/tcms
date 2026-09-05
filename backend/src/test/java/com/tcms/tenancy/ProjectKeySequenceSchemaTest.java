@@ -95,7 +95,9 @@ class ProjectKeySequenceSchemaTest extends IntegrationTestBase {
         UUID projectId;
         try (var ignored = CompanyContext.open(company.companyId())) {
             ProjectCreateService.Outcome outcome = projectCreation.create(
-                    company.adminUserId(), new ProjectWriteRequest("PKS2", "Pks Second Product", null));
+                    company.adminUserId(),
+                    // No client: this test is about the key sequence, and 018 added the field.
+                    new ProjectWriteRequest("PKS2", "Pks Second Product", null, null));
             assertThat(outcome)
                     .as("the fixture must actually create a project — a Forbidden or Invalid "
                             + "outcome would make the assertion below vacuously green")

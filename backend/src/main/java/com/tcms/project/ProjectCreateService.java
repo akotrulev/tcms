@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 /**
@@ -105,13 +106,23 @@ public class ProjectCreateService {
     private final EntityManager entityManager;
     private final Clock clock;
 
+    /**
+     * Supplied by {@code crm}, which this module may not import — see {@link ClientDirectory}.
+     *
+     * <p>{@link ObjectProvider} for {@link ProjectService}'s reason: a missing implementation means
+     * no client id validates, and a create naming one is refused with a field error rather than
+     * attaching a project to a row nothing can confirm exists.
+     */
+    private final ObjectProvider<ClientDirectory> clients;
+
     public ProjectCreateService(
             ProjectService projects,
             ProjectRepository repository,
             ProjectSettingsService settings,
             AuditEventRepository auditEvents,
             EntityManager entityManager,
-            Clock clock) {
+            Clock clock,
+            ObjectProvider<ClientDirectory> clients) {
 
         this.projects = projects;
         this.repository = repository;
@@ -119,6 +130,7 @@ public class ProjectCreateService {
         this.auditEvents = auditEvents;
         this.entityManager = entityManager;
         this.clock = clock;
+        this.clients = clients;
     }
 
     /** What happened. Sealed, so the controller's mapping over it is exhaustive at compile time. */
@@ -167,6 +179,11 @@ public class ProjectCreateService {
      * Runs inside {@code createGranted}'s transaction, so {@code app.current_company} is set and
      * every insert below is covered by the RLS {@code WITH CHECK} rather than merely intended to be.
      */
+    private boolean clientIsVisible(UUID clientId) {
+        ClientDirectory directory = clients.getIfAvailable();
+        return directory != null && directory.existsInCompany(clientId);
+    }
+
     private Outcome validateAndCreate(UUID userId, ProjectWriteRequest request) {
         UUID companyId = CompanyContext.require();
         Instant now = clock.instant();
@@ -177,7 +194,15 @@ public class ProjectCreateService {
         String submittedKey = request.key() == null ? null : request.key().strip();
         boolean keyTaken = submittedKey != null && repository.existsByKey(submittedKey);
 
-        ProjectEdit.Outcome validated = ProjectEdit.validateCreate(request, keyTaken);
+        /*
+          Asked only when a client was named, which is the common case NOT to ask: a company with no
+          clients sends null on every create, and a lookup per project creation for a field nobody
+          filled in would be a query whose answer is always the same.
+        */
+        boolean clientUnknown = request.clientId() != null && !clientIsVisible(request.clientId());
+
+        ProjectEdit.Outcome validated =
+                ProjectEdit.validateCreate(request, keyTaken, clientUnknown);
         if (validated instanceof ProjectEdit.Outcome.Invalid invalid) {
             return new Outcome.Invalid(invalid.errors());
         }
@@ -189,8 +214,12 @@ public class ProjectCreateService {
         // ahead of the query anyway — the explicit call is what stops this depending on a flush
         // mode nobody set deliberately, which is the same survivor CompanyProvisioningService
         // records against the same call.
-        Project project = repository.saveAndFlush(Project.create(
-                projectId, companyId, edit.key(), edit.name(), edit.description(), now));
+        Project project = Project.create(
+                projectId, companyId, edit.key(), edit.name(), edit.description(), now);
+        // Before the flush, so the row is inserted with its client rather than updated a statement
+        // later — and so `fk_project_client` is checked by the same insert the RLS WITH CHECK is.
+        project.attachClient(edit.clientId());
+        repository.saveAndFlush(project);
 
         seedDefaults(companyId, projectId);
 

@@ -11958,6 +11958,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/client": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Attach this project to a client, change it, or detach it
+         * @description Requires `project:settings` on this project — story C2's key, and **not** `client:read`
+         *     (scope D1, plan 010 D-M0-9). Project Manager is PROJECT-scope, so a company-wide
+         *     `client:read` would be an inert row for them.
+         *
+         *     **One field, and it is the target state rather than a verb** — the shape
+         *     `PUT /projects/{projectId}/archive` already uses, for its reason: a pair of attach/detach
+         *     endpoints would make the client decide which to call from a copy of the state it may have
+         *     read minutes ago. Sending the client the project already has is a no-op that answers `200`.
+         *
+         *     **It is its own endpoint and not a field on the settings document, and that is a decision
+         *     (018 D-d).** A nullable id has no safe reading of an *absence* in either direction: "leave
+         *     it alone" and "detach" are the same absence, and unlike a boolean it cannot be defaulted
+         *     out of the problem. On a full-replacement document the two are indistinguishable to a
+         *     record, so a save from the Review screen — which does not offer this field — would have
+         *     silently detached the project. One field on its own path has no absence to read.
+         *
+         *     `null` detaches, and is a legitimate target state rather than a clearing operation: a
+         *     project with no client is internal work, which is the common case (scope D1 rule 1).
+         *
+         *     A client id belonging to **another company** answers `400` with a field error on `clientId`,
+         *     never a `500` from the foreign key: `fk_project_client` is on `id` alone and referential
+         *     integrity is not subject to RLS, so the service reads the client back through RLS before
+         *     writing (018 D-l).
+         */
+        put: operations["setProjectClient"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/settings/client-options": {
         parameters: {
             query?: never;
@@ -12336,19 +12380,6 @@ export interface components {
             /** Format: uuid */
             projectId: string;
             /**
-             * @description The project's client, repeated here from `Project` so the `PUT` beside this answers
-             *     with the field it just saved — a form whose save response omits what it wrote has to
-             *     invalidate and re-read to show what it did.
-             *
-             *     **The picker's OPTIONS are not here.** This document is readable by anyone who can see
-             *     the project, deliberately, and an array of every client the company has is not that
-             *     kind of fact: it is `GET /projects/{projectId}/settings/client-options`, gated on
-             *     `project:settings` (plan 018 D-e).
-             *
-             *     Absent from `required` for the reason `Project.client` is.
-             */
-            client?: components["schemas"]["ClientRef"] | null;
-            /**
              * @description §6g's opt-in for cases. **Off by default.** When false the reviewer apparatus does
              *     not exist for cases in this project — no review is opened, no peer verdict can be
              *     recorded, and the client renders no panel. The **status ladder is unaffected**:
@@ -12446,14 +12477,13 @@ export interface components {
          *     would take a project's `Logged` column and both time panels away and refuse its next
          *     entry — so an omission here reads as "leave it on", which is also 016 D-g's default.
          *
-         *     **`clientId` is required and nullable, and it is the one field here where omission has no
-         *     safe reading in either direction.** An absent boolean can default to the state that
-         *     destroys nothing; an absent nullable id cannot, because "leave it alone" and "detach" are
-         *     the same absence. Reading it as detach would let the Review screen's save quietly unbill a
-         *     project, and reading it as leave-alone would make this document not a full replacement. So
-         *     a body without the key is a `400`, and
-         *     `frontend/src/features/settings/settingsUpdate.ts` — the one place the field list is
-         *     written — lists it (plan 018 D-d).
+         *     ~~`clientId` is required and nullable…~~ → **superseded before it shipped (018 D-d).** The
+         *     client is not on this document at all: it is `PUT /projects/{projectId}/client`. A nullable
+         *     id has no safe reading of an absence in *either* direction — "leave it alone" and "detach"
+         *     are the same absence — and unlike a boolean it cannot be defaulted out of the problem. The
+         *     contract could declare it required, but a record cannot tell an absent field from a null
+         *     one, so the server would have answered `200` and detached where the description promised a
+         *     `400`. A single-field endpoint has no absence to read.
          */
         ProjectSettingsUpdate: {
             /** @default false */
@@ -12474,13 +12504,6 @@ export interface components {
             reviewEnabledIssue: boolean;
             /** @default true */
             trackTime: boolean;
-            /**
-             * Format: uuid
-             * @description The client this project is for, or `null` for internal work. **Required** — see this
-             *     schema's description. A client id belonging to another company answers `400` with a
-             *     field error here, for `ProjectInput.clientId`'s reason.
-             */
-            clientId: string | null;
         };
         /**
          * @description What switching review **off** — or raising `requiredPeerReviews` — would land on (005
@@ -19733,6 +19756,19 @@ export interface components {
             phone?: string | null;
         };
         /**
+         * @description The body of `PUT /projects/{projectId}/client`. **One field, required and nullable** — the
+         *     target state, not a verb. `null` means internal work, which is a real answer and the common
+         *     one; there is no synthetic "Internal" client to name instead (scope D1 rule 1).
+         *
+         *     Required is meaningful here in a way it would not be on a multi-field replacement: this
+         *     object has exactly one key, so a body without it is an empty object, which no caller sends
+         *     by accident.
+         */
+        ProjectClientInput: {
+            /** Format: uuid */
+            clientId: string | null;
+        };
+        /**
          * @description A name is enough — `client.html`'s third contact has no phone, and that is a whole contact.
          *
          *     **No credential field exists on this schema**, which is the contract's half of "a contact
@@ -25910,6 +25946,36 @@ export interface operations {
                 };
                 content?: never;
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    setProjectClient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectClientInput"];
+            };
+        };
+        responses: {
+            /** @description The project as it now stands */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];

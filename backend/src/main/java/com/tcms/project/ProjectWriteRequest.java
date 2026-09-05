@@ -1,5 +1,7 @@
 package com.tcms.project;
 
+import java.util.UUID;
+
 /**
  * {@code ProjectInput} in {@code docs/specs/openapi.yaml} — the body of {@code POST /projects}.
  *
@@ -13,6 +15,15 @@ package com.tcms.project;
  * @param key         client-supplied, unlike every display key in the product. See
  *                    {@link ProjectEdit} for the difference and why it is not allocated.
  * @param description nullable, per the contract
+ * @param clientId    the client this project is for, or {@code null} for internal work — optional,
+ *                    and {@code project-new.html}'s Client field, which is itself rendered only
+ *                    when the company has at least one client. <strong>A client belonging to
+ *                    another company is a {@code 400} on this field and not a {@code 500}</strong>:
+ *                    {@code fk_project_client} is on {@code id} alone and referential integrity is
+ *                    not subject to RLS, so the constraint would accept it — see
+ *                    {@link ClientDirectory#existsInCompany}, which is the check that does not
+ *                    (018 D-l). This is the one field here that is not server-owned and still needs
+ *                    validating against something outside the request.
  */
-public record ProjectWriteRequest(String key, String name, String description) {
+public record ProjectWriteRequest(String key, String name, String description, UUID clientId) {
 }

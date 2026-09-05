@@ -1,5 +1,6 @@
 package com.tcms.project;
 
+import com.tcms.api.ClientRef;
 import java.util.UUID;
 
 /**
@@ -27,6 +28,13 @@ import java.util.UUID;
  * @param myRole      the caller's PROJECT-scope role name, or {@code null} when they reach
  *                    this project through a COMPANY-scope grant instead. Display only:
  *                    nothing may branch on it (plan §6b).
+ * @param client      the client this project is for, or {@code null} for internal work (scope D1).
+ *                    <strong>{@code null} is the common case and is not a deficiency</strong> — the
+ *                    owner's own worked example is a company building its own products, and nothing
+ *                    in this product renders a project without a client as missing one. Resolved
+ *                    through {@link ClientDirectory}, so it is also {@code null} for a client this
+ *                    caller cannot see; the two are indistinguishable on purpose, because both mean
+ *                    "no client to show here" and neither is worth telling apart.
  */
 public record ProjectView(
         UUID id,
@@ -35,5 +43,6 @@ public record ProjectView(
         String description,
         boolean archived,
         long caseCount,
-        String myRole) {
+        String myRole,
+        ClientRef client) {
 }

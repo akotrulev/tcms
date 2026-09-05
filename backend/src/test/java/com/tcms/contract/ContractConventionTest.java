@@ -957,7 +957,41 @@ class ContractConventionTest {
             Map.entry("ProjectStaffingPerson",
                     List.of(com.tcms.staffing.ProjectStaffingPersonView.class)),
             Map.entry("ProjectStaffingView",
-                    List.of(com.tcms.staffing.ProjectStaffingView.class)));
+                    List.of(com.tcms.staffing.ProjectStaffingView.class)),
+            // ---- 018 Mc's client block ----
+            //
+            // Two entity/view splits on the same argument as the staffing block above: `Client` and
+            // `ClientContact` are entity CLASSES carrying company_id, the audit columns and
+            // lock_version, none of which is on a view, so the `…View` half of each pair is what
+            // this map names. `ClientView` is also where the two COMPUTED fields live —
+            // projectCount and contactCount — which the entity has no business holding.
+            //
+            // `ClientRef` is the one entry here whose owner is in `api`, and that is the module
+            // boundary showing up in this map. Two modules serve it: `crm` (the picker) and
+            // `project` (ProjectView.client), and `project` is a foundation module that may not
+            // import `crm`. Declaring the shape in each would have been two records over one wire
+            // type — which the repeated-shape rule in ArchitectureRulesTest exists to catch — so it
+            // sits beside UserRef, in the module that holds the wire shapes more than one module
+            // serves.
+            //
+            // `ClientProject` has no table behind it at all: it is a `project` row seen from the
+            // client page, at the four fields Project already carries. client.html draws Lead, Next
+            // release, Hours and Completion beside them and none of those is on any project read
+            // shape today, so a fifth component here would be a column over a number nothing sends.
+            //
+            // `ProjectClientInput` is a request body with one field, and it is the reason 018 D-d
+            // reversed itself: the client was briefly a field on ProjectSettingsUpdate, where an
+            // absent nullable id and an explicit null are the same Java value and "leave it alone"
+            // and "detach" are the same absence. One field on its own path has no absence to read.
+            Map.entry("ClientRef", List.of(com.tcms.api.ClientRef.class)),
+            Map.entry("Client", List.of(com.tcms.crm.ClientView.class)),
+            Map.entry("ClientInput", List.of(com.tcms.crm.ClientWriteRequest.class)),
+            Map.entry("ClientDetail", List.of(com.tcms.crm.ClientDetailView.class)),
+            Map.entry("ClientProject", List.of(com.tcms.crm.ClientProjectView.class)),
+            Map.entry("ClientContact", List.of(com.tcms.crm.ClientContactView.class)),
+            Map.entry("ClientContactInput",
+                    List.of(com.tcms.crm.ClientContactWriteRequest.class)),
+            Map.entry("ProjectClientInput", List.of(com.tcms.crm.ProjectClientRequest.class)));
 
     /**
      * The owners this file cannot name as class literals, because they are package-private.
@@ -1088,6 +1122,20 @@ class ContractConventionTest {
      * an edit rather than an argument.
      */
     private static final Map<String, String> HOMONYMS = Map.of(
+            // 018 Mc's one, and it is the naming hazard that module's own breakdown flagged in
+            // advance — under the wrong name. It predicted a collision on `clientId`, which is the
+            // OIDC identity provider's field, and the CRM schemas were named to avoid it. The
+            // collision landed one noun over instead: an OAuth CLIENT is a registered application,
+            // and a CRM client is a company's customer. English spells them the same and neither is
+            // renameable without making it wrong about what it is.
+            "com.tcms.auth.SocialProperties.Client",
+            "an OAUTH client — the id and secret this instance registers with GitHub or Google. It "
+                    + "never reaches the wire, it predates the crm module by many slices, and it "
+                    + "is a nested config record rather than a response. The Client schema is a "
+                    + "company's CUSTOMER, an attribute of a project (scope D1), served by "
+                    + "crm.ClientView. Two unrelated shapes with one English word, and the one "
+                    + "thing they share is that renaming either would make it wrong",
+
             // 017 M7's two, and they are the cheapest kind of entry this map takes: the collision
             // is one English word, both records predate the staffing module by many slices, and
             // neither ever reaches the wire. Reserving a block of display-key numbers IS an

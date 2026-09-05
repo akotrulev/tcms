@@ -166,11 +166,26 @@ class ModuleStructureTest {
                         `staffing:allocate` and the company one for the three COMPANY keys, which \
                         is why `ProjectService` grew `readInCompany` and `holdsInCompany` in the \
                         same task. `StaffingReadsNoTimeEntryTest` asserts the crossing over source \
-                        text, because SQL is not a Java dependency and this rule cannot see it.""")
+                        text, because SQL is not a Java dependency and this rule cannot see it. \
+                        018 Mc adds `crm`, and it is the first module here whose crossing runs the \
+                        OTHER way. Every one above it reads a module it may not import, through one \
+                        `*Facts` class of native SQL — `staffing` -> `time`, `time` -> `tracker`. \
+                        This one is READ BY a module that may not import it: `project` stores \
+                        `client_id` and must serve the client's NAME on `ProjectView`, and \
+                        `project` is a foundation module. A `project.ClientFacts` would have been \
+                        the sixth instance of the pattern and would have been wrong — all five \
+                        point downstream to upstream, and this edge is upstream to downstream, \
+                        which ArchUnit cannot see precisely because SQL is not a Java dependency. \
+                        So it is the OTHER pattern in that package instead: `project` declares \
+                        `ClientDirectory` and `crm` implements it, as `identity` does for \
+                        `PeopleDirectory` and `integration` for `TrackerBindingDirectory`. It also \
+                        takes four foundation modules rather than five — `storage` is absent \
+                        because nothing here has an attachment, and `client.html`'s Contracts \
+                        panel is built by no module at all.""")
                 .containsExactly(
-                        "api", "auth", "documentation", "execution", "identity", "integration",
-                        "project", "provisioning", "reporting", "repository", "staffing", "storage",
-                        "tenancy", "time", "tracker", "work");
+                        "api", "auth", "crm", "documentation", "execution", "identity",
+                        "integration", "project", "provisioning", "reporting", "repository",
+                        "staffing", "storage", "tenancy", "time", "tracker", "work");
     }
 
     @Test

@@ -19,13 +19,12 @@ import type { ProjectSettings, ProjectSettingsUpdate } from '../../api/types';
  * not a licence to drop it. Sending the current value is what makes the Review screen's save leave
  * the switch where the administrator put it, whichever way round the server's default is.
  *
- * **`clientId` is the one field the server REFUSES when it is absent** (018 D-d), and it is the
- * only field here for which that is the right answer. An absent boolean can default to the state
- * that destroys nothing; an absent nullable id cannot, because "leave it alone" and "detach" are
- * the same absence, and reading it as detach would let this Review screen's save quietly unbill a
- * project. So the contract marks it `required` and a body without it is a 400 — which is why
- * adding it to the contract made *this file* a compile error rather than making two screens
- * silently disagree. That is the whole point of the list living here.
+ * **The project's CLIENT is deliberately not on this document** (018 D-d). It was, for one commit,
+ * and moving it out is what this file's own argument demands rather than contradicts: a nullable id
+ * has no safe reading of an absence in *either* direction — "leave it alone" and "detach" are the
+ * same absence — so unlike every boolean above it, no default could be chosen that does not destroy
+ * something. It is `PUT /projects/{projectId}/client`, one field on its own path, which has no
+ * absence to read. `PUT /projects/{projectId}/archive` is the same shape for the same reason.
  */
 export function fullSettingsUpdate(
   current: ProjectSettings,
@@ -43,11 +42,5 @@ export function fullSettingsUpdate(
     editAfterApproval: next.editAfterApproval,
     requireApprovedCaseForRun: next.requireApprovedCaseForRun,
     trackTime: next.trackTime,
-    /*
-      `clientId` and not `client`: the read shape carries a `ClientRef` so a screen can render the
-      name without a second call, and the write carries the id. `?? null` rather than an omission —
-      see the header: null is "internal", which is a real answer and the common one.
-    */
-    clientId: next.client?.id ?? null,
   };
 }

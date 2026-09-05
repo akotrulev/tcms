@@ -162,13 +162,6 @@ describe('ReviewSettingsPage', () => {
 
     await waitFor(() => expect(put).toHaveBeenCalled())
     expect(put.mock.calls[0][1]).toEqual({
-      /*
-        018 D-d's field. This form does not offer it — the Client select is General's — so it is
-        here for exactly the reason `reviewEnabledIssue` above is: a field the form carries and
-        omits from the PUT is one the server acts on. For this one the server does not default it
-        at all, it refuses, so an omission is a 400 rather than a silent detach.
-      */
-      clientId: null,
       // Carried through untouched, and that is the point of this assertion since 015 T5: this form
       // does not offer D33's gate and General does, so a save here must not switch it off.
       reviewEnabledIssue: false,

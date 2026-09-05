@@ -50,6 +50,29 @@ public class Project {
     @Column(name = "description")
     private String description;
 
+    /**
+     * The client this project is for, or {@code null} for internal work (scope D1).
+     *
+     * <p><strong>A plain {@code UUID} and not a {@code @ManyToOne}.</strong> The row lives in
+     * {@code crm}, which is not a foundation module, so an association would be an import this
+     * module may not make — and {@code ddl-auto: validate} would then check two mappings over one
+     * table, which is {@code execution.CaseFacts}' recorded reason for refusing that shape. The
+     * name is resolved through {@link ClientDirectory}, which {@code crm} supplies.
+     *
+     * <p><strong>Nullable forever, and there is no synthetic "Internal" client</strong> (scope D1
+     * rule 1). That row would put a fake customer on every internal project, pollute every client
+     * rollup with a company billing itself, and make "which projects are contracted work?" — the
+     * question this column exists to answer — unanswerable. A project with {@code null} here is not
+     * incomplete, and nothing in this product renders it as missing one.
+     *
+     * <p>The column has existed since {@code V2}, deliberately unmapped: {@code ArchitectureRulesTest}
+     * sweeps {@code @Entity} fields for readerless and writerless columns in both directions, so a
+     * mapping added by M0 would have been an entry Mc then had to remove. {@code V11} adds the
+     * foreign key and this adds the mapping, together, as {@code V2}'s own comment promised.
+     */
+    @Column(name = "client_id")
+    private UUID clientId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -161,6 +184,24 @@ public class Project {
 
     public String getDescription() {
         return description;
+    }
+
+    public UUID getClientId() {
+        return clientId;
+    }
+
+    /**
+     * Attach, change or detach the client — {@code null} detaches, and is a legitimate target state
+     * rather than a clearing operation.
+     *
+     * <p><strong>The caller has already checked the id is in this company.</strong> This does not,
+     * and could not honestly: {@code fk_project_client} is on {@code id} alone and referential
+     * integrity is not subject to RLS, so the constraint would accept another company's client.
+     * {@code ClientDirectory.existsInCompany} is the check, and it runs where the outcome can still
+     * become a {@code 400} on the right field (018 D-l).
+     */
+    public void attachClient(UUID newClientId) {
+        this.clientId = newClientId;
     }
 
     public Instant getCreatedAt() {

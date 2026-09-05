@@ -142,6 +142,54 @@ public abstract class TrackerEndpointTestBase extends IntegrationTestBase {
         }
     }
 
+    /**
+     * A COMPANY-scope grant, written through the app connection with {@code ON CONFLICT DO NOTHING}
+     * and read back.
+     *
+     * <p>~~Lived on {@code StaffingTestBase}~~ → <strong>moved here 2026-09-05 (018 T3)</strong>,
+     * when {@code crm} became the second module needing it. It is not staffing's shape, it is the
+     * company-wide half of {@link #grantOnProject}, and a second copy is exactly what these base
+     * classes exist to prevent.
+     *
+     * <p>Both halves are {@link #grantOnProject}'s and for its reasons: the
+     * insert is idempotent in the database rather than behind a read (this runs from
+     * {@code @BeforeEach}), and the read-back exists because RLS <em>hides</em> a row written with
+     * the wrong company context rather than erroring — which would surface as a 403 from every test
+     * in the class and read as a gate defect.
+     */
+    protected void grantInCompany(UUID id, UUID companyId, UUID roleId, UUID userId)
+            throws SQLException {
+
+        try (Connection connection = appConnection(companyId);
+                PreparedStatement statement = connection.prepareStatement("""
+                        INSERT INTO role_assignment
+                            (id, company_id, role_id, user_id, project_id, granted_at)
+                        VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid),
+                                CAST(? AS uuid), NULL, now())
+                        ON CONFLICT (id) DO NOTHING
+                        """)) {
+            statement.setObject(1, id);
+            statement.setObject(2, companyId);
+            statement.setObject(3, roleId);
+            statement.setObject(4, userId);
+            statement.executeUpdate();
+        }
+
+        try (Connection connection = appConnection(companyId);
+                PreparedStatement statement = connection.prepareStatement(
+                        "SELECT count(*) FROM role_assignment "
+                                + "WHERE id = CAST(? AS uuid) AND project_id IS NULL")) {
+            statement.setObject(1, id);
+            try (var rows = statement.executeQuery()) {
+                rows.next();
+                if (rows.getLong(1) != 1) {
+                    throw new AssertionError("the company-wide grant " + id + " was not written "
+                            + "for user " + userId + " in company " + companyId);
+                }
+            }
+        }
+    }
+
     protected void seedProject(UUID id, UUID companyId, String key, String name, Instant now) {
         if (projects.findScopedById(id).isEmpty()) {
             projects.save(Project.create(id, companyId, key, name, null, now));

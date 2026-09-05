@@ -408,7 +408,7 @@ pattern has five instances and every one of them points **downstream → upstrea
 dependency, and a rule that holds only because the checker is blind is a rule that will be broken
 again by somebody who reads the code rather than this paragraph.
 
-### D-d — The client is written through the settings document, because there is no `PATCH /projects`
+### D-d — ~~The client is written through the settings document~~ → **its own endpoint**
 
 `GeneralSettingsPage.tsx` records it and the contract confirms it: *"There is no
 `PATCH /projects/{projectId}` — the contract has a create, a detail read, an archive and a settings
@@ -420,6 +420,17 @@ document, and nothing that renames a project."* So the two write paths for a pro
   `project:settings`), which is `settings-general.html`'s.
 
 `project:settings` is exactly the key story C2 requires, so this needs no new gate.
+
+> **Reversed in T3, before either half shipped.** The paragraph below is kept because its reasoning
+> is right and its conclusion was wrong, and the difference is worth reading. The client is
+> **`PUT /projects/{projectId}/client`** — one field on its own path, the shape
+> `PUT /projects/{projectId}/archive` already uses. Why: the plan proposed marking `clientId`
+> `required` so an omitted one would be a `400`, and **the server cannot deliver that**. Jackson
+> gives an absent field and an explicit `null` the same Java value — the whole reason
+> `api.PatchBody` exists here — so a record-bound `PUT` answers `200` and detaches where the
+> contract promised a refusal. The screen most likely to do it is Review settings, which does not
+> offer the field. A single-field endpoint has no absence to read, and the settings document stays
+> what its own header says it is: the project's §6g review policy, which a client is not.
 
 **The trap, and it is `settingsUpdate.ts`'s trap with a nastier payload.** `PUT …/settings` is a full
 replacement, and that file's header already explains what an omitted field costs: *"a page that saves
@@ -1447,6 +1458,70 @@ git commit -m "feat(crm): V11 — client, client_contact, and the project.client
 ---
 
 ## T3 — The `crm` module, the `ClientDirectory` inversion, and the project's client
+
+> **Landed 2026-09-05.** `com.tcms.crm` — thirteen files — plus `project.ClientDirectory`,
+> `api.ClientRef` and the project-side wiring. Gate on shanks: **`./gradlew build` SUCCESSFUL,
+> 3947 tests passed, zero failures** — and no `Could not write XML test results` line, so the
+> fd-limit shape `shanks-runner-details.md` warns about did not arise and the green is real.
+>
+> **The largest correction in the plan so far, and it reverses D-d.**
+>
+> **`clientId` is NOT on `ProjectSettingsUpdate`. It is `PUT /projects/{projectId}/client`.**
+> T1 landed it on the settings document, with the contract declaring it `required` so that a body
+> omitting it would be a `400`. Writing the server revealed that claim could not be honoured:
+> **Jackson gives an absent field and an explicit `null` the same Java value**, which is the whole
+> reason `api.PatchBody` exists in this codebase. So the server would have answered `200` and
+> *detached the project* where the description promised a refusal — and the caller most likely to
+> do it is the Review settings screen, which does not offer the field at all. A contract that lies
+> is worse than the hazard it was written to prevent.
+>
+> Two ways out: put the settings `PUT` behind `PatchBody` so absence is observable, or give the
+> field its own path. The second is right and the repo already had the precedent —
+> `PUT /projects/{projectId}/archive`, whose contract note reads *"One field, and it is the target
+> state rather than a verb."* One field on its own path **has no absence to read.** It also keeps
+> the settings document what its own header says it is: the project's §6g review policy, which a
+> client is not.
+>
+> D-d above is struck through and rewritten. `settingsUpdate.ts` and the three payload-pinning
+> tests T1 changed are reverted to what they were.
+>
+> **Five more corrections:**
+>
+> 1. **`ClientRef` lives in `com.tcms.api`**, not in `crm` and not nested in `ProjectView`. Two
+>    modules serve it and `project` may not import `crm`, so declaring it twice would be two records
+>    over one wire shape — which `ArchitectureRulesTest`'s repeated-shape sweep catches. It sits
+>    beside `UserRef`, which is in that package for exactly this reason.
+> 2. **`ProjectService` and `ProjectCreateService` take `ObjectProvider<ClientDirectory>`**, not the
+>    interface directly: `crm` is not on the classpath of every context that builds them, and a
+>    missing implementation degrades to "no client on any project" — which is what a company with no
+>    clients renders anyway, so the degraded state is the ordinary one rather than a broken screen.
+> 3. **`ProjectService.viewOfChanged` became public.** `crm` writes `project.client_id` and must
+>    answer with a `Project`; a second assembler there would be a second answer to "what is a Project
+>    on the wire". Widening the visibility is cheaper than the drift, and safe — the method gates
+>    nothing and is only reachable with an already-gated `Project`.
+> 4. **`grantInCompany` moved from `StaffingTestBase` to `TrackerEndpointTestBase`.** `crm` is the
+>    second module to need a company-wide grant; it is not staffing's shape, it is the company half
+>    of `grantOnProject`.
+> 5. **Four registry tests a new module must feed**, none of which this plan predicted, and each of
+>    which said exactly what to do: `ModuleStructureTest` wanted `@ApplicationModule` on the
+>    package-info **and** `crm` added to the module list with a paragraph; `ArchitectureRulesTest`
+>    rejected `findByClientIdInOrderByNameAsc` as a declared query with no caller (deleted, per its
+>    own instruction); `ContractConventionTest` wanted a pairing per schema. `crm` declares **four**
+>    foundation modules, not five — `storage` is absent because nothing here has an attachment.
+>
+> **And one homonym, which the breakdown predicted under the wrong name.** It warned that `clientId`
+> collides with the OIDC identity provider's field, and the CRM schemas were named to avoid it. The
+> collision landed one noun over: `com.tcms.auth.SocialProperties.Client` is an **OAuth** client.
+> Registered in `HOMONYMS` rather than renamed — neither name is wrong.
+>
+> **The one that cost the most time, and it was avoidable in one command.** `ClientEndpointTest` and
+> `CrmCreatesNoLoginTest` first took UUID prefixes `fa` and `fb`. Both were **already in use** —
+> `fa` is `PlanStatisticsEndpointTest`'s and `fb` is `ClassificationValueWriteEndpointTest`'s, and
+> `fa001000-0000-4000-8000-000000000001` is literally that first class's project id. Every class
+> passed in isolation and the suite failed with a `project_pkey` duplicate naming none of them,
+> which is precisely the failure `StaffingTestBase`'s header describes. Now `fd` and `ff`, verified
+> by grepping the tree — which is the check that should have been run before taking them, and is now
+> written into both classes' headers.
 
 **Deliverable:** the eight endpoints T1 declared serve real rows; a project attaches, changes and
 detaches a client through create and through the settings document; a contact creates no `app_user`

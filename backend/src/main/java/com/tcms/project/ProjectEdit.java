@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 /**
@@ -31,7 +32,7 @@ import java.util.regex.Pattern;
  * The check is a lookup and the constraint is still the guarantee — see
  * {@link ProjectCreateService} for the race between them and what answers it.
  */
-record ProjectEdit(String key, String name, String description) {
+record ProjectEdit(String key, String name, String description, UUID clientId) {
 
     /**
      * {@code ck_project_key_format} in V1, and {@code Project.key}'s {@code pattern} in the
@@ -77,8 +78,16 @@ record ProjectEdit(String key, String name, String description) {
      * @param keyAlreadyUsed whether this company already has a project with this key. Passed in
      *                       rather than looked up here, so this type stays a pure function of its
      *                       inputs and the one query lives with the transaction that will insert.
+     * @param clientIsUnknown whether {@code request.clientId()} names no client this company can
+     *                       see. Passed in for {@code keyAlreadyUsed}'s reason, and answered by
+     *                       {@link ClientDirectory#existsInCompany} rather than by the foreign key:
+     *                       {@code fk_project_client} is on {@code id} alone and referential
+     *                       integrity is not subject to RLS, so the constraint would accept another
+     *                       company's client (018 D-l). Ignored when no client was named, which is
+     *                       the common case
      */
-    static Outcome validateCreate(ProjectWriteRequest request, boolean keyAlreadyUsed) {
+    static Outcome validateCreate(
+            ProjectWriteRequest request, boolean keyAlreadyUsed, boolean clientIsUnknown) {
         Map<String, List<String>> errors = new LinkedHashMap<>();
 
         String key = trimToNull(request.key());
@@ -106,8 +115,18 @@ record ProjectEdit(String key, String name, String description) {
             error(errors, "description", "Keep the description under " + MAX_DESCRIPTION + " characters.");
         }
 
+        /*
+          A 400 on the field and not a 404, for the key's reason one branch up: the caller's next
+          action is to pick a different client, and a form has somewhere to put this sentence. A
+          404 would also be an oracle for client ids in another tenancy, which §6t forbids.
+        */
+        UUID clientId = request.clientId();
+        if (clientId != null && clientIsUnknown) {
+            error(errors, "clientId", "That client does not exist.");
+        }
+
         return errors.isEmpty()
-                ? new Outcome.Valid(new ProjectEdit(key, name, description))
+                ? new Outcome.Valid(new ProjectEdit(key, name, description, clientId))
                 : new Outcome.Invalid(errors);
     }
 

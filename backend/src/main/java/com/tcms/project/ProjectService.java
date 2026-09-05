@@ -1,14 +1,19 @@
 package com.tcms.project;
 
+import com.tcms.api.ClientRef;
 import com.tcms.tenancy.CompanyContext;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -64,9 +69,25 @@ public class ProjectService {
     private final ProjectRepository projects;
     private final ProjectAccess access;
 
-    public ProjectService(ProjectRepository projects, ProjectAccess access) {
+    /**
+     * Supplied by {@code crm}, which this module may not import — see {@link ClientDirectory}.
+     *
+     * <p><strong>{@link ObjectProvider} and not a constructor parameter</strong>, because
+     * {@code crm} is not on the classpath of every test that builds this service directly. A
+     * missing implementation means the client is {@code null} on every project, which is exactly
+     * what a company with no clients renders anyway — so the degraded state is the ordinary state
+     * and not a broken screen.
+     */
+    private final ObjectProvider<ClientDirectory> clients;
+
+    public ProjectService(
+            ProjectRepository projects,
+            ProjectAccess access,
+            ObjectProvider<ClientDirectory> clients) {
+
         this.projects = projects;
         this.access = access;
+        this.clients = clients;
     }
 
     /**
@@ -614,8 +635,36 @@ public class ProjectService {
                 .toList();
     }
 
+    /**
+     * The names of every client the given projects point at, in one lookup.
+     *
+     * <p>One call for the whole list rather than one per project: a projects list is the only place
+     * this is asked in bulk, and per-row resolution there is the N+1 the {@code *Directory} pattern
+     * exists to avoid. <strong>Empty in and empty out, and that is the common path</strong> — a
+     * company with no clients has {@code null} on every project.
+     */
+    private Map<UUID, String> clientNamesFor(List<Project> visible) {
+        Set<UUID> ids = visible.stream()
+                .map(Project::getClientId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        ClientDirectory directory = clients.getIfAvailable();
+        return directory == null ? Map.of() : directory.namesOf(ids);
+    }
+
     private ProjectView view(
             Project project, Map<UUID, Long> caseCounts, Map<UUID, String> roleNames) {
+        return view(project, caseCounts, roleNames, clientNamesFor(List.of(project)));
+    }
+
+    private ProjectView view(
+            Project project,
+            Map<UUID, Long> caseCounts,
+            Map<UUID, String> roleNames,
+            Map<UUID, String> clientNames) {
         return new ProjectView(
                 project.getId(),
                 project.getKey(),
@@ -630,7 +679,23 @@ public class ProjectService {
                 // precedence that used to be applied here (a grant naming the project wins,
                 // otherwise the inherited role) is resolved in `identity` now, so an absent key is
                 // the only "no name" and this line no longer restates a rule it cannot test.
-                roleNames.get(project.getId()));
+                roleNames.get(project.getId()),
+                /*
+                  Null for a project with no client AND for a client this caller cannot see, and the
+                  two are deliberately indistinguishable: both mean "no client to show here", and
+                  neither is a deficiency this product renders. Scope D1 rule 1 refuses the
+                  synthetic "Internal" row that would have made the first impossible.
+                */
+                clientRefFor(project, clientNames));
+    }
+
+    private static ClientRef clientRefFor(Project project, Map<UUID, String> clientNames) {
+        UUID clientId = project.getClientId();
+        if (clientId == null) {
+            return null;
+        }
+        String name = clientNames.get(clientId);
+        return name == null ? null : new ClientRef(clientId, name);
     }
 
     /**
@@ -667,11 +732,19 @@ public class ProjectService {
      * an archived one usually has a great many, and returning zero for it would put a wrong number
      * on the card the caller is looking at.
      *
-     * <p>Package-private, and the project is passed in rather than re-read: the only callers are
-     * inside a write that has already been through {@link #writeGranted}, so re-fetching would be a
-     * round trip whose one purpose would be to re-gate what is already gated.
+     * <p>~~Package-private~~ → <strong>public since 018 T3</strong>, and the project is passed in
+     * rather than re-read: the only callers are inside a write that has already been through
+     * {@link #writeGranted}, so re-fetching would be a round trip whose one purpose would be to
+     * re-gate what is already gated.
+     *
+     * <p>It is public because {@code crm} writes {@code project.client_id} —
+     * {@code PUT /projects/{projectId}/client} — and a second assembler there would be a second
+     * answer to "what is a Project on the wire", which is the drift this method exists to prevent.
+     * Widening the visibility is the cheaper of the two, and it is safe for the reason above: the
+     * method gates nothing and is only reachable with a {@link Project} the caller has already had
+     * gated.
      */
-    ProjectView viewOfChanged(Project project, UUID userId) {
+    public ProjectView viewOfChanged(Project project, UUID userId) {
         return view(
                 project,
                 caseCounts(CompanyContext.require(), List.of(project.getId())),

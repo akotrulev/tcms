@@ -39,49 +39,6 @@ public abstract class StaffingTestBase extends TrackerEndpointTestBase {
             UUID.fromString("10000000-0000-4000-8000-000000000010");
 
     /**
-     * A COMPANY-scope grant, written through the app connection with {@code ON CONFLICT DO NOTHING}
-     * and read back.
-     *
-     * <p>Both halves are {@code TrackerEndpointTestBase.grantOnProject}'s and for its reasons: the
-     * insert is idempotent in the database rather than behind a read (this runs from
-     * {@code @BeforeEach}), and the read-back exists because RLS <em>hides</em> a row written with
-     * the wrong company context rather than erroring — which would surface as a 403 from every test
-     * in the class and read as a gate defect.
-     */
-    protected void grantInCompany(UUID id, UUID companyId, UUID roleId, UUID userId)
-            throws SQLException {
-
-        try (Connection connection = appConnection(companyId);
-                PreparedStatement statement = connection.prepareStatement("""
-                        INSERT INTO role_assignment
-                            (id, company_id, role_id, user_id, project_id, granted_at)
-                        VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid),
-                                CAST(? AS uuid), NULL, now())
-                        ON CONFLICT (id) DO NOTHING
-                        """)) {
-            statement.setObject(1, id);
-            statement.setObject(2, companyId);
-            statement.setObject(3, roleId);
-            statement.setObject(4, userId);
-            statement.executeUpdate();
-        }
-
-        try (Connection connection = appConnection(companyId);
-                PreparedStatement statement = connection.prepareStatement(
-                        "SELECT count(*) FROM role_assignment "
-                                + "WHERE id = CAST(? AS uuid) AND project_id IS NULL")) {
-            statement.setObject(1, id);
-            try (var rows = statement.executeQuery()) {
-                rows.next();
-                if (rows.getLong(1) != 1) {
-                    throw new AssertionError("the company-wide grant " + id + " was not written "
-                            + "for user " + userId + " in company " + companyId);
-                }
-            }
-        }
-    }
-
-    /**
      * Runs a service call with the company context open, as the request filter does.
      *
      * <p>Every read and write here starts with {@code CompanyContext.require()}, and a call without

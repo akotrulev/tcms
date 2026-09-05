@@ -173,7 +173,16 @@ public class DemoDataSeeder {
             }
 
             ProjectCreateService.Outcome outcome = projectCreate.create(adminId,
-                    new ProjectWriteRequest(project.key(), project.name(), project.description()));
+                    /*
+                      No client, and the demo data is deliberately client-less for now: Mc ships
+                      the module, and seeding two demo companies with invented customers would put
+                      this repository's guesses where a reader cannot tell them from a client's own
+                      records — the argument V10 makes for not seeding a skill vocabulary. It also
+                      makes the seeded instance the case the module's acceptance criterion is about:
+                      a company with no clients, where nothing client-shaped renders.
+                    */
+                    new ProjectWriteRequest(
+                            project.key(), project.name(), project.description(), null));
             switch (outcome) {
                 case ProjectCreateService.Outcome.Created created -> {
                     ids.put(project.key(), created.view().id());
