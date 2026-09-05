@@ -11,7 +11,10 @@
 import type { BadgeTone } from '../components/kit/Badge';
 import type {
   AbsenceKind,
+  BudgetBasis,
   ClientStatus,
+  InvoiceStatus,
+  RateCardScope,
   AggregationPolicy,
   AssignmentVia,
   ArtifactStatus,
@@ -1353,3 +1356,68 @@ export const clientStatusTones = {
   ACTIVE: 'steel',
   ARCHIVED: 'plain',
 } as const satisfies Record<ClientStatus, BadgeTone>;
+
+/**
+ * Whether an invoice is a query or a record (019 M8).
+ *
+ * **The two words are doing more work than a lifecycle usually asks of them.** A `DRAFT` stores no
+ * lines at all — it is a header plus a live computation over the approved hours that exist *now*,
+ * recomputed on every read (019 D-c) — while an `ISSUED` invoice's lines are rows written once, in
+ * the single transaction that ever writes one, carrying the rate as applied. So *Draft* is not
+ * "an invoice that is not finished yet" and *Issued* is not "an invoice that has been sent":
+ * issuing sends nothing (*"sending is your mail client's job"*), and what it does is make the
+ * figures stop moving.
+ *
+ * Nothing anywhere says *Sent* or *Paid*. There is no payment tracking in this module and no
+ * running balance per client (019 D-q), and a label implying either would be the screen promising
+ * a state the product cannot reach.
+ */
+export const invoiceStatusLabels = {
+  DRAFT: 'Draft',
+  ISSUED: 'Issued',
+} as const satisfies Record<InvoiceStatus, string>;
+
+/**
+ * Badge tones for the two, on the kit's eight.
+ *
+ * `DRAFT` is `retest` — the tone this kit uses for *somebody still has to decide about this* — and
+ * `ISSUED` is `steel` rather than `passed`. An issued invoice is not a success; it is a record,
+ * and the ordinary state of almost every row in the list. Green on all of them is a colour that
+ * has stopped carrying information, which is the argument `clientStatusTones` makes above.
+ */
+export const invoiceStatusTones = {
+  DRAFT: 'retest',
+  ISSUED: 'steel',
+} as const satisfies Record<InvoiceStatus, BadgeTone>;
+
+/**
+ * What a project's ceiling is measured in (019 M8).
+ *
+ * Both spellings are on `billing.html` one row apart — `600h` and `€40 000` — and the difference
+ * matters to exactly one reader. To Finance it decides which column the number goes in; to a
+ * Project Manager it decides nothing at all, because the project-scope view is a **percentage**
+ * whichever basis it is (019 D-h), and a `MONEY` budget on a project whose client has no rate card
+ * reads as *unknown* rather than as zero.
+ */
+export const budgetBasisLabels = {
+  HOURS: 'Hours',
+  MONEY: 'Money',
+} as const satisfies Record<BudgetBasis, string>;
+
+/**
+ * Which rung of the rate ladder an entry sits on (019 D-d).
+ *
+ * The order is the order the ladder walks: a `PERSON` entry naming whoever logged the hour beats a
+ * `ROLE` entry naming a role they actually hold on that project, which beats `ALL_ROLES`. The
+ * labels are the mockup's own parenthetical — *Mira Sund (person)*, *Test Lead (role)*,
+ * *All roles* — so the screen says which rung matched rather than leaving the reader to infer it
+ * from a rate they did not expect.
+ *
+ * `ALL_ROLES` reads *All roles* and not *Default*: it is the least specific entry on the card, not
+ * a fallback the system invented, and somebody chose the number on it.
+ */
+export const rateCardScopeLabels = {
+  PERSON: 'person',
+  ROLE: 'role',
+  ALL_ROLES: 'All roles',
+} as const satisfies Record<RateCardScope, string>;

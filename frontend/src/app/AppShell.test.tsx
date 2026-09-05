@@ -244,6 +244,63 @@ describe('AppShell — the credential entries (005 C2)', () => {
 })
 
 /**
+ * The Billing entry (019 D-o) — **the fifth gated entry**, and the one this file exists to pin.
+ *
+ * `billing.html` says it in a callout on the screen itself: *"Switch the top bar to Test Engineer
+ * or Account Manager and this entry disappears from the sidebar entirely — not greyed out, not
+ * empty. It is not their screen."* Plan 009's execution breakdown names exactly this test as M8's
+ * acceptance criterion.
+ *
+ * Both directions, because a one-sided test cannot tell an absent entry from a rail that failed to
+ * render at all — and the Account Manager arm is the sharper of the two negatives: that role holds
+ * `client:read` and reads the client's hours, so the thing being asserted is that seeing the work
+ * is not seeing what it costs.
+ */
+describe('AppShell — the Billing entry (019 D-o)', () => {
+  it('renders it for a caller holding billing:read', async () => {
+    renderShell(`/projects/${OLB}/cases`, ['billing:read'])
+    await railReady()
+
+    // `get`, not `find`: the company gate answers on the first `/me/permissions` and has no second
+    // round trip to wait for — the two credential tests above make the same distinction.
+    expect(rail().getByRole('link', { name: 'Billing' })).toHaveAttribute('href', '/billing')
+  })
+
+  it.each([
+    ['a Test Engineer', ['case:read', 'time:log'] as PermissionKey[]],
+    ['an Account Manager', ['client:read', 'time:log'] as PermissionKey[]],
+  ])('does not render it for %s', async (_who, permissions) => {
+    renderShell(`/projects/${OLB}/cases`, permissions)
+    await railReady()
+
+    // The rail really did render the rest of the ungrouped block — otherwise the absence below
+    // proves nothing about the entry.
+    expect(rail().getByRole('link', { name: 'My work' })).toBeInTheDocument()
+    expect(rail().getByRole('link', { name: 'Timesheets' })).toBeInTheDocument()
+    // ABSENT, not disabled. `queryByRole` over the whole rail, so a disabled-looking entry
+    // rendered as a non-link would still have to be missing by name.
+    expect(rail().queryByRole('link', { name: 'Billing' })).toBeNull()
+    expect(rail().queryByText('Billing')).toBeNull()
+  })
+
+  it('keeps it out of the small-screen drawer too', async () => {
+    /*
+      The drawer renders the same `RailContent`, so this could only fail by the gate being read
+      twice with different arguments — which is exactly the shape of defect a shared component
+      invites when one caller passes a prop the other does not.
+    */
+    const user = userEvent.setup()
+    renderShell(`/projects/${OLB}/cases`, ['case:read'])
+    await railReady()
+    await user.click(screen.getByTestId('Nav.HamburgerButton'))
+
+    const drawer = within(await screen.findByTestId('Nav.Drawer'))
+    expect(drawer.getByRole('link', { name: 'Timesheets' })).toBeInTheDocument()
+    expect(drawer.queryByRole('link', { name: 'Billing' })).toBeNull()
+  })
+})
+
+/**
  * `docs/specs/2026-08-28-design-language.md` §4 — the rail collapses on the routes where the
  * reader is following a procedure at a measure, and the rail is navigation they are not doing.
  *

@@ -24,6 +24,7 @@
  *     tcmsFaults.importing('midway') // the source stopped answering during the run — see below
  *     tcmsFaults.time('rejected')  // your fortnight came back with a note — see below
  *     tcmsFaults.staffing('no-profile') // nobody's contracted hours are recorded — see below
+ *     tcmsFaults.billing('no-rate-card') // nothing this company does can be priced — see below
  *     tcmsFaults.off()
  *
  * ## Why this lives here and not in a mock transport
@@ -261,6 +262,8 @@ export interface FaultState {
   staffing: StaffingFault | null;
   /** How many clients this company has, or `null` for the instance as it actually is. */
   clients: ClientsFault | null;
+  /** Which unpriceable state the billing reads are in, or `null` for the instance's own figures. */
+  billing: BillingFault | null;
 }
 
 /** The five ways somebody else's tracker fails us. See this module's header. */
@@ -349,6 +352,29 @@ export type StaffingFault = 'no-profile' | 'over-allocated';
  */
 export type ClientsFault = 'none' | 'some';
 
+/**
+ * The billing arm (019 T5), and like the clients arm it fabricates a **state** rather than a
+ * failure.
+ *
+ * Both are `200`s carrying a shape the screens have a second branch for, and the branch is the
+ * thing that cannot be reached any other way — a `seed-demo-data` instance has rate cards, budgets
+ * and two invoices on purpose, so the two states this module was hardest to word for are exactly
+ * the two nobody can walk to.
+ *
+ *   - `'no-rate-card'` — every rate-card read answers `card: null`, and every draft comes back with
+ *     all of its hours in the `NO_RATE` bucket at a total of zero. This is `billing.html`'s
+ *     *Kessler Health* row and the **second** exclusion note on an invoice — the bucket a naive
+ *     implementation loses, because from inside a join it looks exactly like a priced hour
+ *     (019 D-g). Reaching it for real means deleting every card on the instance.
+ *   - `'nothing-priceable'` — every read answers empty or zero, so the four tiles, the budget
+ *     table, the invoice list and any draft render their empty states at once. This is a company
+ *     that has just started, and it is the state most likely to be mistaken for a broken screen.
+ *
+ * The four generic faults still reach these paths through `only('/billing')`, `only('/invoices')`
+ * and so on. This arm is for the two states that are not faults.
+ */
+export type BillingFault = 'no-rate-card' | 'nothing-priceable';
+
 const faults: FaultState = {
   status: null,
   retryAfter: null,
@@ -365,6 +391,7 @@ const faults: FaultState = {
   time: null,
   staffing: null,
   clients: null,
+  billing: null,
 };
 
 /**
@@ -612,6 +639,17 @@ export function verdictFor(path: string, method = 'GET'): FaultVerdict {
   */
   if (faults.clients !== null && isClientPopulationRead(path, method) && applies(path)) {
     return clientsVerdict(faults.clients, path);
+  }
+
+  /*
+    The billing arm, tenth, and the second here that fabricates a STATE rather than a failure — see
+    `BillingFault`. Scoped by path for every arm above's reason, and its matcher answers WHICH read
+    matched rather than only whether one did: five operations answer five different shapes, so the
+    body is picked per operation exactly as the staffing arm's is.
+  */
+  if (faults.billing !== null && applies(path)) {
+    const which = isBillingRead(path, method);
+    if (which !== null) return billingVerdict(faults.billing, which);
   }
 
   if (!applies(path)) return { kind: 'none' };
@@ -1156,6 +1194,152 @@ function clientsVerdict(fault: ClientsFault, path: string): FaultVerdict {
   };
 }
 
+/**
+ * The five reads and one write whose ANSWERS decide whether anything on the billing screens can be
+ * priced.
+ *
+ * Every list path is anchored, for `isRankWrite`'s recorded reason and the fifth arm to pay it:
+ * `/invoices` is a prefix of `/invoices/{invoiceId}`, and answering an array there would serve an
+ * `InvoiceDetail` read a list — the drifted-body failure, injected by accident. `/rate-cards` is a
+ * prefix of `/rate-cards/{rateCardId}` in exactly the same way.
+ *
+ * `POST /invoices` is included because it answers an `InvoiceDetail` of its own: a draft made while
+ * the arm is on must render the same all-excluded state the read does, or the one gesture that
+ * reaches this state would land on an unfaulted body.
+ *
+ * `/projects/{id}/budget-burn` is deliberately NOT faulted. It is the one endpoint in the module a
+ * Test Engineer may call and it carries no money at all (019 D-h), so there is no money-shaped
+ * state here for it to be in — and answering it from this arm would put a billing fault on a
+ * project screen.
+ */
+function isBillingRead(path: string, method: string): 'summary' | 'rate-cards' | 'budgets' | 'invoices' | 'invoice' | null {
+  const bare = withoutQuery(path);
+  if (method === 'POST') return bare === '/invoices' ? 'invoice' : null;
+  if (method !== 'GET') return null;
+  if (bare === '/billing/summary') return 'summary';
+  if (bare === '/rate-cards') return 'rate-cards';
+  if (bare === '/budgets') return 'budgets';
+  if (bare === '/invoices') return 'invoices';
+  if (/^\/invoices\/[^/]+$/.test(bare)) return 'invoice';
+  return null;
+}
+
+/** The two clients the billing arm invents, and the ids every fabricated body below agrees on. */
+const FAULT_CLIENTS = [
+  { id: '00000000-0000-4000-8000-0000000000b1', name: 'Kessler Health' },
+  { id: '00000000-0000-4000-8000-0000000000b2', name: 'Bergstrom AG' },
+];
+
+const FAULT_INVOICE_ID = '00000000-0000-4000-8000-0000000000b9';
+const FAULT_PROJECT_ID = '00000000-0000-4000-8000-0000000000b7';
+
+/**
+ * The billing bodies, and **neither arm is a failure** — see {@link BillingFault}.
+ *
+ * `'nothing-priceable'` answers the empty shape of whichever read matched, which is what makes the
+ * four tiles, the two tables and the invoice list show their empty states together. `'no-rate-card'`
+ * answers a *populated* company that nothing can price: clients with no card, a money budget whose
+ * burn is `null` rather than zero, and a draft whose every hour is in the `NO_RATE` bucket with its
+ * reason on it.
+ *
+ * The zero-total draft is the body worth having. It is the one state where a screen can silently
+ * lose an hour — from inside a join an unpriceable hour looks exactly like a priced one — and
+ * `€0.00` with an empty Lines table and no note is precisely the render 019 D-g forbids.
+ */
+function billingVerdict(
+  fault: BillingFault,
+  which: 'summary' | 'rate-cards' | 'budgets' | 'invoices' | 'invoice',
+): FaultVerdict {
+  const empty = fault === 'nothing-priceable';
+
+  if (which === 'summary') {
+    return {
+      kind: 'body',
+      status: 200,
+      body: {
+        invoicedYearToDate: [],
+        draftableNow: [],
+        unapprovedHours: empty ? 0 : 38,
+        clientsBilled: 0,
+      },
+    };
+  }
+
+  if (which === 'rate-cards') {
+    return {
+      kind: 'body',
+      status: 200,
+      // Every client, and every card null — `billing.html`'s Kessler Health row, for all of them.
+      body: empty ? [] : FAULT_CLIENTS.map((client) => ({ client, card: null })),
+    };
+  }
+
+  if (which === 'budgets') {
+    return {
+      kind: 'body',
+      status: 200,
+      body:
+        empty ? []
+        : [
+            {
+              projectId: FAULT_PROJECT_ID,
+              projectKey: 'KESS',
+              projectName: 'Kessler Portal',
+              client: FAULT_CLIENTS[0],
+              basis: 'MONEY',
+              amountHours: null,
+              amountMoney: { amount: 40000, currency: 'EUR' },
+              approvedHours: 126,
+              // Null, not zero — 126 hours nothing can price is *unknown* spend, not none.
+              pricedToDate: null,
+              burnPercent: null,
+            },
+          ],
+    };
+  }
+
+  const invoice = {
+    id: FAULT_INVOICE_ID,
+    number: null,
+    client: FAULT_CLIENTS[0],
+    periodStart: '2026-09-01',
+    periodEnd: '2026-09-30',
+    status: 'DRAFT',
+    currency: 'EUR',
+    total: { amount: 0, currency: 'EUR' },
+    lineCount: 0,
+    approvedHours: 0,
+    issuedAt: null,
+    issuedBy: null,
+  };
+
+  if (which === 'invoices') {
+    return { kind: 'body', status: 200, body: empty ? [] : [invoice] };
+  }
+
+  return {
+    kind: 'body',
+    status: 200,
+    body: {
+      invoice,
+      billTo: null,
+      termsDays: 30,
+      lines: [],
+      entries: [],
+      excluded:
+        empty ? []
+        : [
+            {
+              reason: 'NO_RATE',
+              hours: 68,
+              detail: 'Mira Sund 32h · Dana Petrov 24h · Tomas Ek 12h',
+            },
+          ],
+      budgetEffect: [],
+    },
+  };
+}
+
 function staffingVerdict(fault: StaffingFault, path: string, method: string): FaultVerdict {
   const people = [
     faultPerson(fault, '00000000-0000-4000-8000-0000000000f1', 'Mira Sund'),
@@ -1520,6 +1704,24 @@ export function installFaultConsole(): void {
       );
     },
     /**
+     * Which unpriceable state the billing screens are in — `no-rate-card` to walk the second
+     * exclusion bucket, `nothing-priceable` to walk every empty state at once.
+     *
+     * `tcmsFaults.billing(null)` gives the instance back its own figures. Neither state is a
+     * failure: this is the second arm here that exists because a *correct* state is unreachable on
+     * a seeded instance, not because a broken one is.
+     */
+    billing(fault: BillingFault | null) {
+      faults.billing = fault;
+      console.info(
+        fault === null
+          ? '[tcms faults] billing is the instance’s own again'
+          : fault === 'no-rate-card'
+            ? '[tcms faults] no client has a rate card — every approved hour must appear in the NO_RATE bucket, named'
+            : '[tcms faults] nothing is priceable — every billing region must render its empty state',
+      );
+    },
+    /**
      * How the staffing reads misbehave. `tcmsFaults.staffing(null)` restores them without clearing
      * anything else, for `tracker()`'s reason.
      */
@@ -1550,6 +1752,14 @@ export function installFaultConsole(): void {
       faults.import = null;
       faults.time = null;
       faults.staffing = null;
+      /*
+        `clients` was missing from this list until 019 T5 added `billing` beside it, so
+        `tcmsFaults.off()` left a fabricated population in place while announcing everything was
+        cleared — the one failure mode of this whole module, since a developer then reads a real
+        screen against invented data. Both are here now.
+      */
+      faults.clients = null;
+      faults.billing = null;
       console.info('[tcms faults] cleared');
     },
     state: () => ({ ...faults }),
@@ -1560,6 +1770,6 @@ export function installFaultConsole(): void {
     '[tcms faults] available — try tcmsFaults.status(500), .hang(), .expire(), '
       + ".tracker('403'), .issue('conflict'), .rank('conflict'), .wip(), "
       + ".release('empty'), .importing('midway'), .time('rejected'), .clients('none'), "
-      + ".staffing('no-profile'), .off()",
+      + ".staffing('no-profile'), .billing('no-rate-card'), .off()",
   );
 }

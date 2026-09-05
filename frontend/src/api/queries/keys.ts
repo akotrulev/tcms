@@ -788,6 +788,54 @@ export const keys = {
     optionsFor: (projectId: string) => ['projects', projectId, 'client-options'] as const,
   },
 
+  /**
+   * Billing (019 M8). One root, and two of its keys live somewhere else on purpose.
+   *
+   * `billingRoot` is what an invoice write sweeps. A draft stores no lines — they are computed on
+   * every read (019 D-c) — so issuing one changes the four summary tiles, the budget table's
+   * priced figures, the invoice list and the client page's rollup **at the same moment**, and
+   * none of them can be individually invalidated with any confidence about which. The sweep is
+   * therefore the root, exactly as `timeRoot` and `staffingRoot` are and for the same reason:
+   * enumerating narrower keys at each call site is one chance per site to miss the one that is
+   * not on screen, which is precisely the one nothing will refetch.
+   *
+   * `clientBilling` sits under `clientsRoot` rather than here, for the reason the comment above
+   * `clientsRoot` gives — where a key lives is decided by which invalidation must sweep it, and
+   * that table is on the client page, which every client write already stales. An invoice write
+   * consequently sweeps **both** roots, and {@link keys} cannot express that on its own: it is
+   * stated in `useIssueInvoice` and its two siblings rather than left to be discovered from a
+   * stale table on another screen.
+   *
+   * `budgetBurn` sits under `['projects', projectId, …]` rather than here, which is
+   * `projectStaffing`'s decision one module over (017's note on `staffingRoot`). It is a
+   * project-scope read on a project screen, gated on `project:read` rather than on a money key
+   * (019 D-h), and it must be swept by the project invalidation the overview already runs. Under
+   * `billingRoot` it would be refreshed by billing writes and by nothing the project does.
+   */
+  billingRoot: ['billing'] as const,
+  billing: {
+    summary: (on: string) => ['billing', 'summary', on] as const,
+    rateCards: ['billing', 'rate-cards'] as const,
+    rateCard: (rateCardId: string) => ['billing', 'rate-cards', rateCardId] as const,
+    budgets: (clientId: string) => ['billing', 'budgets', clientId] as const,
+    invoices: (clientId: string, status: string) =>
+      ['billing', 'invoices', clientId, status] as const,
+    invoice: (invoiceId: string) => ['billing', 'invoices', invoiceId] as const,
+    expenses: (projectId: string) => ['billing', 'expenses', projectId] as const,
+  },
+  /**
+   * The client's own hours-and-invoices rollup — under `clientsRoot`, and see {@link keys.billing}.
+   *
+   * It is `client:read` rather than a money key, and it is the one billing read an Account Manager
+   * makes. `amountsVisible` on the answer is what decides whether it carries amounts (019 D-i), so
+   * the flag is part of the *body* and not part of the key: two readers of one client get two
+   * different answers under one cache entry, which is correct — a cache is per session, and a
+   * session has one reader.
+   */
+  clientBilling: (clientId: string) => ['clients', clientId, 'billing'] as const,
+  /** The project-scope burn, with no amount on it (019 D-h). See {@link keys.billing}. */
+  budgetBurn: (projectId: string) => ['projects', projectId, 'budget-burn'] as const,
+
   /*
     The prefix roots (§250).
 

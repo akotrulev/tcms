@@ -133,6 +133,12 @@ const ClientsPage = lazy(() =>
 const ClientPage = lazy(() =>
   import('../features/clients/ClientPage').then((m) => ({ default: m.ClientPage })),
 );
+const BillingPage = lazy(() =>
+  import('../features/billing/BillingPage').then((m) => ({ default: m.BillingPage })),
+);
+const InvoicePage = lazy(() =>
+  import('../features/billing/InvoicePage').then((m) => ({ default: m.InvoicePage })),
+);
 const StaffingPage = lazy(() =>
   import('../features/staffing/StaffingPage').then((m) => ({ default: m.StaffingPage })),
 );
@@ -1209,6 +1215,39 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <ClientPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            Billing (019 M8) — company-wide, so outside the project segment for `/clients`' reason:
+            an invoice is the company's and spans projects, and scoping it under the switcher would
+            say switching projects changes which invoices you are looking at.
+
+            **Routed for everybody, and refused by a sentence rather than by the router**, as every
+            readable screen in this app is. The RAIL entry is the exception and is ABSENT without
+            `billing:read` (019 D-o) — `AppShell` carries the argument, which is `ApiTokenService`'s
+            and is sharpest here: the read is refused rather than narrowed, so the screen behind the
+            entry exists only to say no.
+
+            The route staying open is not in tension with that. A link to an invoice can be pasted
+            into a message, and a caller who follows one must land on a sentence naming who holds
+            the key rather than on a 404 that says the invoice does not exist — which would be a
+            different and false claim about the company.
+          */}
+          <Route
+            path="/billing"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <BillingPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/billing/invoices/:invoiceId"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <InvoicePage />
               </Suspense>
             }
           />

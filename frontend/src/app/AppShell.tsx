@@ -28,6 +28,7 @@ import {
   Moon,
   Network,
   Package,
+  Receipt,
   Rocket,
   Search,
   Settings,
@@ -231,6 +232,40 @@ const TIMESHEETS: NavItem = {
   to: '/timesheets',
   icon: <Timer className="size-4" />,
   end: true,
+};
+
+/**
+ * Billing (019 M8), and **the fifth gated entry in a rail whose standing rule is
+ * disable-don't-hide** (§31) — after the two audit entries, the three credential entries and
+ * Clients.
+ *
+ * `billing.html` says it in a callout on the screen itself: *"Switch the top bar to Test Engineer
+ * or Account Manager and this entry disappears from the sidebar entirely — not greyed out, not
+ * empty. It is not their screen."*
+ *
+ * The argument is `ApiTokenService`'s, restated by the Clients entry below and sharpest here: the
+ * read is **refused rather than narrowed**, so the whole screen behind this entry exists only to
+ * say no, and an entry into that refusal is the same refusal one click earlier. A Test Engineer
+ * has no business learning from a sidebar what their employer bills — which is the sentence the
+ * Clients entry makes about how many customers they have, one step less sensitive.
+ *
+ * Placement: this ungrouped block outside the project frame, **after `TIMESHEETS`**, for that
+ * item's own reason inverted. A timesheet period is personal and spans projects; an invoice is the
+ * company's and spans projects; neither is changed by the switcher, so neither may sit under it.
+ *
+ * Gated on `billing:read` — the key every money-holding role holds and every billing read on that
+ * screen requires. It fails CLOSED while pending, like the other gates here: the item appears once
+ * the answer arrives, where a wrongly-shown one would flash a link that then vanishes.
+ *
+ * The `/billing` **route** stays open to everybody and refuses with a sentence, as every readable
+ * screen in this app does. That is not in tension with hiding the entry: a pasted link must land
+ * on a refusal naming who holds the key, and this rail simply does not offer the trip.
+ */
+const BILLING: NavItem = {
+  label: 'Billing',
+  to: '/billing',
+  icon: <Receipt className="size-4" />,
+  end: false,
 };
 
 /**
@@ -810,13 +845,19 @@ function RailContent({
   const { activeProjectId } = useActiveProject();
 
   /*
-    The rail's only permission reads, and the only two entries any verdict here decides — see
-    `AuditReach`. Both gates fail CLOSED while pending, which is `useCan`'s `can()` and the right
-    default for an entry that is hidden rather than disabled: the item appears once the answer
-    arrives, where a wrongly-shown one would flash a link that then vanishes.
+    The rail's only permission reads. ~~The only two entries any verdict here decides~~ → nine of
+    them now, across the project frame and the ungrouped block above it — the two audit entries
+    (`AuditReach`), the three credential entries (`CredentialReach`), Imports, Clients, and
+    `BILLING`. The count grew; the rule did not, and each of those carries its own paragraph saying
+    why it is the exception rather than the pattern.
+
+    Both gates fail CLOSED while pending, which is `useCan`'s `can()` and the right default for an
+    entry that is hidden rather than disabled: the item appears once the answer arrives, where a
+    wrongly-shown one would flash a link that then vanishes.
 
     Both hooks read `/me/permissions`, which every screen behind this rail already fetches, so the
-    keys are warm and this costs no extra round trip on navigation.
+    keys are warm and this costs no extra round trip on navigation. `BILLING` reads the same warm
+    company gate, so the fifth exception costs no fifth request.
   */
   const projectGate = useCan(activeProjectId);
   const companyGate = useCanInCompany();
@@ -913,8 +954,13 @@ function RailContent({
       </div>
 
       {/*
-        Outside the project frame below it, all three of them. `MY_WORK` and `TIMESHEETS` are
-        personal; `ALL_PROJECTS` is what the switcher chooses between — see each one's own note.
+        Outside the project frame below it, all four of them. `MY_WORK` and `TIMESHEETS` are
+        personal, `BILLING` is the company's, and `ALL_PROJECTS` is what the switcher chooses
+        between — see each one's own note.
+
+        `BILLING` is the only one of the four that is conditional, and it is ABSENT rather than
+        disabled for a caller without `billing:read` — see {@link BILLING} for why this rail breaks
+        its own disable-don't-hide rule here for the fifth recorded time.
       */}
       <ul className={cn('m-0 list-none py-2', collapsed ? 'px-0' : 'px-2')}>
         <li>
@@ -923,6 +969,11 @@ function RailContent({
         <li>
           <RailLink item={TIMESHEETS} onNavigate={onNavigate} collapsed={collapsed} />
         </li>
+        {companyGate.can('billing:read') && (
+          <li>
+            <RailLink item={BILLING} onNavigate={onNavigate} collapsed={collapsed} />
+          </li>
+        )}
         <li>
           <RailLink item={ALL_PROJECTS} onNavigate={onNavigate} collapsed={collapsed} />
         </li>

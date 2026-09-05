@@ -451,7 +451,14 @@ You are `fe-react` working in the tcms repo. Read CLAUDE.md first, then load `fe
 `fe-react-component-testing`.
 
 Read, in this order: docs/plans/019-billing.md §T6 and its "Decisions" section — D-h, D-i and D-p ·
-CLAUDE.md · frontend/src/features/clients/BillingSlot.tsx IN FULL (its header states exactly what you
+CLAUDE.md · frontend/src/api/queries/billing.ts IN FULL — **T5 already built and exported both hooks
+you need**, `useClientBilling(clientId, enabled)` and `useProjectBudgetBurn(projectId, enabled)`, and
+that file's header says which gate each costs and why neither is a money key ·
+frontend/src/features/billing/money.ts and months.ts (your value column formats through `formatMoney`
+and there is deliberately no `sum`) · frontend/src/features/billing/BudgetPanel.tsx's exported
+`BurnMeter` — **use it rather than drawing a second meter**, because an overrun must not look one way
+on the Billing screen and another on a project's Overview ·
+frontend/src/features/clients/BillingSlot.tsx IN FULL (its header states exactly what you
 are replacing and why the slot exists) · docs/mockups/client.html's three KPI tiles, its "Hours and
 invoices to date" table and its "Rate card" panel · docs/mockups/project-overview.html's "Budget
 burn" panel · docs/mockups/settings-general.html's Budget row ·
@@ -476,6 +483,15 @@ Traps this task will hit:
 - **The Overview's Budget burn panel carries hours and a percentage and no currency, ever** (D-h).
   The mockup's own hint says "hours, no rates" and its copy says "What an hour costs is Finance's,
   and is not on this page". For a MONEY-basis budget render the percentage alone — never the amount.
+  `BudgetBurn` has no amount and no currency member at all, so there is nothing to withhold: if you
+  find yourself importing `money.ts` on that panel, you have reached for the wrong hook.
+- **`burnPercent: null` is *unknown* and never zero, and `BurnMeter` already renders it that way.**
+  A MONEY ceiling on a project whose client has no rate card cannot be priced; zero would read as
+  *nothing spent* on a project that has spent a quarter. The meter is also NOT capped at 100 —
+  billing.html draws 102% in a danger tone, and clamping it hides the one row that matters.
+- **You do not need a new key or a new hook.** `keys.clientBilling` sits under `clientsRoot` and
+  `keys.budgetBurn` under the project's own prefix, both for the reason `keys.ts`' comment gives, and
+  T5's invoice writes already sweep both roots. Adding a key here is a sign of a wrong turn.
 - **ProjectOverviewPage.test.tsx currently asserts the budget card is NOT rendered.** That assertion
   was correct when it was written and is now superseded; rewrite it to assert what is now true, and
   say in the file that it was reversed by 019 rather than deleting the reasoning.
@@ -2516,16 +2532,25 @@ drives the two states a seeded instance will not show.
 **Depends on:** T4 (every endpoint these screens read)
 **Stack:** `fe` · **Agent:** `fe-react`
 
-**Files:**
+**Files** — as landed:
 - Create: `frontend/src/api/queries/billing.ts`
 - Modify: `frontend/src/api/queries/keys.ts`, `frontend/src/api/queries/index.ts`
 - Create: `frontend/src/features/billing/BillingPage.tsx`, `RateCardPanel.tsx`, `RateCardDialog.tsx`,
   `BudgetPanel.tsx`, `BudgetDialog.tsx`, `InvoiceListPanel.tsx`, `DraftInvoiceDialog.tsx`,
-  `InvoicePage.tsx`, `InvoiceLines.tsx`, `InvoiceEntries.tsx`, `money.ts`, and their tests
-- Modify: `frontend/src/app/AppShell.tsx`, `frontend/src/app/router.tsx`,
-  `frontend/src/lib/devFaults.ts`, `frontend/src/lib/labels.ts`
+  `InvoicePage.tsx`, `InvoiceLines.tsx`, `InvoiceEntries.tsx`, `money.ts`, **`months.ts`**, and
+  tests for `money`, `months`, `BillingPage`, `InvoicePage`, `RateCardDialog`, `BudgetDialog` and
+  `DraftInvoiceDialog`
+- Modify: `frontend/src/app/AppShell.tsx`, `frontend/src/app/AppShell.test.tsx`,
+  `frontend/src/app/router.tsx`, `frontend/src/lib/devFaults.ts`, `frontend/src/lib/labels.ts`
 
-- [ ] **Step 1: The keys, in the one factory**
+**`months.ts` was not predicted by this plan and is the eleventh file.** The month is needed in two
+places that must agree — the summary's `on` parameter and the draft dialog's default period — and
+`features/time/periods.ts` is the fortnight, deliberately, with a header forbidding exactly the
+re-derivation a shared file would invite. It is `periods.ts`' neighbour with the same UTC argument
+and the same three edges under test (`31st → previous month`, February, the year boundary), and it
+imports `todayIso` from that file rather than declaring a second answer to *what is today*.
+
+- [x] **Step 1: The keys, in the one factory**
 
 ```ts
   /**
@@ -2556,7 +2581,7 @@ drives the two states a seeded instance will not show.
 a project-scope read on a project screen, and it must be swept by the project invalidation the
 overview already runs, exactly as `projectStaffing` is (017's note on `staffingRoot`).
 
-- [ ] **Step 2: The rail entry — the fifth gated one**
+- [x] **Step 2: The rail entry — the fifth gated one**
 
 ```tsx
 /**
@@ -2601,7 +2626,7 @@ request:
         )}
 ```
 
-- [ ] **Step 3: The test the execution breakdown names as an acceptance criterion**
+- [x] **Step 3: The test the execution breakdown names as an acceptance criterion**
 
 ```tsx
 it('does not render the Billing entry for a Test Engineer or an Account Manager', async () => {
@@ -2620,7 +2645,7 @@ it('renders the Billing entry for a caller holding billing:read', async () => {
 })
 ```
 
-- [ ] **Step 4: `money.ts` — one formatter, and no cross-currency sum**
+- [x] **Step 4: `money.ts` — one formatter, and no cross-currency sum**
 
 ```ts
 /**
@@ -2637,7 +2662,7 @@ export function formatMoney(money: Money): string { … }
 export function formatMoneyList(figures: Money[]): string[] { … }
 ```
 
-- [ ] **Step 5: `BillingPage` — the four tiles, four panels, in the mockup's order**
+- [x] **Step 5: `BillingPage` — the four tiles, four panels, in the mockup's order**
 
 The mockup's layout, translated: a `g4` KPI row, then a `g-main` two-column grid with **Rate cards**
 and **Project budgets** stacked on the left and **Invoices** and **Not billed** on the right. Every
@@ -2660,7 +2685,7 @@ the module refuses:
       </Panel>
 ```
 
-- [ ] **Step 6: `InvoicePage` — a draft and an issued invoice are one screen in two states**
+- [x] **Step 6: `InvoicePage` — a draft and an issued invoice are one screen in two states**
 
 ```tsx
 /**
@@ -2697,7 +2722,7 @@ The entries table's approval column is headed **`Period approved`**, and its `ti
         </TableHead>
 ```
 
-- [ ] **Step 7: `tcmsFaults.billing(…)`**
+- [x] **Step 7: `tcmsFaults.billing(…)`**
 
 ```ts
 /**
@@ -2713,7 +2738,48 @@ The entries table's approval column is headed **`Period approved`**, and its `ti
  */
 ```
 
-- [ ] **Step 8: Gate and commit**
+**Five things landed differently from what this task predicted, and each is stated so a reader
+comparing the code against the plan finds the reason rather than a gap:**
+
+1. **`RateCardDialog` is mounted only while it is open, and it carries a client picker.** It reads
+   `/users` and `/roles` to populate its `PERSON` and `ROLE` rungs — both are reachable for a
+   Finance user, unlike `client-new.html`'s account-manager picker (018), because `GET /users` costs
+   `company:read`, which the non-assignable **Company Member** baseline grants every member on
+   joining. A permanently mounted dialog therefore made two requests on every load of the Billing
+   screen for a form nobody had opened, which `BillingPage.test.tsx` caught through the harness's
+   unmocked-read throw. The picker exists because `billing.html` draws a top-level *New rate card*
+   button while a card is per client: it lists the clients that have **no** card, which are the only
+   ones a create can succeed for, and it is absent when a row's pencil already named one.
+2. **The ladder waits for those two lists before it renders.** A `PERSON` rung is seeded with a
+   person *id*; drawn into a select whose options have not arrived, the browser falls back to the
+   placeholder, so the form would read *Choose a person…* over a rung that is in fact set. The wait
+   is on `isPending` rather than on `data === undefined`, so a failed list falls through to the
+   disabled picker and its sentence instead of waiting forever.
+3. **`tcmsFaults.off()` did not clear the clients arm**, and had not since 018. Found while adding
+   `billing` beside it — `off()` announced *cleared* while a fabricated population stayed in place,
+   which is this module's one real failure mode, since a developer then reads a real screen against
+   invented data. Both are cleared now, and the comment says which one was missing.
+4. **Money renders two decimals**, where every mockup figure is a whole euro. `Money.amount` is a
+   `double`, so an invoice can total `€6,096.42`, and dropping the cents would be a wrong number on
+   the one screen whose entire subject is what a client owes. The mockup's whole euros are a fact
+   about its example data rather than a rounding rule.
+5. **Both destructive actions confirm in place rather than in a second dialog** — the rate card's
+   removal and a budget's. This app never stacks modals and never uses `window.confirm`, so the
+   confirmation is a `Banner` inside the form that names the object and both consequences: for a
+   rate card, that issued invoices keep their figures and future hours land in the `NO_RATE` bucket;
+   for a budget, that the project keeps every hour anybody logged.
+
+**Two things this task did NOT build, both deliberate and both stated in the code:**
+
+- **No expense hooks.** `/expenses` exists and is reachable from the CLI and MCP, an expense is
+  never an invoice line, and no mockup draws a panel for one (019 D-j). A hook with no caller would
+  be the only thing on this surface claiming a screen was coming. `keys.billing.expenses` exists for
+  the day one is.
+- **No `Preview PDF`.** Absent rather than drawn-and-inert, in both invoice states, and
+  `InvoicePage.test.tsx` asserts its absence in both — the mockup draws it, there is no endpoint,
+  and none is planned (019 D-q).
+
+- [x] **Step 8: Gate and commit**
 
 ```bash
 ~/bin/tcms-remote sync

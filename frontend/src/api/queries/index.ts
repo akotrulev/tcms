@@ -404,3 +404,37 @@ export {
   useSetProjectClient,
   useUpdateClient,
 } from './clients';
+
+/*
+  Billing (019 M8). Sixteen operations, and the split of gates is what to read first: everything
+  here costs one of the seven COMPANY-scope money keys except two — `useProjectBudgetBurn` is
+  `project:read`, because its shape has no amount and no currency member at all to withhold
+  (019 D-h), and `useClientBilling` is `client:read`, because the server decides per caller whether
+  its answer carries amounts and says so in `amountsVisible` (019 D-i).
+
+  Every read is `enabled`-gated on the permission rather than allowed to 403: the rail entry into
+  `/billing` is ABSENT without `billing:read` (019 D-o), so a screen that fired one anyway would
+  report a refusal for a control the reader was never meant to see.
+
+  There are no expense hooks. `/expenses` exists and is reachable from the CLI and MCP, but an
+  expense is never an invoice line and no mockup draws a panel for one (019 D-j) — see the module
+  header.
+*/
+export {
+  useBillingSummary,
+  useBudgets,
+  useClearProjectBudget,
+  useClientBilling,
+  useCreateRateCard,
+  useDeleteRateCard,
+  useDiscardInvoice,
+  useDraftInvoice,
+  useInvoice,
+  useInvoices,
+  useIssueInvoice,
+  useProjectBudgetBurn,
+  useRateCards,
+  useSetProjectBudget,
+  useUpdateRateCard,
+  type InvoiceFilter,
+} from './billing';
