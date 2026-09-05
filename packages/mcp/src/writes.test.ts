@@ -1123,7 +1123,17 @@ describe('the surface as a whole — surface spec §2 and §4.1', () => {
     // Deleting a CLIENT has no arm at all: the endpoint exists and refuses while any project
     // names the client, archiving is what that refusal points at, and an agent-drivable delete of
     // an organisation record that is meant to outlive the work is a capability nobody asked for.
-    expect(TOOLS).toHaveLength(39);
+    //
+    // 39 -> 43 with billing (019 T1): `tcms_read_billing`, `tcms_write_billing`,
+    // `tcms_read_rate_card` and `tcms_write_rate_card`. `tcms_write_billing` is the FIRST tool on
+    // this surface to span four permissions, and §2 is satisfied by the arm table for the same
+    // reason `tcms_write_client` satisfied it with two — with a stronger argument here, because
+    // §A3 grants the seven money keys as a BLOCK to Instance Admin, Company Admin and Finance and
+    // to nobody else, so splitting would produce four tools listed to an identical audience.
+    // `GET /projects/{projectId}/budget-burn` is on NEITHER read tool: it is `project:read` and
+    // belongs to the project surface, and listing it here would put a money tool in front of every
+    // engineer in the company (019 D-h).
+    expect(TOOLS).toHaveLength(43);
   });
 
   it('names every tool in the tcms_ namespace', () => {

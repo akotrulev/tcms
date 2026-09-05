@@ -12038,6 +12038,444 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/billing/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The four figures at the top of the Billing screen
+         * @description Requires `billing:read` at company scope.
+         *
+         *     **`invoicedYearToDate` and `draftableNow` are arrays, one entry per currency** (019 D-l).
+         *     `billing.html` draws a single `€52.4k` tile while its own rate-card table carries a EUR
+         *     client and a CHF client two rows apart; that is a single-currency render of a
+         *     multi-currency company, and one number summed across two currencies is wrong in both. The
+         *     screen renders one line per currency where the mockup renders one figure — recorded as a
+         *     disagreement rather than resolved silently, per plan 009's precedence rule.
+         *
+         *     `unapprovedHours` is a plain number, because hours have no currency, and it is the figure
+         *     the mockup labels *excluded from every draft*.
+         */
+        get: operations["getBillingSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rate-cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every active client and the rate card it has, or has not
+         * @description Requires `ratecard:read`.
+         *
+         *     **One slot per ACTIVE client, card or `null`.** `billing.html`'s table ends on a Kessler
+         *     Health row reading *no rate card yet* with a `Set` button, and that row is an answer rather
+         *     than a missing one — a client with no card is the state a new client is in, and its
+         *     approved hours are still recorded, they just cannot be priced.
+         *
+         *     Answers `[]` for a company with no clients at all, which is the owner's own case (scope D1
+         *     rule 2). Nothing marks that as incomplete.
+         */
+        get: operations["listRateCards"];
+        put?: never;
+        /**
+         * Set a client's rate card
+         * @description Requires `ratecard:manage`.
+         *
+         *     **One card per client** — `uq_rate_card_client` — so a second `POST` for a client that
+         *     already has one answers `409`. The currency lives on the card and not on the invoice, which
+         *     is what makes an invoice's currency a property of its client rather than a field on a form,
+         *     and a cross-client invoice structurally impossible rather than merely refused.
+         *
+         *     A card for a client whose id this company cannot see answers `400` with a field error on
+         *     `clientId`, never a `404` and never a `500` from the foreign key — `RLS` is what decides
+         *     visibility and the constraint is not subject to it (018 D-l).
+         */
+        post: operations["createRateCard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rate-cards/{rateCardId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rateCardId: components["parameters"]["RateCardId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One rate card and its entries
+         * @description Requires `ratecard:read`.
+         */
+        get: operations["getRateCard"];
+        /**
+         * Replace a rate card and every entry on it
+         * @description Requires `ratecard:manage`. **A full replacement, entries included** — the entries sent are
+         *     the entries the card then has, and one omitted is one removed. `PUT /clients/{clientId}` is
+         *     the same shape for the same reason: the screen shows and submits the whole card.
+         *
+         *     **It does not reprice anything already issued.** An `invoice_line` carries the rate as
+         *     applied, as a number, so a card doubled today leaves last month's invoice exactly as it was
+         *     sent (019 D-c). It does change every DRAFT invoice for this client on that draft's next
+         *     read, which is the same decision seen from the other side.
+         */
+        put: operations["updateRateCard"];
+        post?: never;
+        /**
+         * Remove a client's rate card
+         * @description Requires `ratecard:manage`.
+         *
+         *     **Never refused because an invoice exists**, and that is the difference from
+         *     `DELETE /clients/{clientId}`, which answers `409` while a project names the client. An
+         *     issued invoice does not reference this card: its lines carry the rate they were priced at.
+         *     Removing the card stops future hours being priceable and changes nothing already sent.
+         */
+        delete: operations["deleteRateCard"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every project with a budget, its approved hours and its burn
+         * @description Requires `billing:read` — this is the money view of a budget, in a currency where the
+         *     project has one. The percentage-only view a Project Manager reads is
+         *     `GET /projects/{projectId}/budget-burn`, gated on `project:read` (019 D-h).
+         *
+         *     **A project with no client has no rate card and therefore no `pricedToDate`**, and it is
+         *     listed anyway. `billing.html` draws *Internal Platform · None (internal) · budget — · 126h
+         *     approved · no budget set* in the same table as three billed projects, with no warning tone
+         *     and no call to action: a company building its own products is the owner's own case (scope
+         *     D1 rule 1, 019 D-p).
+         */
+        get: operations["listBudgets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/budget": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set or replace this project's budget
+         * @description Requires `billing:budget` at **company** scope — not a project grant. A budget is a money
+         *     decision and the seven money keys are company-wide (roles spec §A3's Money table), so a
+         *     Project Manager sets no budget and reads the burn.
+         *
+         *     **A `MONEY` basis requires a currency and an `HOURS` basis forbids one**, enforced by
+         *     `ck_budget_shape` in the database as well as here: a shape the database holds is one the
+         *     application cannot drift from.
+         *
+         *     The target state, not a verb — sending a budget for a project that already has one replaces
+         *     it, as `PUT /projects/{projectId}/client` does one path over.
+         */
+        put: operations["setProjectBudget"];
+        post?: never;
+        /**
+         * Remove this project's budget
+         * @description Requires `billing:budget`. A project with no budget is not a project in a deficient state —
+         *     `settings-general.html`'s Budget row reads *no budget set* and the overview draws no panel
+         *     at all. `204` whether or not there was one, because the target state is the same either way.
+         */
+        delete: operations["clearProjectBudget"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/budget-burn": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The ceiling and the burn, as a percentage and hours
+         * @description Requires **`project:read`** — the one endpoint in this tag that is not gated on a money key,
+         *     and the reason it is safe is that there is nothing on it to withhold (019 D-h).
+         *     `BudgetBurn` has **no amount member and no currency member at all**: a `MONEY`-basis budget
+         *     reaches this endpoint as `burnPercent` alone.
+         *
+         *     This is what the roles spec means by *"a Project Manager… whose budget view is a percentage
+         *     on the project overview rather than a number in a currency"*, and it is what
+         *     `project-overview.html` draws — the panel's hint reads *"hours, no rates"* and its copy
+         *     reads *"A Project Manager sees the ceiling and the burn. What an hour costs is Finance's,
+         *     and is not on this page."*
+         *
+         *     Gating it on `billing:read` was rejected: it would hide a project's own ceiling from the
+         *     people delivering against it.
+         *
+         *     **`burnPercent` is `null`, not zero, where a `MONEY` budget's project has no rate card.**
+         *     The burn is then *unknown*, and a zero would read as *nothing spent* on a project that has
+         *     spent a quarter. `basis` is `null` when the project has no budget, which is a state and not
+         *     an error.
+         */
+        get: operations["getProjectBudgetBurn"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/invoices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The company's invoices, drafts included
+         * @description Requires `billing:read`. Newest period first, drafts and issued together.
+         */
+        get: operations["listInvoices"];
+        put?: never;
+        /**
+         * Draft an invoice for a client and a period
+         * @description Requires `billing:invoice`.
+         *
+         *     **This writes a header and not one line** (019 D-c). The lines are computed on every read
+         *     of `GET /invoices/{invoiceId}` from the approved entries that exist at that moment, which is
+         *     why `invoice.html` can promise *"Approve them and this draft recalculates"* without a
+         *     recalculate endpoint, a staleness flag, or a window in which a draft disagrees with the
+         *     timesheets behind it.
+         *
+         *     **A client with no rate card answers `400`**, with a field error naming the card: a draft
+         *     that could price nothing would be a document whose every hour is in an exclusion bucket,
+         *     and `billing.html`'s `Set` button is where that is fixed.
+         *
+         *     The cost of the computed draft, stated rather than discovered: two drafts open over an
+         *     overlapping period for one client both offer the same hours, and whichever issues first
+         *     takes them. The second recomputes on its next read with those hours gone and the invoice
+         *     that took them named. Reserving entries at draft time was rejected — it makes an open draft
+         *     a lock on the company's time data.
+         */
+        post: operations["draftInvoice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/invoices/{invoiceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoiceId: components["parameters"]["InvoiceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One invoice, its lines, the entries behind them and what was excluded
+         * @description Requires `billing:read`.
+         *
+         *     **A DRAFT's lines are computed now; an ISSUED invoice's are the rows written when it was
+         *     issued** (019 D-c). Both arrive in the same shape, and the difference is visible in
+         *     `invoice.status` and in the fact that an issued invoice's figures never move again.
+         *
+         *     **`excluded` carries both buckets and neither is ever dropped** (019 D-g): hours that are
+         *     not approved, and approved hours no rate card can price. `invoice.html` states the first on
+         *     the screen — *"38 hours are excluded because they are not approved… They are counted here
+         *     so nobody wonders where they went"* — and the second is the same promise for the case that
+         *     mockup's example company does not have. An empty array means every approved hour in the
+         *     period is on a line.
+         */
+        get: operations["getInvoice"];
+        put?: never;
+        post?: never;
+        /**
+         * Discard a draft
+         * @description Requires `billing:invoice`. `invoice.html`'s **Discard** button.
+         *
+         *     **`409` for an ISSUED invoice**, and the status is the point: the caller may delete, the
+         *     invoice exists, and it is not a field they can fix — so it is neither `403` nor `404`,
+         *     exactly as `DELETE /clients/{clientId}` reasons about a client a project still names
+         *     (018 D-k). An issued invoice is a document that was sent; there is no operation on this
+         *     surface that unsends one.
+         */
+        delete: operations["discardInvoice"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/invoices/{invoiceId}/issue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoiceId: components["parameters"]["InvoiceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue a draft, writing its lines and locking them
+         * @description Requires `billing:issue` — its own key, separate from `billing:invoice`, for the reason
+         *     `release:publish` is separate from `release:manage`: issuing moves a state and it is its
+         *     own gate and its own audit row.
+         *
+         *     **This is the one operation in this product that writes an `invoice_line`**, and nothing
+         *     updates one afterwards. It composes the draft one last time, persists each line with the
+         *     rate **as applied** — a number, not a reference resolved later — links each line to the
+         *     time entries behind it, allocates the number, and flips the status. Re-reading after the
+         *     rate card changes returns exactly the same figures, which is what *the lines lock* means
+         *     here: there is no operation that can change one, so the immutability is structural rather
+         *     than a guard on a handler somebody forgets.
+         *
+         *     **It sends nothing.** `invoice.html` says so: *"Issuing locks the lines. It does not send
+         *     anything — sending is your mail client's job."* There is no PDF, no email and no delivery
+         *     state, and none is planned.
+         *
+         *     **`409` for an invoice that is already `ISSUED`.** Idempotency by re-issue would either
+         *     reprice a sent document or silently do nothing, and both are worse than a refusal that
+         *     names the state.
+         */
+        post: operations["issueInvoice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/expenses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Expenses recorded against a project
+         * @description Requires `billing:read`.
+         *
+         *     **An expense is recorded and never invoiced** (scope D24, 019 D-j). D24 admits exactly one
+         *     line shape — approved time at a rate-card rate — and `invoice.html` draws no expense row.
+         *     This exists because `billing:expense` is in the permission catalogue and a key with no
+         *     reachable endpoint is an unreachable row (roles spec §43); its callers are the CLI and MCP
+         *     verbs. **No mockup draws an expenses panel, so no screen renders one**, and that absence is
+         *     a decision rather than an unfinished task.
+         *
+         *     An AI assistant's usage is a cost and would be recorded here. It is never charged to a
+         *     client — `billing.html`'s *Not billed* panel says so on the screen.
+         */
+        get: operations["listExpenses"];
+        put?: never;
+        /**
+         * Record an expense against a project
+         * @description Requires `billing:expense`. See `listExpenses` for why this exists and why no screen calls
+         *     it. Recording one does not create an invoice line and cannot be made to.
+         */
+        post: operations["recordExpense"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/expenses/{expenseId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                expenseId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove an expense
+         * @description Requires `billing:expense`. Nothing references it; there is no invoice line to unpick.
+         */
+        delete: operations["deleteExpense"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/billing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clientId: components["parameters"]["ClientId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * A client's approved hours per period and the invoices raised against them
+         * @description Requires **`client:read`** — not a money key — and it is `client.html`'s *"Hours and
+         *     invoices to date"* table plus the two tiles above it. **Served by `billing` and tagged
+         *     `clients`**, because the tag names the screen a reader is on and this is the only path in
+         *     it that a money module answers.
+         *
+         *     **`amountsVisible` says whether this caller holds `billing:read`, and it is a field rather
+         *     than an omission** (019 D-i). One path serves two readers with different columns:
+         *     `client.html`'s footer states it from the other side — *"Amounts are absent for an Account
+         *     Manager. Switch the top bar to Finance and this table gains a value column."* Without the
+         *     flag, `amount: null` would mean either *no invoice for this period* or *not your business*,
+         *     and a renderer cannot tell them apart, so it would draw an empty column at an Account
+         *     Manager, which that mockup explicitly does not.
+         *
+         *     When `amountsVisible` is `false`, **every `amount` here is `null`** and the value column is
+         *     absent from the screen — not empty, not dashed. The hours are not withheld: an Account
+         *     Manager knows the client and the hours, and never a rate.
+         *
+         *     The flag is evaluated server-side. A client that computed it from its own permission cache
+         *     would be one stale `/me/permissions` away from rendering a column of nulls and calling it
+         *     money.
+         */
+        get: operations["getClientBilling"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -19761,6 +20199,394 @@ export interface components {
             phone?: string | null;
         };
         /**
+         * @description A monetary figure and the currency it is in, **always together**. There is no bare number
+         *     anywhere in this tag: a company with a EUR client and a CHF client has no single total, and
+         *     a naked `amount` is the field that eventually gets summed across two of them (019 D-l).
+         */
+        Money: {
+            /** Format: double */
+            amount: number;
+            /** @description ISO 4217, upper case. Determined by the client's rate card and never chosen on a form, which is what makes a cross-client invoice structurally impossible. */
+            currency: string;
+        };
+        /**
+         * @description How specific a rate-card entry is, and the order the ladder walks (019 D-d): a `PERSON`
+         *     entry naming the person who logged the hour, then a `ROLE` entry naming a role that person
+         *     actually holds **on that project**, then `ALL_ROLES`. Where two `ROLE` entries both match,
+         *     the **higher rate wins** — deterministic by construction, and a decision rather than a coin
+         *     toss: a person granted both Test Lead and Test Engineer on one project is billed as a Test
+         *     Lead, which is the number the client agreed.
+         * @enum {string}
+         */
+        RateCardScope: "PERSON" | "ROLE" | "ALL_ROLES";
+        /**
+         * @description `billing.html`'s *Applies to · Rate · Effective* columns. The effective date is on the
+         *     **entry** and not on the card, because that mockup carries two Acme roles *from 1 Jan 2026*
+         *     and one Acme person *from 1 Jul 2026*.
+         */
+        RateCardEntry: {
+            /** Format: uuid */
+            id: string;
+            scope: components["schemas"]["RateCardScope"];
+            /** Format: uuid */
+            personId?: string | null;
+            /** Format: uuid */
+            roleId?: string | null;
+            /** Format: double */
+            hourlyRate: number;
+            /** Format: date */
+            effectiveFrom: string;
+            /** @description What this entry applies to, resolved server-side — `Mira Sund`, `Test Lead`, `All roles`. The client renders it and never joins a person or a role to build it. */
+            appliesTo: string;
+        };
+        /**
+         * @description One entry of a `RateCardInput`. `scope` decides which of the two ids is required and the
+         *     other must be absent, matched by `ck_rate_card_entry_shape` in the database:
+         *     `PERSON` needs `personId`, `ROLE` needs `roleId`, `ALL_ROLES` needs neither.
+         */
+        RateCardEntryInput: {
+            scope: components["schemas"]["RateCardScope"];
+            /** Format: uuid */
+            personId?: string | null;
+            /** Format: uuid */
+            roleId?: string | null;
+            /** Format: double */
+            hourlyRate: number;
+            /** Format: date */
+            effectiveFrom: string;
+        };
+        /**
+         * @description **One per client** — `uq_rate_card_client`. The currency lives here rather than on the
+         *     invoice, which is what makes an invoice's currency a property of its client rather than a
+         *     field on a form.
+         *
+         *     A client with no card is not an error: its approved hours are still recorded, they just
+         *     cannot be priced, and they land in the `NO_RATE` exclusion bucket, counted and named.
+         */
+        RateCard: {
+            /** Format: uuid */
+            id: string;
+            client: components["schemas"]["ClientRef"];
+            currency: string;
+            entries: components["schemas"]["RateCardEntry"][];
+        };
+        /**
+         * @description The body of `POST /rate-cards` and `PUT /rate-cards/{rateCardId}`. The `PUT` is a **full
+         *     replacement including the entries** — the entries sent are the entries the card then has,
+         *     and one omitted is one removed.
+         *
+         *     `clientId` is ignored on the `PUT`; a card does not move between clients, and moving one
+         *     would silently reprice every draft on both sides.
+         */
+        RateCardInput: {
+            /** Format: uuid */
+            clientId: string;
+            currency: string;
+            entries: components["schemas"]["RateCardEntryInput"][];
+        };
+        /**
+         * @description A client and its card, **or a client and `null`** — `billing.html`'s Kessler Health row,
+         *     which reads *no rate card yet* beside a `Set` button. The absence is a row rather than a
+         *     missing one, because that is the state every new client is in.
+         */
+        RateCardSlot: {
+            client: components["schemas"]["ClientRef"];
+            card: components["schemas"]["RateCard"] | null;
+        };
+        /**
+         * @description A ceiling in hours or in money. `settings-general.html` draws `600h`; `billing.html` draws both, one project apart. Either way what a Project Manager reads is the burn and never the rate.
+         * @enum {string}
+         */
+        BudgetBasis: "HOURS" | "MONEY";
+        /**
+         * @description `billing.html`'s *Project budgets* table — **the money view**, gated on `billing:read`. The
+         *     percentage-only view a Project Manager reads is `BudgetBurn`, and the two are separate
+         *     schemas rather than one with fields withheld, because a schema whose meaning depends on who
+         *     asked is one no reader can check (019 D-h).
+         */
+        Budget: {
+            /** Format: uuid */
+            projectId: string;
+            projectKey: string;
+            projectName: string;
+            /** @description `null` for an internal project, and that is not a deficiency — `billing.html` renders it as *None (internal)* with no warning tone (scope D1 rule 1, 019 D-p). */
+            client?: components["schemas"]["ClientRef"] | null;
+            basis: components["schemas"]["BudgetBasis"];
+            /**
+             * Format: double
+             * @description The ceiling when `basis` is `HOURS`; `null` otherwise.
+             */
+            amountHours: number | null;
+            /** @description The ceiling when `basis` is `MONEY`; `null` otherwise. */
+            amountMoney: components["schemas"]["Money"] | null;
+            /** Format: double */
+            approvedHours: number;
+            /** @description What those approved hours are worth. `null` where the project has no client or its client has no rate card — the burn is then **unknown** rather than zero. */
+            pricedToDate: components["schemas"]["Money"] | null;
+            /**
+             * Format: double
+             * @description Approved hours over an `HOURS` ceiling, or priced hours over a `MONEY` one. `null` when a `MONEY` budget cannot be priced. **Not capped at 100** — `billing.html` draws Bergstrom Portal at 102% in a danger tone, and clamping it would hide the one row the screen exists to surface.
+             */
+            burnPercent: number | null;
+        };
+        /**
+         * @description `PUT /projects/{projectId}/budget`. A `MONEY` basis **requires** `currency` and an `HOURS`
+         *     basis **forbids** it — `ck_budget_shape` holds the same rule in the database, so the
+         *     application cannot drift from it.
+         */
+        BudgetInput: {
+            basis: components["schemas"]["BudgetBasis"];
+            /** Format: double */
+            amount: number;
+            currency?: string | null;
+        };
+        /**
+         * @description **The project-scope view, and it has no amount member and no currency member at all**
+         *     (019 D-h). Gated on `project:read`, and safe for exactly that reason: there is nothing on
+         *     it to withhold.
+         *
+         *     `project-overview.html` draws it under the hint *"hours, no rates"* with the copy *"A
+         *     Project Manager sees the ceiling and the burn. What an hour costs is Finance's, and is not
+         *     on this page."*
+         */
+        BudgetBurn: {
+            /** @description `null` when the project has no budget — a state, not an error. */
+            basis: components["schemas"]["BudgetBasis"] | null;
+            /**
+             * Format: double
+             * @description The ceiling in hours when `basis` is `HOURS`. **`null` for a `MONEY` budget**, which reaches this endpoint as `burnPercent` alone — the amount is Finance's.
+             */
+            budgetHours: number | null;
+            /** Format: double */
+            approvedHours: number;
+            /**
+             * Format: double
+             * @description `null` where a `MONEY` budget's project has no rate card. The burn is then *unknown*, and a zero would read as *nothing spent* on a project that has spent a quarter.
+             */
+            burnPercent: number | null;
+        };
+        /**
+         * @description A `DRAFT` stores no lines and recomputes on every read; an `ISSUED` invoice's lines are rows written once and never updated (019 D-c).
+         * @enum {string}
+         */
+        InvoiceStatus: "DRAFT" | "ISSUED";
+        /**
+         * @description One project, one rate, the hours at it. Grouped by project then by rate, as `invoice.html`
+         *     draws them.
+         *
+         *     For an `ISSUED` invoice these are stored rows carrying `rate` **as applied** — a number,
+         *     not a reference resolved later — so a card edited next month does not reprice an invoice
+         *     sent last month. For a `DRAFT` they are computed on every read and stored nowhere.
+         */
+        InvoiceLine: {
+            /** Format: uuid */
+            projectId: string;
+            projectName: string;
+            /** @description The resolved label the rate was matched on — `Mira Sund`, `Test Lead`. */
+            appliesTo: string;
+            scope: components["schemas"]["RateCardScope"];
+            /** Format: double */
+            hours: number;
+            /** Format: double */
+            rate: number;
+            amount: components["schemas"]["Money"];
+        };
+        /**
+         * @description One approved hour behind a line — `invoice.html`'s *Time entries behind these lines* table.
+         *
+         *     **`periodApprovedAt` and `periodApprovedBy` are the decision on that person's timesheet
+         *     PERIOD, and the field names say so deliberately** (019 D-f, 016 D-i). A period is per
+         *     person per fortnight and **spans projects**, while `time:approve` is a PROJECT-scope grant,
+         *     so approving one approves entries against projects the approver cannot see. *These hours
+         *     were approved* is a claim the data supports. *Somebody with authority over this project
+         *     approved these hours* is not, and no field here makes it. If per-project approval authority
+         *     is ever wanted it belongs in `time` as a column written at decision time, not here as a
+         *     join computing a claim about the past from the grants of the present.
+         */
+        InvoiceEntry: {
+            /** Format: uuid */
+            timeEntryId: string;
+            /** Format: date */
+            spentOn: string;
+            personName: string;
+            /** Format: double */
+            hours: number;
+            subjectKey: string;
+            subjectTitle: string;
+            /** Format: date-time */
+            periodApprovedAt: string;
+            periodApprovedBy: string;
+        };
+        /**
+         * @description Hours in the period that are **not** on a line, counted and named. Both buckets are always
+         *     present when they are non-empty and neither is ever silently dropped (019 D-g) — an hour
+         *     that vanished from a draft with no explanation is the defect this module exists to remove.
+         */
+        ExcludedHours: {
+            /**
+             * @description `NOT_APPROVED` — logged in the window and its timesheet period is not approved.
+             *     `invoice.html` states it on the screen: *"They are counted here so nobody wonders where
+             *     they went."*
+             *
+             *     `NO_RATE` — approved, but the client's rate card has no entry effective that day, or
+             *     there is no card. *"Without a card, approved hours are still recorded — they just
+             *     cannot be priced."* This is the bucket a naive implementation loses, because from
+             *     inside a join it looks exactly like a priced hour.
+             * @enum {string}
+             */
+            reason: "NOT_APPROVED" | "NO_RATE";
+            /** Format: double */
+            hours: number;
+            /** @description Who and how much — `Tomas Ek 24h · Jun Park 14h`. */
+            detail: string;
+        };
+        /** @description A draft or an issued invoice, as the list renders it. */
+        Invoice: {
+            /** Format: uuid */
+            id: string;
+            /** @description `null` while `DRAFT` — `invoice.html`'s panel reads *assigned on issue* — and `INV-2026-041` once issued. Unique per company; gap-free numbering is not guaranteed and is not required, for the reason `key_sequence` gives about display keys (019 D-k). */
+            number: string | null;
+            client: components["schemas"]["ClientRef"];
+            /** Format: date */
+            periodStart: string;
+            /** Format: date */
+            periodEnd: string;
+            status: components["schemas"]["InvoiceStatus"];
+            currency: string;
+            total: components["schemas"]["Money"];
+            lineCount: number;
+            /**
+             * Format: double
+             * @description The hours actually on lines — excluded hours are not counted here.
+             */
+            approvedHours: number;
+            /** Format: date-time */
+            issuedAt: string | null;
+            issuedBy: string | null;
+        };
+        /**
+         * @description `invoice.html` in one document — the header, the lines, the entries behind them, what was
+         *     excluded and the budgets this invoice moves. Nothing here is paged: the screen renders all
+         *     of it together.
+         */
+        InvoiceDetail: {
+            invoice: components["schemas"]["Invoice"];
+            /** @description The client contact this invoice is addressed to — `null` when the client has none recorded, which is a state and not a blocker. Issuing does not send anything, so there is nothing an absent address prevents. */
+            billTo: components["schemas"]["ClientContact"] | null;
+            termsDays: number;
+            lines: components["schemas"]["InvoiceLine"][];
+            entries: components["schemas"]["InvoiceEntry"][];
+            /** @description An empty array means every approved hour in the period is on a line. It never means the excluded hours were not looked for. */
+            excluded: components["schemas"]["ExcludedHours"][];
+            /** @description The budget of every project this invoice touches, as it stands — `invoice.html`'s *Budget effect* panel. Empty when none of them has a budget. */
+            budgetEffect: components["schemas"]["Budget"][];
+        };
+        /**
+         * @description `POST /invoices`. A client and a period, and nothing else: the lines are the approved hours
+         *     that exist, and there is no field here that could add one by hand. Billing is a report, not
+         *     a spreadsheet (story M2).
+         */
+        InvoiceDraftInput: {
+            /** Format: uuid */
+            clientId: string;
+            /** Format: date */
+            periodStart: string;
+            /** Format: date */
+            periodEnd: string;
+            /** @description Payment terms in days; the server records 30 when it is omitted. **No `default:` keyword**, deliberately — `openapi-typescript` emits a defaulted property as *required* in the generated type, which would make every draft that omits it a compile error in both clients (018 T1's finding, recorded on `ClientInput.status`). */
+            termsDays?: number | null;
+        };
+        /**
+         * @description A cost recorded against a project. **Never an invoice line** (scope D24, 019 D-j), and no
+         *     screen renders one — see `listExpenses` for both reasons.
+         */
+        Expense: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: string;
+            projectName: string;
+            /** Format: date */
+            incurredOn: string;
+            description: string;
+            amount: components["schemas"]["Money"];
+        };
+        ExpenseInput: {
+            /** Format: uuid */
+            projectId: string;
+            /** Format: date */
+            incurredOn: string;
+            description: string;
+            /** Format: double */
+            amount: number;
+            currency: string;
+        };
+        /** @description One row of `client.html`'s *Hours and invoices to date* table. */
+        ClientBillingRow: {
+            /** @description `Aug 2026`. */
+            periodLabel: string;
+            /** Format: date */
+            periodStart: string;
+            /** Format: uuid */
+            projectId: string;
+            projectName: string;
+            /** Format: double */
+            approvedHours: number;
+            /** Format: uuid */
+            invoiceId: string | null;
+            /** @description `null` for a draft — the mockup renders the word *Draft* in that column. */
+            invoiceNumber: string | null;
+            /** @description `null` where the period's hours are on no invoice at all. */
+            invoiceStatus: components["schemas"]["InvoiceStatus"] | null;
+            /** @description Always `null` when `amountsVisible` is `false`. See that field — the flag is what makes this `null` readable. */
+            amount: components["schemas"]["Money"] | null;
+        };
+        /**
+         * @description `client.html`'s two tiles — *Approved hours to date* and *Invoices* — and the table under
+         *     them. Gated on `client:read`, so an Account Manager reads it in full and Finance reads it
+         *     with amounts.
+         */
+        ClientBillingSummary: {
+            /**
+             * @description **Whether this caller holds `billing:read`** (019 D-i), evaluated server-side.
+             *
+             *     It is a field rather than an omission because one path serves two readers with
+             *     different columns, and without it `amount: null` would mean either *no invoice for this
+             *     period* or *not your business* — indistinguishable to a renderer, which would then draw
+             *     an empty column at an Account Manager. `client.html` explicitly does not: *"Amounts are
+             *     absent for an Account Manager. Switch the top bar to Finance and this table gains a
+             *     value column."* When this is `false` the column is **absent**, not empty and not dashed.
+             */
+            amountsVisible: boolean;
+            /** Format: double */
+            approvedHoursToDate: number;
+            /** Format: double */
+            approvedHoursThisQuarter: number;
+            invoiceCount: number;
+            /** Format: date-time */
+            lastIssuedAt: string | null;
+            rows: components["schemas"]["ClientBillingRow"][];
+        };
+        /** @description `billing.html`'s four tiles. */
+        BillingSummary: {
+            /**
+             * @description **One entry per currency** (019 D-l). `billing.html` draws one `€52.4k` tile while its
+             *     own rate-card table carries a EUR client and a CHF client two rows apart; that is a
+             *     single-currency render, and one number summed across two currencies is wrong in both.
+             *     An empty array means nothing has been issued this year.
+             */
+            invoicedYearToDate: components["schemas"]["Money"][];
+            /** @description What the period's approved, priceable, unbilled hours are worth, per currency. */
+            draftableNow: components["schemas"]["Money"][];
+            /**
+             * Format: double
+             * @description A plain number, because hours have no currency. `billing.html` labels it *excluded from every draft*, which is exactly what it is.
+             */
+            unapprovedHours: number;
+            /** @description How many clients have at least one issued invoice this year. */
+            clientsBilled: number;
+        };
+        /**
          * @description The body of `PUT /projects/{projectId}/client`. **One field, required and nullable** — the
          *     target state, not a verb. `null` means internal work, which is a real answer and the common
          *     one; there is no synthetic "Internal" client to name instead (scope D1 rule 1).
@@ -19967,6 +20793,8 @@ export interface components {
     parameters: {
         ProjectId: string;
         ClientId: string;
+        RateCardId: string;
+        InvoiceId: string;
         SocialProviderKey: components["schemas"]["SocialProvider"];
         /**
          * @description An `attachment` row's id. Scoped by its owner as well as by its id everywhere it is
@@ -26004,6 +26832,491 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ClientRef"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getBillingSummary: {
+        parameters: {
+            query?: {
+                /** @description Any day in the period `draftableNow` is computed over. Defaults to today. The year-to-date figure is always the calendar year containing this day. */
+                on?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The company's money, as far as this caller may see it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingSummary"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listRateCards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Each active client and its card */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RateCardSlot"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createRateCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RateCardInput"];
+            };
+        };
+        responses: {
+            /** @description The card as created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RateCard"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getRateCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rateCardId: components["parameters"]["RateCardId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The card */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RateCard"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateRateCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rateCardId: components["parameters"]["RateCardId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RateCardInput"];
+            };
+        };
+        responses: {
+            /** @description The card as it now stands */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RateCard"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteRateCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rateCardId: components["parameters"]["RateCardId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The card and its entries are gone */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listBudgets: {
+        parameters: {
+            query?: {
+                /** @description Only projects attached to this client. */
+                clientId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The projects and their budgets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Budget"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    setProjectBudget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetInput"];
+            };
+        };
+        responses: {
+            /** @description The budget as it now stands */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Budget"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    clearProjectBudget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The project has no budget */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getProjectBudgetBurn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The burn, with no money on it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetBurn"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listInvoices: {
+        parameters: {
+            query?: {
+                clientId?: string;
+                /** @description Defaults to `ALL`, which is what `billing.html`'s Invoices panel renders — two issued invoices and one draft in one list, the draft outlined rather than filtered away. */
+                status?: "DRAFT" | "ISSUED" | "ALL";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The invoices */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Invoice"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    draftInvoice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvoiceDraftInput"];
+            };
+        };
+        responses: {
+            /** @description The draft, with its lines computed for the first time */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getInvoice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoiceId: components["parameters"]["InvoiceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The invoice in full */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    discardInvoice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoiceId: components["parameters"]["InvoiceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The draft is gone; its hours are draftable again */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    issueInvoice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoiceId: components["parameters"]["InvoiceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The invoice, now issued and numbered */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listExpenses: {
+        parameters: {
+            query: {
+                projectId: string;
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The expenses, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Expense"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    recordExpense: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExpenseInput"];
+            };
+        };
+        responses: {
+            /** @description The expense as recorded */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Expense"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    deleteExpense: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                expenseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The expense is gone */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getClientBilling: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clientId: components["parameters"]["ClientId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The client's hours and invoices */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientBillingSummary"];
                 };
             };
             401: components["responses"]["Unauthorized"];

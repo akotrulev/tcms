@@ -69,6 +69,11 @@ import {
   suite,
   client as clientFixture,
   clientContact,
+  budget,
+  expense,
+  invoiceDetail,
+  rateCard,
+  rateCardSlot,
 } from '../../client/src/test/fixtures.js';
 import { COMMANDS } from './commands.js';
 import { EXIT } from './main.js';
@@ -101,6 +106,30 @@ const WATCHED = ['idempotency-key', 'if-match'] as const;
  * operation — not a header this file could start sending.
  */
 const CREATE_WITHOUT_A_KEY: Record<string, string> = {
+  /* Billing (019 T1). Five entries, and each names what a lost or raced write actually costs. */
+  'billing draft': 'POST /invoices declares no Idempotency-Key, the same scope wall as '
+    + '`client create` below: the parameter deduplicates within `(company, project, key)` and an '
+    + 'invoice is addressed to a CLIENT. There is no constraint standing in for it either — two '
+    + 'drafts over one period for one client are a legitimate state — so a lost response leaves a '
+    + 'second draft. It CANNOT double-bill: a draft stores no lines, both drafts offer the same '
+    + 'hours, and whichever is issued first takes them (019 D-c). The second recomputes on its next '
+    + 'read with those hours gone and the invoice that took them named.',
+  'expense record': 'POST /expenses declares no Idempotency-Key, and this is the one entry in this '
+    + 'map the parameter\'s own scope does NOT excuse: an expense is addressed to a project, so the '
+    + 'header could be offered. It is not, because nothing in the product reads an expense back '
+    + 'except `expense list` (019 D-j), so a duplicate is visible to and removable by the same '
+    + 'caller that made it. Closing it is one contract line whenever an expense gains a reader.',
+  'budget set': 'PUT /projects/{projectId}/budget declares no If-Match, and `Budget` carries no '
+    + '`lockVersion` on the wire to precondition on — the wall `client edit` meets on the MCP side. '
+    + 'Bounded by the row: a budget is a basis, an amount and a currency, so two people setting one '
+    + 'at once lose a ceiling rather than a body of work, and the loser can see the winner\'s value '
+    + 'on the next `billing budgets`.',
+  'rate-card set': 'PUT /rate-cards/{rateCardId} declares no If-Match and `RateCard` carries no '
+    + '`lockVersion`. WORSE than `budget set` above and stated rather than implied: the endpoint is '
+    + 'a FULL replacement including the entries, so two people editing one card at once lose a '
+    + 'whole rate card and not one field of it. The POST half of this command meets the create wall '
+    + 'instead, where `uq_rate_card_client` bounds it — a raced create answers 409 rather than '
+    + 'giving one client two cards.',
   'client create': 'POST /clients declares no Idempotency-Key, and the parameter\'s own scope is '
     + 'the reason `staffing absence` below gives: it deduplicates within `(company, project, key)` '
     + 'and a client is addressed to no project. What a lost response costs is bounded by a '
@@ -311,6 +340,84 @@ const INVOCATIONS: Record<string, Invocation> = {
     routes: {
       'POST /clients/cl-1/contacts': { status: 201, body: clientContact() },
     },
+  },
+  /*
+    Billing (019 T1). None of these carries a project in its path except the two budget arms and
+    `expense record`, and none carries an idempotency key — the parameter deduplicates within
+    `(company, project, key)` and a client-addressed write has no project (CREATE_WITHOUT_A_KEY).
+  */
+  'billing draft': {
+    argv: () => [
+      'billing', 'draft', '--client', 'cl-1', '--from', '2026-09-01', '--to', '2026-09-30',
+    ],
+    path: '/invoices',
+    routes: { 'POST /invoices': { status: 201, body: invoiceDetail() } },
+  },
+  'billing issue': {
+    argv: () => ['billing', 'issue', 'inv-1'],
+    path: '/invoices/inv-1/issue',
+    routes: {
+      'POST /invoices/inv-1/issue': {
+        status: 200,
+        body: invoiceDetail({
+          invoice: {
+            ...invoiceDetail().invoice,
+            number: 'INV-2026-001',
+            status: 'ISSUED',
+            issuedAt: '2026-10-01T09:00:00Z',
+            issuedBy: 'Fin Ance',
+          },
+        }),
+      },
+    },
+  },
+  'billing discard': {
+    // `--yes` because the delete arm asks first, as `doc unlink` above does.
+    argv: () => ['billing', 'discard', 'inv-1', '--yes'],
+    path: '/invoices/inv-1',
+    routes: { 'DELETE /invoices/inv-1': { status: 204 } },
+  },
+  'budget set': {
+    argv: () => ['budget', 'set', '--basis', 'HOURS', '--amount', '600'],
+    path: '/budget',
+    routes: { 'PUT /budget': { status: 200, body: budget() } },
+  },
+  'budget clear': {
+    argv: () => ['budget', 'clear', '--yes'],
+    path: '/budget',
+    routes: { 'DELETE /budget': { status: 204 } },
+  },
+  'expense record': {
+    argv: () => [
+      'expense', 'record', '--on', '2026-09-02', '--amount', '240',
+      '--currency', 'EUR', '--what', 'Device lab hire',
+    ],
+    path: '/expenses',
+    routes: { 'POST /expenses': { status: 201, body: expense() } },
+  },
+  'expense remove': {
+    argv: () => ['expense', 'remove', 'ex-1', '--yes'],
+    path: '/expenses/ex-1',
+    routes: { 'DELETE /expenses/ex-1': { status: 204 } },
+  },
+  'rate-card set': {
+    // The list read is in `routes` rather than in `scaffolding` because it is what this command
+    // uses to decide between POST and PUT, and the slot's `card: null` is what makes it a POST —
+    // the arm a client with no card takes, which is every client on its first rate.
+    argv: () => [
+      'rate-card', 'set', '--client', 'cl-1', '--currency', 'EUR',
+      '--entry', 'ALL_ROLES::90:2026-01-01',
+    ],
+    path: '/rate-cards',
+    routes: {
+      'GET /rate-cards': { status: 200, body: [rateCardSlot()] },
+      'POST /rate-cards': { status: 201, body: rateCard() },
+    },
+  },
+  'rate-card remove': {
+    argv: () => ['rate-card', 'remove', 'rc-1', '--yes'],
+    path: '/rate-cards/rc-1',
+    routes: { 'DELETE /rate-cards/rc-1': { status: 204 } },
   },
   'staffing allocate': {
     argv: () => [

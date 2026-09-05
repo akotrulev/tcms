@@ -1032,6 +1032,46 @@ export type ClientContact = S['ClientContact'];
 export type ClientContactInput = S['ClientContactInput'];
 export type ClientStatus = NonNullable<S['Client']['status']>;
 
+/**
+ * Billing (019 M8) — what an approved hour is worth, what a project may spend, and the invoice
+ * that says so.
+ *
+ * **Every monetary figure is a {@link Money}, never a bare number** (019 D-l), and every
+ * company-level total is an array of them, one per currency: a company with a EUR client and a CHF
+ * client has no single total, and a naked amount is the field that eventually gets summed across
+ * two of them.
+ *
+ * **{@link BudgetBurn} is the one shape here a Test Engineer may read**, and it carries no amount
+ * and no currency member at all (019 D-h) — `project-overview.html`'s panel is *"hours, no rates"*.
+ * Everything else costs one of the seven money keys, which Instance Admin, Company Admin and
+ * Finance hold and nobody else does.
+ */
+export type Money = S['Money'];
+export type RateCard = S['RateCard'];
+export type RateCardInput = S['RateCardInput'];
+export type RateCardEntry = S['RateCardEntry'];
+export type RateCardEntryInput = S['RateCardEntryInput'];
+export type RateCardSlot = S['RateCardSlot'];
+export type RateCardScope = S['RateCardScope'];
+export type Budget = S['Budget'];
+export type BudgetInput = S['BudgetInput'];
+export type BudgetBasis = S['BudgetBasis'];
+export type BudgetBurn = S['BudgetBurn'];
+export type Invoice = S['Invoice'];
+export type InvoiceDetail = S['InvoiceDetail'];
+export type InvoiceLine = S['InvoiceLine'];
+export type InvoiceEntry = S['InvoiceEntry'];
+export type InvoiceDraftInput = S['InvoiceDraftInput'];
+export type InvoiceStatus = S['InvoiceStatus'];
+export type ExcludedHours = S['ExcludedHours'];
+/** Why an hour is not on a line — `NOT_APPROVED` or `NO_RATE`, both counted and named (019 D-g). */
+export type ExclusionReason = NonNullable<S['ExcludedHours']['reason']>;
+export type Expense = S['Expense'];
+export type ExpenseInput = S['ExpenseInput'];
+export type ClientBillingSummary = S['ClientBillingSummary'];
+export type ClientBillingRow = S['ClientBillingRow'];
+export type BillingSummary = S['BillingSummary'];
+
 export type PersonProfile = S['PersonProfile'];
 export type PersonProfileInput = S['PersonProfileInput'];
 export type Skill = S['Skill'];

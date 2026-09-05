@@ -28,11 +28,26 @@ import type {
   AgentTaskContext,
   Artifact,
   Assistant,
+  BillingSummary,
+  Budget,
+  BudgetBurn,
   Client,
+  ClientBillingRow,
+  ClientBillingSummary,
   ClientContact,
   ClientDetail,
   ClientProject,
   ClientRef,
+  ExcludedHours,
+  Expense,
+  Invoice,
+  InvoiceDetail,
+  InvoiceEntry,
+  InvoiceLine,
+  Money,
+  RateCard,
+  RateCardEntry,
+  RateCardSlot,
   AuditEvent,
   AuthResult,
   Configuration,
@@ -1911,4 +1926,223 @@ export function aClientProject(overrides: Partial<ClientProject> = {}): ClientPr
  */
 export function aClientDetail(overrides: Partial<ClientDetail> = {}): ClientDetail {
   return { client: aClient(), contacts: [], projects: [], ...overrides }
+}
+
+/**
+ * A monetary figure and its currency, always together (019 D-l).
+ *
+ * There is deliberately no factory that sums two of these. `billing.html` draws one `€52.4k` tile
+ * while its own rate-card table carries a EUR client and a CHF client two rows apart, and a helper
+ * that added across currencies would be the one place this feature could produce a number that is
+ * wrong in both.
+ */
+export function money(overrides: Partial<Money> = {}): Money {
+  return { amount: 0, currency: 'EUR', ...overrides }
+}
+
+/** One rate-card entry. `ALL_ROLES` by default — the least specific rung of the ladder (019 D-d). */
+export function aRateCardEntry(overrides: Partial<RateCardEntry> = {}): RateCardEntry {
+  return {
+    id: 'rce1',
+    scope: 'ALL_ROLES',
+    personId: null,
+    roleId: null,
+    hourlyRate: 90,
+    effectiveFrom: '2026-01-01',
+    appliesTo: 'All roles',
+    ...overrides,
+  }
+}
+
+/** One card per client. `entries` defaults to empty — a card set a minute ago has none. */
+export function aRateCard(overrides: Partial<RateCard> = {}): RateCard {
+  return {
+    id: 'rc1',
+    client: aClientRef(),
+    currency: 'EUR',
+    entries: [],
+    ...overrides,
+  }
+}
+
+/**
+ * A client and its card, **or a client and `null`** — `billing.html`'s *no rate card yet* row.
+ *
+ * The default is `null`, because that is the state every new client is in and the one a screen is
+ * most likely to render wrongly.
+ */
+export function aRateCardSlot(overrides: Partial<RateCardSlot> = {}): RateCardSlot {
+  return { client: aClientRef(), card: null, ...overrides }
+}
+
+/**
+ * The money view of a budget, gated on `billing:read`.
+ *
+ * `HOURS` by default with no client and no priced figure — `billing.html`'s internal-project row,
+ * which is the owner's own case and the one nothing may mark as deficient (019 D-p).
+ */
+export function aBudget(overrides: Partial<Budget> = {}): Budget {
+  return {
+    projectId: 'p1',
+    projectKey: 'ACME',
+    projectName: 'Acme Storefront',
+    client: null,
+    basis: 'HOURS',
+    amountHours: 600,
+    amountMoney: null,
+    approvedHours: 0,
+    pricedToDate: null,
+    burnPercent: 0,
+    ...overrides,
+  }
+}
+
+/**
+ * The **project-scope** burn, and it has no amount and no currency member at all (019 D-h).
+ *
+ * `basis: null` by default, which is a project with no budget — a state, not an error, and the one
+ * where the overview draws no panel.
+ */
+export function aBudgetBurn(overrides: Partial<BudgetBurn> = {}): BudgetBurn {
+  return { basis: null, budgetHours: null, approvedHours: 0, burnPercent: null, ...overrides }
+}
+
+/** A draft by default: no number, no issue stamp, nothing on it that only issuing writes. */
+export function anInvoice(overrides: Partial<Invoice> = {}): Invoice {
+  return {
+    id: 'inv1',
+    number: null,
+    client: aClientRef(),
+    periodStart: '2026-09-01',
+    periodEnd: '2026-09-30',
+    status: 'DRAFT',
+    currency: 'EUR',
+    total: money(),
+    lineCount: 0,
+    approvedHours: 0,
+    issuedAt: null,
+    issuedBy: null,
+    ...overrides,
+  }
+}
+
+/** One project, one rate, the hours at it. */
+export function anInvoiceLine(overrides: Partial<InvoiceLine> = {}): InvoiceLine {
+  return {
+    projectId: 'p1',
+    projectName: 'Acme Storefront',
+    appliesTo: 'All roles',
+    scope: 'ALL_ROLES',
+    hours: 0,
+    rate: 0,
+    amount: money(),
+    ...overrides,
+  }
+}
+
+/**
+ * One approved hour behind a line.
+ *
+ * `periodApprovedBy` is who decided that person's **period** — not who approved this project's
+ * hours, and the difference is 019 D-f. A period spans projects while `time:approve` is
+ * project-scope, so no field here claims per-project authority.
+ */
+export function anInvoiceEntry(overrides: Partial<InvoiceEntry> = {}): InvoiceEntry {
+  return {
+    timeEntryId: 'te1',
+    spentOn: '2026-09-02',
+    personName: 'Mira Sund',
+    hours: 0,
+    subjectKey: 'ACME-122',
+    subjectTitle: 'Card capture',
+    periodApprovedAt: '2026-09-03T08:00:00Z',
+    periodApprovedBy: 'Rae Lindqvist',
+    ...overrides,
+  }
+}
+
+/** Hours that are not on a line, counted and named. Never silently dropped (019 D-g). */
+export function excludedHours(overrides: Partial<ExcludedHours> = {}): ExcludedHours {
+  return { reason: 'NOT_APPROVED', hours: 0, detail: '', ...overrides }
+}
+
+/**
+ * `invoice.html` in one document.
+ *
+ * Every array defaults to empty, including `excluded` — an empty `excluded` means every approved
+ * hour in the period is on a line, which is a real answer and the one a test should have to opt out
+ * of rather than into.
+ */
+export function anInvoiceDetail(overrides: Partial<InvoiceDetail> = {}): InvoiceDetail {
+  return {
+    invoice: anInvoice(),
+    billTo: null,
+    termsDays: 30,
+    lines: [],
+    entries: [],
+    excluded: [],
+    budgetEffect: [],
+    ...overrides,
+  }
+}
+
+/** A cost recorded against a project, and never an invoice line (019 D-j). */
+export function anExpense(overrides: Partial<Expense> = {}): Expense {
+  return {
+    id: 'ex1',
+    projectId: 'p1',
+    projectName: 'Acme Storefront',
+    incurredOn: '2026-09-02',
+    description: 'Device lab hire',
+    amount: money(),
+    ...overrides,
+  }
+}
+
+/** One row of `client.html`'s hours-and-invoices table. Unbilled by default. */
+export function aClientBillingRow(overrides: Partial<ClientBillingRow> = {}): ClientBillingRow {
+  return {
+    periodLabel: 'Sep 2026',
+    periodStart: '2026-09-01',
+    projectId: 'p1',
+    projectName: 'Acme Storefront',
+    approvedHours: 0,
+    invoiceId: null,
+    invoiceNumber: null,
+    invoiceStatus: null,
+    amount: null,
+    ...overrides,
+  }
+}
+
+/**
+ * `client.html`'s two tiles and the table under them.
+ *
+ * **`amountsVisible` defaults to `false`** — the Account Manager's view, which is the one the value
+ * column must be *absent* from rather than empty (019 D-i). A test about Finance's view says so by
+ * overriding, which is the direction this file's defaults always run.
+ */
+export function aClientBillingSummary(
+  overrides: Partial<ClientBillingSummary> = {},
+): ClientBillingSummary {
+  return {
+    amountsVisible: false,
+    approvedHoursToDate: 0,
+    approvedHoursThisQuarter: 0,
+    invoiceCount: 0,
+    lastIssuedAt: null,
+    rows: [],
+    ...overrides,
+  }
+}
+
+/** `billing.html`'s four tiles. Empty arrays mean nothing issued and nothing draftable. */
+export function aBillingSummary(overrides: Partial<BillingSummary> = {}): BillingSummary {
+  return {
+    invoicedYearToDate: [],
+    draftableNow: [],
+    unapprovedHours: 0,
+    clientsBilled: 0,
+    ...overrides,
+  }
 }

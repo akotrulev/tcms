@@ -2278,6 +2278,427 @@ const clientContactAdd: Command = {
   },
 };
 
+/* ------------------------------------------------------------------ billing ----
+   M8 (plan 019). Four of the seven money keys are write keys — `billing:budget`,
+   `billing:expense`, `billing:invoice` and `billing:issue` — and §A3 grants all seven as a BLOCK
+   to Instance Admin, Company Admin and Finance. There is no caller in this product who holds one
+   and not the rest, so the commands below are separated by what they DO rather than by who may
+   run them; each still declares its own key, so a role that splits them later does not silently
+   widen any of these.
+
+   NOTHING HERE BILLS A FIXED FEE, A RETAINER OR AN AI ASSISTANT'S HOURS (scope D24, 019 D-q), and
+   there is no option that could ask for one. An invoice line is approved time at a rate-card rate,
+   and it is the only line shape that exists. */
+
+/**
+ * `tcms billing draft --client cl-1 --from 2026-09-01 --to 2026-09-30`
+ *
+ * Costs `billing:invoice`. **This writes a header and not one line** (019 D-c): the lines are the
+ * approved hours that exist, computed on every read, which is why approving a period later changes
+ * the draft with no further command. There is no option here that could add a line by hand —
+ * billing is a report, not a spreadsheet (story M2).
+ *
+ * A client with no rate card answers `400`. A draft that could price nothing would be a document
+ * whose every hour is in an exclusion bucket; `tcms rate-card set` is where that is fixed.
+ */
+const billingDraft: Command = {
+  name: 'billing draft',
+  summary: "Draft an invoice from a client's approved hours for a period",
+  usage: 'tcms billing draft --client cl-1 --from 2026-09-01 --to 2026-09-30 [--terms 30]',
+  options: {
+    client: { type: 'string' },
+    from: { type: 'string' },
+    to: { type: 'string' },
+    terms: { type: 'string' },
+  },
+  write: { kind: 'create', permission: 'billing:invoice' },
+  /*
+    No `--idempotency-key`, for `client create`'s reason: the parameter deduplicates within
+    `(company, project, key)` and an invoice is addressed to a client, not to a project. There is no
+    uniqueness constraint standing in for it either — two drafts over the same period for the same
+    client are a legitimate state — so a lost response leaves a second draft. That is visible on
+    `tcms billing invoices`, discardable, and it cannot double-bill: the two drafts offer the same
+    hours and whichever issues first takes them (019 D-c). Recorded in CREATE_WITHOUT_A_KEY.
+  */
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const terms = text(options['terms']);
+
+    const created = await client.POST('/invoices', {
+      body: present({
+        clientId: requireOption(context, 'client'),
+        periodStart: requireOption(context, 'from'),
+        periodEnd: requireOption(context, 'to'),
+        termsDays: terms === undefined ? undefined : strictNumber(terms, '--terms'),
+      }) as components['schemas']['InvoiceDraftInput'],
+      tcms: request,
+    });
+
+    reportWrite(out, json, created, [
+      ['Drafted', show(created.invoice.id)],
+      ['Lines', String(created.lines.length)],
+      ['Excluded', created.excluded.map((row) => `${row.hours}h ${row.reason}`).join(', ') || 'nothing'],
+      ['Next', 'tcms billing issue ' + created.invoice.id + ' — which writes the lines and locks them'],
+    ]);
+  },
+};
+
+/**
+ * `tcms billing issue <invoiceId>`
+ *
+ * Costs `billing:issue` — its own key, separate from `billing:invoice`, for the reason
+ * `release:publish` is separate from `release:manage`: issuing moves a state, so it is its own gate
+ * and its own audit row.
+ *
+ * **This is the one command in this product that writes an invoice line, and nothing updates one
+ * afterwards.** Re-reading after the rate card changes returns the same figures: the lines carry
+ * the rate as applied, as a number, so the lock is structural rather than guarded (019 D-c).
+ *
+ * **It sends nothing.** There is no PDF, no email and no delivery state — `invoice.html` says so:
+ * *"Issuing locks the lines. It does not send anything — sending is your mail client's job."*
+ */
+const billingIssue: Command = {
+  name: 'billing issue',
+  summary: 'Issue a draft, writing its lines and locking them — irreversible',
+  usage: 'tcms billing issue inv-1',
+  options: {},
+  /*
+    `state`, not `edit`, and the distinction is the one `suite status` and `plan status` already
+    draw: this names an absolute target state rather than a change to a value, so an `If-Match`
+    would refuse a request over a version the caller never claimed to have based anything on. The
+    server preconditions on the state itself — a 409 for an invoice that is already ISSUED — which
+    is a stronger guard than a header, not a weaker one.
+  */
+  write: { kind: 'state', permission: 'billing:issue' },
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const invoiceId = requireArg(context, 'invoice');
+
+    const issued = await client.POST('/invoices/{invoiceId}/issue', {
+      params: { path: { invoiceId } },
+      tcms: request,
+    });
+
+    reportWrite(out, json, issued, [
+      ['Issued', show(issued.invoice.number)],
+      ['Total', `${issued.invoice.total.amount.toFixed(2)} ${issued.invoice.total.currency}`],
+      ['Lines', `${issued.lines.length} — locked; no command changes them`],
+      ['Note', 'nothing was sent — issuing locks the lines and does not deliver the invoice'],
+    ]);
+  },
+};
+
+/**
+ * `tcms billing discard <invoiceId>` — remove a draft.
+ *
+ * Costs `billing:invoice`. **`409` for an invoice that has been issued**, and the status is the
+ * point: the caller may delete, the invoice exists, and it is not a field they can fix. An issued
+ * invoice is a document that was sent, and there is no operation on this surface that unsends one.
+ */
+const billingDiscard: Command = {
+  name: 'billing discard',
+  summary: 'Discard a draft — refused for an invoice that has been issued',
+  usage: 'tcms billing discard inv-1',
+  options: {},
+  write: { kind: 'delete', permission: 'billing:invoice' },
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const invoiceId = requireArg(context, 'invoice');
+
+    await client.DELETE('/invoices/{invoiceId}', {
+      params: { path: { invoiceId } },
+      tcms: request,
+    });
+
+    reportWrite(out, json, { discarded: invoiceId }, [
+      ['Discarded', invoiceId],
+      ['Note', 'its hours are draftable again — nothing about them was changed'],
+    ]);
+  },
+};
+
+/**
+ * `tcms budget set --project ACME --basis HOURS --amount 600`
+ *
+ * Costs `billing:budget` at **company** scope, not a project grant: a budget is a money decision
+ * and the seven money keys are company-wide. A Project Manager sets no budget and reads the burn,
+ * as a percentage and never as a currency (019 D-h).
+ *
+ * A `MONEY` basis requires `--currency` and an `HOURS` basis forbids it. `ck_budget_shape` holds
+ * the same rule in the database, so this refusal and the server's cannot drift apart.
+ */
+const budgetSet: Command = {
+  name: 'budget set',
+  summary: "Set or replace a project's budget, in hours or in money",
+  usage: 'tcms budget set --project ACME --basis HOURS --amount 600\n'
+    + '       tcms budget set --project ACME --basis MONEY --amount 40000 --currency EUR',
+  options: {
+    basis: { type: 'string' },
+    amount: { type: 'string' },
+    currency: { type: 'string' },
+  },
+  write: { kind: 'edit', permission: 'billing:budget' },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const projectId = await projectOf(context);
+
+    const typed = requireOption(context, 'basis').toUpperCase();
+    const basis = BUDGET_BASES.find((value) => value === typed);
+    if (basis === undefined) {
+      throw new UsageError(`--basis must be one of ${BUDGET_BASES.join(', ')}.`);
+    }
+    const currency = text(options['currency'])?.toUpperCase();
+    if (basis === 'MONEY' && currency === undefined) {
+      throw new UsageError('--currency is required for a MONEY budget, and forbidden for an HOURS one.');
+    }
+    if (basis === 'HOURS' && currency !== undefined) {
+      throw new UsageError('--currency is forbidden for an HOURS budget: hours have no currency.');
+    }
+
+    const saved = await client.PUT('/projects/{projectId}/budget', {
+      params: { path: { projectId } },
+      body: present({
+        basis,
+        amount: strictNumber(requireOption(context, 'amount'), '--amount'),
+        currency,
+      }) as components['schemas']['BudgetInput'],
+      tcms: request,
+    });
+
+    reportWrite(out, json, saved, [
+      ['Project', show(saved.projectName)],
+      ['Budget', basis === 'HOURS' ? `${saved.amountHours}h` : `${saved.amountMoney?.amount} ${saved.amountMoney?.currency}`],
+      ['Burn', saved.burnPercent === null ? 'unknown — this project has no rate card' : `${saved.burnPercent}%`],
+    ]);
+  },
+};
+
+/** The contract's `BudgetBasis`, narrowed here so a typo is refused rather than decoded from a 400. */
+const BUDGET_BASES = ['HOURS', 'MONEY'] as const;
+
+/**
+ * `tcms budget clear --project ACME`
+ *
+ * Costs `billing:budget`. A project with no budget is not deficient: the settings row reads
+ * *no budget set* and the overview draws no panel at all. `204` whether or not there was one,
+ * because the target state is the same either way.
+ */
+const budgetClear: Command = {
+  name: 'budget clear',
+  summary: "Remove a project's budget",
+  usage: 'tcms budget clear --project ACME',
+  options: {},
+  write: { kind: 'delete', permission: 'billing:budget' },
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const projectId = await projectOf(context);
+
+    await client.DELETE('/projects/{projectId}/budget', {
+      params: { path: { projectId } },
+      tcms: request,
+    });
+
+    reportWrite(out, json, { cleared: projectId }, [
+      ['Cleared', projectId],
+      ['Note', 'a project with no budget is a state, not a gap — nothing marks it as missing one'],
+    ]);
+  },
+};
+
+/**
+ * `tcms expense record --project ACME --on 2026-09-02 --amount 240 --currency EUR --what "Device lab"`
+ *
+ * Costs `billing:expense`. **An expense is recorded and never invoiced** (scope D24, 019 D-j): D24
+ * admits one line shape, approved time at a rate-card rate, and there is no option here or endpoint
+ * anywhere that turns a cost into a line.
+ *
+ * An AI assistant's usage is exactly this kind of cost. Record it here; it is never charged to a
+ * client.
+ */
+const expenseRecord: Command = {
+  name: 'expense record',
+  summary: 'Record a cost against a project — never an invoice line',
+  usage: 'tcms expense record --project ACME --on 2026-09-02 --amount 240 --currency EUR --what "Device lab hire"',
+  options: {
+    on: { type: 'string' },
+    amount: { type: 'string' },
+    currency: { type: 'string' },
+    what: { type: 'string' },
+  },
+  write: { kind: 'create', permission: 'billing:expense' },
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const projectId = await projectOf(context);
+
+    const recorded = await client.POST('/expenses', {
+      body: present({
+        projectId,
+        incurredOn: requireOption(context, 'on'),
+        description: requireOption(context, 'what'),
+        amount: strictNumber(requireOption(context, 'amount'), '--amount'),
+        currency: requireOption(context, 'currency').toUpperCase(),
+      }) as components['schemas']['ExpenseInput'],
+      tcms: request,
+    });
+
+    reportWrite(out, json, recorded, [
+      ['Recorded', show(recorded.description)],
+      ['Expense', show(recorded.id)],
+      ['Note', 'this is a cost and never an invoice line — time and materials only (D24)'],
+    ]);
+  },
+};
+
+/** `tcms expense remove <expenseId>` — costs `billing:expense`. Nothing references it. */
+const expenseRemove: Command = {
+  name: 'expense remove',
+  summary: 'Remove a recorded expense',
+  usage: 'tcms expense remove ex-1',
+  options: {},
+  write: { kind: 'delete', permission: 'billing:expense' },
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const expenseId = requireArg(context, 'expense');
+
+    await client.DELETE('/expenses/{expenseId}', {
+      params: { path: { expenseId } },
+      tcms: request,
+    });
+
+    reportWrite(out, json, { deleted: expenseId }, [['Removed', expenseId]]);
+  },
+};
+
+/**
+ * `tcms rate-card set --client cl-1 --currency EUR --entry ALL_ROLES::90:2026-01-01`
+ *
+ * Costs `ratecard:manage`. **A full replacement including the entries**: `--entry` may repeat, and
+ * the entries sent are the entries the card then has — one omitted is one removed. `PUT
+ * /rate-cards/{id}` is the same shape as `PUT /clients/{clientId}` for the same reason: the screen
+ * shows and submits the whole card.
+ *
+ * Each `--entry` is `SCOPE:TARGET:RATE:FROM`. `TARGET` is a user id for `PERSON`, a role id for
+ * `ROLE`, and **empty** for `ALL_ROLES` — the shape `ck_rate_card_entry_shape` holds in the
+ * database, refused here so a mistake is a message rather than a 400 to decode.
+ *
+ * **It reprices nothing already issued.** An issued line carries the rate as applied, as a number.
+ * It does change every draft for this client on that draft's next read, which is the same decision
+ * seen from the other side (019 D-c).
+ */
+const rateCardSet: Command = {
+  name: 'rate-card set',
+  summary: "Replace a client's rate card and every entry on it",
+  usage: 'tcms rate-card set --client cl-1 --currency EUR \\\n'
+    + '         --entry ALL_ROLES::90:2026-01-01 --entry PERSON:u-1:110:2026-07-01',
+  options: { client: { type: 'string' }, currency: { type: 'string' }, entry: { type: 'string' } },
+  write: { kind: 'edit', permission: 'ratecard:manage' },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const clientId = requireOption(context, 'client');
+    const currency = requireOption(context, 'currency').toUpperCase();
+    const entries = all(options['entry']).map((value) => entryFrom(value));
+    if (entries.length === 0) {
+      throw new UsageError('At least one --entry is required. A card with no entries prices nothing.');
+    }
+
+    /*
+      A read-then-PUT, because the endpoint is a full replacement and this command names the client
+      rather than the card. `tcms rate-card list` prints the card id per row; looking it up here
+      means the common invocation is the one a person would type. A client with no card yet is a
+      POST instead — the two are one command because "set a rate card" is one thought.
+    */
+    const slots = await client.GET('/rate-cards', { tcms: request });
+    const existing = slots.find((slot) => slot.client.id === clientId)?.card ?? null;
+
+    const body = { clientId, currency, entries } as components['schemas']['RateCardInput'];
+    const saved = existing === null
+      ? await client.POST('/rate-cards', { body, tcms: request })
+      : await client.PUT('/rate-cards/{rateCardId}', {
+        params: { path: { rateCardId: existing.id } },
+        body,
+        tcms: request,
+      });
+
+    reportWrite(out, json, saved, [
+      ['Client', show(saved.client.name)],
+      ['Currency', show(saved.currency)],
+      ['Entries', `${saved.entries.length} — the entries sent are the entries the card has`],
+      ['Note', 'nothing already issued was repriced; drafts for this client recompute on next read'],
+    ]);
+  },
+};
+
+/** `SCOPE:TARGET:RATE:FROM`, refused here rather than decoded from a 400. */
+function entryFrom(value: string): components['schemas']['RateCardEntryInput'] {
+  const parts = value.split(':');
+  if (parts.length !== 4) {
+    throw new UsageError(
+      `--entry must be SCOPE:TARGET:RATE:FROM — got "${value}". TARGET is empty for ALL_ROLES.`,
+    );
+  }
+  const [rawScope, target, rate, from] = parts as [string, string, string, string];
+  const scope = RATE_SCOPES.find((known) => known === rawScope.toUpperCase());
+  if (scope === undefined) {
+    throw new UsageError(`--entry scope must be one of ${RATE_SCOPES.join(', ')} — got "${rawScope}".`);
+  }
+  if (scope === 'ALL_ROLES' && target !== '') {
+    throw new UsageError('An ALL_ROLES entry names nobody: leave its TARGET empty.');
+  }
+  if (scope !== 'ALL_ROLES' && target === '') {
+    throw new UsageError(`A ${scope} entry needs a TARGET — a user id for PERSON, a role id for ROLE.`);
+  }
+  /*
+    `strictNumber` returns `number | undefined` — undefined for an absent option — and an entry's
+    rate is neither absent nor optional: the shape above already refused a value with the wrong
+    number of parts. Narrowed here rather than cast, so a `--entry PERSON:u-1::2026-01-01` is a
+    message about the rate instead of a `null` reaching the server as one.
+  */
+  const hourlyRate = strictNumber(rate, '--entry rate');
+  if (hourlyRate === undefined) {
+    throw new UsageError(`--entry needs a rate — got "${value}", whose RATE is empty.`);
+  }
+  return {
+    scope,
+    personId: scope === 'PERSON' ? target : null,
+    roleId: scope === 'ROLE' ? target : null,
+    hourlyRate,
+    effectiveFrom: from,
+  };
+}
+
+/** The contract's `RateCardScope`, and the order the rate ladder walks it (019 D-d). */
+const RATE_SCOPES = ['PERSON', 'ROLE', 'ALL_ROLES'] as const;
+
+/**
+ * `tcms rate-card remove <rateCardId>` — costs `ratecard:manage`.
+ *
+ * **Never refused because an invoice exists**, which is the difference from `DELETE
+ * /clients/{clientId}`. An issued invoice does not reference the card: its lines carry the rate
+ * they were priced at. Removing the card stops future hours being priceable and changes nothing
+ * already sent.
+ */
+const rateCardRemove: Command = {
+  name: 'rate-card remove',
+  summary: "Remove a client's rate card",
+  usage: 'tcms rate-card remove rc-1',
+  options: {},
+  write: { kind: 'delete', permission: 'ratecard:manage' },
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const rateCardId = requireArg(context, 'rate-card');
+
+    await client.DELETE('/rate-cards/{rateCardId}', {
+      params: { path: { rateCardId } },
+      tcms: request,
+    });
+
+    reportWrite(out, json, { deleted: rateCardId }, [
+      ['Removed', rateCardId],
+      ['Note', 'nothing already issued changed — an issued line carries the rate it was priced at'],
+    ]);
+  },
+};
+
 export const WRITES: readonly Command[] = [
   caseEdit,
   caseProposal,
@@ -2316,4 +2737,13 @@ export const WRITES: readonly Command[] = [
   staffingAbsence,
   clientCreate,
   clientContactAdd,
+  billingDraft,
+  billingIssue,
+  billingDiscard,
+  budgetSet,
+  budgetClear,
+  expenseRecord,
+  expenseRemove,
+  rateCardSet,
+  rateCardRemove,
 ];

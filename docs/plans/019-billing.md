@@ -39,7 +39,7 @@ plan's status table, verified 2026-09-05 before this plan was written.** No modu
 
 | # | Task | Stack | Agent | Deliverable | Depends on |
 |---|---|---|---|---|---|
-| 1 | T1 — The billing contract, both generated clients, and the CLI/MCP verbs | `ts` | `tooling-engineer` | Twelve path items under a new `billing` tag plus one under `clients`, every schema carrying its `required` array; both generated clients regenerated; a factory per resource in both fixture files; the CLI's `billing` and `rate-card` families and four MCP tools; the surface doc. Every endpoint answers a real `404` until T3/T4 | none |
+| 1 | T1 — The billing contract, both generated clients, and the CLI/MCP verbs | `ts` | `tooling-engineer` | Eleven path items under a new `billing` tag plus one under `clients`, every schema carrying its `required` array; both generated clients regenerated; a factory per resource in both fixture files; the CLI's `billing` and `rate-card` families and four MCP tools; the surface doc. Every endpoint answers a real `404` until T3/T4 | none |
 | 2 | T2 — `V12` — the seven billing tables | `be` | `data-architect` | `V12__billing.sql` applied; seven tables with `FORCE` RLS; `SchemaConventionTest` 102 → 109; the ERD amended | T1 |
 | 3 | T3 — Rate cards, pricing, budgets and expenses | `be` | `be-java` | `billing.PricingService` prices one approved hour by the rate card; the rate-card, budget, budget-burn and expense endpoints serve real rows; `GET /projects/{id}/budget-burn` carries no currency and no amount; `BillingReadsAndNeverWritesTest` pins both `*Facts` classes | T2 |
 | 4 | T4 — Invoices, the lock on issue, the two negatives, and the demo seed | `be` | `be-java` | `POST /invoices` drafts from approved hours and recomputes on every read; `POST …/issue` writes the lines once and assigns a number; a discard of an issued invoice answers `409` and its lines are unchanged after a rate-card edit; `BillingMoneyBoundaryTest` and the extended `TimeMoneyBoundaryTest` are green; `seed-demo-data` writes rate cards, budgets and two invoices | T3 |
@@ -80,7 +80,7 @@ takes) and its tool table rows 38-39 · docs/specs/2026-07-30-tcms-roles-permiss
 `git show --stat` the 018 T1 commit for the exact file set a contract commit in this repo touches.
 Yours is that same set.
 
-Deliver: twelve path items under a NEW `billing` tag, plus ONE more (`/clients/{clientId}/billing`)
+Deliver: eleven path items under a NEW `billing` tag, plus ONE more (`/clients/{clientId}/billing`)
 under the EXISTING `clients` tag, each schema carrying its `required` array;
 frontend/src/api/schema.d.ts and packages/client/src/schema.ts regenerated; a factory per new
 resource in BOTH src/test/fixtures.ts copies; the CLI's `billing` and `rate-card` command families;
@@ -95,6 +95,19 @@ Traps this task will hit:
   clients: `openapi-typescript` emits a defaulted property as REQUIRED, so every create that omits it
   becomes a compile error. `ClientInput.status` carries no `default:` for exactly this reason;
   `InvoiceDraftInput`, `RateCardEntryInput`, `BudgetInput` and `ExpenseInput` must not gain one.
+- **The shipped user guide is a FRONTEND file, and it will redden the packages job.**
+  `frontend/src/features/help/sections.tsx` carries the `tcms …` terminal blocks and the tool list,
+  and `guideCopies.test.ts` in *both* `cli` and `mcp` reads it: a command or tool that is not listed
+  there fails, and so does the prose tool count ("39 tools" in three places). Landed with this task
+  rather than deferred to T5, because a `ts` task that reddens a gate is not done.
+- **Every write arm needs an entry in TWO `writeConformance.test.ts` tables**, one per package —
+  `INVOCATIONS` (how to invoke it) and, where the endpoint offers no `Idempotency-Key` or
+  `If-Match`, `CREATE_WITHOUT_A_KEY` with **what the shortfall costs a caller**. A write with no
+  entry is a failure rather than a skip, deliberately.
+- **`billing issue` is `kind: 'state'`, not `'edit'`.** It names an absolute target state, so an
+  `If-Match` would refuse a request over a version the caller never claimed to have based anything
+  on — `suite status` and `plan status` draw the same distinction. The server preconditions on the
+  state itself with a `409`, which is the stronger guard.
 - **contractBodies.ts needs NO change**, and 016 T1, 017 T1 and 018 T1 all recorded the same finding.
   Both copies are the schema WALKER; the marked region is `violationsOf` and its helpers and holds no
   response bodies. Bodies are factories in frontend/src/test/fixtures.ts and
@@ -115,8 +128,9 @@ Traps this task will hit:
   that would match one except in a description saying it does not exist.
 
 Commit ONE commit, staging only: docs/specs/openapi.yaml, frontend/src/api/schema.d.ts,
-packages/client/src/schema.ts, frontend/src/test/fixtures.ts, packages/client/src/test/fixtures.ts,
-packages/cli/src/*.ts, packages/mcp/src/*.ts, docs/specs/2026-08-08-mcp-tool-and-command-surface.md,
+frontend/src/api/types.ts, packages/client/src/schema.ts, frontend/src/test/fixtures.ts,
+packages/client/src/test/fixtures.ts, packages/cli/src/*.ts, packages/mcp/src/*.ts,
+frontend/src/features/help/sections.tsx, docs/specs/2026-08-08-mcp-tool-and-command-surface.md,
 docs/plans/019-billing.md. Message: `feat(billing): the billing contract, both clients, and the
 money verbs`.
 
@@ -765,12 +779,13 @@ Named here so a reviewer can grep for each and find only these lines:
 
 | File | Responsibility | Task |
 |---|---|---|
-| `docs/specs/openapi.yaml` | 13 new path items, ~18 new schemas, under a new `billing` tag and the existing `clients` tag | T1 |
+| `docs/specs/openapi.yaml` | 12 new path items (11 `billing` + 1 `clients`), 19 new schemas | T1 |
 | `frontend/src/api/schema.d.ts` · `packages/client/src/schema.ts` | the two generated copies, regenerated in T1's commit | T1 |
 | `frontend/src/test/fixtures.ts` · `packages/client/src/test/fixtures.ts` | one factory per new resource; **not** byte-identical to each other | T1 |
 | `packages/cli/src/{reads,writes}.ts` | the `billing` and `rate-card` command families | T1 |
 | `packages/mcp/src/{reads,writes}.ts` | tools 40–43 | T1 |
 | `docs/specs/2026-08-08-mcp-tool-and-command-surface.md` | §3.11 and tool-table rows 40–43 | T1 |
+| `frontend/src/features/help/sections.tsx` | **the shipped user guide** — every CLI command and MCP tool, and the tool count. Not predicted by this plan; `guideCopies.test.ts` in *both* packages reads this frontend file and fails the **packages** job when it drifts | T1 |
 | `backend/src/main/resources/db/migration/V12__billing.sql` | seven tables, seven FORCE policies, the reasoning in block comments | T2 |
 | `backend/src/test/java/com/tcms/tenancy/SchemaConventionTest.java` | 102 → 109 | T2 |
 | `com/tcms/billing/package-info.java` | `@ApplicationModule(allowedDependencies = {api, tenancy, identity, project})` and the module's two prohibitions | T3 |
@@ -802,7 +817,7 @@ Named here so a reviewer can grep for each and find only these lines:
 
 ## T1 — The billing contract, both generated clients, and the CLI/MCP verbs
 
-**Deliverable:** Thirteen path items — twelve under a new `billing` tag and one under `clients` —
+**Deliverable:** Twelve path items — eleven under a new `billing` tag and one under `clients` —
 in `docs/specs/openapi.yaml`, every schema carrying its `required` array; both generated clients
 regenerated from it; a factory per new resource in both fixture files; the CLI's `billing` and
 `rate-card` families; four MCP tools; and the surface doc listing them. Every endpoint answers a real
@@ -820,7 +835,7 @@ regenerated from it; a factory per new resource in both fixture files; the CLI's
 
 - [ ] **Step 1: The path items**
 
-Thirteen, in this order in the file, after the `clients` block:
+Twelve, in this order in the file, after the `clients` block:
 
 | Path | Method | Permission | Serves |
 |---|---|---|---|
@@ -844,8 +859,10 @@ Thirteen, in this order in the file, after the `clients` block:
 | `/expenses/{expenseId}` | `DELETE` | `billing:expense` | remove one |
 | `/clients/{clientId}/billing` | `GET` | **`client:read`** | `client.html`'s tiles and table (D-i) |
 
-(Twelve path *items* under `billing` — `/rate-cards`, `/invoices`, `/expenses` and
-`/projects/{projectId}/budget` each carry more than one method — plus one under `clients`.)
+(**Eleven** path *items* under `billing` — `/rate-cards`, `/invoices`, `/expenses` and
+`/projects/{projectId}/budget` each carry more than one method, so nineteen method-rows above
+collapse to eleven items — plus one under `clients`, twelve in all. The task table's count was
+corrected here on landing.)
 
 - [ ] **Step 2: The schemas, each with its `required` array**
 
@@ -2032,7 +2049,7 @@ void anHourOnAnIssuedInvoiceIsNeverOfferedToASecondDraft() { … }
 @DisplayName("every billing-tagged path in the contract refuses a Test Engineer")
 void everyBillingTaggedPathRefusesATestEngineer() {
     List<String> billingPaths = pathsTaggedBilling(Path.of("../docs/specs/openapi.yaml"));
-    assertThat(billingPaths).hasSizeGreaterThanOrEqualTo(12);
+    assertThat(billingPaths).hasSizeGreaterThanOrEqualTo(11);
     for (String path : billingPaths) {
         assertThat(callAs(DANA_TEST_ENGINEER, path).getStatus())
                 .as("%s must refuse a Test Engineer: they hold time:log and not one money key", path)

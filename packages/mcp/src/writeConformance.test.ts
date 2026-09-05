@@ -78,6 +78,11 @@ import {
   client as clientFixture,
   clientContact,
   clientDetail,
+  budget,
+  expense,
+  invoiceDetail,
+  rateCard,
+  rateCardSlot,
 } from '../../client/src/test/fixtures.js';
 import { WRITE_TOOLS } from './writes.js';
 import { api, agentRoutes, sessionWith, withApi, type Answer, type Api } from './test/harness.js';
@@ -128,6 +133,36 @@ const CREATE_WITHOUT_A_KEY: Record<string, string> = {
     'PUT /clients/{clientId}/contacts/{contactId}, the same wall as `tcms_write_client.edit` above '
     + 'and listed separately rather than covered by implication. Narrower: the loss is one '
     + 'person\'s phone number or role, on a record the client page shows in full.',
+  'tcms_write_billing.draft-invoice':
+    'POST /invoices declares no Idempotency-Key, the same scope wall as `tcms_write_client.record` '
+    + 'above: the parameter deduplicates within `(company, project, key)` and an invoice is '
+    + 'addressed to a CLIENT. There is no constraint standing in for it either — two drafts over '
+    + 'one period for one client are a legitimate state, so a lost response leaves a second draft. '
+    + 'It cannot double-bill: a draft stores no lines, both drafts offer the same hours, and '
+    + 'whichever is issued first takes them (019 D-c).',
+  'tcms_write_billing.record-expense':
+    'POST /expenses, the same wall, and an expense is addressed to a project — so this one is the '
+    + 'parameter\'s own scope and is closable by adding it. It has not been added because nothing '
+    + 'in the product reads an expense back except the CLI verb that lists them (019 D-j), so a '
+    + 'duplicate is visible and removable by the same caller that made it.',
+  'tcms_write_billing.set-budget':
+    'PUT /projects/{projectId}/budget declares no If-Match, and `Budget` carries no lockVersion on '
+    + 'the wire to precondition on — the wall every edit entry here meets. Bounded by the row: a '
+    + 'budget is a basis, an amount and a currency, and two people setting one at once lose a '
+    + 'ceiling rather than a body of work.',
+  'tcms_write_billing.issue-invoice':
+    'POST …/issue declares no If-Match, and the arm is declared `delete` for its consent prompt '
+    + 'rather than `edit`, so the map would not require one either way. Listed anyway because it is '
+    + 'the one IRREVERSIBLE act in the module and a reader checking what protects it should find '
+    + 'the answer here: the SERVER does, with a 409 for an invoice that is already ISSUED. A '
+    + 'precondition header would be a weaker guard than a state check, not a stronger one.',
+  'tcms_write_rate_card.set':
+    'PUT /rate-cards/{rateCardId} declares no If-Match and `RateCard` carries no lockVersion, so '
+    + 'two people editing one card at once lose the earlier edit — `tcms_write_client.edit`\'s wall '
+    + 'exactly. WORSE here than there, and stated rather than implied: the arm is a FULL '
+    + 'replacement including the entries, so the loss is a whole rate card and not one field of '
+    + 'one. The POST half of this arm meets the create wall instead, and `uq_rate_card_client` '
+    + 'bounds it — a retried create answers 409 rather than giving one client two cards.',
   'tcms_write_issue.update':
     'PATCH /issues/{key} declares no If-Match, and there is nothing to precondition on even if it '
     + 'did: `Issue` carries no `lockVersion` on the wire at all. So closing this is a contract '
@@ -437,6 +472,72 @@ const INVOCATIONS: Record<string, Invocation> = {
     input: { action: 'contact-remove', client: 'cl-1', contact: 'cc-1' },
     path: '/clients/cl-1/contacts/cc-1',
     routes: { 'DELETE /clients/cl-1/contacts/cc-1': { status: 204, body: null } },
+  },
+  /* Billing (019 T1). Seven arms on one tool, plus the rate card's two. */
+  'tcms_write_billing.set-budget': {
+    tool: 'tcms_write_billing',
+    input: { action: 'set-budget', project: 'p-1', basis: 'HOURS', amount: 600 },
+    path: '/projects/p-1/budget',
+    routes: { 'PUT /projects/p-1/budget': { status: 200, body: budget() } },
+  },
+  'tcms_write_billing.clear-budget': {
+    tool: 'tcms_write_billing',
+    input: { action: 'clear-budget', project: 'p-1' },
+    path: '/projects/p-1/budget',
+    routes: { 'DELETE /projects/p-1/budget': { status: 204, body: null } },
+  },
+  'tcms_write_billing.record-expense': {
+    tool: 'tcms_write_billing',
+    input: {
+      action: 'record-expense', project: 'p-1', on: '2026-09-02',
+      what: 'Device lab hire', amount: 240, currency: 'EUR',
+    },
+    path: '/expenses',
+    routes: { 'POST /expenses': { status: 201, body: expense() } },
+  },
+  'tcms_write_billing.remove-expense': {
+    tool: 'tcms_write_billing',
+    input: { action: 'remove-expense', expense: 'ex-1' },
+    path: '/expenses/ex-1',
+    routes: { 'DELETE /expenses/ex-1': { status: 204, body: null } },
+  },
+  'tcms_write_billing.draft-invoice': {
+    tool: 'tcms_write_billing',
+    input: { action: 'draft-invoice', client: 'cl-1', from: '2026-09-01', to: '2026-09-30' },
+    path: '/invoices',
+    routes: { 'POST /invoices': { status: 201, body: invoiceDetail() } },
+  },
+  'tcms_write_billing.discard-invoice': {
+    tool: 'tcms_write_billing',
+    input: { action: 'discard-invoice', invoice: 'inv-1' },
+    path: '/invoices/inv-1',
+    routes: { 'DELETE /invoices/inv-1': { status: 204, body: null } },
+  },
+  'tcms_write_billing.issue-invoice': {
+    tool: 'tcms_write_billing',
+    input: { action: 'issue-invoice', invoice: 'inv-1' },
+    path: '/invoices/inv-1/issue',
+    routes: { 'POST /invoices/inv-1/issue': { status: 200, body: invoiceDetail() } },
+  },
+  'tcms_write_rate_card.set': {
+    tool: 'tcms_write_rate_card',
+    // The list read is what the arm uses to choose between POST and PUT, and `card: null` on the
+    // slot is what makes this the POST — a client's first rate card, which is every client's.
+    input: {
+      action: 'set', client: 'cl-1', currency: 'EUR',
+      entries: [{ scope: 'ALL_ROLES', hourlyRate: 90, effectiveFrom: '2026-01-01' }],
+    },
+    path: '/rate-cards',
+    routes: {
+      'GET /rate-cards': { status: 200, body: [rateCardSlot()] },
+      'POST /rate-cards': { status: 201, body: rateCard() },
+    },
+  },
+  'tcms_write_rate_card.remove': {
+    tool: 'tcms_write_rate_card',
+    input: { action: 'remove', card: 'rc-1' },
+    path: '/rate-cards/rc-1',
+    routes: { 'DELETE /rate-cards/rc-1': { status: 204, body: null } },
   },
   'tcms_write_allocation.allocate': {
     tool: 'tcms_write_allocation',

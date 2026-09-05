@@ -717,7 +717,14 @@ tcms time rollup ACME-1# estimate against approved and pending hours; --epic for
 tcms staffing directory# who has which skills, when they are free, and how booked they already are
 tcms staffing project  # who is allocated to this project, and the ids the allocate verb takes
 tcms client list       # the company's clients — an empty list is an answer, not a failure
-tcms client show cl-1  # one client, its contacts and its projects`}</Terminal>
+tcms client show cl-1  # one client, its contacts and its projects
+tcms billing summary   # invoiced this year, draftable now, unapproved hours — one line per currency
+tcms billing budgets   # every project's ceiling, approved hours and burn
+tcms billing invoices  # drafts and issued invoices together
+tcms billing invoice inv-1 # its lines, the hours behind them, and what was excluded and why
+tcms rate-card list    # every active client and its card — or no card, which is a real answer
+tcms rate-card show rc-1   # one card and the rate ladder on it
+tcms expense list      # costs recorded against a project; never invoice lines`}</Terminal>
 
         <H>Writing</H>
         <Terminal>{`tcms case edit         # change a test case
@@ -742,6 +749,15 @@ tcms staffing allocate --person "Dana Petrov" --percent 50 --from 2026-09-01 --t
 tcms staffing absence --from 2026-09-24 --to 2026-09-24   # your own needs no permission
 tcms client create --name "Acme Retail"       # a name is enough; a client never signs in
 tcms client contact-add cl-1 --name "Hanna Lund" --email hanna.lund@acme.test
+tcms rate-card set --client cl-1 --currency EUR --entry ALL_ROLES::90:2026-01-01
+tcms rate-card remove rc-1                   # nothing already issued is repriced
+tcms budget set --basis HOURS --amount 600   # or --basis MONEY --amount 40000 --currency EUR
+tcms budget clear                            # a project with no budget is a state, not a gap
+tcms billing draft --client cl-1 --from 2026-09-01 --to 2026-09-30
+tcms billing issue inv-1                     # writes the lines and locks them; sends nothing
+tcms billing discard inv-1                   # a draft only — an issued invoice is refused
+tcms expense record --on 2026-09-02 --amount 240 --currency EUR --what "Device lab hire"
+tcms expense remove ex-1
 tcms review comment    # a remark on an open review`}</Terminal>
 
         <H>Options that apply everywhere</H>
@@ -827,7 +843,7 @@ tcms review comment    # a remark on an open review`}</Terminal>
   {
     id: 'mcp',
     title: 'AI agent access (MCP)',
-    summary: 'Connecting an AI assistant, the 39 tools, and the limits that make it safe.',
+    summary: 'Connecting an AI assistant, the 43 tools, and the limits that make it safe.',
     body: (
       <>
         <P>
@@ -862,19 +878,19 @@ tcms review comment    # a remark on an open review`}</Terminal>
                 'tcms_whoami reports who the credential acts as and what it can reach. tcms_orient returns the project with its classification dimensions, execution statuses, suites, tags and case counts in one call — the vocabulary is per-project, so an agent that skips this guesses values that get refused. tcms_shape answers what a payload of a given kind must look like, and reaches no instance at all, so it is safe to call before anything is configured.',
             },
             {
-              term: 'Reading — 17',
+              term: 'Reading — 20',
               detail:
-                'tcms_search_cases · tcms_open_case · tcms_list_suites · tcms_list_library · tcms_list_artifacts · tcms_doc_tree · tcms_open_doc_page · tcms_list_plans · tcms_open_run · tcms_read_issue · tcms_read_board · tcms_read_release · tcms_read_timesheet · tcms_read_time_rollup · tcms_read_staffing · tcms_read_client · tcms_list_proposals · tcms_triage',
+                'tcms_search_cases · tcms_open_case · tcms_list_suites · tcms_list_library · tcms_list_artifacts · tcms_doc_tree · tcms_open_doc_page · tcms_list_plans · tcms_open_run · tcms_read_issue · tcms_read_board · tcms_read_release · tcms_read_timesheet · tcms_read_time_rollup · tcms_read_staffing · tcms_read_client · tcms_read_billing · tcms_read_rate_card · tcms_list_proposals · tcms_triage',
             },
             {
-              term: 'Writing — 17',
+              term: 'Writing — 19',
               detail:
-                'tcms_write_case · tcms_write_suite · tcms_write_doc_page · tcms_write_plan · tcms_write_run · tcms_record_result · tcms_review_comment · tcms_review_verdict · tcms_write_issue · tcms_write_backlog · tcms_write_release · tcms_write_artifact · tcms_write_timesheet · tcms_approve_timesheet · tcms_write_allocation · tcms_write_absence · tcms_write_client · tcms_report',
+                'tcms_write_case · tcms_write_suite · tcms_write_doc_page · tcms_write_plan · tcms_write_run · tcms_record_result · tcms_review_comment · tcms_review_verdict · tcms_write_issue · tcms_write_backlog · tcms_write_release · tcms_write_artifact · tcms_write_timesheet · tcms_approve_timesheet · tcms_write_allocation · tcms_write_absence · tcms_write_client · tcms_write_billing · tcms_write_rate_card · tcms_report',
             },
           ]}
         />
         <P>
-          The list is workflow-shaped rather than one tool per endpoint: 39 tools over roughly 98 API
+          The list is workflow-shaped rather than one tool per endpoint: 43 tools over roughly 110 API
           paths. Tool definitions cost the model context, so a mirror of the API would be a surface
           only the largest hosts could afford to load.
         </P>

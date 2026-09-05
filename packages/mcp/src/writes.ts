@@ -2715,6 +2715,289 @@ const writeClient: ToolDefinition = {
   },
 };
 
+/**
+ * A number the caller must have sent. `input.ts` exports {@link num} for the optional case and no
+ * required counterpart, because until this module every numeric field on this surface was optional.
+ * Declared here rather than added there: one caller is not a shared helper, and moving it later is
+ * a smaller change than un-sharing it.
+ */
+function requiredNumber(input: Record<string, unknown>, name: string): number {
+  const value = num(input, name);
+  if (value === undefined) {
+    throw new InputError(`\`${name}\` is required for this action.`);
+  }
+  return value;
+}
+
+/* ------------------------------------------------------------------ billing ---- */
+
+/**
+ * The money write surface — **one tool spanning FOUR permissions**, where `tcms_write_client` spans
+ * two.
+ *
+ * §2 is satisfied by the arm table, as it was there. Splitting would produce four tools listed to
+ * an identical audience: §A3 grants the seven money keys as a **block** to Instance Admin, Company
+ * Admin and Finance and to nobody else, so there is no caller in this product who holds one and not
+ * the rest. The arm table stays anyway, so a role that splits them later does not silently widen
+ * any arm, and {@link ToolDefinition.narrow} tells a credential holding a subset which arms it
+ * reaches before it tries.
+ *
+ * **`issue-invoice` is the only arm here with a `destructiveHint`, and it is not a delete.** It is
+ * the one irreversible act in the module: the lines become rows, no operation updates one, and
+ * nothing on this surface unsends an invoice. A consent prompt is exactly right for it.
+ *
+ * **No arm bills a fixed fee, a retainer or an AI assistant's hours**, and there is no field that
+ * could ask for one (scope D24, 019 D-q).
+ */
+const writeBilling: ToolDefinition = {
+  name: 'tcms_write_billing',
+  title: 'Set a budget, record a cost, draft an invoice, issue it',
+  description:
+    '`set-budget` and `clear-budget` set or remove a project\'s ceiling, in HOURS or in MONEY — a '
+    + 'MONEY budget requires a currency and an HOURS one forbids it. `record-expense` and '
+    + '`remove-expense` record costs against a project; **an expense is NEVER an invoice line** and '
+    + 'cannot be made into one. `draft-invoice` opens a draft for a client and a period; '
+    + '`discard-invoice` removes a draft; `issue-invoice` issues one. '
+    + '**A draft stores no lines.** Its lines are the client\'s approved, priceable, not-yet-billed '
+    + 'hours recomputed on every read, so approving a timesheet period changes the draft with no '
+    + 'further call — there is no recalculate action and none is needed. '
+    + '**Issuing is irreversible.** It writes the lines with the rate as applied, links them to the '
+    + 'time entries behind them, assigns the number and locks everything: no action on this surface '
+    + 'changes an issued line, and re-reading after the rate card moves returns the same figures. '
+    + 'It also SENDS NOTHING — there is no PDF, no email and no delivery state. Discarding an '
+    + 'issued invoice is refused. '
+    + '**Nothing here adds a line by hand.** An invoice line is approved time at a rate-card rate '
+    + 'and that is the only line shape that exists — time and materials only. If asked for a fixed '
+    + 'fee, a retainer, a drawdown or a charge for an AI assistant\'s hours, say the product does '
+    + 'not do it.',
+  gate: {
+    mode: 'any',
+    permissions: ['billing:budget', 'billing:expense', 'billing:invoice', 'billing:issue'],
+  },
+  narrow: (held) => {
+    const missing = (['billing:budget', 'billing:expense', 'billing:invoice', 'billing:issue'] as const)
+      .filter((key) => !held.has(key));
+    if (missing.length === 0) return undefined;
+    return `This credential is missing ${missing.join(', ')}, so the arms those keys gate will be `
+      + 'refused. The seven money keys are granted as a block in this product, so a credential '
+      + 'holding only some of them is unusual and worth reporting rather than working around.';
+  },
+  arms: [
+    { action: 'set-budget', kind: 'edit', permission: 'billing:budget' },
+    { action: 'clear-budget', kind: 'delete', permission: 'billing:budget', targets: ['project'] },
+    { action: 'record-expense', kind: 'create', permission: 'billing:expense' },
+    { action: 'remove-expense', kind: 'delete', permission: 'billing:expense', targets: ['expense'] },
+    { action: 'draft-invoice', kind: 'create', permission: 'billing:invoice' },
+    { action: 'discard-invoice', kind: 'delete', permission: 'billing:invoice', targets: ['invoice'] },
+    /*
+      `kind: 'delete'` for the destructive hint and the consent prompt it brings, on an action that
+      deletes nothing. Issuing is the one irreversible act in this module — the lines become rows
+      nothing updates and the invoice becomes a document that was sent — and the consent gate is
+      the right shape for it even though the taxonomy's word is wrong. Stated here rather than
+      discovered from a reviewer wondering what it deletes.
+    */
+    { action: 'issue-invoice', kind: 'delete', permission: 'billing:issue', targets: ['invoice'] },
+  ],
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['action'],
+    properties: {
+      action: ACTION(
+        ['set-budget', 'clear-budget', 'record-expense', 'remove-expense',
+          'draft-invoice', 'discard-invoice', 'issue-invoice'],
+        'What to do.',
+      ),
+      project: {
+        type: 'string',
+        description: 'The project id. Required for set-budget, clear-budget and record-expense.',
+      },
+      client: { type: 'string', description: 'The client id, from tcms_read_client. Required for draft-invoice.' },
+      invoice: { type: 'string', description: 'The invoice id, from tcms_read_billing. Required for discard-invoice and issue-invoice.' },
+      expense: { type: 'string', description: 'The expense id. Required for remove-expense.' },
+      basis: {
+        type: 'string',
+        enum: ['HOURS', 'MONEY'],
+        description: 'Required for set-budget. A MONEY basis requires currency; an HOURS basis forbids it.',
+      },
+      amount: { type: 'number', description: 'The budget ceiling, or the expense amount.' },
+      currency: { type: 'string', description: 'ISO 4217, e.g. EUR. Required for a MONEY budget and for an expense.' },
+      from: { type: 'string', description: 'Period start, ISO date. Required for draft-invoice.' },
+      to: { type: 'string', description: 'Period end, ISO date. Required for draft-invoice.' },
+      termsDays: { type: 'number', description: 'Payment terms in days for a draft. 30 when omitted.' },
+      on: { type: 'string', description: 'The date an expense was incurred, ISO. Required for record-expense.' },
+      what: { type: 'string', description: 'What the expense was for. Required for record-expense.' },
+    },
+  },
+  run: async (session, input) => {
+    const tcms = session.request;
+    const action = requireStr(input, 'action');
+
+    if (action === 'set-budget') {
+      const basis = requireStr(input, 'basis');
+      const currency = str(input, 'currency');
+      if (basis === 'MONEY' && currency === undefined) {
+        throw new InputError('A MONEY budget needs a `currency`; an HOURS budget must not have one.');
+      }
+      if (basis === 'HOURS' && currency !== undefined) {
+        throw new InputError('An HOURS budget must not carry a `currency` — hours have none.');
+      }
+      return session.client.PUT('/projects/{projectId}/budget', {
+        params: { path: { projectId: requireStr(input, 'project') } },
+        body: present({
+          basis: basis as 'HOURS' | 'MONEY',
+          amount: requiredNumber(input, 'amount'),
+          currency,
+        }) as components['schemas']['BudgetInput'],
+        tcms,
+      });
+    }
+
+    if (action === 'clear-budget') {
+      return session.client.DELETE('/projects/{projectId}/budget', {
+        params: { path: { projectId: requireStr(input, 'project') } },
+        tcms,
+      });
+    }
+
+    if (action === 'record-expense') {
+      return session.client.POST('/expenses', {
+        body: {
+          projectId: requireStr(input, 'project'),
+          incurredOn: requireStr(input, 'on'),
+          description: requireStr(input, 'what'),
+          amount: requiredNumber(input, 'amount'),
+          currency: requireStr(input, 'currency'),
+        } as components['schemas']['ExpenseInput'],
+        tcms,
+      });
+    }
+
+    if (action === 'remove-expense') {
+      return session.client.DELETE('/expenses/{expenseId}', {
+        params: { path: { expenseId: requireStr(input, 'expense') } },
+        tcms,
+      });
+    }
+
+    if (action === 'draft-invoice') {
+      return session.client.POST('/invoices', {
+        body: present({
+          clientId: requireStr(input, 'client'),
+          periodStart: requireStr(input, 'from'),
+          periodEnd: requireStr(input, 'to'),
+          termsDays: num(input, 'termsDays'),
+        }) as components['schemas']['InvoiceDraftInput'],
+        tcms,
+      });
+    }
+
+    const invoiceId = requireStr(input, 'invoice');
+
+    if (action === 'discard-invoice') {
+      return session.client.DELETE('/invoices/{invoiceId}', {
+        params: { path: { invoiceId } },
+        tcms,
+      });
+    }
+
+    return session.client.POST('/invoices/{invoiceId}/issue', {
+      params: { path: { invoiceId } },
+      tcms,
+    });
+  },
+};
+
+/**
+ * Rate cards, on their own key — `ratecard:manage`.
+ *
+ * **`set` is a full replacement including the entries**, so it reads the current card first only to
+ * decide between `POST` and `PUT`: the entries an agent sends are the entries the card then has,
+ * and one omitted is one removed. That is stated in the description rather than implied, because it
+ * is the one thing a model asked to "add a rate for Mira" will get wrong.
+ */
+const writeRateCard: ToolDefinition = {
+  name: 'tcms_write_rate_card',
+  title: "Set or remove a client's rate card",
+  description:
+    '`set` replaces a client\'s rate card **and every entry on it** — the entries you send are the '
+    + 'entries the card then has, and one you leave out is one you have removed. To ADD a rate, '
+    + 'read the card first with tcms_read_rate_card and send its existing entries back alongside '
+    + 'the new one. `remove` deletes the card entirely. '
+    + 'An entry is a scope (PERSON, ROLE or ALL_ROLES), the id it names, an hourly rate and the '
+    + 'date it takes effect. The rate for an hour is the most specific entry effective on or before '
+    + 'the day it was worked, and where two ROLE entries match the higher wins. '
+    + '**Neither arm reprices anything already issued** — an issued invoice line carries the rate it '
+    + 'was priced at, as a number. Both DO change every draft for that client on its next read. '
+    + 'One card per client, and the currency is on the card.',
+  gate: { mode: 'all', permissions: ['ratecard:manage'] },
+  arms: [
+    { action: 'set', kind: 'edit', permission: 'ratecard:manage' },
+    { action: 'remove', kind: 'delete', permission: 'ratecard:manage', targets: ['card'] },
+  ],
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['action'],
+    properties: {
+      action: ACTION(['set', 'remove'], 'What to do.'),
+      client: { type: 'string', description: 'The client id. Required for `set`.' },
+      card: { type: 'string', description: 'The rate card id. Required for `remove`.' },
+      currency: { type: 'string', description: 'ISO 4217, e.g. EUR. Required for `set`; it lives on the card.' },
+      entries: {
+        type: 'array',
+        description: 'The WHOLE card. Anything omitted is removed.',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['scope', 'hourlyRate', 'effectiveFrom'],
+          properties: {
+            scope: { type: 'string', enum: ['PERSON', 'ROLE', 'ALL_ROLES'] },
+            personId: { type: 'string', description: 'Required for PERSON, forbidden otherwise.' },
+            roleId: { type: 'string', description: 'Required for ROLE, forbidden otherwise.' },
+            hourlyRate: { type: 'number' },
+            effectiveFrom: { type: 'string', description: 'ISO date this rate takes effect.' },
+          },
+        },
+      },
+    },
+  },
+  run: async (session, input) => {
+    const tcms = session.request;
+    const action = requireStr(input, 'action');
+
+    if (action === 'remove') {
+      return session.client.DELETE('/rate-cards/{rateCardId}', {
+        params: { path: { rateCardId: requireStr(input, 'card') } },
+        tcms,
+      });
+    }
+
+    const clientId = requireStr(input, 'client');
+    const body = {
+      clientId,
+      currency: requireStr(input, 'currency'),
+      entries: (input['entries'] ?? []) as components['schemas']['RateCardEntryInput'][],
+    } as components['schemas']['RateCardInput'];
+
+    /*
+      One tool arm over two verbs, because "set a rate card" is one thought and which HTTP method it
+      is depends on a fact the caller has no reason to hold. The read is cheap and is the same list
+      an agent would have had to make anyway to find the card id.
+    */
+    const slots = await session.client.GET('/rate-cards', { tcms });
+    const existing = slots.find((slot) => slot.client.id === clientId)?.card ?? null;
+    if (existing === null) {
+      return session.client.POST('/rate-cards', { body, tcms });
+    }
+    return session.client.PUT('/rate-cards/{rateCardId}', {
+      params: { path: { rateCardId: existing.id } },
+      body,
+      tcms,
+    });
+  },
+};
+
 export const WRITE_TOOLS: readonly ToolDefinition[] = [
   writeCase,
   writeSuite,
@@ -2734,4 +3017,6 @@ export const WRITE_TOOLS: readonly ToolDefinition[] = [
   writeAllocation,
   writeAbsence,
   writeClient,
+  writeBilling,
+  writeRateCard,
 ];

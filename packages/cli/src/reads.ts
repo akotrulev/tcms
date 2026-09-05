@@ -2238,6 +2238,305 @@ const clientShow: Command = {
   },
 };
 
+/* ------------------------------------------------------------------ billing ----
+   M8 (plan 019). Every read below costs `billing:read` or `ratecard:read` — company-scope keys
+   held by Instance Admin, Company Admin and Finance and by nobody else, which is the sharpest
+   boundary in the expansion (scope §7). A Test Engineer holding `time:log` runs `tcms time list`
+   and is refused every one of these, which is the point rather than a limitation.
+
+   MONEY IS PRINTED WITH ITS CURRENCY, ALWAYS, and a company total is one line per currency
+   (019 D-l). There is deliberately no helper here that adds two: a company with a EUR client and
+   a CHF client has no single total, and one number across both is wrong in both. */
+
+/** `1 980.00 EUR`, or `—`. The one formatter, so no caller renders a bare amount. */
+function amount(value: { amount: number; currency: string } | null | undefined): string {
+  return value == null ? '—' : `${value.amount.toFixed(2)} ${value.currency}`;
+}
+
+/**
+ * `tcms billing summary` — `billing.html`'s four tiles.
+ *
+ * **`invoicedYearToDate` and `draftableNow` print one line per currency**, because they are arrays
+ * (019 D-l). An empty array means nothing has been issued this year, which is a company's first
+ * year rather than a fault.
+ */
+const billingSummary: Command = {
+  name: 'billing summary',
+  summary: 'Invoiced year to date, draftable now, unapproved hours, clients billed',
+  usage: 'tcms billing summary [--on 2026-09-15]',
+  options: { on: { type: 'string' } },
+  run: async ({ client, out, json, options, request }) => {
+    const on = first(options['on']);
+    const view = await client.GET('/billing/summary', {
+      params: { query: on === undefined ? {} : { on } },
+      tcms: request,
+    });
+    if (json) return out.json(view);
+
+    fields(out, [
+      ['Invoiced YTD', view.invoicedYearToDate.map(amount).join('  ') || '—'],
+      ['Draftable now', view.draftableNow.map(amount).join('  ') || '—'],
+      ['Unapproved', `${view.unapprovedHours}h — excluded from every draft`],
+      ['Clients billed', show(view.clientsBilled)],
+    ]);
+  },
+};
+
+/**
+ * `tcms rate-card list` — every active client and the card it has, **or has not**.
+ *
+ * A client with no card is a row reading `—`, not a missing row: that is the state every new client
+ * is in, and its approved hours are still recorded — they just cannot be priced (019 D-d).
+ */
+const rateCardList: Command = {
+  name: 'rate-card list',
+  summary: 'Every active client and its rate card, or its absence',
+  usage: 'tcms rate-card list',
+  options: {},
+  run: async ({ client, out, json, request }) => {
+    const slots = await client.GET('/rate-cards', { tcms: request });
+    if (json) return out.json(slots);
+
+    table(out, slots, [
+      { header: 'CLIENT', value: (row) => show(row.client.name) },
+      { header: 'CURRENCY', value: (row) => show(row.card?.currency ?? null) },
+      { header: 'ENTRIES', value: (row) => (row.card ? String(row.card.entries.length) : '—') },
+      { header: 'CARD', value: (row) => show(row.card?.id ?? null) },
+      { header: 'CLIENT ID', value: (row) => show(row.client.id) },
+    ]);
+
+    if (slots.some((slot) => slot.card === null)) {
+      out.line();
+      out.line('A client with no card is not an error. Its approved hours are recorded and simply');
+      out.line('cannot be priced — they land in an invoice\'s NO_RATE bucket, counted and named.');
+    }
+  },
+};
+
+/** `tcms rate-card show <rateCardId>` — one card and the ladder on it, most specific first. */
+const rateCardShow: Command = {
+  name: 'rate-card show',
+  summary: 'One rate card and its entries',
+  usage: 'tcms rate-card show rc-1',
+  options: {},
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const rateCardId = requireArg(context, 'rate-card');
+    const card = await client.GET('/rate-cards/{rateCardId}', {
+      params: { path: { rateCardId } },
+      tcms: request,
+    });
+    if (json) return out.json(card);
+
+    fields(out, [['Client', show(card.client.name)], ['Currency', show(card.currency)]]);
+    out.line();
+    table(out, card.entries, [
+      { header: 'APPLIES TO', value: (row) => show(row.appliesTo) },
+      { header: 'SCOPE', value: (row) => show(row.scope) },
+      { header: 'RATE', value: (row) => `${row.hourlyRate} / h` },
+      { header: 'FROM', value: (row) => show(row.effectiveFrom) },
+    ]);
+    out.line();
+    out.line('The ladder is PERSON, then ROLE, then ALL_ROLES, each as of the day the hour was');
+    out.line('worked. Where two ROLE entries match, the higher rate wins (019 D-d).');
+  },
+};
+
+/**
+ * `tcms billing budgets` — the money view of every project's ceiling and burn.
+ *
+ * The percentage-only view a Project Manager reads is on the project overview and costs
+ * `project:read`; this one costs `billing:read` and carries the amounts (019 D-h).
+ *
+ * A project with no client prints `—` for its client and no priced figure, and is listed anyway.
+ * That is the owner's own case and nothing marks it as deficient (019 D-p).
+ */
+const billingBudgets: Command = {
+  name: 'billing budgets',
+  summary: 'Every project with a budget, its approved hours and its burn',
+  usage: 'tcms billing budgets [--client cl-1]',
+  options: { client: { type: 'string' } },
+  run: async ({ client, out, json, options, request }) => {
+    const clientId = first(options['client']);
+    const rows = await client.GET('/budgets', {
+      params: { query: clientId === undefined ? {} : { clientId } },
+      tcms: request,
+    });
+    if (json) return out.json(rows);
+
+    table(out, rows, [
+      { header: 'PROJECT', value: (row) => show(row.projectName) },
+      { header: 'CLIENT', value: (row) => show(row.client?.name ?? null) },
+      { header: 'BASIS', value: (row) => show(row.basis) },
+      {
+        header: 'BUDGET',
+        value: (row) => (row.basis === 'HOURS' ? `${row.amountHours}h` : amount(row.amountMoney)),
+      },
+      { header: 'APPROVED', value: (row) => `${row.approvedHours}h` },
+      { header: 'PRICED', value: (row) => amount(row.pricedToDate) },
+      {
+        header: 'BURN',
+        value: (row) => (row.burnPercent === null ? 'unknown' : `${row.burnPercent}%`),
+      },
+    ]);
+    out.line();
+    out.line('A burn of "unknown" is a MONEY budget on a project whose client has no rate card. It');
+    out.line('is deliberately not zero: zero would read as nothing spent on a project that has.');
+  },
+};
+
+/** `tcms billing invoices` — drafts and issued invoices in one list, newest period first. */
+const billingInvoices: Command = {
+  name: 'billing invoices',
+  summary: "The company's invoices, drafts included",
+  usage: 'tcms billing invoices [--client cl-1] [--status DRAFT|ISSUED|ALL]',
+  options: { client: { type: 'string' }, status: { type: 'string' } },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const typed = first(options['status'])?.toUpperCase();
+    const status = INVOICE_FILTERS.find((value) => value === typed);
+    if (typed !== undefined && status === undefined) {
+      throw new UsageError(`--status must be one of ${INVOICE_FILTERS.join(', ')}.`);
+    }
+    const clientId = first(options['client']);
+
+    const rows = await client.GET('/invoices', {
+      params: {
+        query: {
+          ...(status === undefined ? {} : { status }),
+          ...(clientId === undefined ? {} : { clientId }),
+        },
+      },
+      tcms: request,
+    });
+    if (json) return out.json(rows);
+
+    table(out, rows, [
+      { header: 'NUMBER', value: (row) => show(row.number ?? 'Draft') },
+      { header: 'CLIENT', value: (row) => show(row.client.name) },
+      { header: 'PERIOD', value: (row) => `${row.periodStart} → ${row.periodEnd}` },
+      { header: 'STATUS', value: (row) => show(row.status) },
+      { header: 'HOURS', value: (row) => `${row.approvedHours}h` },
+      { header: 'TOTAL', value: (row) => amount(row.total) },
+      { header: 'ID', value: (row) => show(row.id) },
+    ]);
+  },
+};
+
+/**
+ * `tcms billing invoice <invoiceId>` — the lines, the entries behind them, and **what was
+ * excluded**.
+ *
+ * Both exclusion buckets print, always, and neither is a footnote (019 D-g): hours nobody has
+ * approved, and approved hours no rate card can price. An hour that vanished from a draft with no
+ * explanation is the defect this module exists to remove.
+ *
+ * A draft's figures are computed at the moment of this call and will move when a period is
+ * approved. An issued invoice's never move again.
+ */
+const billingInvoice: Command = {
+  name: 'billing invoice',
+  summary: 'One invoice — its lines, the hours behind them, and what was excluded',
+  usage: 'tcms billing invoice inv-1',
+  options: {},
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const invoiceId = requireArg(context, 'invoice');
+    const view = await client.GET('/invoices/{invoiceId}', {
+      params: { path: { invoiceId } },
+      tcms: request,
+    });
+    if (json) return out.json(view);
+
+    fields(out, [
+      ['Number', show(view.invoice.number ?? 'assigned on issue')],
+      ['Client', show(view.invoice.client.name)],
+      ['Period', `${view.invoice.periodStart} → ${view.invoice.periodEnd}`],
+      ['Status', show(view.invoice.status)],
+      ['Bill to', show(view.billTo?.name ?? null)],
+      ['Terms', `${view.termsDays} days`],
+      ['Total', amount(view.invoice.total)],
+    ]);
+
+    out.line();
+    out.line(`Lines (${view.lines.length})`);
+    table(out, view.lines, [
+      { header: 'PROJECT', value: (row) => show(row.projectName) },
+      { header: 'APPLIES TO', value: (row) => show(row.appliesTo) },
+      { header: 'HOURS', value: (row) => String(row.hours) },
+      { header: 'RATE', value: (row) => String(row.rate) },
+      { header: 'AMOUNT', value: (row) => amount(row.amount) },
+    ]);
+
+    out.line();
+    out.line(`Excluded (${view.excluded.length})`);
+    if (view.excluded.length === 0) {
+      out.line('  Nothing — every approved hour in the period is on a line.');
+    } else {
+      table(out, view.excluded, [
+        { header: 'REASON', value: (row) => show(row.reason) },
+        { header: 'HOURS', value: (row) => String(row.hours) },
+        { header: 'WHO', value: (row) => show(row.detail) },
+      ]);
+    }
+
+    out.line();
+    out.line(`Entries (${view.entries.length}) — "period approved" is the decision on that`);
+    out.line('person\'s timesheet period, which spans projects. It is not a claim that somebody');
+    out.line('with authority over this project approved these hours (019 D-f).');
+    table(out, view.entries, [
+      { header: 'DATE', value: (row) => show(row.spentOn) },
+      { header: 'PERSON', value: (row) => show(row.personName) },
+      { header: 'AGAINST', value: (row) => `${row.subjectKey} ${row.subjectTitle}` },
+      { header: 'HOURS', value: (row) => String(row.hours) },
+      { header: 'PERIOD APPROVED', value: (row) => show(row.periodApprovedBy) },
+    ]);
+  },
+};
+
+/** The contract's `status` filter on `GET /invoices`, so a typo is refused here, not decoded. */
+const INVOICE_FILTERS = ['DRAFT', 'ISSUED', 'ALL'] as const;
+
+/**
+ * `tcms expense list --project ACME` — costs recorded against a project.
+ *
+ * **An expense is never an invoice line** (scope D24, 019 D-j), and no screen in the product
+ * renders one: this verb and its two write siblings are the whole surface. They exist because
+ * `billing:expense` is in the permission catalogue and a key with no reachable endpoint is an
+ * unreachable row (roles spec §43).
+ */
+const expenseList: Command = {
+  name: 'expense list',
+  summary: 'Expenses recorded against a project — never invoice lines',
+  usage: 'tcms expense list --project ACME [--from 2026-09-01] [--to 2026-09-30]',
+  options: { from: { type: 'string' }, to: { type: 'string' } },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const projectId = await projectOf(context);
+    const from = first(options['from']);
+    const to = first(options['to']);
+
+    const rows = await client.GET('/expenses', {
+      params: {
+        query: {
+          projectId,
+          ...(from === undefined ? {} : { from }),
+          ...(to === undefined ? {} : { to }),
+        },
+      },
+      tcms: request,
+    });
+    if (json) return out.json(rows);
+
+    table(out, rows, [
+      { header: 'DATE', value: (row) => show(row.incurredOn) },
+      { header: 'WHAT', value: (row) => show(row.description) },
+      { header: 'AMOUNT', value: (row) => amount(row.amount) },
+      { header: 'ID', value: (row) => show(row.id) },
+    ]);
+  },
+};
+
 export const READS: readonly Command[] = [
   whoami,
   format,
@@ -2274,4 +2573,11 @@ export const READS: readonly Command[] = [
   staffingProject,
   clientList,
   clientShow,
+  billingSummary,
+  billingBudgets,
+  billingInvoices,
+  billingInvoice,
+  rateCardList,
+  rateCardShow,
+  expenseList,
 ];

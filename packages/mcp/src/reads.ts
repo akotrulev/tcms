@@ -1696,6 +1696,159 @@ const readClient: ToolDefinition = {
   },
 };
 
+/* ------------------------------------------------------------------ billing ---- */
+
+/**
+ * The money surface, read-only. Two tools, split by KEY rather than by noun.
+ *
+ * `billing:read` and `ratecard:read` are separate keys in the catalogue, and §2's rule is that a
+ * tool is listed only to a caller who can reach the whole of it. In practice §A3 grants all seven
+ * money keys as a block to Instance Admin, Company Admin and Finance, so the two tools are listed
+ * to the same audience today — the split is what keeps that an observation rather than an
+ * assumption the surface is built on.
+ *
+ * **`GET /projects/{projectId}/budget-burn` is deliberately on NEITHER of them.** It is gated on
+ * `project:read` and belongs to the project surface, not the money surface; putting it here would
+ * list a money tool to every engineer in the company (019 D-h).
+ */
+const readBilling: ToolDefinition = {
+  name: 'tcms_read_billing',
+  title: "The company's money — summary, budgets, invoices and expenses",
+  description:
+    'With nothing, the company summary: invoiced year to date, what is draftable now, unapproved '
+    + 'hours and how many clients have been billed. With `view: "budgets"`, every project with a '
+    + 'budget, its approved hours and its burn. With `view: "invoices"`, drafts and issued invoices '
+    + 'together. With `invoice` (an id), that invoice in full — its lines, the time entries behind '
+    + 'them, and WHAT WAS EXCLUDED. With `view: "expenses"` and `project`, costs recorded against '
+    + 'that project. '
+    + '**Every monetary figure carries its currency, and the company totals are ARRAYS — one entry '
+    + 'per currency.** Do not add them together: a company with a EUR client and a CHF client has '
+    + 'no single total, and one number across both is wrong in both. '
+    + '**An invoice always reports what it excluded and never silently drops an hour.** Two '
+    + 'buckets: NOT_APPROVED (nobody has signed for them) and NO_RATE (approved, but the client has '
+    + 'no rate-card entry effective that day). Both are counted with the hours and the people named. '
+    + '**`periodApprovedBy` on an entry is who decided that PERSON\'S TIMESHEET PERIOD.** A period '
+    + 'spans projects while the approval permission is project-scoped, so it is NOT a claim that '
+    + 'somebody with authority over this project approved these hours — do not describe it as one. '
+    + '**Time and materials only.** There is no fixed fee, no retainer, no drawdown, no running '
+    + 'balance and no margin here, and an AI assistant\'s usage is a cost that is never billed to a '
+    + 'client. If asked for any of those, say the product does not do it rather than deriving one.',
+  gate: { mode: 'all', permissions: ['billing:read'] },
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      view: {
+        type: 'string',
+        enum: ['summary', 'budgets', 'invoices', 'expenses'],
+        description: 'Which read. Defaults to summary.',
+      },
+      invoice: {
+        type: 'string',
+        description: 'One invoice in full, by id — its lines, the hours behind them and what was excluded.',
+      },
+      client: { type: 'string', description: 'Narrow budgets or invoices to one client, by id.' },
+      project: { type: 'string', description: 'Required for expenses: the project id.' },
+      status: {
+        type: 'string',
+        enum: ['DRAFT', 'ISSUED', 'ALL'],
+        description: 'Which invoices to list. Defaults to ALL, as the screen shows them.',
+      },
+      on: { type: 'string', description: 'Any day in the period the summary is computed over. Defaults to today.' },
+    },
+  },
+  run: async (session, input) => {
+    const tcms = session.request;
+    const invoiceId = str(input, 'invoice');
+    if (invoiceId !== undefined) {
+      return session.client.GET('/invoices/{invoiceId}', { params: { path: { invoiceId } }, tcms });
+    }
+
+    const clientId = str(input, 'client');
+    switch (str(input, 'view') ?? 'summary') {
+      case 'budgets':
+        return session.client.GET('/budgets', {
+          params: { query: clientId === undefined ? {} : { clientId } },
+          tcms,
+        });
+      case 'invoices': {
+        const asked = str(input, 'status');
+        const status = INVOICE_FILTERS.find((value) => value === asked);
+        return session.client.GET('/invoices', {
+          params: {
+            query: {
+              ...(status === undefined ? {} : { status }),
+              ...(clientId === undefined ? {} : { clientId }),
+            },
+          },
+          tcms,
+        });
+      }
+      case 'expenses': {
+        const projectId = str(input, 'project');
+        if (projectId === undefined) {
+          throw new InputMismatch('`project` is required for the expenses view — expenses are per project.');
+        }
+        return session.client.GET('/expenses', { params: { query: { projectId } }, tcms });
+      }
+      default: {
+        const on = str(input, 'on');
+        return session.client.GET('/billing/summary', {
+          params: { query: on === undefined ? {} : { on } },
+          tcms,
+        });
+      }
+    }
+  },
+};
+
+/** The contract's `status` filter on `GET /invoices`. */
+const INVOICE_FILTERS = ['DRAFT', 'ISSUED', 'ALL'] as const;
+
+/**
+ * Rate cards, on their own key.
+ *
+ * **A client with no card is a row, not a missing row**, and the description says so: it is the
+ * state every new client is in, and its approved hours are still recorded — they simply cannot be
+ * priced. An agent that read the absence as an error would report a company as misconfigured for
+ * having onboarded a client this week.
+ */
+const readRateCard: ToolDefinition = {
+  name: 'tcms_read_rate_card',
+  title: 'What each client is charged per hour',
+  description:
+    'With nothing, every ACTIVE client and the rate card it has — or `card: null`, which is a real '
+    + 'answer rather than a gap: a client with no card is the state every new client is in, and its '
+    + 'approved hours are recorded and simply cannot be priced. With `card` (an id), that card and '
+    + 'its entries. '
+    + '**The rate for an hour is the most specific entry effective on or before the day it was '
+    + 'worked**: a PERSON entry naming who logged it, then a ROLE entry naming a role that person '
+    + 'holds on that project, then ALL_ROLES. Where two ROLE entries match, the higher rate wins. '
+    + 'One card per client, and the currency lives on the card — which is why an invoice cannot span '
+    + 'two clients. '
+    + 'Reading this costs ratecard:read, which is held by Instance Admin, Company Admin and Finance '
+    + 'and by nobody else. An Account Manager knows the client and the hours and never a rate.',
+  gate: { mode: 'all', permissions: ['ratecard:read'] },
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      card: { type: 'string', description: 'One rate card in full, by id — from a list read.' },
+    },
+  },
+  run: async (session, input) => {
+    const tcms = session.request;
+    const rateCardId = str(input, 'card');
+    if (rateCardId !== undefined) {
+      return session.client.GET('/rate-cards/{rateCardId}', {
+        params: { path: { rateCardId } },
+        tcms,
+      });
+    }
+    return session.client.GET('/rate-cards', { tcms });
+  },
+};
+
 export const READ_TOOLS: readonly ToolDefinition[] = [
   orient,
   searchCases,
@@ -1716,4 +1869,6 @@ export const READ_TOOLS: readonly ToolDefinition[] = [
   readTimeRollup,
   readStaffing,
   readClient,
+  readBilling,
+  readRateCard,
 ];

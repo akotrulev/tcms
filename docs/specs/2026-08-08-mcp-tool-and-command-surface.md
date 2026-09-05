@@ -201,6 +201,10 @@ Namespaced `tcms_*`. `projectId` and `companyId` **do not appear in any schema**
 | 37 | `tcms_write_absence` | `staffing:absence` | `POST`/`DELETE /staffing/people/{userId}/absences` | 017 T1 — see §3.9 |
 | 38 | `tcms_read_client` | `client:read` | `GET /clients`, `GET /clients/{clientId}` | 018 T1 — see §3.10 |
 | 39 | `tcms_write_client` | **any of** `client:create` / `client:edit` | `POST`/`PUT`/`DELETE /clients…`, `…/contacts…` | 018 T1 — see §3.10 |
+| 40 | `tcms_read_billing` | `billing:read` | `GET /billing/summary`, `GET /budgets`, `GET /invoices`, `…/{invoiceId}`, `GET /expenses` | 019 T1 — see §3.11 |
+| 41 | `tcms_write_billing` | **any of** `billing:budget` / `billing:expense` / `billing:invoice` / `billing:issue` | `PUT`/`DELETE /projects/{id}/budget`, `POST`/`DELETE /expenses…`, `POST`/`DELETE /invoices…`, `POST …/issue` | 019 T1 — see §3.11 |
+| 42 | `tcms_read_rate_card` | `ratecard:read` | `GET /rate-cards`, `…/{rateCardId}` | 019 T1 — see §3.11 |
+| 43 | `tcms_write_rate_card` | `ratecard:manage` | `POST`/`PUT`/`DELETE /rate-cards…` | 019 T1 — see §3.11 |
 
 Eighteen are buildable against today's contract; two need §4.2's contract addition first; one has a
 blocked arm (§5).
@@ -1026,6 +1030,81 @@ this surface.
 and §3.9's sentence, unchanged and repeated here for the sharpest instance of it: an Account Manager
 holds `client:read` and does not hold `billing:*`, and `client.html` renders the hours-and-invoices
 table for them with the amounts absent. Those columns are M8's.
+
+
+### 3.11 The billing verbs (019 T1) — four tools, and the first that spans four keys
+
+Plan 019 (M8). Twelve operations over twelve path items, eleven tagged `billing` and one — the
+client rollup — tagged `clients` because the tag names the screen a reader is on.
+[The plan](../plans/019-billing.md) carries the decisions; what follows is only what they do to this
+surface.
+
+| Tool | Gate | Arms / reads |
+|---|---|---|
+| `tcms_read_billing` | `billing:read` | the company summary · budgets · invoices · one invoice in full · expenses |
+| `tcms_write_billing` | **any of** `billing:budget` / `billing:expense` / `billing:invoice` / `billing:issue` | `set-budget` · `clear-budget` · `record-expense` · `remove-expense` · `draft-invoice` · `discard-invoice` · `issue-invoice` |
+| `tcms_read_rate_card` | `ratecard:read` | the slots · one card |
+| `tcms_write_rate_card` | `ratecard:manage` | `set` · `remove` |
+
+- **`tcms_write_billing` spans FOUR permissions**, where §3.10's `tcms_write_client` spanned two and
+  every tool before it spanned one. §2 is satisfied by the **arm table**, as it was there. Splitting
+  would produce four tools listed to an *identical* audience: §A3 grants the seven money keys as a
+  **block** to Instance Admin, Company Admin and Finance and to nobody else, so there is no caller
+  in this product who holds one and not the rest. The arm table stays anyway, and `narrow(held)`
+  names the missing keys — a credential holding a subset is unusual enough that the refusal copy
+  says so, rather than quietly working around it.
+- **`issue-invoice` is declared `kind: 'delete'` and deletes nothing.** It is the one irreversible
+  act in the module — the lines become rows nothing updates, and the invoice becomes a document that
+  was sent — and `destructiveHint` plus the elicitation prompt is exactly the right gate for it. The
+  taxonomy's word is wrong and the behaviour is right; recorded here so a reviewer does not go
+  looking for what it removes.
+- **`GET /projects/{projectId}/budget-burn` is on NEITHER read tool**, and that is the sharpest
+  decision on this surface. It is gated on `project:read` and carries a percentage and hours and no
+  currency and no amount at all (019 D-h) — it belongs to the project surface, and listing it here
+  would put a money-titled tool in front of every engineer in the company.
+- **`tcms_write_rate_card`'s `set` arm replaces the WHOLE card, entries included**, and its
+  description says so twice because it is the one thing a model asked to *"add a rate for Mira"*
+  will get wrong. To add, read the card first and send its existing entries back beside the new one.
+  It is one arm over two HTTP verbs — `POST` for a client with no card, `PUT` otherwise — because
+  *"set a rate card"* is one thought and which method it is depends on a fact the caller has no
+  reason to hold. §3.10's `edit` arm reads before it writes for the same reason.
+- **A draft stores no lines, and `tcms_read_billing`'s description leads with it** (019 D-c). Its
+  lines are the client's approved, priceable, unbilled hours recomputed on every read, so approving
+  a timesheet period changes the draft with no further call. There is deliberately **no
+  `recalculate` arm**, and an agent that goes looking for one is the reason the absence is stated
+  rather than implied.
+- **Every monetary figure carries its currency and the company totals are ARRAYS.** One entry per
+  currency (019 D-l), and both read tools say *do not add them together*: a company with a EUR
+  client and a CHF client has no single total, and one number across both is wrong in both. This is
+  the failure mode a summarising model walks straight into.
+- **An invoice always reports what it excluded.** Two buckets — `NOT_APPROVED` and `NO_RATE` — with
+  the hours and the people named, and an empty array means every approved hour is on a line rather
+  than that nothing was looked for (019 D-g). An hour that vanished from a draft with no explanation
+  is the defect this module exists to remove, and a model relaying a total without the exclusions
+  reintroduces it one layer up.
+- **`periodApprovedBy` is who decided that person's timesheet PERIOD**, and both the schema
+  description and the read tool's say so at length (019 D-f, 016 D-i). A period spans projects while
+  `time:approve` is a PROJECT-scope grant, so approving one approves entries against projects the
+  approver cannot see. *These hours were approved* is supported by the data; *somebody with
+  authority over this project approved them* is not, and a model paraphrasing the first into the
+  second is the specific failure the wording exists to prevent.
+- **Neither create arm carries an `Idempotency-Key`**, for §3.10's reason: the parameter
+  deduplicates within `(company, project, key)` and an invoice is addressed to a client. Unlike
+  `record`, there is no constraint standing in for it either — two drafts over one period for one
+  client are a legitimate state — so a lost response leaves a second draft. It cannot double-bill:
+  both drafts offer the same hours and whichever issues first takes them. Recorded in
+  `CREATE_WITHOUT_A_KEY` in both packages.
+- **No arm on this surface bills a fixed fee, a retainer, a drawdown or an AI assistant's hours**
+  (scope D24), and there is no field that could ask for one. `tcms_write_billing`'s description ends
+  by telling a model to say the product does not do it rather than deriving one — an agent asked to
+  *"invoice the retainer"* will otherwise assemble something out of the parts that are here.
+
+**The money boundary, stated for the third time on this surface and for the last.** §3.8 and §3.9
+each recorded that no verb of theirs returns a rate; §3.10 recorded it for the sharpest client case.
+Here is the other side of it: **`tcms_read_billing` and `tcms_read_rate_card` are the only tools on
+this surface that return money, and a credential without the money keys is not shown them at all.**
+A Test Engineer's `tools/list` contains neither, which is the same statement `billing.html` makes to
+a person — the Billing entry is absent from their sidebar rather than greyed out.
 
 ---
 

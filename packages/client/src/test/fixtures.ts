@@ -58,6 +58,10 @@ export const IDS = {
   skill: 'sk-1',
   client: 'cl-1',
   clientContact: 'cc-1',
+  rateCard: 'rc-1',
+  rateCardEntry: 'rce-1',
+  invoice: 'inv-1',
+  expense: 'ex-1',
 } as const;
 
 /** A fixed instant, so nothing here depends on when the suite runs. */
@@ -1339,4 +1343,219 @@ export function clientDetail(
   overrides: Partial<Schemas['ClientDetail']> = {},
 ): Schemas['ClientDetail'] {
   return { client: client(), contacts: [], projects: [], ...overrides };
+}
+
+/**
+ * A monetary figure and its currency, **always together** (019 D-l).
+ *
+ * There is deliberately no helper that sums two of these. A company with a EUR client and a CHF
+ * client has no single total, and every company-level figure on this surface is an array of these
+ * rather than one of them.
+ */
+export function money(overrides: Partial<Schemas['Money']> = {}): Schemas['Money'] {
+  return { amount: 0, currency: 'EUR', ...overrides };
+}
+
+/** One rate-card entry. `ALL_ROLES` by default — the least specific rung of the ladder (019 D-d). */
+export function rateCardEntry(
+  overrides: Partial<Schemas['RateCardEntry']> = {},
+): Schemas['RateCardEntry'] {
+  return {
+    id: IDS.rateCardEntry,
+    scope: 'ALL_ROLES',
+    personId: null,
+    roleId: null,
+    hourlyRate: 90,
+    effectiveFrom: '2026-01-01',
+    appliesTo: 'All roles',
+    ...overrides,
+  };
+}
+
+/** One card per client. `entries` defaults to empty — a card set a minute ago has none. */
+export function rateCard(overrides: Partial<Schemas['RateCard']> = {}): Schemas['RateCard'] {
+  return { id: IDS.rateCard, client: clientRef(), currency: 'EUR', entries: [], ...overrides };
+}
+
+/**
+ * A client and its card, **or a client and `null`** — `billing.html`'s *no rate card yet* row.
+ * The default is `null`, because that is the state every new client is in.
+ */
+export function rateCardSlot(
+  overrides: Partial<Schemas['RateCardSlot']> = {},
+): Schemas['RateCardSlot'] {
+  return { client: clientRef(), card: null, ...overrides };
+}
+
+/**
+ * The money view of a budget, gated on `billing:read`. `HOURS` by default, no client, nothing
+ * priced — `billing.html`'s internal-project row, which nothing may mark as deficient (019 D-p).
+ */
+export function budget(overrides: Partial<Schemas['Budget']> = {}): Schemas['Budget'] {
+  return {
+    projectId: IDS.project,
+    projectKey: 'ACME',
+    projectName: 'Acme Storefront',
+    client: null,
+    basis: 'HOURS',
+    amountHours: 600,
+    amountMoney: null,
+    approvedHours: 0,
+    pricedToDate: null,
+    burnPercent: 0,
+    ...overrides,
+  };
+}
+
+/**
+ * The **project-scope** burn — no amount member and no currency member at all (019 D-h).
+ * `basis: null` by default: a project with no budget, which is a state and not an error.
+ */
+export function budgetBurn(overrides: Partial<Schemas['BudgetBurn']> = {}): Schemas['BudgetBurn'] {
+  return { basis: null, budgetHours: null, approvedHours: 0, burnPercent: null, ...overrides };
+}
+
+/** A draft by default: no number, no issue stamp, nothing on it that only issuing writes. */
+export function invoice(overrides: Partial<Schemas['Invoice']> = {}): Schemas['Invoice'] {
+  return {
+    id: IDS.invoice,
+    number: null,
+    client: clientRef(),
+    periodStart: '2026-09-01',
+    periodEnd: '2026-09-30',
+    status: 'DRAFT',
+    currency: 'EUR',
+    total: money(),
+    lineCount: 0,
+    approvedHours: 0,
+    issuedAt: null,
+    issuedBy: null,
+    ...overrides,
+  };
+}
+
+/** One project, one rate, the hours at it. */
+export function invoiceLine(
+  overrides: Partial<Schemas['InvoiceLine']> = {},
+): Schemas['InvoiceLine'] {
+  return {
+    projectId: IDS.project,
+    projectName: 'Acme Storefront',
+    appliesTo: 'All roles',
+    scope: 'ALL_ROLES',
+    hours: 0,
+    rate: 0,
+    amount: money(),
+    ...overrides,
+  };
+}
+
+/**
+ * One approved hour behind a line. `periodApprovedBy` is who decided that person's **period** —
+ * not who approved this project's hours, and the difference is 019 D-f.
+ */
+export function invoiceEntry(
+  overrides: Partial<Schemas['InvoiceEntry']> = {},
+): Schemas['InvoiceEntry'] {
+  return {
+    timeEntryId: IDS.timeEntry,
+    spentOn: '2026-09-02',
+    personName: 'Mira Sund',
+    hours: 0,
+    subjectKey: 'ACME-122',
+    subjectTitle: 'Card capture',
+    periodApprovedAt: '2026-09-03T08:00:00Z',
+    periodApprovedBy: 'Rae Lindqvist',
+    ...overrides,
+  };
+}
+
+/** Hours that are not on a line, counted and named. Never silently dropped (019 D-g). */
+export function excludedHours(
+  overrides: Partial<Schemas['ExcludedHours']> = {},
+): Schemas['ExcludedHours'] {
+  return { reason: 'NOT_APPROVED', hours: 0, detail: '', ...overrides };
+}
+
+/**
+ * `invoice.html` in one document. Every array defaults to empty, `excluded` included — an empty
+ * `excluded` means every approved hour in the period is on a line, which is a real answer.
+ */
+export function invoiceDetail(
+  overrides: Partial<Schemas['InvoiceDetail']> = {},
+): Schemas['InvoiceDetail'] {
+  return {
+    invoice: invoice(),
+    billTo: null,
+    termsDays: 30,
+    lines: [],
+    entries: [],
+    excluded: [],
+    budgetEffect: [],
+    ...overrides,
+  };
+}
+
+/** A cost recorded against a project, and never an invoice line (019 D-j). */
+export function expense(overrides: Partial<Schemas['Expense']> = {}): Schemas['Expense'] {
+  return {
+    id: IDS.expense,
+    projectId: IDS.project,
+    projectName: 'Acme Storefront',
+    incurredOn: '2026-09-02',
+    description: 'Device lab hire',
+    amount: money(),
+    ...overrides,
+  };
+}
+
+/** One row of `client.html`'s hours-and-invoices table. Unbilled by default. */
+export function clientBillingRow(
+  overrides: Partial<Schemas['ClientBillingRow']> = {},
+): Schemas['ClientBillingRow'] {
+  return {
+    periodLabel: 'Sep 2026',
+    periodStart: '2026-09-01',
+    projectId: IDS.project,
+    projectName: 'Acme Storefront',
+    approvedHours: 0,
+    invoiceId: null,
+    invoiceNumber: null,
+    invoiceStatus: null,
+    amount: null,
+    ...overrides,
+  };
+}
+
+/**
+ * `client.html`'s two tiles and the table under them.
+ *
+ * **`amountsVisible` defaults to `false`** — the Account Manager's view, which is the one the value
+ * column must be *absent* from rather than empty (019 D-i).
+ */
+export function clientBillingSummary(
+  overrides: Partial<Schemas['ClientBillingSummary']> = {},
+): Schemas['ClientBillingSummary'] {
+  return {
+    amountsVisible: false,
+    approvedHoursToDate: 0,
+    approvedHoursThisQuarter: 0,
+    invoiceCount: 0,
+    lastIssuedAt: null,
+    rows: [],
+    ...overrides,
+  };
+}
+
+/** `billing.html`'s four tiles. Empty arrays mean nothing issued and nothing draftable. */
+export function billingSummary(
+  overrides: Partial<Schemas['BillingSummary']> = {},
+): Schemas['BillingSummary'] {
+  return {
+    invoicedYearToDate: [],
+    draftableNow: [],
+    unapprovedHours: 0,
+    clientsBilled: 0,
+    ...overrides,
+  };
 }
