@@ -20,6 +20,7 @@
  *     tcmsFaults.rank('conflict') // the rank write loses a race — see below
  *     tcmsFaults.wip()            // every card move lands the column over its limit — see below
  *     tcmsFaults.release('empty') // the roadmap is empty — merge day, see below
+ *     tcmsFaults.clients('none') // this company has no clients — every client surface vanishes
  *     tcmsFaults.importing('midway') // the source stopped answering during the run — see below
  *     tcmsFaults.time('rejected')  // your fortnight came back with a note — see below
  *     tcmsFaults.staffing('no-profile') // nobody's contracted hours are recorded — see below
@@ -258,6 +259,8 @@ export interface FaultState {
   time: TimeFault | null;
   /** How the staffing reads misbehave, or `null` for a company whose profiles are recorded. */
   staffing: StaffingFault | null;
+  /** How many clients this company has, or `null` for the instance as it actually is. */
+  clients: ClientsFault | null;
 }
 
 /** The five ways somebody else's tracker fails us. See this module's header. */
@@ -325,6 +328,27 @@ export type TimeFault = 'rejected' | 'locked';
  */
 export type StaffingFault = 'no-profile' | 'over-allocated';
 
+/**
+ * The clients arm, and it is **the only arm in this file that fabricates a population rather than a
+ * failure**.
+ *
+ * Every other arm here answers the question *what does this screen do when something breaks*. Mc's
+ * acceptance criterion is not a failure at all: it is an **absence** — with no clients, six
+ * surfaces render nothing, and *"nothing"* is a state a reader can only check by seeing it. On a
+ * `seed-demo-data` instance that state is unreachable without deleting every client, and on a
+ * fresh one the populated state is unreachable without creating them. So neither half of the
+ * criterion could be looked at before this arm existed, which is exactly the case
+ * *build the fault switch before the feature it proves* is written for.
+ *
+ * `'none'` answers `[]` to the client list and to the project picker; `'some'` answers a fabricated
+ * pair. Both are `200`s carrying a state rather than failures, so both are `body` verdicts — the
+ * shape the tracker arm established for a degraded answer.
+ *
+ * The four generic faults still reach these paths through `only('/clients')`. This arm is for the
+ * two states that are not faults.
+ */
+export type ClientsFault = 'none' | 'some';
+
 const faults: FaultState = {
   status: null,
   retryAfter: null,
@@ -340,6 +364,7 @@ const faults: FaultState = {
   import: null,
   time: null,
   staffing: null,
+  clients: null,
 };
 
 /**
@@ -578,6 +603,15 @@ export function verdictFor(path: string, method = 'GET'): FaultVerdict {
   if (faults.staffing !== null && isStaffingPath(path) && applies(path)) {
     const verdict = staffingVerdict(faults.staffing, path, method);
     if (verdict.kind !== 'none') return verdict;
+  }
+
+  /*
+    The clients arm, ninth, and the only one here that fabricates a POPULATION rather than a
+    failure — see `ClientsFault`. Scoped by path for every arm above's reason, and its matcher is
+    anchored because `/clients` is a prefix of `/clients/{clientId}`.
+  */
+  if (faults.clients !== null && isClientPopulationRead(path, method) && applies(path)) {
+    return clientsVerdict(faults.clients, path);
   }
 
   if (!applies(path)) return { kind: 'none' };
@@ -1069,6 +1103,59 @@ const FAULT_TO = '2026-11-30';
  * a single row cannot show that the chip's count, the row badges and the breakdown are read off one
  * served subset rather than three separate filters.
  */
+/**
+ * The two reads whose EMPTINESS decides whether anything client-shaped renders.
+ *
+ * Both are anchored, and the first one has to be. `startsWith('/clients')` would also catch
+ * `/clients/{clientId}`, and answering an array there would serve a `ClientDetail` read a list —
+ * the drifted-body failure, injected by accident. That is `isRankWrite`'s recorded reason and this
+ * is the fourth arm to pay it.
+ *
+ * The detail read is deliberately NOT faulted: a client page is only reachable from a list that
+ * has one, so `'none'` makes it unreachable rather than empty, and `'some'` would need a whole
+ * fabricated `ClientDetail` to answer a question no acceptance criterion asks.
+ */
+function isClientPopulationRead(path: string, method: string): boolean {
+  if (method !== 'GET') return false;
+  const bare = withoutQuery(path);
+  return bare === '/clients' || /^\/projects\/[^/]+\/settings\/client-options$/.test(bare);
+}
+
+/**
+ * A fabricated pair, or none — see {@link ClientsFault}.
+ *
+ * `'some'` serves the two shapes the two paths declare: `GET /clients` answers `Client[]` and the
+ * picker answers `ClientRef[]`, which is two fields of the same row. Serving the fuller shape to
+ * both would put a `projectCount` on a picker option, which is a body the contract does not
+ * declare and `contractBodies` would reject in a test.
+ */
+function clientsVerdict(fault: ClientsFault, path: string): FaultVerdict {
+  if (fault === 'none') return { kind: 'body', status: 200, body: [] };
+
+  const pair = [
+    { id: '00000000-0000-4000-8000-0000000000c1', name: 'Acme Retail' },
+    { id: '00000000-0000-4000-8000-0000000000c2', name: 'Bergstrom AG' },
+  ];
+
+  if (withoutQuery(path) !== '/clients') return { kind: 'body', status: 200, body: pair };
+
+  return {
+    kind: 'body',
+    status: 200,
+    body: pair.map((client, index) => ({
+      ...client,
+      location: index === 0 ? 'Stockholm' : 'Zürich',
+      industry: index === 0 ? 'retail' : 'logistics',
+      notes: null,
+      status: 'ACTIVE',
+      accountManager: null,
+      projectCount: index === 0 ? 2 : 1,
+      contactCount: index === 0 ? 3 : 2,
+      createdAt: '2026-03-04T09:00:00Z',
+    })),
+  };
+}
+
 function staffingVerdict(fault: StaffingFault, path: string, method: string): FaultVerdict {
   const people = [
     faultPerson(fault, '00000000-0000-4000-8000-0000000000f1', 'Mira Sund'),
@@ -1416,6 +1503,23 @@ export function installFaultConsole(): void {
       );
     },
     /**
+     * How many clients this company has — `none` to walk the absence, `some` to walk the presence.
+     *
+     * `tcmsFaults.clients(null)` gives the instance back its real answer. Neither state is a
+     * failure: this is the one arm here that exists because a *correct* state is unreachable by
+     * using the app, not because a broken one is.
+     */
+    clients(fault: ClientsFault | null) {
+      faults.clients = fault;
+      console.info(
+        fault === null
+          ? '[tcms faults] clients are the instance’s own again'
+          : fault === 'none'
+            ? '[tcms faults] this company now has NO clients — every client surface must vanish'
+            : '[tcms faults] this company now has two clients',
+      );
+    },
+    /**
      * How the staffing reads misbehave. `tcmsFaults.staffing(null)` restores them without clearing
      * anything else, for `tracker()`'s reason.
      */
@@ -1455,7 +1559,7 @@ export function installFaultConsole(): void {
   console.info(
     '[tcms faults] available — try tcmsFaults.status(500), .hang(), .expire(), '
       + ".tracker('403'), .issue('conflict'), .rank('conflict'), .wip(), "
-      + ".release('empty'), .importing('midway'), .time('rejected'), "
+      + ".release('empty'), .importing('midway'), .time('rejected'), .clients('none'), "
       + ".staffing('no-profile'), .off()",
   );
 }

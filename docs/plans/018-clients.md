@@ -1872,6 +1872,37 @@ git commit -m "feat(crm): the client module, the ClientDirectory inversion, and 
 
 ## T4 — The clients fault arm, the query module, and the three client screens
 
+> **Landed 2026-09-05.** `features/clients/` (five components), `api/queries/clients.ts` with nine
+> hooks, the client keys, the `clients` fault arm, two label maps, both routes and the rail entry.
+> Gates on shanks: **build ✓, lint 0 warnings/0 errors, 2828 tests passed**; packages
+> 170 + 138 + 234 green (the contract moved). The 2 `CaseGrid.test.tsx` failures are the
+> pre-existing pair verified against clean `master` in T1.
+>
+> **Four corrections:**
+>
+> 1. **`ClientInput.status` lost its `default: ACTIVE` keyword.** `openapi-typescript` emits a
+>    property carrying one as **required** — `ProjectSettingsUpdate`'s six booleans are the standing
+>    proof, which is why `settingsUpdate.ts` sends every one. Here it made a create that omits
+>    `status` a compile error in both clients and would have forced a cast saying the opposite of
+>    what the server does. The default is a server behaviour stated in prose now, not a schema
+>    keyword that changes a type.
+> 2. **No tile row on the client page.** The mockup draws three and two of them are M8's, leaving
+>    Projects alone — and a row of one tile reads as two that failed to load. The count moved into
+>    the panel title, where it is a fact about the list under it. (`kit.Tile` is also a `<button>`
+>    requiring `onClick`, and a tile with a no-op handler is the action-that-does-nothing `ui-rules`
+>    §4 forbids.)
+> 3. **The Account manager filter and picker are absent**, and this is a missing read rather than a
+>    decision against them. The endpoint takes `accountManagerId` and the create schema takes it,
+>    but populating either needs the company member list, which is `staffing:directory`'s — a key a
+>    Company Admin holding `client:create` need not hold. An empty picker is worse than none.
+> 4. **`ClientCreateDialog` navigates to the new client rather than back to the list**, because the
+>    next thing a person does after recording one is add a contact or attach a project, and both
+>    live there.
+>
+> **The plan predicted the fault arm would need `only('/clients')` narrowing on top of the four
+> generic faults; it does not.** The arm is scoped by an anchored path test like every arm since the
+> tracker's, and `only()` still narrows it further for free.
+
 **Deliverable:** `/clients`, `/clients/:clientId` and the create dialog render on the render kit;
 with zero clients the list renders `clients-empty.html`'s state and offers the first client; and
 `tcmsFaults.clients('none')` drives that state on an instance that has clients.

@@ -127,6 +127,12 @@ const TimesheetPage = lazy(() =>
 const ApprovalsPage = lazy(() =>
   import('../features/time/ApprovalsPage').then((m) => ({ default: m.ApprovalsPage })),
 );
+const ClientsPage = lazy(() =>
+  import('../features/clients/ClientsPage').then((m) => ({ default: m.ClientsPage })),
+);
+const ClientPage = lazy(() =>
+  import('../features/clients/ClientPage').then((m) => ({ default: m.ClientPage })),
+);
 const StaffingPage = lazy(() =>
   import('../features/staffing/StaffingPage').then((m) => ({ default: m.StaffingPage })),
 );
@@ -1171,6 +1177,38 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <PersonPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            Clients (018 Mc) — company-wide, so outside the project segment: one client has many
+            projects, and scoping the list under the project switcher would say the opposite of what
+            it answers.
+
+            **Routed for everybody, and refused by a sentence rather than by the router**, as every
+            readable screen in this app is. The RAIL entry is the exception to that pattern and is
+            gated on `client:read` — `AppShell` carries the reason, which is `ApiTokenService`'s:
+            an empty list is a claim about the company told to somebody who may not ask.
+
+            `/clients` stays reachable for a company with **no clients at all**, and that is the
+            module's acceptance criterion rather than a convenience. It is the only trace such a
+            company ever sees; every other client surface renders nothing (scope D1 rule 3), and
+            `clients-empty.html` exists so the first one can still be created.
+          */}
+          <Route
+            path="/clients"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <ClientsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/clients/:clientId"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <ClientPage />
               </Suspense>
             }
           />

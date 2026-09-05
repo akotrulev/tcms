@@ -770,6 +770,24 @@ export const keys = {
    */
   staffingRoot: ['staffing'] as const,
 
+  /**
+   * Clients (018 Mc). One root and three keys, and the third one is somewhere else on purpose.
+   *
+   * `optionsFor` is keyed under the **project** — `['projects', p, 'client-options']` — and not
+   * under `clientsRoot`, because the invalidation is what decides where a key lives. A client
+   * created from the project-settings picker must refresh that picker, and every project-scoped
+   * write already sweeps `['projects', p, …]`; under `clientsRoot` it would be refreshed by client
+   * writes and by nothing the project does. It is also a different question with a different gate
+   * — `project:settings` rather than `client:read` — so a reader holding one and not the other
+   * must not evict the other's answer.
+   */
+  clientsRoot: ['clients'] as const,
+  clients: {
+    list: (status: string, managerId: string) => ['clients', 'list', status, managerId] as const,
+    one: (clientId: string) => ['clients', clientId] as const,
+    optionsFor: (projectId: string) => ['projects', projectId, 'client-options'] as const,
+  },
+
   /*
     The prefix roots (§250).
 

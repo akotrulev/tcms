@@ -19707,12 +19707,17 @@ export interface components {
              */
             accountManagerId?: string | null;
             /**
-             * @description Optional, and `ACTIVE` when omitted, so a create need not mention it. This is also the
-             *     archive control — see `updateClient` for why there is no archive sub-resource.
-             * @default ACTIVE
+             * @description Optional, and the server records `ACTIVE` when it is omitted, so a create need not
+             *     mention it. This is also the archive control — see `updateClient` for why there is no
+             *     archive sub-resource.
+             *
+             *     **No `default:` keyword, deliberately.** `openapi-typescript` emits a property carrying
+             *     one as **required** in the generated type (see `ProjectSettingsUpdate`, where every
+             *     boolean is), which would make a create that omits `status` a compile error in both
+             *     clients and force a cast that says the opposite of what the server does.
              * @enum {string}
              */
-            status: "ACTIVE" | "ARCHIVED";
+            status?: "ACTIVE" | "ARCHIVED";
         };
         /**
          * @description `client.html` — the client, its contacts and the projects attached to it, in one document,

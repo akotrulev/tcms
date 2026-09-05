@@ -3,6 +3,7 @@ import {
   Bell,
   Bot,
   Bug,
+  Building2,
   ChartColumn,
   ChevronLeft,
   ChevronRight,
@@ -300,6 +301,13 @@ function projectNav(
    * listed only for a caller who has one.
    */
   canImport: boolean,
+  /**
+   * `client:read` — the Clients screen (018 Mc). Its own parameter for `canImport`'s reason: it is
+   * not a credential the product keeps, so it does not belong on {@link CredentialReach}. The rule
+   * it shares with that interface is the one that matters — the entry is listed only for a caller
+   * who can read the list behind it.
+   */
+  canReadClients: boolean,
 ): { heading: string; items: NavItem[] }[] {
   const p = `/projects/${projectId}`;
   return [
@@ -578,6 +586,27 @@ function projectNav(
         */
         { label: 'Org chart', to: '/org-chart', icon: <Network className="size-4" /> },
         /*
+          Clients (018 Mc), after Org chart because it answers the same shape of question one step
+          out — who this company is, then who it works for.
+
+          **GATED, and it is the fourth entry in this rail that is.** The standing rule here is
+          disable-don't-hide, and the three credential entries below are the recorded exceptions;
+          this is the same exception for the same reason `ApiTokenService` gives — *the read is
+          refused rather than narrowed, because an empty array would be a claim about the company
+          told to somebody who may not ask*, and an entry into that refusal is the same claim one
+          click earlier. A Test Engineer has no business learning from a sidebar how many customers
+          their employer has.
+
+          It does NOT weaken `clients-empty.html`'s promise that the page stays reachable so the
+          first client can be created. Everybody who could create one holds `client:read`
+          (Instance Admin, Company Admin, Account Manager; Finance holds the read alone) — the
+          entry stays for exactly them, and for a company with no clients it is the only
+          client-shaped thing in the entire product.
+        */
+        ...(canReadClients
+          ? [{ label: 'Clients', to: '/clients', icon: <Building2 className="size-4" /> }]
+          : []),
+        /*
           Staffing and Directory (017 M7), after Org chart because they answer the same shape of
           question one step further on — who these people are, then who is free and who knows what.
 
@@ -810,6 +839,7 @@ function RailContent({
           sso: companyGate.can('company:idp'),
         },
         projectGate.can('issue:import'),
+        companyGate.can('client:read'),
       )
     : [];
 

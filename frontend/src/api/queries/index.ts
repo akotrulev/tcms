@@ -382,3 +382,25 @@ export {
   useStaffingPerson,
   useUpdateAllocation,
 } from './staffing';
+
+/*
+  Clients (018 Mc). Eight operations, and the gate splits by SCOPE rather than by read-vs-write:
+  everything under `/clients` costs the COMPANY-scope `client:read` / `client:create` /
+  `client:edit` / `client:delete`, while the project picker and the attach both cost
+  `project:settings`, which is PROJECT scope — story C2's key, because a Project Manager holds no
+  company client key at all.
+
+  Both reads are `enabled`-gated on the permission rather than allowed to 403: a refusal here would
+  raise a notification for a control the reader was never meant to see.
+*/
+export {
+  useAddClientContact,
+  useClient,
+  useClients,
+  useCreateClient,
+  useDeleteClient,
+  useProjectClientOptions,
+  useRemoveClientContact,
+  useSetProjectClient,
+  useUpdateClient,
+} from './clients';

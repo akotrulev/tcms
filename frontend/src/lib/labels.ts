@@ -11,6 +11,7 @@
 import type { BadgeTone } from '../components/kit/Badge';
 import type {
   AbsenceKind,
+  ClientStatus,
   AggregationPolicy,
   AssignmentVia,
   ArtifactStatus,
@@ -1327,3 +1328,28 @@ export const absenceKindTones = {
   HOLIDAY: 'steel',
   OTHER: 'steel',
 } as const satisfies Record<AbsenceKind, BadgeTone>;
+
+/**
+ * Whether a client is one this company still works with (018 Mc).
+ *
+ * **Two members and no third**, and `ARCHIVED` is not a deleted-flag: `DELETE /clients/{id}` is
+ * refused while any project names the client, and archiving is what that refusal points at
+ * (018 D-k). The label says *Archived* rather than *Inactive* for that reason — inactive would
+ * read as a judgement about the relationship, where archived is a statement about the record.
+ */
+export const clientStatusLabels = {
+  ACTIVE: 'Active',
+  ARCHIVED: 'Archived',
+} as const satisfies Record<ClientStatus, string>;
+
+/**
+ * Badge tones for the two.
+ *
+ * `ACTIVE` is `steel` and not `good`: a client being current is the ordinary state of almost every
+ * row on the screen, and a green badge on every one of them is a colour that has stopped carrying
+ * information. `ARCHIVED` is `plain`, which is the only thing the badge is there to say.
+ */
+export const clientStatusTones = {
+  ACTIVE: 'steel',
+  ARCHIVED: 'plain',
+} as const satisfies Record<ClientStatus, BadgeTone>;
