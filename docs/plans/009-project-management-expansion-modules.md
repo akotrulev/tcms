@@ -71,9 +71,9 @@ would mean eight edits to three documents that a test pins byte-for-byte. It is 
 | **M5** | Agent execution | ~~`V7`~~ → ~~`V6`~~ → ~~`V7`~~ → `V8` | connect their own assistant and have it work a task, but never close it | M1 | done 2026-09-04 @ `4f3bbf8b` — plan 015 |
 | **M6** | Time | ~~`V8`~~ → ~~`V10`~~ → ~~`V11`~~ → `V9` | log hours, submit a period, and have a PM approve it | M1 | done 2026-09-04 @ `3471358c` — plan 016 |
 | **M7** | Staffing | ~~`V9` (unchanged)~~ → **`V10` — taken 2026-09-04** | allocate people, see capacity, and find who is free | ~~M6~~ → **M0** (review R11) | done 2026-09-04 @ `44f8d39a` — plan [017-staffing.md](017-staffing.md) |
-| **M8** | Billing | ~~`V10`~~ → ~~`V11`~~ → ~~`V12`~~ → **whatever `ls` says on the day** | price approved time and issue an invoice | M6 · Mc | not started — same reason as `Mc`: this column has been re-derived by arithmetic five times and been wrong five times, and the directory settles it in one command |
+| **M8** | Billing | ~~`V10`~~ → ~~`V11`~~ → ~~`V12`~~ → **whatever `ls` says on the day** (`V11` is now spent by Mc) | price approved time and issue an invoice | M6 · Mc — **both `done`** | not started — same reason as `Mc` was: this column has been re-derived by arithmetic six times and been wrong six times, and the directory settles it in one command |
 | **M9** | Delivery analytics | none | read burn-up, cycle time and flow | M3 | not started |
-| **Mc** | Clients | ~~`V8`~~ → ~~`V9`~~ → **whatever `ls` says on the day** | record a client and attach projects to it | M0 | not started — `V9` went to M6 and `V10` to M7, both by landing before it, so this cell no longer names a number rather than naming a fifth wrong one |
+| **Mc** | Clients | ~~`V8`~~ → ~~`V9`~~ → ~~whatever `ls` says on the day~~ → **`V11` — taken 2026-09-05** | record a client and attach projects to it | M0 | done 2026-09-05 @ `c7e504ff` — plan [018-clients.md](018-clients.md) |
 
 **The `V` column was re-derived on 2026-08-30** from the confirmed landing order in
 [009-execution-breakdown.md](009-execution-breakdown.md) — `M1 → M2 → M3 → M5 → M4 → Mc → M7 → M6 → M8 → M9`.
@@ -1898,10 +1898,11 @@ switcher in the mockups: Billing is ABSENT from the sidebar for everyone but Fin
 Admin — absent, not greyed out. The mockups are the source of truth for the screens; the plan and
 scope spec for behaviour.
 
-Confirm M6 AND Mc both read `done` in the status table before starting. ~~Only M9 may run beside M8.~~
-Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M8 runs NINTH; task list in docs/plans/009-execution-breakdown.md, phase 9. Mc's
-closure task rewrites this prompt with the client endpoints and the client page's hours-and-invoices
-slot as they actually landed — trust that rewrite over anything this block says about them today.
+Confirm M6 AND Mc both read `done` in the status table before starting — **as of 2026-09-05 they
+both do**, M6 @ `3471358c` (plan 016) and Mc @ its own sha (plan 018). ~~Only M9 may run beside M8.~~
+Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M8 runs NINTH; task list in docs/plans/009-execution-breakdown.md, phase 9. **Mc's closure task has now
+rewritten this prompt** — the "What Mc actually built" section below is that rewrite, and it
+supersedes anything elsewhere in this block about clients.
 
 **M6 landed 2026-09-04 (`V9__time.sql`, plan 016-time.md). What it actually built, which is not
 everywhere what this plan guessed:**
@@ -1958,9 +1959,65 @@ everywhere what this plan guessed:**
   on the screen rather than rendering a number it could not source. The Time panel it belongs in
   exists — `GeneralSettingsPage.tsx`'s `TimePanel` — so this is a row to add, not a panel to build.
 
+**Mc landed 2026-09-05 (`V11__crm_clients.sql`, plan 018-clients.md). What it actually built, which
+is not everywhere what this prompt guessed:**
+
+- **Package `com.tcms.crm`**, tagged `clients` on the wire. Endpoints as they landed:
+  `GET /clients?status=ACTIVE|ARCHIVED|ALL&accountManagerId=` · `POST /clients` ·
+  `GET /clients/{clientId}` (a `ClientDetail` — the client, its contacts and its projects in ONE
+  read) · `PUT /clients/{clientId}` (a full replacement, and also the archive control) ·
+  `DELETE /clients/{clientId}` · `POST /clients/{clientId}/contacts` ·
+  `PUT|DELETE /clients/{clientId}/contacts/{contactId}` ·
+  **`GET /projects/{projectId}/settings/client-options`** (the picker, `project:settings`) ·
+  **`PUT /projects/{projectId}/client`** (attach/change/detach, `project:settings`).
+- **`api.ClientRef` is the shared two-field shape** — `{id, name}` — and it is in `api` rather than
+  in `crm` because `project` serves it too on `ProjectView.client` and may not import `crm`.
+  **`project` reads a client's NAME through `project.ClientDirectory`**, which `crm` implements; do
+  not add a `billing.ClientFacts` reading the `client` table, and do not import `crm` from a
+  foundation module.
+- **The money boundary on the client surface is already asserted and you must not weaken it.**
+  `crm.CrmCreatesNoLoginTest.theClientSurfaceCarriesNoMoneyWord` serialises a `ClientDetail` and
+  fails on `rate`, `cost`, `amount`, `currency`, `invoice` or `budget` appearing anywhere in it.
+  **That is a test you will have to change**, and it is the one place in this module where that is
+  correct rather than a weakening: extend it to say what M8 may now add and where, do not delete
+  it. Its sibling `time.TimeMoneyBoundaryTest` you must NOT touch except to extend.
+  Fixture UUID prefixes: `fd` is `ClientEndpointTest`'s, `ff` is `CrmCreatesNoLoginTest`'s, `f8`
+  and `f9` are M6's. **Grep the tree before taking one** — `fa` and `fb` looked free and were not,
+  and the suite failed with a `project_pkey` duplicate naming neither class.
+- **`ClientDetail` carries NO hours and NO invoice figures**, and `ClientProject` is four fields
+  (`id`, `key`, `name`, `archived`) because nothing else is on any project read shape.
+- **The hours-and-invoices slot is `frontend/src/features/clients/BillingSlot.tsx`** — a real
+  component, mounted last on `ClientPage`, drawing no data and reading no endpoint. **It is your
+  whole table, not three of its columns**: `Period · Project · Approved hours · Invoice · Status`,
+  of which you own three. Mc deliberately did not build the hours half even though M6 had landed
+  and `time_entry.project_id` is indexed — building two columns and rebuilding the table here costs
+  more than building it once (018 D-g). Replace `BillingSlot`'s body; the seam is the file.
+- **The rate card panel and the Contracts panel are NOT rendered anywhere**, not even as a refusal.
+  The rate card is yours to build. **The Contracts panel belongs to no module at all** (018 D-h) —
+  it is in neither Mc's schema nor your declared six, so if you want it, it is a decision and a
+  table, not a port.
+- **`clients.html`'s `Hours to date` and `Last invoice` columns are not built either**, for D-g's
+  reason. The list is `ClientsPage.tsx` and its table is five columns.
+- **A client is archived, not deleted, once a project names it** (018 D-k) — `DELETE` answers `409`
+  naming archiving. `Client.projectCount` counts archived projects too, deliberately, because it is
+  the number that refusal is computed from.
+- **`tcmsFaults.clients('none' | 'some')`** forces the client list and the picker empty or
+  populated. It is the only arm in `devFaults.ts` that fabricates a population rather than a
+  failure, and it is how you walk a billing screen for a company that has no clients.
+- **The Clients rail entry is GATED on `client:read`** — the fourth gated entry in a rail whose rule
+  is disable-don't-hide. Billing is absent from the sidebar for everyone but Finance and Company
+  Admin, so yours is the fifth and the argument is the same one: `ApiTokenService`'s.
+- **`ClientInput.status` carries no `default:` keyword and must not gain one.** `openapi-typescript`
+  emits a defaulted property as **required**, which would make every create that omits it a compile
+  error in both generated clients. Watch this on every optional field in your six tables.
+- **`project.client_id` is nullable forever and there is no "Internal" client row** (scope D1
+  rule 1). **An invoice cannot assume a project has a client**, and neither can a rate card lookup.
+
 Then:
 1. Write docs/plans/0NN-billing.md with ep-writing-plans — next free NNN, next free V from the
-   migration directory (the table says V12 after the 2026-09-01 shift; the directory is the authority). New `billing` module:
+   migration directory. **`V11` is spent (Mc, 2026-09-05) and `018` is spent as a plan number**, so
+   the projections are `V12` and `019` — but that column has now been wrong six times, so run `ls`
+   and believe it, not this sentence. New `billing` module:
    rate_card, rate_card_entry, budget, invoice, invoice_line, expense. Time and materials only
    (D24); AI-assistant usage is a cost, never a line.
 2. Execute with ep-executing-plans. Contract first in one commit (openapi.yaml with `required`

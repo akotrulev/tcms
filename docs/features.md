@@ -65,8 +65,39 @@ Written for a reader deciding what the product does. Implementation detail is co
   release panel says what a release *is* and what it buys, because a release is a thing the project
   will have and has none yet. A budget panel is not rendered at all — that module is not installed,
   and an empty card for it would be an advertisement rather than an explanation
-- A project belonging to a company with **no clients** is the same screen with no client chip, no
-  client column and no prompt to attach one. Nothing nags a company that has none
+- ~~A project belonging to a company with **no clients** is the same screen with no client chip, no
+  client column and no prompt to attach one. Nothing nags a company that has none~~ →
+  **superseded 2026-09-05 (Mc): that is now a description of what the product does rather than a
+  promise about what it will.** Every client surface is conditional on the company having at least
+  one client, and the absences are asserted as tests. See **Clients** below
+- Say which client a project is for, on its General settings — **and "None (internal)" is a value,
+  not a gap.** The field only exists once the company has recorded a client
+
+## Clients
+
+- Record a client — an organisation your company delivers software for — and **a name is the only
+  thing it needs.** Location, industry and notes can come later, or never
+- Add contacts for a client: name, role, email, phone. **A contact is a record of a person to talk
+  to and never a login** — nobody at a client can sign in, see a board, or be granted a permission,
+  and adding one creates no account of any kind
+- Attach a project to a client from the project's own settings, change it, or detach it. One client
+  has many projects; a project has at most one client — or none
+- Open a client to see its projects and its contacts in one place
+- Filter the projects list by client, with the filter held in the URL so the narrowed list can be
+  sent to whoever asked
+- Archive a client you no longer work with. **Deleting one that projects still name is refused**,
+  and the refusal says to archive it instead — leaving live work with no customer is the thing that
+  cannot happen
+- **A company with no clients is a first-class, complete state, not an unfilled one.** If you build
+  your own products you may never record one, and nothing in the product nags, blocks or degrades:
+  no Client column, no Client filter, no Client field, no "attach a client" prompt, and no project
+  marked as missing one. The Clients screen stays reachable so the first one can still be created —
+  that is the only trace a client-less company ever sees
+- Clients are visible to Company Admins, Account Managers and Finance. **Finance can read a client
+  and not edit one**: an invoice has to name a customer, and maintaining the record is the Account
+  Manager's job
+- What a client's work is **worth** is not here. Rate cards, budgets and invoices are a separate
+  module; an Account Manager knows the client and the hours and never a rate
 
 ## Writing Test Cases
 

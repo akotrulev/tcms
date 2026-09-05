@@ -2067,6 +2067,33 @@ git commit -m "feat(crm): the clients fault arm, the query module, and the three
 
 ## T5 — The client on the project surfaces, its proven absence, and the close-out
 
+> **Landed 2026-09-05 @ `c7e504ff`.** All four surfaces, the absence asserted in both directions,
+> and the close-out. Gates on shanks: frontend build + lint 0/0 + **2836 tests**; packages
+> 170 + 138 + 234; backend `crm` + `contract` + `architecture` green.
+>
+> **Three corrections:**
+>
+> 1. **The overview's two arms live in `ProjectOverviewPage.test.tsx`, not in the absence file.**
+>    That screen makes thirteen reads behind a mock its own file owns, and a second copy would be
+>    thirteen more ways for a client assertion to fail for a reason unrelated to clients. Both files
+>    point at each other. It is also the better home: that file's M1-era comment predicted Mc would
+>    have to make this a deliberate decision, and the decision is now recorded where the prediction
+>    was.
+> 2. **Two existing settings suites needed the `client-options` read mocked.** `ClientPanel` added a
+>    request `GeneralSettingsPage.test.tsx` and `ArchiveProject.test.tsx` answered with
+>    `unmocked read`, failing seven tests that have nothing to do with clients. Answered `[]` in
+>    both, which is the state those files are about anyway.
+> 3. **No "None (internal)" anywhere a project is merely displayed.** The card and the chip render
+>    nothing when there is no client; the string is offered only in the two `<select>`s, which must
+>    say something in every state. That is the line between a value and a nag, and the absence test
+>    asserts the string is nowhere on the list screen.
+>
+> **Close-out done:** `docs/features.md` has a Clients section and its old promise struck through
+> and superseded; plan 009's status table reads `done 2026-09-05 @ c7e504ff` with **`V11`** in the
+> migration column; the **M8 prompt is rewritten in place** with the endpoints as they landed, the
+> `BillingSlot` seam, the two panels nobody built, the `f8/f9/fd/ff` prefix map, and the
+> `default:`-makes-it-required trap.
+
 **Deliverable:** the Client filter and the per-project client on `/projects`, the Client field on
 project creation and on General settings, and the client chip on the project overview — each of them
 asserted **absent** when the company has no clients; and `docs/features.md`, plan 009's status table
@@ -2238,9 +2265,47 @@ git commit -m "docs(plan): Mc done — V11, the built-and-unverified list, and M
 
 ---
 
-## Close-out — filled in by T5
+## Close-out
 
-**Status:** not started.
-**Migration actually taken:** `V11` *(confirm against the directory in T2 and correct here if it moved)*.
-**Built and unverified:** *(T5 writes this — the gates prove it compiles, not that it works)*.
+**Status:** done 2026-09-05 @ `c7e504ff`.
+**Migration actually taken:** **`V11`** — `V11__crm_clients.sql`, and it matched D-a's projection,
+which is the first time in six that this column survived contact with the directory. It survived
+because M6 and M7 both landed ahead of Mc, as the confirmed order had them.
+**Plan number taken:** `018`. `016` is Time and `017` is Staffing; the breakdown's projected `016`
+was three weeks stale.
+
+### Built and unverified
+
+The gates prove it compiles and that the assertions written for it hold. They do not prove it works,
+and this list is the difference. Nothing below has been exercised against a running instance.
+
+- **No screen here has been opened in a browser.** Every frontend claim is a Vitest assertion over a
+  `fetch` double. A no-op theme toggle, two contradictory percentages on one screen and a
+  provider-ordering bug that rendered nothing but the error page all typechecked and linted clean in
+  this repository.
+- **`tcmsFaults.clients('none' | 'some')` has never been run in a console.** It is the switch the
+  absence criterion is meant to be *walked* with, and it has only been proven by the tests that
+  serve `[]` directly — which do not go through `verdictFor` at all. Its anchoring is asserted by
+  reading, not by a test.
+- **The `PUT /projects/{projectId}/client` round trip is proven at the service layer only.**
+  `ClientEndpointTest` calls `ClientService.attachTo`; no test drives the controller, so the path
+  mapping, the `@RequestBody` binding and the `ProjectClientRequest` deserialisation are unexercised.
+  The same is true of all eight `/clients` routes: the tests exercise `ClientService`, and
+  `ContractConventionTest` compares shapes, but nothing sends an HTTP request.
+- **No cross-company attempt has been made against a live database.** D-l's rule — a foreign
+  `clientId` is a `400` and not a `500` — is asserted with an id that names nothing at all, which
+  exercises the same branch but not the same *hazard*: a real client row in another company, passing
+  the foreign key and refused by RLS, has not been constructed.
+- **The `409` on deleting a referenced client is asserted; the foreign key's `ON DELETE RESTRICT`
+  backstop is not.** The service refuses first, so the constraint has never fired.
+- **`seed-demo-data` creates no clients**, deliberately — so a seeded instance shows the *empty*
+  case on every client surface and the populated case has never been seen end to end outside a test.
+- **The CLI and MCP verbs have not been run against a server.** `writeConformance` proves the
+  headers and `guideCopies` proves the listing; nothing has executed `tcms client list`.
+- **`ClientContactsPanel`'s remove has no confirmation.** `ui-rules` §4 requires one on every
+  destructive action, naming the object. This is a known gap rather than an oversight: it is one
+  row, restorable by re-adding it, and the panel was scoped to the mockup's Add affordance. It
+  should be closed before the module is called finished.
+- **Nothing renders a client's hours**, and nothing in the product prices anything. That is M8's,
+  and `BillingSlot` says so on the screen rather than leaving it to be discovered.
 
