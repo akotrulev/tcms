@@ -1212,6 +1212,32 @@ git commit -m "feat(crm): the client contract, both clients, and the CLI/MCP ver
 
 ## T2 — `V11` — `client`, `client_contact`, and the `project.client_id` FK
 
+> **Landed 2026-09-05. The V actually taken is `V11`**, confirmed by `ls` on the day: `V1 … V10`.
+> That matches D-a, which is the first time in six that this column's number survived contact with
+> the directory — and it survived because M6 and M7 both landed before Mc rather than after it, as
+> the confirmed order had them.
+>
+> **One correction, and it is the one this task's own step 2 warned about.** The policy text drafted
+> in this plan was `current_setting('app.current_company')::uuid`. **That is the wrong spelling.**
+> V10's — and V1's, and every policy in the schema —  is
+> `nullif(current_setting('app.current_company', true), '')::uuid`, which is the fail-closed one:
+> the `true` is `missing_ok`, so an unset GUC yields NULL rather than raising, and the `nullif`
+> turns the empty string into NULL too. `SchemaConventionTest.everyPolicyHasTheExactIsolationPredicate`
+> compares the policy TEXT and would have failed on the draft. Copied character for character from
+> V10, as step 2 instructed and as the plan draft itself did not.
+>
+> **Two more things the draft had wrong and V10 settled:** there is **no `WITH CHECK`** — a
+> USING-only policy reuses USING as the insert check, so the read boundary *is* the write boundary,
+> and an explicit `WITH CHECK` fails that same text comparison. And there is **no explicit `GRANT`**
+> — `ALTER DEFAULT PRIVILEGES FOR ROLE tcms_owner` covers every new table in `public`.
+>
+> `SchemaConventionTest` 100 → **102**. `ExportTables.java` needed no edit, as predicted: the walked
+> set is derived from the tables carrying a `company_isolation` policy, so both are exported by
+> construction.
+>
+> Gates on shanks: the whole `com.tcms.tenancy.*` suite green, plus `ArchitectureRulesTest`,
+> `ExportTablesTest` and `SeedDataTest`.
+
 **Deliverable:** `V11__crm_clients.sql` creates `client` and `client_contact`, both with
 `company_id UUID NOT NULL` leading every index and uniqueness constraint and both under
 `FORCE ROW LEVEL SECURITY`; `project.client_id` gains `REFERENCES client(id)` and stays nullable;

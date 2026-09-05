@@ -415,7 +415,24 @@ class SchemaConventionTest extends IntegrationTestBase {
                 // and cost are M8, capacity is derived on every read (017 D-a), and V10's header
                 // says both rather than leaving either absence to be read as a gap this number
                 // covers.
-                .isEqualTo(100);
+                //
+                // 102 since V11 (plan 018, module Mc) — client and client_contact. `client` is the
+                // shape where "it is the company's own customer list, and a customer is not secret"
+                // could argue itself out of a policy — and would be wrong twice over: the row names
+                // WHOSE customer, and the list of who a company delivers software for is a
+                // competitor's client roster on an instance that serves several of them.
+                // client_contact is person_skill's shape one module over — a CHILD table whose
+                // parent is isolated, so its rows look correct in every test that uses one company
+                // and the missing predicate is invisible by reading. Its rows carry a named
+                // person's email and phone at a client organisation.
+                //
+                // The module's other change is a CONSTRAINT on a table that already carries its
+                // policy — project.client_id gaining the foreign key V2 shipped it without — and a
+                // constraint added to a protected table is protected by it, so it does not move
+                // this number. There is STILL no rate, cost or invoice table: that is M8, and V11's
+                // header says so rather than leaving the absence to be read as a gap this number
+                // covers.
+                .isEqualTo(102);
     }
 
     @Test
