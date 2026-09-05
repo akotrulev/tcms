@@ -263,6 +263,26 @@ docs/plans/019-billing.md. Message: `feat(billing): the billing module, the rate
 burn without a currency`.
 
 Gate on shanks: `~/bin/tcms-remote sync` then `~/bin/tcms-remote backend ./gradlew build`.
+
+**THE BACKEND SUITE IS ALREADY RED WHEN YOU START, AND NOT BECAUSE OF YOU.** T1 declared the
+contract with no handlers and no records, and gated on `packages` rather than `backend`, so three
+`contract` classes have failed on master since `fe872222` — `ContractEnumTest`,
+`ContractParameterBindingTest.everyDeclaredOperationHasAHandler` (all sixteen billing paths) and
+`ContractConventionTest.everyObjectSchemaIsPairedOrExempt` (all twenty billing schemas). T2 measured
+this at `HEAD` with its own work stashed rather than assuming it. **Your controllers and records are
+what turn them green** — a shrinking list is your progress signal, so read the list rather than the
+`BUILD FAILED`, and expect T4's invoice handlers to clear whatever you leave. Anything OUTSIDE those
+three classes is yours.
+
+**`V12` carries five `CHECK`s this plan's T2 draft did not name**, and you write rows against them:
+`ck_invoice_terms` (`terms_days >= 0`), `ck_invoice_currency` (`^[A-Z]{3}$` on `invoice` too),
+`ck_invoice_line_rate` (`>= 0`), `ck_invoice_line_label` (`applies_to` non-empty) and
+`ck_invoice_line_entry_hours` (`> 0 AND <= 24`). None refuses anything this plan says is storable.
+
+**Comments on these tables are checked, and `invoice.html` will fail.** `SchemaCommentTest` resolves
+every `x.y` token in a *catalog* comment against table `x`'s columns, and `invoice` is now a table —
+so a `COMMENT ON` naming the mockup reads as a claim about a column that does not exist. `V12` says
+"the invoice screen" in its catalog comments for that reason. Java comments are unaffected.
 ```
 
 ### Prompt — T4 — Invoices, the lock on issue, the two negatives, and the demo seed
@@ -1255,6 +1275,62 @@ the ERD carries the seven tables.
 - Create: `backend/src/main/resources/db/migration/V12__billing.sql`
 - Modify: `backend/src/test/java/com/tcms/tenancy/SchemaConventionTest.java:395-440`
 - Modify: `docs/specs/2026-07-30-tcms-erd.md`
+
+> **Landed 2026-09-05. The V actually taken is `V12`**, confirmed by `ls` on the day: `V1 … V11`,
+> `V11__crm_clients.sql` being Mc's. **D-a's number survived contact with the directory** — the
+> second time in seven that this column has been right on the day, and for the same reason as the
+> first: it was read rather than derived.
+>
+> **Step 7 was NOT run as written, and should not be.** It prescribes `docker compose down -v`,
+> which drops `pgdata` and `tcmsblobs` on a stack that is running and seeded. The computed check the
+> step exists for was done two other ways instead, and both are stronger than the one they replace.
+> Statically: a **tokenizer** over `V12` — not a line-based comment strip, which is the trap this
+> file sets, because the block comments contain `--` *inside* string literals and the literals
+> contain apostrophes, so the first two attempts at the script silently deleted real DDL and reported
+> four tables that exist as missing. It asserts seven `CREATE TABLE`s, each with `company_id UUID NOT
+> NULL REFERENCES company(id)`, each on the RLS array, `company_id` leading all eight indexes and all
+> five `UNIQUE` constraints, every `REFERENCES` target resolving against `V1…V12`, and every
+> `COMMENT ON` naming something that exists. Dynamically: `SchemaConventionTest` on a real Postgres
+> is those same three assertions executed. **Rewrite step 7 in place if this plan is ever re-run**;
+> do not restore the `down -v`.
+>
+> **The DDL landed as drafted plus five `CHECK`s the plan did not name.** `ck_invoice_terms`
+> (`terms_days >= 0`); `ck_invoice_currency` — the `^[A-Z]{3}$` the draft put on `rate_card`,
+> `budget` and `expense` but not on `invoice`, which is the one table carrying a *frozen copy* of a
+> currency and therefore the one where a bad value outlives its source; `ck_invoice_line_rate`
+> (`rate_applied >= 0`, matching `ck_rate_card_entry_rate` upstream); `ck_invoice_line_label`
+> (`applies_to` non-empty — the column exists so the row still reads correctly after the person
+> leaves, and an empty string would not); and `ck_invoice_line_entry_hours` (`> 0 AND <= 24`, the
+> bound `ck_time_entry_hours` puts on the row being snapshotted). **T3 and T4 write these rows and
+> will meet these constraints**; none refuses anything this plan says should be storable.
+>
+> **`invoice_line.person_id` / `role_id` deliberately carry NO shape constraint**, unlike
+> `rate_card_entry`'s. They are written by one transaction from an entry that already passed
+> `ck_rate_card_entry_shape`, so a second copy would guard nothing and would be a second place the
+> rule could drift.
+>
+> **`SchemaCommentTest` caught two comment defects the plan's draft comments carried, and the first
+> is a naming collision this module created.** That class resolves every `x.y` token in a catalog
+> comment against table `x`'s columns — so **`invoice.html` reads as a claim about a column**, now
+> that `invoice` is a table. It is the schema's first mockup/table stem collision: `directory.html`,
+> `staffing.html` and `client-new.html` all have stems no table shares. The catalog comments
+> therefore say *"the invoice screen"* while `V12`'s own `--` block comments still say `invoice.html`,
+> and the header carries a paragraph saying why so it is not undone. **Any later migration
+> commenting on these tables hits the same rule.** The second: `rate_card_entry_id` in
+> `invoice_line.rate_applied`'s comment is a `snake_case` token naming nothing, and is reworded to
+> *"not a reference into `rate_card_entry`"* rather than exempted — the qualified arm has no
+> exemption list by design, and the bare arm's is reserved for tokens whose rewording would cost the
+> sentence its force, which this one's does not.
+>
+> **The gate is green for this task and the tree is NOT green at this boundary, and the two facts are
+> separate.** `./gradlew build` on shanks ends `BUILD FAILED` on **three `contract` classes** —
+> `ContractEnumTest`, `ContractParameterBindingTest.everyDeclaredOperationHasAHandler` (all sixteen
+> billing paths) and `ContractConventionTest.everyObjectSchemaIsPairedOrExempt` (all twenty billing
+> schemas). **They are T1's and they fail identically at `HEAD` with this task's work stashed**,
+> which was measured rather than assumed. T1 declared the contract with no handlers and no records —
+> its own deliverable says *"every endpoint answers a real `404` until T3 and T4"* — and it gated on
+> `packages`, not `backend`, so master has been red on the backend suite since `fe872222`. **T3 and
+> T4 are what turn them green**, and T3 must not read them as damage it caused.
 
 - [ ] **Step 1: Read the directory, not this plan**
 

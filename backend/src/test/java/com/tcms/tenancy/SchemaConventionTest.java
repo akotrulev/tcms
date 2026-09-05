@@ -432,7 +432,38 @@ class SchemaConventionTest extends IntegrationTestBase {
                 // this number. There is STILL no rate, cost or invoice table: that is M8, and V11's
                 // header says so rather than leaving the absence to be read as a gap this number
                 // covers.
-                .isEqualTo(102);
+                //
+                // 109 since V12 (plan 019, module M8) — rate_card, rate_card_entry, budget,
+                // invoice, invoice_line, invoice_line_entry and expense. That is the rate, cost and
+                // invoice table the four comments above kept saying was M8's; this is M8.
+                //
+                // SEVEN, not the six plan 009 named. invoice_line_entry is the seventh:
+                // it links an issued line to the time entries priced into it, because story M2
+                // requires an entry to show which invoice it is on and this module may not write a
+                // column on `time_entry` (019 D-b). It carries NO foreign key to that table — the
+                // polymorphic crossing ERD §0.1 permits — which is exactly why it needs the policy
+                // in its own right: there is no isolated parent on that side to inherit anything
+                // from, and its rows carry a named person, a date, an hour count and an approval.
+                //
+                // Three of the seven are the shape this class exists for — rate_card_entry,
+                // invoice_line and invoice_line_entry are all CHILD tables whose parent is already
+                // isolated, person_skill's and client_contact's configuration one and two modules
+                // over: the rows look correct in every test that uses one company and the missing
+                // predicate is invisible by reading. What is in them is the worst content in the
+                // expansion to get wrong — a client's negotiated hourly rates, and a line-by-line
+                // record of who worked on what for whom, at what price.
+                //
+                // invoice_line and invoice_line_entry are also the two rows in this schema written
+                // exactly once and never updated, so neither carries lock_version (019 D-c). That
+                // is deliberate and does not bear on this count: immutability is not isolation, and
+                // a row nothing updates is still a row another company must not read.
+                //
+                // The module touches NOTHING else. No column on time_entry — no invoiced_at, no
+                // invoice_id, no billed flag — because the seventh table exists to make one
+                // unnecessary; and no change to key_sequence or to tcms_seed_company_defaults,
+                // because invoice.seq is billing's own counter (019 D-k). Both absences are
+                // decisions, and neither is a gap this number covers.
+                .isEqualTo(109);
     }
 
     @Test
