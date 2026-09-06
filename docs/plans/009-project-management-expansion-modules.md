@@ -72,7 +72,7 @@ would mean eight edits to three documents that a test pins byte-for-byte. It is 
 | **M6** | Time | ~~`V8`~~ → ~~`V10`~~ → ~~`V11`~~ → `V9` | log hours, submit a period, and have a PM approve it | M1 | done 2026-09-04 @ `3471358c` — plan 016 |
 | **M7** | Staffing | ~~`V9` (unchanged)~~ → **`V10` — taken 2026-09-04** | allocate people, see capacity, and find who is free | ~~M6~~ → **M0** (review R11) | done 2026-09-04 @ `44f8d39a` — plan [017-staffing.md](017-staffing.md) |
 | **M8** | Billing | ~~`V10`~~ → ~~`V11`~~ → ~~whatever `ls` says on the day~~ → **`V12` — taken 2026-09-05** | price approved time and issue an invoice | M6 · Mc — **both `done`** | done 2026-09-06 @ `c58384b5` — plan [019-billing.md](019-billing.md) |
-| **M9** | Delivery analytics | none | read burn-up, cycle time and flow | M3 | not started |
+| **M9** | Delivery analytics | none | read burn-up, cycle time and flow | M3 | in progress — plan [020-delivery-analytics.md](020-delivery-analytics.md) |
 | **Mc** | Clients | ~~`V8`~~ → ~~`V9`~~ → ~~whatever `ls` says on the day~~ → **`V11` — taken 2026-09-05** | record a client and attach projects to it | M0 | done 2026-09-05 @ `c7e504ff` — plan [018-clients.md](018-clients.md) |
 
 **The `V` column was re-derived on 2026-08-30** from the confirmed landing order in
