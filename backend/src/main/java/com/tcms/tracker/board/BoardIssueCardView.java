@@ -53,9 +53,12 @@ import java.util.UUID;
  * @param allStoriesDone    021 D-d, and a <strong>nudge rather than a transition</strong>: true on
  *                          an EPIC whose every counted story is DONE while the epic itself is not.
  *                          The server never moves an epic on its own
- * @param linkedCases       null until 021 T4 serves it, and null for a card with no linked cases.
- *                          The key is always present, so a consumer tells "not served" from "none
- *                          linked" by reading the null rather than by an absent property
+ * @param linkedCases       the roll-up of the cases linked to this card's work (021 D-k), or null
+ *                          when nothing under it is linked — ~~null until 021 T4 serves it~~ →
+ *                          served since T4, so the null now means "none linked" and nothing else.
+ *                          The key is always present. An EPIC rolls up its whole subtree and a TASK
+ *                          borrows its parent story's, because linking is done on the story (H7)
+ *                          and the QA board is made of tasks
  */
 public record BoardIssueCardView(
         String key,

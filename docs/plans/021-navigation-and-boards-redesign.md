@@ -1403,12 +1403,25 @@ serves, deliberately without an ignore list. T4 may still replace its Java-side 
 `project_id IN (…)` query — see the prompt.
 **Depends on:** T3 (the card view)
 
-**Files:**
-- Create: `tracker/IssueSearchService.java`, `IssueSearchHitView.java`
-- Modify: `tracker/IssueController.java`, `IssueRepository.java`, `board/BoardCardService.java`
-- Test: `tracker/IssueSearchTest.java` (new), `board/BoardCardServiceTest.java`
+**Files:** ~~as predicted~~ → what landed, the search half having gone in T2:
+- Create: `tracker/release/LinkedCaseFacts.java` — the batched read, and it is in `release` rather
+  than `board` because `ReleaseFacts` is the one file in `tracker` that names a table this module
+  does not own. `board` asks a question and gets plain values back; it never names `case_health`.
+- Modify: `board/BoardCardService.java`, `BoardIssueCardView.java`, `LinkedCasesSummaryView.java`
+- Test: `board/BoardCardServiceTest.java`, `board/BoardMoveServiceTest.java`
+- ~~`tracker/IssueSearchService.java`, `IssueSearchHitView.java`, `IssueController.java`,
+  `IssueRepository.java`, `IssueSearchTest.java`~~ → T2's, and its Java-side filter was **left as
+  it is**: the cross-project ordering is project name → key length → key, moving it into SQL moves
+  it into the database's collation, and there is no size pressure to pay that for. The header on
+  `IssueSearchService` already records the decision and the shape to move to.
 
-- [ ] **Step 1: Failing tests**
+**Still owed, and it is a `ts` task rather than this one.** `openapi.yaml` still describes
+`linkedCases` as *"Null until served (021 T4)"*, and that sentence is now false — the null means
+*none linked* and nothing else. Correcting it means `npm run gen:api` in **both** copies, which is
+the `ts` stack, so a `be` task cannot make the edit without shipping a cross-stack commit. The two
+Java records carry the corrected reading with the old one struck through.
+
+- [x] **Step 1: Failing tests**
 
 ```java
 @Test @DisplayName("ACME-1 finds ACME-1 and ACME-10 by key before any title match")
@@ -1419,7 +1432,7 @@ void rlsHolds() { /* two companies, the way RlsIsolationTest does it */ }
 void linkedCasesSummary() { … }
 ```
 
-- [ ] **Step 2: Implement**
+- [x] **Step 2: Implement**
 
 `IssueRepository`:
 ```java
@@ -1430,9 +1443,18 @@ List<Issue> search(@Param("q") String q, Pageable page);
 filters by the caller's readable projects using the predicate `BoardCardService` uses for
 `mine=true`. `BoardCardService`: after cards are built, `links.findByIssueIdIn(ids)` →
 `facts.lastResultsOf(caseIds)` → per issue `{ total, passing, failing, blocked, notRun }` by
-`StatusKind`; tasks take their parent's; epics sum their stories'.
+`StatusKind`; tasks take their parent's; ~~epics sum their stories'~~ → **epics UNION their
+subtree's**. Summing was wrong and the test says so: one case can verify two stories of the same
+epic, and adding the two summaries reports five cases where four exist — a total a reader cannot
+reconcile against the stories it came from. The set is case ids, unioned; a TASK borrows its
+parent's whole subtree, because linking is done on the story (H7) and the QA board is made of task
+cards. Bucketing is `documentation.BlockCoverageView`'s rule over the same rows: only `PASSED`,
+`FAILED` and `BLOCKED` are verdicts, so `SKIPPED`, `RETEST`, `UNTESTED`, `WIP` and the
+never-executed all land in `notRun` and the four parts always sum to `total`. Null rather than a
+zeroed summary when nothing is linked. The batch hangs off `factsFor`, so `BoardMoveService`'s
+answer carries it too and the drag cannot lose it.
 
-- [ ] **Step 3: Gate and commit**
+- [x] **Step 3: Gate and commit**
 
 ```bash
 ~/bin/tcms-remote sync && ~/bin/tcms-remote backend 'ulimit -n 65535; ./gradlew build'

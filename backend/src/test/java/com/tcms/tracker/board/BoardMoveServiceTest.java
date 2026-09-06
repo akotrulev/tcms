@@ -60,6 +60,7 @@ class BoardMoveServiceTest extends TrackerEndpointTestBase {
     private TransitionService transitions;
 
     private int nextSeq;
+    private int nextCase;
 
     @BeforeEach
     void seed() throws SQLException {
@@ -77,8 +78,10 @@ class BoardMoveServiceTest extends TrackerEndpointTestBase {
         grantOnProject(MANAGER_GRANT, ACME, PM_ROLE, MANAGER, PROJECT);
         seedProjectDefaults(ACME, PROJECT);
         clearIssues(List.of(ACME));
+        clearCases();
         restoreBoards();
         nextSeq = 1;
+        nextCase = 1;
     }
 
     /**
@@ -91,6 +94,7 @@ class BoardMoveServiceTest extends TrackerEndpointTestBase {
     @AfterEach
     void putTheBoardsBack() throws SQLException {
         clearIssues(List.of(ACME));
+        clearCases();
         restoreBoards();
     }
 
@@ -201,6 +205,34 @@ class BoardMoveServiceTest extends TrackerEndpointTestBase {
         BoardContentsView onCoarse = contents(coarse);
         assertThat(columnOf(onCoarse, key)).isEqualTo(columnId(coarse, "In flight"));
         assertThat(columnOf(contents(fine), key)).isEqualTo(columnId(fine, "In review"));
+    }
+
+    @Test
+    @DisplayName("a moved card keeps its linked-case summary")
+    void aMovedCardKeepsItsLinkedCaseSummary() throws SQLException {
+        // The trap `elsewhere` already paid for: a card is assembled in TWO places, here and in
+        // BoardCardService.assemble, and a field computed in only one is a field the card loses on
+        // every drag. It holds because this answer is built from `cards.factsFor` — the same
+        // assembly the board read uses — rather than from a second copy of the shape.
+        UUID board = perStatusBoard("Fine", null, 0);
+        String key = issue("a story with a case behind it");
+        UUID verified = testCase("the total is right");
+        lastResult(verified, "PASSED");
+        linkCase(key, verified);
+
+        LinkedCasesSummaryView onTheBoard = scoped(() ->
+                cards.contents(MANAGER, board, BoardCardService.Filter.none()).orElseThrow())
+                .lanes().stream()
+                .flatMap(lane -> lane.cards().stream())
+                .filter(card -> card.key().equals(key))
+                .findFirst()
+                .orElseThrow()
+                .linkedCases();
+        assertThat(onTheBoard).isEqualTo(new LinkedCasesSummaryView(1, 1, 0, 0, 0));
+
+        CardMoveResultView afterTheDrag = moved(board, key, columnId(board, "Refining"));
+
+        assertThat(afterTheDrag.card().linkedCases()).isEqualTo(onTheBoard);
     }
 
     // =====================================================================
@@ -382,6 +414,71 @@ class BoardMoveServiceTest extends TrackerEndpointTestBase {
             statement.executeUpdate();
         }
         return key;
+    }
+
+    /** A minimal {@code test_case} row — {@code BoardCardServiceTest} carries the argument for it. */
+    private UUID testCase(String title) throws SQLException {
+        int seq = nextCase++;
+        UUID id = UUID.fromString(String.format("bf309000-0000-4000-8000-%012d", seq));
+        try (Connection connection = appConnection(ACME);
+                PreparedStatement statement = connection.prepareStatement("""
+                        INSERT INTO test_case (id, company_id, project_id, key, key_seq, title)
+                        VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, ?)
+                        """)) {
+            statement.setObject(1, id);
+            statement.setObject(2, ACME);
+            statement.setObject(3, PROJECT);
+            statement.setString(4, "MOVETC-" + seq);
+            statement.setLong(5, seq);
+            statement.setString(6, title);
+            statement.executeUpdate();
+        }
+        return id;
+    }
+
+    /** One {@code TEST_CASE} link — the row {@code PUT /issues/&#123;key&#125;/test-cases} writes. */
+    private void linkCase(String issueKey, UUID caseId) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+                PreparedStatement statement = connection.prepareStatement("""
+                        INSERT INTO issue_link (company_id, issue_id, target_type, target_id)
+                        VALUES (CAST(? AS uuid),
+                                (SELECT id FROM issue WHERE issue_key = ?),
+                                'TEST_CASE', CAST(? AS uuid))
+                        """)) {
+            statement.setObject(1, ACME);
+            statement.setString(2, issueKey);
+            statement.setObject(3, caseId);
+            statement.executeUpdate();
+        }
+    }
+
+    /** One {@code case_health} row — the read model the summary reads, written directly. */
+    private void lastResult(UUID caseId, String kind) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+                PreparedStatement statement = connection.prepareStatement("""
+                        INSERT INTO case_health (case_id, company_id, project_id,
+                                                 last_status_kind, last_executed_at)
+                        VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, now())
+                        """)) {
+            statement.setObject(1, caseId);
+            statement.setObject(2, ACME);
+            statement.setObject(3, PROJECT);
+            statement.setString(4, kind);
+            statement.executeUpdate();
+        }
+    }
+
+    /** {@code case_health} first: it is keyed on a case id, and the cases go with it. */
+    private void clearCases() throws SQLException {
+        try (Connection connection = appConnection(ACME)) {
+            for (String table : List.of("case_health", "test_case")) {
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "DELETE FROM " + table + " WHERE project_id = CAST(? AS uuid)")) {
+                    statement.setObject(1, PROJECT);
+                    statement.executeUpdate();
+                }
+            }
+        }
     }
 
     private String statusOf(String key) throws SQLException {

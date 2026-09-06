@@ -59,6 +59,7 @@ class BoardCardServiceTest extends TrackerEndpointTestBase {
     private WorkflowService workflow;
 
     private int nextSeq;
+    private int nextCase;
 
     @BeforeEach
     void seed() throws SQLException {
@@ -80,8 +81,10 @@ class BoardCardServiceTest extends TrackerEndpointTestBase {
         seedProjectDefaults(ACME, PROJECT);
         clearLabels();
         clearIssues(List.of(ACME));
+        clearCases();
         restoreBoards();
         nextSeq = 1;
+        nextCase = 1;
     }
 
     /** The board rows go FIRST, for D-p's reason — the seed function's board block skips silently. */
@@ -89,6 +92,7 @@ class BoardCardServiceTest extends TrackerEndpointTestBase {
     void putEverythingBack() throws SQLException {
         clearLabels();
         clearIssues(List.of(ACME));
+        clearCases();
         restoreBoards();
     }
 
@@ -357,6 +361,122 @@ class BoardCardServiceTest extends TrackerEndpointTestBase {
     }
 
     @Test
+    @DisplayName("a task carries its story's linked cases, and an epic the union of its stories'")
+    void aTaskBorrowsItsStorysSummaryAndAnEpicRollsTheSubtreeUp() throws SQLException {
+        // 021 D-k, and the two halves an implementation gets wrong separately.
+        //
+        // THE TASK. Linking is done on the story (H7) and the QA board is made of task cards, so a
+        // task computing only its OWN links would leave the one board that needs the summary
+        // showing nothing at all. It borrows its parent's.
+        //
+        // THE EPIC. `theShared` verifies BOTH stories, which is ordinary — one case can prove two
+        // slices of the same feature. An epic that SUMMED its stories' summaries would report five
+        // cases where four exist, and a reader could not reconcile the epic against the stories it
+        // came from. The roll-up is a union of case ids.
+        String epic = epic("Payments");
+        String first = story("Guest checkout", epic, null, Priority.MEDIUM);
+        String second = story("Saved cards", epic, null, Priority.MEDIUM);
+        // TASK level is `Sub-task` and NOT the type called `Task`, which V13 D29 seeds at STORY
+        // level so a solo project never needs an Epic and a Story before "a thing to do". Both are
+        // here because the borrow is keyed on the LEVEL: `Sub-task` takes its story's summary and
+        // `Task` — a story-level unit of work that carries its own links — does not.
+        String subtask = subtask("the form", first);
+        String storyLevelTask = task("a Task, which is STORY level", first);
+
+        UUID onlyFirst = testCase("the guest reaches the card form");
+        UUID shared = testCase("the total is right");
+        UUID onlySecond = testCase("a saved card is offered");
+        UUID neverRun = testCase("nobody has run this one");
+        lastResult(onlyFirst, "PASSED");
+        lastResult(shared, "FAILED");
+        lastResult(onlySecond, "BLOCKED");
+
+        linkCase(first, onlyFirst);
+        linkCase(first, shared);
+        linkCase(second, shared);
+        linkCase(second, onlySecond);
+        linkCase(second, neverRun);
+
+        UUID board = defaultBoard();
+        assertThat(cardFor(board, first).linkedCases())
+                .isEqualTo(new LinkedCasesSummaryView(2, 1, 1, 0, 0));
+        assertThat(cardFor(board, second).linkedCases())
+                .isEqualTo(new LinkedCasesSummaryView(3, 0, 1, 1, 1));
+        assertThat(cardFor(board, subtask).linkedCases())
+                .as("a sub-task has no links of its own and shows its parent story's")
+                .isEqualTo(cardFor(board, first).linkedCases());
+        assertThat(cardFor(board, storyLevelTask).linkedCases())
+                .as("""
+                        A STORY-level Task borrows nothing: it is a unit of work in its own right \
+                        and links go on it directly, so an empty one is empty. Keying the borrow \
+                        on "has a parent" rather than on the level would make this the story's \
+                        summary and put a coverage figure on a card nobody linked a case to.""")
+                .isNull();
+        assertThat(cardFor(board, epic).linkedCases())
+                .as("""
+                        FOUR distinct cases, not the five that summing the two stories would \
+                        report: the shared case is one case however many stories claim it.""")
+                .isEqualTo(new LinkedCasesSummaryView(4, 1, 1, 1, 1));
+    }
+
+    @Test
+    @DisplayName("only PASSED, FAILED and BLOCKED are verdicts; every other kind is notRun")
+    void aKindThatIsNotAVerdictLandsInNotRun() throws SQLException {
+        // `documentation.BlockCoverageView`'s rule over the same case_health rows, and §46's: a
+        // roll-up that could go either way must not go the way that makes the report look better
+        // than the truth. SKIPPED, RETEST, UNTESTED and WIP are not verdicts, so they sit with the
+        // case nobody has ever run rather than with the ones that passed.
+        String story = story("Guest checkout", null, null, Priority.MEDIUM);
+        int linked = 0;
+        for (String kind : List.of("PASSED", "FAILED", "BLOCKED",
+                "SKIPPED", "RETEST", "UNTESTED", "WIP")) {
+            UUID id = testCase("last " + kind);
+            lastResult(id, kind);
+            linkCase(story, id);
+            linked++;
+        }
+        // The eighth has no case_health row at all — the state of every case in a project the
+        // recompute has not reached, and the same fact as a null column.
+        linkCase(story, testCase("no health row at all"));
+        linked++;
+
+        LinkedCasesSummaryView summary = cardFor(defaultBoard(), story).linkedCases();
+
+        assertThat(summary).isEqualTo(new LinkedCasesSummaryView(8, 1, 1, 1, 5));
+        assertThat(summary.passing() + summary.failing() + summary.blocked() + summary.notRun())
+                .as("the parts must sum to the total, or a reader cannot subtract with them")
+                .isEqualTo(summary.total())
+                .isEqualTo(linked);
+    }
+
+    @Test
+    @DisplayName("a card with nothing linked carries null, not a zeroed summary")
+    void nothingLinkedIsNullAndNeverZero() throws SQLException {
+        // The contract's key is always present. A card reading "0 of 0 passing" claims coverage was
+        // measured where none was ever asked for, and the whole point of the nullable key is that a
+        // consumer can tell the two apart.
+        String story = story("nothing linked", null, null, Priority.MEDIUM);
+
+        assertThat(cardFor(defaultBoard(), story).linkedCases()).isNull();
+    }
+
+    @Test
+    @DisplayName("a link naming a case that no longer exists is not counted")
+    void aDanglingLinkIsNotCounted() throws SQLException {
+        // issue_link.target_id carries no foreign key (scope §3), so a link can outlive the case it
+        // names. Counting it would tell a card it has two cases when it has one, and the phantom
+        // would be permanently not-run — a coverage figure that can only ever get worse.
+        String story = story("Guest checkout", null, null, Priority.MEDIUM);
+        UUID live = testCase("a case that exists");
+        lastResult(live, "PASSED");
+        linkCase(story, live);
+        linkCase(story, UUID.fromString("bf209000-0000-4000-8000-0000000000ff"));
+
+        assertThat(cardFor(defaultBoard(), story).linkedCases())
+                .isEqualTo(new LinkedCasesSummaryView(1, 1, 0, 0, 0));
+    }
+
+    @Test
     @DisplayName("hasAcceptanceCriteria is the readiness signal, and the criteria stay off the card")
     void theCardSaysWhetherItHasAcceptanceCriteria() throws SQLException {
         // 021 §2.6 — the PM board's readiness signal. The array itself stays off the card: it is
@@ -490,8 +610,19 @@ class BoardCardServiceTest extends TrackerEndpointTestBase {
         return key;
     }
 
+    /**
+     * A {@code Task} — which is a <strong>STORY</strong>-level type (V13 D29), not a TASK-level one.
+     *
+     * <p>The name has been misleading since V13 seeded six types across three levels; {@link
+     * #subtask} is what makes a TASK-level issue.
+     */
     private String task(String title, String parentKey) throws SQLException {
         return insert(title, "Task", parentKey);
+    }
+
+    /** The TASK-level type, and the only seeded one — {@code Sub-task}. */
+    private String subtask(String title, String parentKey) throws SQLException {
+        return insert(title, "Sub-task", parentKey);
     }
 
     private String insert(String title, String typeName, String parentKey) throws SQLException {
@@ -563,6 +694,84 @@ class BoardCardServiceTest extends TrackerEndpointTestBase {
                     "text":"The guest can pay without an account.","done":false,"position":0}]""");
             statement.setString(2, key);
             statement.executeUpdate();
+        }
+    }
+
+    /**
+     * A minimal {@code test_case} row, written straight through the app connection.
+     *
+     * <p>{@code CaseWriteService} would pull {@code repository}'s whole validation surface into a
+     * fixture about board cards; the summary reads three columns of this table, and this writes
+     * those plus what the schema requires. {@code ReleaseReadinessTest} makes the same choice one
+     * package over.
+     */
+    private UUID testCase(String title) throws SQLException {
+        int seq = nextCase++;
+        UUID id = UUID.fromString(String.format("bf209000-0000-4000-8000-%012d", seq));
+        try (Connection connection = appConnection(ACME);
+                PreparedStatement statement = connection.prepareStatement("""
+                        INSERT INTO test_case (id, company_id, project_id, key, key_seq, title)
+                        VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?, ?)
+                        """)) {
+            statement.setObject(1, id);
+            statement.setObject(2, ACME);
+            statement.setObject(3, PROJECT);
+            statement.setString(4, "CARDTC-" + seq);
+            statement.setLong(5, seq);
+            statement.setString(6, title);
+            statement.executeUpdate();
+        }
+        return id;
+    }
+
+    /** One {@code TEST_CASE} link — the row {@code PUT /issues/&#123;key&#125;/test-cases} writes. */
+    private void linkCase(String issueKey, UUID caseId) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+                PreparedStatement statement = connection.prepareStatement("""
+                        INSERT INTO issue_link (company_id, issue_id, target_type, target_id)
+                        VALUES (CAST(? AS uuid),
+                                (SELECT id FROM issue WHERE issue_key = ?),
+                                'TEST_CASE', CAST(? AS uuid))
+                        """)) {
+            statement.setObject(1, ACME);
+            statement.setString(2, issueKey);
+            statement.setObject(3, caseId);
+            statement.executeUpdate();
+        }
+    }
+
+    /**
+     * One {@code case_health} row, written directly.
+     *
+     * <p>{@code repository} recomputes that table from executions on a tick, and driving a run
+     * through {@code execution} to produce one would make this class a test of the ingestion path.
+     * What the card summary reads is the read model, so the read model is what the fixture writes.
+     */
+    private void lastResult(UUID caseId, String kind) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+                PreparedStatement statement = connection.prepareStatement("""
+                        INSERT INTO case_health (case_id, company_id, project_id,
+                                                 last_status_kind, last_executed_at)
+                        VALUES (CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, now())
+                        """)) {
+            statement.setObject(1, caseId);
+            statement.setObject(2, ACME);
+            statement.setObject(3, PROJECT);
+            statement.setString(4, kind);
+            statement.executeUpdate();
+        }
+    }
+
+    /** {@code case_health} first: it is keyed on a case id, and the cases go with it. */
+    private void clearCases() throws SQLException {
+        try (Connection connection = appConnection(ACME)) {
+            for (String table : List.of("case_health", "test_case")) {
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "DELETE FROM " + table + " WHERE project_id = CAST(? AS uuid)")) {
+                    statement.setObject(1, PROJECT);
+                    statement.executeUpdate();
+                }
+            }
         }
     }
 

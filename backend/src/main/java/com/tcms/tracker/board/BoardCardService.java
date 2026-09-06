@@ -6,6 +6,7 @@ import com.tcms.project.Project;
 import com.tcms.project.ProjectService;
 import com.tcms.project.ProjectSettingsService;
 import com.tcms.project.ReviewSettings;
+import com.tcms.project.StatusKind;
 import com.tcms.tenancy.CompanyContext;
 import com.tcms.tracker.Completion;
 import com.tcms.tracker.CountedIssue;
@@ -22,6 +23,7 @@ import com.tcms.tracker.IssueTransitionRepository;
 import com.tcms.tracker.IssueType;
 import com.tcms.tracker.IssueTypeRepository;
 import com.tcms.tracker.Priority;
+import com.tcms.tracker.release.LinkedCaseFacts;
 import com.tcms.tracker.release.ReleaseRefView;
 import com.tcms.tracker.release.ReleaseRepository;
 import java.time.Clock;
@@ -90,6 +92,7 @@ public class BoardCardService {
     private final IssueLabelRepository labels;
     private final IssueLabelAssignmentRepository assignments;
     private final ReleaseRepository releases;
+    private final LinkedCaseFacts linkedCases;
     private final ProjectSettingsService settings;
     private final Clock clock;
 
@@ -106,6 +109,7 @@ public class BoardCardService {
             IssueLabelRepository labels,
             IssueLabelAssignmentRepository assignments,
             ReleaseRepository releases,
+            LinkedCaseFacts linkedCases,
             ProjectSettingsService settings,
             Clock clock) {
 
@@ -121,6 +125,7 @@ public class BoardCardService {
         this.labels = labels;
         this.assignments = assignments;
         this.releases = releases;
+        this.linkedCases = linkedCases;
         this.settings = settings;
         this.clock = clock;
     }
@@ -447,8 +452,14 @@ public class BoardCardService {
         releases.findByProjectIdOrderBySortKeyAsc(projectId).forEach(release ->
                 releasesById.put(release.getId(), ReleaseRefView.of(release)));
 
+        // 021 D-k, and ONE call per board read rather than one per card: `LinkedCaseFacts` takes
+        // every live issue of the project at once, so the summary on a card costs a map lookup and
+        // the read behind it is three statements whether the board holds two cards or two hundred.
+        LinkedCaseFacts.LinkedCases linked = linkedCases.forIssues(
+                projectId, live.stream().map(Issue::getId).toList());
+
         return new Facts(live, typesById, statusesById, labelsByIssue, refs, releasesById,
-                userId, settings.effective(projectId),
+                linked, userId, settings.effective(projectId),
                 LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC));
     }
 
@@ -469,6 +480,9 @@ public class BoardCardService {
         private final Map<UUID, UserRef> refs;
         private final Map<UUID, ReleaseRefView> releasesById;
         private final Map<UUID, List<Issue>> childrenByParent = new HashMap<>();
+        private final LinkedCaseFacts.LinkedCases linked;
+        /** Memoised {@link #caseIdsUnder}, because an epic's subtree is walked once per card in it. */
+        private final Map<UUID, Set<UUID>> caseIdsBySubtree = new HashMap<>();
         private final UUID userId;
         private final ReviewSettings policy;
         private final LocalDate today;
@@ -480,6 +494,7 @@ public class BoardCardService {
                 Map<UUID, List<LabelView>> labelsByIssue,
                 Map<UUID, UserRef> refs,
                 Map<UUID, ReleaseRefView> releasesById,
+                LinkedCaseFacts.LinkedCases linked,
                 UUID userId,
                 ReviewSettings policy,
                 LocalDate today) {
@@ -490,6 +505,7 @@ public class BoardCardService {
             this.labelsByIssue = labelsByIssue;
             this.refs = refs;
             this.releasesById = releasesById;
+            this.linked = linked;
             this.userId = userId;
             this.policy = policy;
             this.today = today;
@@ -576,10 +592,86 @@ public class BoardCardService {
                     issue.hasAcceptanceCriteria(),
                     blockedFromStatusOf(issue),
                     allStoriesDone(issue, type, status),
-                    // 021 T4's read, not this one's. The contract declares the key nullable and
-                    // says "null until served", so a consumer tells "not served" from "none
-                    // linked" by reading the null rather than by a property that is missing.
-                    null);
+                    linkedCasesOf(issue, type));
+        }
+
+        /**
+         * The linked-case roll-up on a card (021 D-k), or null when nothing under it is linked.
+         *
+         * <h2>The set is the issue's subtree, and a TASK borrows its parent's</h2>
+         *
+         * <p>A story's cases are its own plus its tasks'; an <strong>epic's</strong> are the union
+         * over everything beneath it, which is what "an epic rolls up its stories" means once the
+         * stories have tasks of their own. A <strong>task</strong> has no subtree, so it shows its
+         * parent story's — {@code docs/mockups/ia-redesign/13-qa-board.html} draws the summary on
+         * task cards and linking is done on the story (H7), so a task computing only its own would
+         * show the QA board, the one board made of tasks, nothing at all.
+         *
+         * <p><strong>A union of case ids, never a sum of counts.</strong> One case may verify two
+         * stories of the same epic, and adding the two summaries would report an epic as having four
+         * cases when it has three — a total a reader cannot reconcile against the stories it came
+         * from.
+         *
+         * <h2>Only three kinds are a verdict; everything else is notRun</h2>
+         *
+         * <p>{@code documentation.BlockCoverageView}'s rule, over the same {@code case_health} rows:
+         * {@code SKIPPED}, {@code RETEST}, {@code UNTESTED} and {@code WIP} land in {@code notRun}
+         * beside a case that has never been executed at all, because §46 says a roll-up that could
+         * go either way must not go the way that makes the report look better than the truth. So
+         * {@code passing + failing + blocked + notRun == total}, always — a summary whose parts do
+         * not sum is one nobody can subtract with.
+         *
+         * <p>Null rather than a zeroed summary for a card with no linked cases: the contract's key
+         * is always present, and a card reading "0 of 0 passing" claims coverage was measured where
+         * none was ever asked for.
+         */
+        private LinkedCasesSummaryView linkedCasesOf(Issue issue, IssueType type) {
+            Issue parent = issue.getParentId() == null ? null : byId.get(issue.getParentId());
+            Set<UUID> caseIds = type.getLevel() == IssueLevel.TASK && parent != null
+                    ? caseIdsUnder(parent)
+                    : caseIdsUnder(issue);
+            if (caseIds.isEmpty()) {
+                return null;
+            }
+            int passing = 0;
+            int failing = 0;
+            int blocked = 0;
+            int notRun = 0;
+            for (UUID caseId : caseIds) {
+                StatusKind kind = linked.lastKindByCase().get(caseId);
+                if (kind == StatusKind.PASSED) {
+                    passing++;
+                } else if (kind == StatusKind.FAILED) {
+                    failing++;
+                } else if (kind == StatusKind.BLOCKED) {
+                    blocked++;
+                } else {
+                    // Absent, null, SKIPPED, RETEST, UNTESTED, WIP — see the header.
+                    notRun++;
+                }
+            }
+            return new LinkedCasesSummaryView(caseIds.size(), passing, failing, blocked, notRun);
+        }
+
+        /**
+         * The distinct cases linked to this issue or to anything beneath it.
+         *
+         * <p>Recursive rather than a loop with a stack because the depth rule bounds the tree at
+         * three levels, so the recursion cannot be deeper than {@code epicOf}'s two steps already
+         * assume — and memoised, because a lane draws an epic card and every card under it and the
+         * epic's subtree would otherwise be walked once per card in it.
+         */
+        private Set<UUID> caseIdsUnder(Issue issue) {
+            Set<UUID> memo = caseIdsBySubtree.get(issue.getId());
+            if (memo != null) {
+                return memo;
+            }
+            Set<UUID> ids = new LinkedHashSet<>(
+                    linked.casesByIssue().getOrDefault(issue.getId(), List.of()));
+            childrenOf(issue).forEach(child -> ids.addAll(caseIdsUnder(child)));
+            Set<UUID> fixed = Set.copyOf(ids);
+            caseIdsBySubtree.put(issue.getId(), fixed);
+            return fixed;
         }
 
         /**
