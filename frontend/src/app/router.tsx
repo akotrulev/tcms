@@ -92,6 +92,9 @@ const DocPageEditorPage = lazy(() =>
 const ReportsPage = lazy(() =>
   import('../features/reports/ReportsPage').then((m) => ({ default: m.ReportsPage })),
 );
+const AnalyticsPage = lazy(() =>
+  import('../features/analytics/AnalyticsPage').then((m) => ({ default: m.AnalyticsPage })),
+);
 const IngestionsPage = lazy(() =>
   import('../features/ingestion/IngestionsPage').then((m) => ({ default: m.IngestionsPage })),
 );
@@ -1038,6 +1041,28 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <ReportsPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            Delivery analytics (020, M9) — the burn-up, cycle time and the flow.
+
+            **A second route beside `reports` rather than a replacement for it**, and the mockup
+            disagrees: `reports.html` carries `data-projnav="reports"`, so the render puts delivery
+            analytics in the slot the shipped execution-reports screen already occupies. That screen
+            is real, has saved definitions pointing at its route, and nothing in plan 009 or the
+            scope document asks for it to go — so this is `analytics` and the divergence is recorded
+            rather than resolved silently (020 D-l).
+
+            The two are genuinely different questions filed under different headings: `reports` is
+            *of* execution results, this is *of* the project's delivery.
+          */}
+          <Route
+            path="/projects/:projectId/analytics"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <AnalyticsPage />
               </Suspense>
             }
           />

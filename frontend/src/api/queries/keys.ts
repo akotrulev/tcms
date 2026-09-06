@@ -858,6 +858,19 @@ export const keys = {
   runsRoot: (p: string) => ['projects', p, 'runs'] as const,
   aiProposalsRoot: (p: string) => ['projects', p, 'ai-proposals'] as const,
 
+  /*
+    Delivery analytics (020, M9). Under the project prefix, so switching project drops all three,
+    and each key carries its own WINDOW — the release picker and the 30/90/180 selector are the
+    controls a reader changes, and a key that ignored them would serve the previous answer while
+    the control above it said otherwise.
+  */
+  analyticsBurnUp: (p: string, releaseId: string) =>
+    ['projects', p, 'analytics', 'burn-up', releaseId] as const,
+  analyticsCycleTime: (p: string, days: number) =>
+    ['projects', p, 'analytics', 'cycle-time', days] as const,
+  analyticsFlow: (p: string, weeks: number) =>
+    ['projects', p, 'analytics', 'flow', weeks] as const,
+
   /**
    * The cross-project search, as a prefix — the companion to `caseSearch`'s exclusion from
    * `['projects', …]`.

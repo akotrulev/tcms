@@ -438,3 +438,17 @@ export {
   useUpdateRateCard,
   type InvoiceFilter,
 } from './billing';
+
+/*
+  Delivery analytics (020, M9). Three reads and no writes — nothing on that screen changes anything,
+  so there is no invalidation helper to export beside them.
+*/
+export {
+  CYCLE_TIME_WINDOWS,
+  DEFAULT_CYCLE_TIME_DAYS,
+  DEFAULT_FLOW_WEEKS,
+  FLOW_WINDOWS,
+  useBurnUp,
+  useCycleTime,
+  useFlow,
+} from './analytics';

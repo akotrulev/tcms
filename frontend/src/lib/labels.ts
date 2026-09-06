@@ -13,6 +13,7 @@ import type {
   AbsenceKind,
   BudgetBasis,
   ClientStatus,
+  CycleTimeMeasuredFrom,
   InvoiceStatus,
   RateCardScope,
   AggregationPolicy,
@@ -1421,3 +1422,37 @@ export const rateCardScopeLabels = {
   ROLE: 'role',
   ALL_ROLES: 'All roles',
 } as const satisfies Record<RateCardScope, string>;
+
+/**
+ * Which boundary a cycle-time figure is measured from (020 D-c).
+ *
+ * **One member, and the screen prints it** — this product records no moment at which work started.
+ * `issue_transition` is the workflow allow-list, not a history, so `status_entered_at` on a
+ * completed issue is when it entered the *Done* status rather than when somebody picked it up.
+ * Labelling the figure *started → done* would be a number whose label says it is a different
+ * number, which is the failure CLAUDE.md records as two contradictory percentages on one screen.
+ *
+ * `satisfies Record<Union, string>`, so the day the enum gains `STARTED` an unlabelled member is a
+ * compile error rather than a blank on the panel.
+ */
+export const cycleTimeMeasuredFromLabels = {
+  CREATED: 'Created',
+} as const satisfies Record<CycleTimeMeasuredFrom, string>;
+
+/**
+ * The cumulative flow's four bands, in stack order (020 D-d).
+ *
+ * The fourth is **not a status**. It is the issues that existed on a date whose status *on that
+ * date* is recorded nowhere, and its label says so in the words a reader needs rather than in the
+ * schema's — `beforeCurrentStatus` is accurate about the mechanism and tells nobody what they are
+ * looking at.
+ */
+export const flowBandLabels = {
+  notStarted: 'Not started',
+  inFlight: 'In flight',
+  done: 'Done',
+  beforeCurrentStatus: 'Before the current status',
+} as const satisfies Record<FlowBandKey, string>;
+
+/** The four keys of a `CumulativeFlowPoint` that carry a count, in the order they stack. */
+export type FlowBandKey = 'notStarted' | 'inFlight' | 'done' | 'beforeCurrentStatus';

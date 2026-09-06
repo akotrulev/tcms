@@ -264,6 +264,8 @@ export interface FaultState {
   clients: ClientsFault | null;
   /** Which unpriceable state the billing reads are in, or `null` for the instance's own figures. */
   billing: BillingFault | null;
+  /** Which too-little-data state the analytics reads are in, or `null` for the real figures. */
+  analytics: AnalyticsFault | null;
 }
 
 /** The five ways somebody else's tracker fails us. See this module's header. */
@@ -375,6 +377,29 @@ export type ClientsFault = 'none' | 'some';
  */
 export type BillingFault = 'no-rate-card' | 'nothing-priceable';
 
+/**
+ * The analytics arm (020 T3), and the third here that fabricates a **state** rather than a failure.
+ *
+ * Both arms are `200`s carrying `sufficiency.sufficient: false`, which is the branch every panel on
+ * `/projects/{id}/analytics` has to render as a SENTENCE and not as an empty axis. It is the
+ * module's third done-criterion — *a report with too little data says so rather than drawing a flat
+ * line* — and neither state is reachable by using a seeded instance, which is the whole reason this
+ * arm exists rather than a suggestion to go and delete some issues.
+ *
+ *   - `'sparse'` — all three reports answer insufficient. A new project, a project three days old,
+ *     a release nothing targets yet. The wrong render is a chart of zeroes, which reads as *the
+ *     team has done nothing* rather than as *there is not enough here to say*.
+ *   - `'all-late'` — the burn-up only, and it is the imported-project case (020 D-n). M4's importer
+ *     creates the release row and THEN imports, so every imported issue's `release_assigned_at`
+ *     lands after `release.created_at` and the predicate honestly counts 100% of the scope as added
+ *     late. Drawing that renders a team that planned nothing; the server refuses to draw it and
+ *     says why, and this is how you see that happen without running an import.
+ *
+ * The four generic faults still reach these paths through `only('/analytics')`. This arm is for the
+ * two answers that are not failures.
+ */
+export type AnalyticsFault = 'sparse' | 'all-late';
+
 const faults: FaultState = {
   status: null,
   retryAfter: null,
@@ -392,6 +417,7 @@ const faults: FaultState = {
   staffing: null,
   clients: null,
   billing: null,
+  analytics: null,
 };
 
 /**
@@ -650,6 +676,17 @@ export function verdictFor(path: string, method = 'GET'): FaultVerdict {
   if (faults.billing !== null && applies(path)) {
     const which = isBillingRead(path, method);
     if (which !== null) return billingVerdict(faults.billing, which);
+  }
+
+  /*
+    The analytics arm, eleventh, and the third that fabricates a STATE. Scoped by path for every
+    arm above's reason, and its matcher answers WHICH report matched rather than only whether one
+    did: three reports answer three different shapes, and serving a burn-up where a flow was asked
+    for is the drifted-body failure injected by accident.
+  */
+  if (faults.analytics !== null && applies(path)) {
+    const which = isAnalyticsRead(path, method);
+    if (which !== null) return analyticsVerdict(faults.analytics, which);
   }
 
   if (!applies(path)) return { kind: 'none' };
@@ -1224,6 +1261,111 @@ function isBillingRead(path: string, method: string): 'summary' | 'rate-cards' |
   return null;
 }
 
+/**
+ * Which of the three analytics reports a path names.
+ *
+ * Anchored on the whole segment rather than a `startsWith('/analytics')`, for `isBillingRead`'s
+ * recorded reason: the three shapes are unrelated, and answering a `CumulativeFlowReport` where a
+ * `BurnUpReport` was expected is the drifted-body failure arriving from inside the fault switch.
+ */
+function isAnalyticsRead(path: string, method: string): 'burn-up' | 'cycle-time' | 'flow' | null {
+  if (method !== 'GET') return null;
+  const bare = withoutQuery(path);
+  const matched = /^\/projects\/[^/]+\/analytics\/(burn-up|cycle-time|flow)$/.exec(bare);
+  return matched === null ? null : (matched[1] as 'burn-up' | 'cycle-time' | 'flow');
+}
+
+/** The release the analytics arm invents, so the burn-up's header has a version to print. */
+const FAULT_RELEASE_ID = '00000000-0000-4000-8000-0000000000a1';
+const FAULT_RELEASE_CREATED = '2026-07-01T09:00:00Z';
+
+/**
+ * The three insufficient bodies — **and none of them is a failure.**
+ *
+ * Every one is a 200 whose `sufficiency.sufficient` is `false` with the server's own sentence on
+ * it, which is the branch each panel must render as prose. The `reason` strings are copied from
+ * `BurnUpService`, `CycleTimeService` and `FlowService` verbatim: a fault that invented its own
+ * wording would prove the panel renders *a* sentence rather than the one the server sends, and the
+ * wording is the thing being checked.
+ *
+ * `points` is empty for the burn-up and populated for the flow, exactly as the contract says: the
+ * flow's reason is about the SHAPE of its points, so they are still served, and the screen showing
+ * the sentence instead is the screen's decision rather than an absence of data.
+ */
+function analyticsVerdict(
+  fault: AnalyticsFault,
+  which: 'burn-up' | 'cycle-time' | 'flow',
+): FaultVerdict {
+  if (which === 'burn-up') {
+    const late = fault === 'all-late';
+    return {
+      kind: 'body',
+      status: 200,
+      body: {
+        releaseId: FAULT_RELEASE_ID,
+        releaseVersion: '2.4',
+        releaseCreatedAt: FAULT_RELEASE_CREATED,
+        countedTotal: late ? 23 : 0,
+        doneTotal: 0,
+        scopeAddedAfterCreation: late ? 23 : 0,
+        points: [],
+        sufficiency: {
+          sufficient: false,
+          reason:
+            late ?
+              'Every issue was assigned after this release was created — the original-scope '
+              + 'baseline is the import, not a plan.'
+            : 'No story-level issue is targeting this release yet.',
+          issuesConsidered: late ? 23 : 0,
+        },
+      },
+    };
+  }
+
+  if (which === 'cycle-time') {
+    return {
+      kind: 'body',
+      status: 200,
+      body: {
+        measuredFrom: 'CREATED',
+        windowDays: 90,
+        // Two bands, still served with their counts — the reader decides whether two issues is
+        // enough, they are just not handed a median as if it settled the question (020 D-e).
+        bands: [
+          { typeName: 'Story', count: 1, medianDays: 6.2, p90Days: 6.2 },
+          { typeName: 'Task', count: 1, medianDays: 1.8, p90Days: 1.8 },
+        ],
+        sufficiency: {
+          sufficient: false,
+          reason:
+            'Only 2 issues were completed in the last 90 days — too few to report a median.',
+          issuesConsidered: 2,
+        },
+      },
+    };
+  }
+
+  return {
+    kind: 'body',
+    status: 200,
+    body: {
+      windowWeeks: 12,
+      points: [
+        { date: '2026-06-15', notStarted: 1, inFlight: 0, done: 0, beforeCurrentStatus: 6 },
+        { date: '2026-08-03', notStarted: 1, inFlight: 2, done: 1, beforeCurrentStatus: 3 },
+        { date: '2026-09-01', notStarted: 1, inFlight: 2, done: 4, beforeCurrentStatus: 0 },
+      ],
+      sufficiency: {
+        sufficient: false,
+        reason:
+          'More than a third of the issues at the start of this window have no recorded status '
+          + 'for that date.',
+        issuesConsidered: 7,
+      },
+    },
+  };
+}
+
 /** The two clients the billing arm invents, and the ids every fabricated body below agrees on. */
 const FAULT_CLIENTS = [
   { id: '00000000-0000-4000-8000-0000000000b1', name: 'Kessler Health' },
@@ -1722,6 +1864,23 @@ export function installFaultConsole(): void {
       );
     },
     /**
+     * Which too-little-data answer the analytics screen is reading (020 T3).
+     *
+     * `tcmsFaults.analytics(null)` gives it the project's own figures back. **Neither state is a
+     * failure** — both are 200s carrying `sufficient: false` and the server's own sentence, and the
+     * correct render is that sentence rather than an axis with nothing on it.
+     */
+    analytics(fault: AnalyticsFault | null) {
+      faults.analytics = fault;
+      console.info(
+        fault === null
+          ? '[tcms faults] analytics reads the project’s own figures again'
+          : fault === 'sparse'
+            ? '[tcms faults] every report is insufficient — each panel must render its sentence, never a flat line at zero'
+            : '[tcms faults] every issue was assigned after the release existed — the burn-up must refuse to draw and say why',
+      );
+    },
+    /**
      * How the staffing reads misbehave. `tcmsFaults.staffing(null)` restores them without clearing
      * anything else, for `tracker()`'s reason.
      */
@@ -1760,6 +1919,7 @@ export function installFaultConsole(): void {
       */
       faults.clients = null;
       faults.billing = null;
+      faults.analytics = null;
       console.info('[tcms faults] cleared');
     },
     state: () => ({ ...faults }),
@@ -1770,6 +1930,6 @@ export function installFaultConsole(): void {
     '[tcms faults] available — try tcmsFaults.status(500), .hang(), .expire(), '
       + ".tracker('403'), .issue('conflict'), .rank('conflict'), .wip(), "
       + ".release('empty'), .importing('midway'), .time('rejected'), .clients('none'), "
-      + ".staffing('no-profile'), .billing('no-rate-card'), .off()",
+      + ".staffing('no-profile'), .billing('no-rate-card'), .analytics('sparse'), .off()",
   );
 }

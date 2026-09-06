@@ -628,12 +628,31 @@ gauge anywhere."* The mockup breaks it twice — two hue-coded lines on one burn
 the flow stack. The mockup is the source of truth for **the screen**; the render kit is the authority
 on **how a series is drawn**. Reconciled figure by figure:
 
+**The rule was re-derived rather than taken on trust, and it held.** T3 ran the tokens a three-band
+stack would need through the `dataviz` skill's validator against this app's own surfaces, and
+reproduced exactly the measurement `Figure.tsx` records:
+
+| Candidate ramp | Adjacent ΔE (normal vision) | Lightest step vs surface |
+|---|---|---|
+| three steps of one hue, light | 9.2 at best inside the contrast band | 2.38:1 — under the 3:1 floor |
+| three steps of one hue, dark | 13.0 | 1.87:1 — under the floor |
+| three distinct hues | fails CVD separation outright — the reason there is no categorical palette | — |
+
+Three bands cannot be both separable and legible on either surface. So:
+
 | Figure | Mockup draws | This plan draws | Why it survives the rule |
 |---|---|---|---|
-| Burn-up | two lines, green + steel, on one axis | one **filled area** (done) inside one **bounding line** (total scope), plus the step where scope was added | Done ⊆ total is *containment*, not category. A reader who cannot separate the hues still reads the gap, because one shape is inside the other. |
-| Cycle time | four bars, four hues | four `Figure.HBar` rows, one series, label + value per row | This is the facet the rule asks for, and the kit already has the component. |
-| Flow | three-hue stack | ordered stack on the progress ramp (`--color-viz-2` → `--color-wip` → `--color-success`), plus the fourth band in `--color-rule` hatching, legend in stack order | The bands are ordered *stages*, so the stack order carries the reading; hue is reinforcement, not the key. |
-| Estimate accuracy | a table | the same table, drift in `--color-success` / `--color-failed` | Not a chart. |
+| Burn-up | two lines, green + steel, on one axis | one **filled area** (done) inside one **bounding line** (total scope), the line dashed, plus the step where scope was added | Done ⊆ total is *containment*, not category. A reader who cannot separate the two steps of the hue still reads the gap, because one shape is inside the other — and the dash is the secondary encoding that survives greyscale. |
+| Cycle time | four bars, four hues | four `Figure.HBar` rows, one series, label + value + `n=` per row | This is the facet the rule asks for, and the kit already has the component. Four types are four populations, not four slices of one. |
+| Flow | three-hue stack | **four small multiples**, one band each, every one a single series in `--color-viz-1`; the fourth drawn as a 45° hatch in the rule colour | Faceting is what the kit prescribes and what the validator forces. It loses the stack's shared total and keeps the reading the mockup's own alt text describes — *"backlog shrinking, done growing, in-progress steady around five"* — which is four trajectories. |
+| Estimate accuracy | a table | the same table, drift in `--color-failed` / `--color-passed` | Not a chart. Those are the outcome tier and that is correct: over budget is a bad outcome, and this is not a series. |
+
+**The fourth flow band is a hatch and not a hue**, and that is the same decision one step further: a
+fourth colour would say *a fourth status*, where the truth is *no information*. Texture is what the
+skill offers for exactly this case, and it is also what survives forced-colours mode.
+
+`vizTokens.ts` carries this argument beside the values, because the next person to look at
+`reports.html` will see three colours and wonder why the app has one.
 
 **Every colour is a CSS custom property.** `@theme inline` emits `var(--…)` rather than copying the
 value, which is what makes the palette move with `[data-color-scheme]`; a literal hex in an SVG is a
@@ -663,7 +682,10 @@ pipeline produces a report document from a `ReportModel` and this module registe
 (D-b), so pressing it would generate something else entirely.
 
 Instead Export serialises **the exact response objects the panels are already rendering** to CSV,
-client-side, one file per panel in a small menu. That is the strongest available form of *what you see
+client-side, one file per report in a small menu — and every file opens with a header line naming
+what its numbers are *of*, including the server's insufficiency sentence when there is one. A CSV of
+eleven rows with no denominator on it is the same defect as a figure with no subtitle, one file
+format over. That is the strongest available form of *what you see
 is what exports* — not two renderers over one model, but one set of numbers with no second reader at
 all. It also needs no endpoint, no job row and no artifact storage.
 

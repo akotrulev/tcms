@@ -37,6 +37,7 @@ import {
   Sun,
   Tag,
   Timer,
+  TrendingUp,
   UserRoundSearch,
   Users2,
   UserCheck,
@@ -415,6 +416,24 @@ function projectNav(
           and go by permission, which is the opposite of §31's disable-don't-hide.
         */
         { label: 'Reports', to: `${p}/reports`, icon: <ChartColumn className="size-4" /> },
+        /*
+          Delivery analytics (020, M9) — the burn-up, cycle time and the flow.
+
+          **A second entry beside Reports, and the mockup wanted one entry.** `reports.html` carries
+          `data-projnav="reports"`, so the render puts delivery analytics in the slot above. That
+          slot is taken by a screen that ships, has saved definitions pointing at its route and is
+          not this module's to remove, so the divergence is recorded here and in 020 D-l rather than
+          settled by quietly renaming something.
+
+          Filed under **Project** where Reports is under Execution, and the split is the same test
+          every heading in this rail applies: what a report is *of* is execution results, and what
+          this is *of* is whether the project's own work is converging on a release.
+
+          Ungated, like every item in this rail. It costs `report:view`, which every project-scoped
+          role that renders a rail at all holds — so a gate would hide it from nobody while teaching
+          that rail items come and go by permission, which is the opposite of §31.
+        */
+        { label: 'Analytics', to: `${p}/analytics`, icon: <TrendingUp className="size-4" /> },
         /*
           §119. Execution, beside Test runs, because an ingested report *is* a run's results
           arriving by another door — and because the person who goes looking for "why did my CI
