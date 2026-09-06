@@ -724,6 +724,9 @@ tcms billing invoices  # drafts and issued invoices together
 tcms billing invoice inv-1 # its lines, the hours behind them, and what was excluded and why
 tcms rate-card list    # every active client and its card — or no card, which is a real answer
 tcms rate-card show rc-1   # one card and the rate ladder on it
+tcms analytics burn-up --release rel-1 # done vs total scope, and what was added after 2.4 existed
+tcms analytics cycle-time  # median and p90 days to finish, per issue type — measured from created
+tcms analytics flow        # issues per status band, weekly, plus the band nothing recorded
 tcms expense list      # costs recorded against a project; never invoice lines`}</Terminal>
 
         <H>Writing</H>
@@ -843,7 +846,7 @@ tcms review comment    # a remark on an open review`}</Terminal>
   {
     id: 'mcp',
     title: 'AI agent access (MCP)',
-    summary: 'Connecting an AI assistant, the 43 tools, and the limits that make it safe.',
+    summary: 'Connecting an AI assistant, the 44 tools, and the limits that make it safe.',
     body: (
       <>
         <P>
@@ -878,9 +881,9 @@ tcms review comment    # a remark on an open review`}</Terminal>
                 'tcms_whoami reports who the credential acts as and what it can reach. tcms_orient returns the project with its classification dimensions, execution statuses, suites, tags and case counts in one call — the vocabulary is per-project, so an agent that skips this guesses values that get refused. tcms_shape answers what a payload of a given kind must look like, and reaches no instance at all, so it is safe to call before anything is configured.',
             },
             {
-              term: 'Reading — 20',
+              term: 'Reading — 21',
               detail:
-                'tcms_search_cases · tcms_open_case · tcms_list_suites · tcms_list_library · tcms_list_artifacts · tcms_doc_tree · tcms_open_doc_page · tcms_list_plans · tcms_open_run · tcms_read_issue · tcms_read_board · tcms_read_release · tcms_read_timesheet · tcms_read_time_rollup · tcms_read_staffing · tcms_read_client · tcms_read_billing · tcms_read_rate_card · tcms_list_proposals · tcms_triage',
+                'tcms_search_cases · tcms_open_case · tcms_list_suites · tcms_list_library · tcms_list_artifacts · tcms_doc_tree · tcms_open_doc_page · tcms_list_plans · tcms_open_run · tcms_read_issue · tcms_read_board · tcms_read_release · tcms_read_timesheet · tcms_read_time_rollup · tcms_read_staffing · tcms_read_client · tcms_read_billing · tcms_read_rate_card · tcms_read_analytics · tcms_list_proposals · tcms_triage',
             },
             {
               term: 'Writing — 19',
@@ -890,7 +893,7 @@ tcms review comment    # a remark on an open review`}</Terminal>
           ]}
         />
         <P>
-          The list is workflow-shaped rather than one tool per endpoint: 43 tools over roughly 110 API
+          The list is workflow-shaped rather than one tool per endpoint: 44 tools over roughly 110 API
           paths. Tool definitions cost the model context, so a mirror of the API would be a surface
           only the largest hosts could afford to load.
         </P>

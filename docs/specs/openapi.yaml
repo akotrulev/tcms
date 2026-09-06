@@ -90,6 +90,19 @@ tags:
       percentage and hours and no currency and no amount at all — a Project Manager sees the
       ceiling and the burn, and what an hour costs is Finance's.
 
+  - name: analytics
+    description: >
+      Whether a project is converging on a release — burn-up, cycle time and cumulative flow, all
+      computed over `issue_fact`, all reads, all gated on the existing `report:view`. **There is no
+      velocity and there will not be** (scope D6): this product has no sprint, so there is nothing
+      to measure velocity over, and a chart implying otherwise would report a number nobody planned
+      against. These are NOT report jobs — the `reporting` tag's `POST …/reports/generate` pipeline
+      produces documents you generate, poll for and download, while these answer synchronously
+      because the screen above them has a release picker (plan 020 D-b). Two of the three carry a
+      field saying what they could not know: `measuredFrom` is `CREATED` rather than `STARTED`
+      because no status history exists (D-c), and the flow's fourth band is the issues whose status
+      on a past date is not recorded anywhere (D-d).
+
 # =============================================================================
 # PATHS
 # =============================================================================
@@ -11488,6 +11501,137 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  # --------------------------------------------------------- analytics ----
+  # Plan 020 (M9). Three operations over three path items, tagged `analytics`, ALL READS and all
+  # gated on the EXISTING `report:view` (020 D-o) — this module adds no permission key, which is why
+  # the three matrix copies are deliberately untouched by it.
+  #
+  # The gate is `ProjectService#readGranted`, not `readVisible`: a caller who can see the project
+  # but lacks `report:view` gets 403 (404 would tell somebody looking at the project that their
+  # report had vanished), and a caller who cannot see the project gets 404 (telling those apart
+  # makes the endpoint an oracle for another company's tenancy). `GateResult`'s javadoc names
+  # `report:view` as the first permission that distinction was built for.
+  #
+  # NONE of the three has a `default:` keyword on an optional parameter. `openapi-typescript` emits
+  # a defaulted property as REQUIRED, so every caller that omits it becomes a compile error — 018
+  # T1's finding, restated by 019 T1 and now by this module. The server's fallback is prose here and
+  # code there.
+  /projects/{projectId}/analytics/burn-up:
+    parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+    get:
+      tags: [analytics]
+      operationId: getBurnUp
+      summary: Done against total scope over time, for one release
+      description: |
+        Requires `report:view`. `reports.html`'s first panel, and the one figure in this product
+        that distinguishes **scope added after the release was created** — the difference between
+        `issue_fact.release_assigned_at` and `release.created_at`, which is the one number in the
+        chart that cannot be reconstructed after the fact (009 review R12).
+
+        The counted set is **story-level issues whose type counts toward completion**, identical to
+        the release readiness page's `scopeAddedAfterCreation` predicate, so the two screens cannot
+        report different numbers for one release (plan 020 D-f). A Task pointed at a release counts
+        for nothing — it is a breakdown *of* a story, so counting both counts the work twice — and
+        an Epic is excluded by the same flag.
+
+        `release_assigned_at` is stamped at projection time, one outbox tick after the assignment,
+        so "added after creation" means "assigned at least one tick after the release row existed".
+        There is no other source for it at all.
+      parameters:
+        - name: releaseId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+          description: |
+            Required rather than optional-meaning-latest. "The latest release" is a different
+            question with its own answer on the roadmap, and a chart that silently changes which
+            release it is about is the defect a picker exists to prevent.
+      responses:
+        '200':
+          description: The burn-up, or a sufficiency answer saying why there is not one.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BurnUpReport' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{projectId}/analytics/cycle-time:
+    parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+    get:
+      tags: [analytics]
+      operationId: getCycleTime
+      summary: How long issues take to finish, per issue type
+      description: |
+        Requires `report:view`. `reports.html`'s second panel, one band per issue type — **per type
+        and never as one aggregate**, because a median over stories and tasks together is a number
+        about neither.
+
+        **Measured from `created_at`, not from when work started**, and `measuredFrom` says so on
+        every response (plan 020 D-c). This product has no status history: `issue_transition` is the
+        workflow ALLOW-LIST, not a log of moves that happened, so `status_entered_at` on a completed
+        issue is when it entered the *Done* status rather than when somebody picked the work up.
+        Subtracting that from `done_at` yields approximately zero for every issue, under a label
+        claiming it is how long the work took — which is why this operation reports what it actually
+        measured instead.
+      parameters:
+        - name: days
+          in: query
+          required: false
+          schema: { type: integer, enum: [30, 90, 180] }
+          description: |
+            The window, ending now. Omitted means 90 — the server's fallback, stated here rather
+            than as a `default:` keyword, which the generator would turn into a required property.
+            A value outside the enum is a 400 with the allowed set in the message, never a silent
+            clamp to the nearest one.
+      responses:
+        '200':
+          description: One band per type that has a completed issue in the window.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CycleTimeReport' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{projectId}/analytics/flow:
+    parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+    get:
+      tags: [analytics]
+      operationId: getCumulativeFlow
+      summary: Issues per status band, weekly
+      description: |
+        Requires `report:view`. `reports.html`'s third panel.
+
+        **Four bands, not three** (plan 020 D-d). At a past date an issue's band is knowable only
+        when one of two things holds: it had already reached done (`done_at` is *first* reached
+        done, never cleared by a reopen), or it was already in the status it is in now. Otherwise it
+        existed and this product does not know where it was — that is `beforeCurrentStatus`, which
+        is zero at the newest point by construction and grows going backwards.
+
+        Folding that band into `notStarted` would draw a guess as data, and it would be
+        *systematically* wrong in one direction: the further back the chart looks, the more of the
+        "not started" band would be invention.
+      parameters:
+        - name: weeks
+          in: query
+          required: false
+          schema: { type: integer, enum: [8, 12, 26] }
+          description: |
+            The window in whole weeks, ending this week. Omitted means 12. A value outside the enum
+            is a 400, for the reason `days` gives above.
+      responses:
+        '200':
+          description: One point per week, oldest first.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CumulativeFlowReport' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
 # =============================================================================
 # COMPONENTS
 # =============================================================================
@@ -22067,6 +22211,159 @@ components:
         role: { type: string, nullable: true, maxLength: 120 }
         email: { type: string, nullable: true, maxLength: 320 }
         phone: { type: string, nullable: true, maxLength: 60 }
+
+    # ---------------------------------------------------------- analytics ----
+    # Plan 020 (M9). Seven schemas, every one carrying its own `required` array — including
+    # `ReportSufficiency`, which is only ever nested, because `required` does NOT descend and a
+    # schema without one makes every generated property optional. That typechecks and is wrong
+    # everywhere.
+    ReportSufficiency:
+      type: object
+      required: [sufficient, reason, issuesConsidered]
+      description: |
+        Whether there is enough data to draw this, and if not, why — **an answer, not an error**
+        (plan 020 D-e). A well-formed question about a project with three issues deserves a true
+        statement about what can be said, at 200, rather than a 422 or an empty series that renders
+        as a flat line at zero.
+
+        This is the contract's half of the module's third done-criterion: *a report with too little
+        data says so rather than drawing a flat line*. A criterion that lived only in a screen is one
+        the second screen forgets.
+      properties:
+        sufficient: { type: boolean }
+        reason:
+          type: string
+          nullable: true
+          description: |
+            A sentence for a reader, null exactly when `sufficient` is true. Prose rather than a
+            code: every case has a different fix, and a client mapping codes back to sentences is a
+            second place the sentence can be wrong.
+        issuesConsidered:
+          type: integer
+          description: How many non-deleted issues the window actually contained.
+
+    BurnUpPoint:
+      type: object
+      required: [date, done, totalScope]
+      properties:
+        date: { type: string, format: date }
+        done:
+          type: integer
+          description: Counted issues whose `done_at` is on or before this date.
+        totalScope:
+          type: integer
+          description: |
+            Counted issues whose `release_assigned_at` is on or before this date. **The step in this
+            series is scope added after the release was created** — visible, never absorbed into the
+            denominator silently.
+
+    BurnUpReport:
+      type: object
+      required:
+        [releaseId, releaseVersion, releaseCreatedAt, countedTotal, doneTotal,
+         scopeAddedAfterCreation, points, sufficiency]
+      properties:
+        releaseId: { type: string, format: uuid }
+        releaseVersion: { type: string, example: '2.4' }
+        releaseCreatedAt:
+          type: string
+          format: date-time
+          description: The baseline every "added after" comparison is against (009 review R12).
+        countedTotal:
+          type: integer
+          description: Story-level issues counting toward completion that point at this release.
+        doneTotal: { type: integer }
+        scopeAddedAfterCreation:
+          type: integer
+          description: |
+            Counted issues whose `release_assigned_at` is later than `releaseCreatedAt` —
+            **strictly** later, so an issue assigned in the same instant is original scope. The same
+            predicate the release readiness page uses (plan 020 D-f); the two must not disagree
+            about one release, and they are kept identical by sharing the predicate rather than by a
+            comment asking a future reader to.
+        points:
+          type: array
+          items: { $ref: '#/components/schemas/BurnUpPoint' }
+          description: |
+            Weekly from the release's creation to today, oldest first, with today always the last
+            point. **Empty when `sufficiency.sufficient` is false** — there is nothing to draw, and
+            a zero-valued series is the flat line this design refuses.
+        sufficiency: { $ref: '#/components/schemas/ReportSufficiency' }
+
+    CycleTimeMeasuredFrom:
+      type: string
+      description: |
+        Which boundary the elapsed time is measured from. **One member today, deliberately** (plan
+        020 D-c): `STARTED` is what this becomes the day a status-history table exists, and an enum
+        carrying a member nothing can produce would be a promise in the schema rather than a fact
+        about the data. A client written against this field today keeps working when the second
+        member arrives.
+      enum: [CREATED]
+
+    CycleTimeBand:
+      type: object
+      required: [typeName, count, medianDays, p90Days]
+      properties:
+        typeName: { type: string, example: Story }
+        count:
+          type: integer
+          description: Completed issues of this type in the window — the denominator, on the row.
+        medianDays:
+          type: number
+          format: double
+          description: |
+            Nearest-rank, not interpolated: every value here is a duration some issue actually took,
+            so "the median is 6 days" names an issue somebody can go and look at.
+        p90Days: { type: number, format: double }
+
+    CycleTimeReport:
+      type: object
+      required: [measuredFrom, windowDays, bands, sufficiency]
+      properties:
+        measuredFrom: { $ref: '#/components/schemas/CycleTimeMeasuredFrom' }
+        windowDays: { type: integer, example: 90 }
+        bands:
+          type: array
+          items: { $ref: '#/components/schemas/CycleTimeBand' }
+          description: |
+            One per type with at least one completion in the window, ordered by `count` descending
+            then `typeName` — deterministic, because a report whose row order changes between two
+            identical requests is one nobody trusts.
+
+            A thin type is **returned with its `count`**, not hidden: the reader decides whether four
+            issues is enough, and `sufficiency` names it when the whole report is thin.
+        sufficiency: { $ref: '#/components/schemas/ReportSufficiency' }
+
+    CumulativeFlowPoint:
+      type: object
+      required: [date, notStarted, inFlight, done, beforeCurrentStatus]
+      properties:
+        date: { type: string, format: date }
+        notStarted: { type: integer }
+        inFlight: { type: integer }
+        done: { type: integer }
+        beforeCurrentStatus:
+          type: integer
+          description: |
+            Issues that existed on this date but whose status **on that date** is not recorded
+            anywhere (plan 020 D-d). Zero at the newest point by construction; it grows going
+            backwards. This is the band that keeps the chart honest and it must not be folded into
+            `notStarted` by any client.
+
+    CumulativeFlowReport:
+      type: object
+      required: [windowWeeks, points, sufficiency]
+      properties:
+        windowWeeks: { type: integer, example: 12 }
+        points:
+          type: array
+          items: { $ref: '#/components/schemas/CumulativeFlowPoint' }
+          description: |
+            Weekly, oldest first. Unlike the burn-up's, these are still served when
+            `sufficiency.sufficient` is false, because the reason is *about the shape of the points*
+            — a client may render the sentence over a greyed chart. The shipped screen renders the
+            sentence alone.
+        sufficiency: { $ref: '#/components/schemas/ReportSufficiency' }
 
 security:
   - bearerAuth: []

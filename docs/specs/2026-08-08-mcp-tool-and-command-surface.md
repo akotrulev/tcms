@@ -156,7 +156,7 @@ The count below is the **outcome** of this rule, not a target.
 
 ---
 
-## 3. The MCP surface — ~~21~~ ~~26~~ ~~28~~ ~~30~~ ~~34~~ ~~37~~ 39 tools
+## 3. The MCP surface — ~~21~~ ~~26~~ ~~28~~ ~~30~~ ~~34~~ ~~37~~ ~~39~~ ~~43~~ 44 tools
 
 Namespaced `tcms_*`. `projectId` and `companyId` **do not appear in any schema** (§4.1).
 
@@ -205,6 +205,7 @@ Namespaced `tcms_*`. `projectId` and `companyId` **do not appear in any schema**
 | 41 | `tcms_write_billing` | **any of** `billing:budget` / `billing:expense` / `billing:invoice` / `billing:issue` | `PUT`/`DELETE /projects/{id}/budget`, `POST`/`DELETE /expenses…`, `POST`/`DELETE /invoices…`, `POST …/issue` | 019 T1 — see §3.11 |
 | 42 | `tcms_read_rate_card` | `ratecard:read` | `GET /rate-cards`, `…/{rateCardId}` | 019 T1 — see §3.11 |
 | 43 | `tcms_write_rate_card` | `ratecard:manage` | `POST`/`PUT`/`DELETE /rate-cards…` | 019 T1 — see §3.11 |
+| 44 | `tcms_read_analytics` | `report:view` | `GET …/analytics/burn-up`, `…/cycle-time`, `…/flow` | 020 T1 — see §3.12 |
 
 Eighteen are buildable against today's contract; two need §4.2's contract addition first; one has a
 blocked arm (§5).
@@ -1105,6 +1106,58 @@ Here is the other side of it: **`tcms_read_billing` and `tcms_read_rate_card` ar
 this surface that return money, and a credential without the money keys is not shown them at all.**
 A Test Engineer's `tools/list` contains neither, which is the same statement `billing.html` makes to
 a person — the Billing entry is absent from their sidebar rather than greyed out.
+
+---
+
+### 3.12 The analytics verbs (020 T1) — one tool, three arms, and no write side at all
+
+Plan 020 (M9), the last module of the expansion. Three operations over three path items, tagged
+`analytics`, **every one a read**. [The plan](../plans/020-delivery-analytics.md) carries the
+decisions; what follows is only what they do to this surface.
+
+| Tool | Gate | Arms / reads |
+|---|---|---|
+| `tcms_read_analytics` | `report:view` | `burn-up` (one release) · `cycle-time` · `flow` |
+
+- **One tool and not three.** §2's rule is workflow-shaped tools, and *"how is this release going"*
+  is one workflow — a model that has fetched the burn-up will want the cycle time in the same
+  breath. The arm table is what satisfies §2, as it did for `tcms_read_billing`.
+- **There is no write tool in this module, and the absence is stated rather than left to be
+  noticed.** Analytics is computed from `issue_fact` and nothing on this surface can change what it
+  reports except by changing the work — which is `tcms_write_issue`'s, one section back.
+- **This is the first tool since §3.7 to add NO permission key.** `report:view` already exists and is
+  held by every project-scoped role that renders a rail at all — Instance Admin, Company Admin,
+  Project Admin, Test Lead, Test Engineer, Viewer and Automation Service — and by neither Account
+  Manager nor Finance, who hold no `project:read` either. So M9 leaves the three matrix copies
+  untouched, which is an answer and not an omission.
+- **`measuredFrom` is on the wire, and the tool description leads with what it means.** Cycle time
+  is measured from an issue's *creation*, not from when work started, because this product records
+  no such moment: `issue_transition` is the workflow allow-list, not a history. A model that
+  paraphrases the figure as *"how long the work took"* states something the data does not support,
+  which is why the description forbids that phrasing in as many words. The enum has one member
+  today; `STARTED` is what it gains the day a status-history table exists.
+- **The flow has FOUR bands and the fourth is not a status.** `beforeCurrentStatus` is the issues
+  that existed on a past date whose status *on that date* is recorded nowhere; it is zero at the
+  newest point by construction and grows going backwards. The description tells a model not to add
+  it to `notStarted` — folding it in would report a guess as a measurement, and would be
+  systematically wrong in one direction the further back the window reaches.
+- **`sufficient: false` is an answer at 200, with a `reason` in plain words**, and the description
+  tells a model to repeat the reason rather than report the zeroes. *A report with too little data
+  says so rather than drawing a flat line* is one of M9's four done-criteria, and an agent relaying
+  an empty series as a finding breaks it one layer up from the screen that honours it.
+- **`release` is required for the burn-up and there is no latest-release default.** A chart that
+  silently changes which release it is about answers a question nobody asked — the same reason the
+  screen has a picker rather than an inference.
+- **No velocity verb, no sprint burndown, and no field that could ask for one** (scope D6). The
+  description ends by telling a model to say the product has no sprint rather than deriving a number
+  from these three — an agent asked for *"our velocity"* will otherwise assemble one out of the
+  cycle-time bands, which measures a different thing over a cadence that does not exist.
+
+**These are not report jobs, and the distinction is worth one line here** because both live under
+`reporting`'s roof. §6e's `POST …/reports/generate` produces a *document* — asynchronous, polled,
+downloadable, stored as an artifact — and nothing in this section touches it. Delivery analytics
+answers synchronously because the screen above it has a release picker (020 D-b), and it is
+registered in no computation registry, so `tcms_report`'s type catalogue does not list it.
 
 ---
 

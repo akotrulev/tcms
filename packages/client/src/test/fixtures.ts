@@ -1559,3 +1559,89 @@ export function billingSummary(
     ...overrides,
   };
 }
+
+/**
+ * Delivery analytics (020, M9) — three reports, and every one of them defaults to **sufficient**.
+ *
+ * The insufficient case is what these exist to let a test *ask for*: `burnUpReport({ sufficiency:
+ * reportSufficiency({ sufficient: false, reason: '…' }) })` is the shape a client must read as "this
+ * cannot be drawn and here is why" rather than as an empty series. It is a 200, not an error — a
+ * well-formed question about a project with three issues deserves a true statement about what can be
+ * said (020 D-e).
+ */
+export function reportSufficiency(
+  overrides: Partial<Schemas['ReportSufficiency']> = {},
+): Schemas['ReportSufficiency'] {
+  return {
+    sufficient: true,
+    reason: null,
+    issuesConsidered: 27,
+    ...overrides,
+  };
+}
+
+/**
+ * The mockup's numbers: 27 counted, 21 done, and **4 assigned after 2.4 was created** — the one
+ * figure in this chart that cannot be reconstructed after the fact (009 review R12).
+ */
+export function burnUpReport(
+  overrides: Partial<Schemas['BurnUpReport']> = {},
+): Schemas['BurnUpReport'] {
+  return {
+    releaseId: '00000000-0000-4000-8000-0000000009a1',
+    releaseVersion: '2.4',
+    releaseCreatedAt: '2026-07-01T09:00:00Z',
+    countedTotal: 27,
+    doneTotal: 21,
+    scopeAddedAfterCreation: 4,
+    points: [
+      { date: '2026-07-01', done: 0, totalScope: 23 },
+      { date: '2026-08-12', done: 12, totalScope: 27 },
+      { date: '2026-09-02', done: 21, totalScope: 27 },
+    ],
+    sufficiency: reportSufficiency(),
+    ...overrides,
+  };
+}
+
+/**
+ * Four bands, ordered `count` descending then alphabetically — the order the server serves, and the
+ * order a test asserting determinism expects. `measuredFrom` is `CREATED` and there is no other
+ * value to give it (020 D-c): this product records no moment at which work started.
+ */
+export function cycleTimeReport(
+  overrides: Partial<Schemas['CycleTimeReport']> = {},
+): Schemas['CycleTimeReport'] {
+  return {
+    measuredFrom: 'CREATED',
+    windowDays: 90,
+    bands: [
+      { typeName: 'Task', count: 41, medianDays: 1.8, p90Days: 4 },
+      { typeName: 'Story', count: 18, medianDays: 6.2, p90Days: 14 },
+      { typeName: 'Bug', count: 9, medianDays: 3.1, p90Days: 9 },
+      { typeName: 'Spike', count: 3, medianDays: 4, p90Days: 7 },
+    ],
+    sufficiency: reportSufficiency({ issuesConsidered: 71 }),
+    ...overrides,
+  };
+}
+
+/**
+ * `beforeCurrentStatus` shrinks to **zero at the newest point**, which is the property that makes
+ * the fourth band honest rather than a fourth status (020 D-d). A fixture whose last point carried a
+ * non-zero one would describe something the server cannot produce.
+ */
+export function cumulativeFlowReport(
+  overrides: Partial<Schemas['CumulativeFlowReport']> = {},
+): Schemas['CumulativeFlowReport'] {
+  return {
+    windowWeeks: 12,
+    points: [
+      { date: '2026-06-15', notStarted: 14, inFlight: 4, done: 2, beforeCurrentStatus: 7 },
+      { date: '2026-08-03', notStarted: 9, inFlight: 5, done: 11, beforeCurrentStatus: 2 },
+      { date: '2026-09-01', notStarted: 3, inFlight: 5, done: 19, beforeCurrentStatus: 0 },
+    ],
+    sufficiency: reportSufficiency(),
+    ...overrides,
+  };
+}

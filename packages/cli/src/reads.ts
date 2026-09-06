@@ -2537,6 +2537,174 @@ const expenseList: Command = {
   },
 };
 
+/**
+ * `tcms analytics burn-up --release <id>` — done against total scope, and the scope that arrived
+ * after the release existed.
+ *
+ * **The last line is the point of the command.** A burn-up whose denominator grew silently reports a
+ * team going backwards for no visible reason; `scopeAddedAfterCreation` is where it came from, and
+ * it is the one number in the chart that cannot be reconstructed after the fact (009 review R12).
+ *
+ * An insufficient report prints its reason and no table. That is a 200 and not a failure — a
+ * well-formed question about a release nothing targets yet deserves a sentence, not an empty grid
+ * (020 D-e).
+ */
+const analyticsBurnUp: Command = {
+  name: 'analytics burn-up',
+  summary: 'Done against total scope for one release, and what was added after it was created',
+  usage: 'tcms analytics burn-up --release rel-1',
+  options: { release: { type: 'string' } },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const releaseId = first(options['release']);
+    if (releaseId === undefined) {
+      throw new UsageError('--release is required. "The latest release" is a different question, '
+        + 'and a chart that silently changes which release it is about is what a picker prevents.');
+    }
+
+    const report = await client.GET('/projects/{projectId}/analytics/burn-up', {
+      params: { path: { projectId: await projectOf(context) }, query: { releaseId } },
+      tcms: request,
+    });
+    if (json) return out.json(report);
+
+    out.line(`${show(report.releaseVersion)}  —  created ${show(report.releaseCreatedAt)}`);
+    if (!report.sufficiency.sufficient) {
+      out.line();
+      out.line(show(report.sufficiency.reason));
+      return;
+    }
+
+    out.line(
+      `${String(report.doneTotal)} of ${String(report.countedTotal)} counted issues done`
+        + `  ·  ${String(report.scopeAddedAfterCreation)} assigned after the release was created`,
+    );
+    out.line();
+    table(out, report.points, [
+      { header: 'DATE', value: (row) => show(row.date) },
+      { header: 'DONE', value: (row) => String(row.done) },
+      { header: 'TOTAL SCOPE', value: (row) => String(row.totalScope) },
+    ]);
+    out.line();
+    out.line('The counted set is story-level issues whose type counts toward completion — the same');
+    out.line('set the release readiness view uses, so the two cannot disagree about one release.');
+  },
+};
+
+/**
+ * `tcms analytics cycle-time` — median and p90 days to finish, per issue type.
+ *
+ * **Measured from creation, and the output says so on its own line** (020 D-c). This product records
+ * no moment at which work started: `issue_transition` is the workflow allow-list, not a log, so
+ * "started → done" is not a number anything here can produce.
+ */
+const analyticsCycleTime: Command = {
+  name: 'analytics cycle-time',
+  summary: 'Median and p90 days from creation to done, per issue type',
+  usage: 'tcms analytics cycle-time [--days 30|90|180]',
+  options: { days: { type: 'string' } },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const days = numericOption(options['days'], 'days', CYCLE_TIME_WINDOWS);
+
+    const report = await client.GET('/projects/{projectId}/analytics/cycle-time', {
+      params: {
+        path: { projectId: await projectOf(context) },
+        query: days === undefined ? {} : { days },
+      },
+      tcms: request,
+    });
+    if (json) return out.json(report);
+
+    if (!report.sufficiency.sufficient) {
+      out.line(show(report.sufficiency.reason));
+      return;
+    }
+
+    table(out, report.bands, [
+      { header: 'TYPE', value: (row) => show(row.typeName) },
+      { header: 'COUNT', value: (row) => String(row.count) },
+      { header: 'MEDIAN', value: (row) => `${row.medianDays.toFixed(1)} d` },
+      { header: 'P90', value: (row) => `${row.p90Days.toFixed(1)} d` },
+    ]);
+    out.line();
+    out.line(`Measured from ${report.measuredFrom.toLowerCase()} to done, over `
+      + `${String(report.windowDays)} days. There is no "started" moment in this product to`);
+    out.line('measure from, and no velocity — there are no sprints to measure that over.');
+  },
+};
+
+/**
+ * `tcms analytics flow` — issues per status band, weekly, and the band that is not a status.
+ *
+ * `BEFORE` is issues that existed on that date whose status *on that date* is recorded nowhere (020
+ * D-d). It is zero on the newest row by construction and grows going up the table. Folding it into
+ * NOT STARTED would print a guess as a measurement.
+ */
+const analyticsFlow: Command = {
+  name: 'analytics flow',
+  summary: 'Issues per status band, weekly',
+  usage: 'tcms analytics flow [--weeks 8|12|26]',
+  options: { weeks: { type: 'string' } },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const weeks = numericOption(options['weeks'], 'weeks', FLOW_WINDOWS);
+
+    const report = await client.GET('/projects/{projectId}/analytics/flow', {
+      params: {
+        path: { projectId: await projectOf(context) },
+        query: weeks === undefined ? {} : { weeks },
+      },
+      tcms: request,
+    });
+    if (json) return out.json(report);
+
+    if (!report.sufficiency.sufficient) {
+      out.line(show(report.sufficiency.reason));
+      return;
+    }
+
+    table(out, report.points, [
+      { header: 'WEEK', value: (row) => show(row.date) },
+      { header: 'NOT STARTED', value: (row) => String(row.notStarted) },
+      { header: 'IN FLIGHT', value: (row) => String(row.inFlight) },
+      { header: 'DONE', value: (row) => String(row.done) },
+      { header: 'BEFORE', value: (row) => String(row.beforeCurrentStatus) },
+    ]);
+    out.line();
+    out.line('BEFORE is issues that existed on that date whose status then is recorded nowhere —');
+    out.line('this product has no status history. It is zero on the newest row and grows upward.');
+  },
+};
+
+/** The windows the two windowed reports accept, matching the contract's enums exactly. */
+const CYCLE_TIME_WINDOWS = [30, 90, 180] as const;
+const FLOW_WINDOWS = [8, 12, 26] as const;
+
+/**
+ * A window option, refused rather than clamped.
+ *
+ * Clamping an out-of-enum value to the nearest allowed one answers a question nobody asked and gives
+ * the caller no way to notice — the same argument the server makes for its own 400.
+ */
+function numericOption<T extends number>(
+  raw: string | boolean | (string | boolean)[] | undefined,
+  name: string,
+  allowed: readonly T[],
+): T | undefined {
+  const value = first(raw);
+  if (value === undefined) return undefined;
+  const parsed = Number(value);
+  // `find` and not `includes`: the contract's parameter is a literal union, and under
+  // `exactOptionalPropertyTypes` a plain `number` is not assignable to it. Narrowing here means the
+  // refusal and the type both come from one list, so adding a fourth window is one edit.
+  const matched = allowed.find((candidate) => candidate === parsed);
+  if (matched === undefined) {
+    throw new UsageError(`--${name} must be one of ${allowed.join(', ')}.`);
+  }
+  return matched;
+}
+
 export const READS: readonly Command[] = [
   whoami,
   format,
@@ -2580,4 +2748,7 @@ export const READS: readonly Command[] = [
   rateCardList,
   rateCardShow,
   expenseList,
+  analyticsBurnUp,
+  analyticsCycleTime,
+  analyticsFlow,
 ];

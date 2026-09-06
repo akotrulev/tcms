@@ -1849,6 +1849,129 @@ const readRateCard: ToolDefinition = {
   },
 };
 
+/**
+ * Delivery analytics — one tool, three arms, one gate.
+ *
+ * <p>Not three tools: §2's rule is workflow-shaped tools, and *"how is this release going"* is one
+ * workflow. The arm table in the surface doc's §3.12 is what satisfies §2, exactly as it did for
+ * `tcms_read_billing`.
+ *
+ * **Two of the three answers carry a field naming what the product could not know**, and an agent
+ * that paraphrases them without it will state something false. `measuredFrom` is CREATED because
+ * nothing records when work started; the flow's fourth band is issues whose status on a past date is
+ * recorded nowhere. Both are in the description because an agent reads this text and not the plan.
+ */
+const readAnalytics: ToolDefinition = {
+  name: 'tcms_read_analytics',
+  title: 'Whether a project is converging — burn-up, cycle time and flow',
+  description:
+    'With `view: "burn-up"` and `release` (an id), done against total scope over time for that '
+    + 'release, plus HOW MUCH SCOPE WAS ADDED AFTER THE RELEASE WAS CREATED — the one number in that '
+    + 'chart that cannot be reconstructed afterwards. With `view: "cycle-time"`, median and p90 days '
+    + 'to finish PER ISSUE TYPE. With `view: "flow"`, issues per status band, weekly. '
+    + '**Cycle time is measured from when an issue was CREATED, not from when work started**, and '
+    + '`measuredFrom` says so on every answer. This product records no moment at which work began — '
+    + 'its status table is a workflow allow-list, not a history — so do not describe these numbers '
+    + 'as "how long the work took". '
+    + '**The flow has FOUR bands.** `beforeCurrentStatus` is issues that existed on that date whose '
+    + 'status ON THAT DATE is recorded nowhere; it is zero on the newest point and grows going back. '
+    + 'Do not add it to `notStarted` — that would report a guess as a measurement. '
+    + '**`sufficient: false` is an ANSWER, not an error.** It arrives at 200 with a `reason` in '
+    + 'plain words, and it means there is genuinely too little data to draw the thing. Repeat the '
+    + 'reason; do not report zeroes or an empty series as if they were the finding. '
+    + '**There is no velocity and there will not be** — this product has no sprints, so there is '
+    + 'nothing to measure it over. If asked for velocity or a sprint burndown, say the product has '
+    + 'no sprint rather than deriving a number from these.',
+  gate: { mode: 'all', permissions: ['report:view'] },
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      view: {
+        type: 'string',
+        enum: ['burn-up', 'cycle-time', 'flow'],
+        description: 'Which report. Defaults to cycle-time, the one needing no selection.',
+      },
+      release: {
+        type: 'string',
+        description:
+          'Required for burn-up: the release id. There is no "latest release" default — a chart '
+          + 'that silently changes which release it is about answers a question nobody asked.',
+      },
+      days: {
+        type: 'number',
+        enum: [30, 90, 180],
+        description: 'The cycle-time window. Defaults to 90.',
+      },
+      weeks: {
+        type: 'number',
+        enum: [8, 12, 26],
+        description: 'The flow window, in whole weeks. Defaults to 12.',
+      },
+    },
+  },
+  run: async (session, input) => {
+    const tcms = session.request;
+    const path = { projectId: session.projectId() };
+
+    switch (str(input, 'view') ?? 'cycle-time') {
+      case 'burn-up': {
+        const releaseId = str(input, 'release');
+        if (releaseId === undefined) {
+          throw new InputMismatch(
+            '`release` is required for the burn-up — it is a chart about one release, and there is '
+            + 'no latest-release default.',
+          );
+        }
+        return session.client.GET('/projects/{projectId}/analytics/burn-up', {
+          params: { path, query: { releaseId } },
+          tcms,
+        });
+      }
+      case 'flow': {
+        const weeks = reportWindow(input, 'weeks', FLOW_WINDOWS);
+        return session.client.GET('/projects/{projectId}/analytics/flow', {
+          params: { path, query: weeks === undefined ? {} : { weeks } },
+          tcms,
+        });
+      }
+      default: {
+        const days = reportWindow(input, 'days', CYCLE_TIME_WINDOWS);
+        return session.client.GET('/projects/{projectId}/analytics/cycle-time', {
+          params: { path, query: days === undefined ? {} : { days } },
+          tcms,
+        });
+      }
+    }
+  },
+};
+
+/** The windows the two windowed reports accept, matching the contract's enums exactly. */
+const CYCLE_TIME_WINDOWS = [30, 90, 180] as const;
+const FLOW_WINDOWS = [8, 12, 26] as const;
+
+/**
+ * A window argument, narrowed to the contract's literal union and refused rather than clamped.
+ *
+ * `num` answers a plain `number`, which `exactOptionalPropertyTypes` will not assign to a literal
+ * union — so the narrowing is not optional politeness, it is what makes the call compile. Refusing
+ * rather than clamping is the same argument the server makes for its own 400: snapping 45 to 30
+ * answers a question nobody asked and gives the caller nothing to notice it by.
+ */
+function reportWindow<T extends number>(
+  input: Record<string, unknown>,
+  name: string,
+  allowed: readonly T[],
+): T | undefined {
+  const asked = num(input, name);
+  if (asked === undefined) return undefined;
+  const matched = allowed.find((candidate) => candidate === asked);
+  if (matched === undefined) {
+    throw new InputMismatch(`\`${name}\` must be one of ${allowed.join(', ')}.`);
+  }
+  return matched;
+}
+
 export const READ_TOOLS: readonly ToolDefinition[] = [
   orient,
   searchCases,
@@ -1871,4 +1994,5 @@ export const READ_TOOLS: readonly ToolDefinition[] = [
   readClient,
   readBilling,
   readRateCard,
+  readAnalytics,
 ];

@@ -1072,6 +1072,31 @@ export type ClientBillingSummary = S['ClientBillingSummary'];
 export type ClientBillingRow = S['ClientBillingRow'];
 export type BillingSummary = S['BillingSummary'];
 
+/**
+ * Delivery analytics (020, M9) — three reports over `issue_fact`, all reads, all `report:view`.
+ *
+ * **Two of them carry a field naming what they could not know**, and both are decisions rather than
+ * omissions. {@link CycleTimeMeasuredFrom} is `CREATED` and not `STARTED`, because this product has
+ * no status history — `issue_transition` is the workflow allow-list — so the moment work began is
+ * not recorded anywhere (020 D-c). {@link CumulativeFlowPoint}'s `beforeCurrentStatus` is the issues
+ * that existed on a past date whose status *on that date* nothing knows; folding it into
+ * `notStarted` would draw a guess as data, systematically wrong the further back you look (D-d).
+ *
+ * {@link ReportSufficiency} rides on all three: *too little data* is a 200 with a sentence, not an
+ * empty series. A flat line at zero is the failure that shape exists to prevent.
+ *
+ * **There is no velocity type here and there will not be** — D6 removed the sprint it would be
+ * measured over, and `NoVelocityAnywhereTest` asserts the absence across the whole tree.
+ */
+export type ReportSufficiency = S['ReportSufficiency'];
+export type BurnUpReport = S['BurnUpReport'];
+export type BurnUpPoint = S['BurnUpPoint'];
+export type CycleTimeReport = S['CycleTimeReport'];
+export type CycleTimeBand = S['CycleTimeBand'];
+export type CycleTimeMeasuredFrom = S['CycleTimeMeasuredFrom'];
+export type CumulativeFlowReport = S['CumulativeFlowReport'];
+export type CumulativeFlowPoint = S['CumulativeFlowPoint'];
+
 export type PersonProfile = S['PersonProfile'];
 export type PersonProfileInput = S['PersonProfileInput'];
 export type Skill = S['Skill'];

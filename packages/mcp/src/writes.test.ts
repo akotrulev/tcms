@@ -1066,7 +1066,7 @@ describe('registry declarations', () => {
 });
 
 describe('the surface as a whole — surface spec §2 and §4.1', () => {
-  it('is 37 tools', () => {
+  it('is 44 tools', () => {
     // The count is an OUTCOME of "a tool never spans two permissions on its write path", not a
     // target. It is asserted so that a merge or a split has to be a decision somebody records.
     // ~~21~~ → 23 with audit C10: `tcms_list_artifacts` and `tcms_write_artifact`, which arrived
@@ -1133,7 +1133,16 @@ describe('the surface as a whole — surface spec §2 and §4.1', () => {
     // `GET /projects/{projectId}/budget-burn` is on NEITHER read tool: it is `project:read` and
     // belongs to the project surface, and listing it here would put a money tool in front of every
     // engineer in the company (019 D-h).
-    expect(TOOLS).toHaveLength(43);
+    //
+    // 43 -> 44 with delivery analytics (020 T1): `tcms_read_analytics`, ONE tool with three arms —
+    // burn-up, cycle time and flow. One and not three because §2's rule is workflow-shaped tools
+    // and "how is this release going" is one workflow; the arm table satisfies §2 as it did for
+    // billing. There is no write side at all: analytics is computed from `issue_fact`, and the only
+    // way to change what it reports is to change the work, which is `tcms_write_issue`'s. It is
+    // also the first tool since the release verbs to add NO permission key — `report:view` already
+    // exists and is held by every project-scoped role that renders a rail at all, which is why M9
+    // leaves the three permission-matrix copies untouched.
+    expect(TOOLS).toHaveLength(44);
   });
 
   it('names every tool in the tcms_ namespace', () => {

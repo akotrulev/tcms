@@ -31,6 +31,7 @@ import type {
   BillingSummary,
   Budget,
   BudgetBurn,
+  BurnUpReport,
   Client,
   ClientBillingRow,
   ClientBillingSummary,
@@ -38,6 +39,8 @@ import type {
   ClientDetail,
   ClientProject,
   ClientRef,
+  CumulativeFlowReport,
+  CycleTimeReport,
   ExcludedHours,
   Expense,
   Invoice,
@@ -123,6 +126,7 @@ import type {
   IssueRef,
   IssueTestCase,
   ReadinessSummary,
+  ReportSufficiency,
   Release,
   ReleaseBlocker,
   ReleaseReadiness,
@@ -2143,6 +2147,88 @@ export function aBillingSummary(overrides: Partial<BillingSummary> = {}): Billin
     draftableNow: [],
     unapprovedHours: 0,
     clientsBilled: 0,
+    ...overrides,
+  }
+}
+
+/**
+ * Delivery analytics (020, M9) — three reports, and every one of them defaults to **sufficient**.
+ *
+ * The insufficient case is what these fixtures exist to let a test *ask for*: `aBurnUpReport({
+ * sufficiency: aReportSufficiency({ sufficient: false, reason: '…' }) })` is the shape the screen
+ * must render as a sentence rather than as a flat line at zero, and it is not reachable by clicking
+ * through a seeded instance — which is also why `tcmsFaults.analytics('sparse')` exists.
+ */
+export function aReportSufficiency(
+  overrides: Partial<ReportSufficiency> = {},
+): ReportSufficiency {
+  return {
+    sufficient: true,
+    reason: null,
+    issuesConsidered: 27,
+    ...overrides,
+  }
+}
+
+/**
+ * The mockup's numbers: 27 counted, 21 done, and **4 assigned after 2.4 was created** — the one
+ * figure in this chart that cannot be reconstructed after the fact (009 review R12).
+ */
+export function aBurnUpReport(overrides: Partial<BurnUpReport> = {}): BurnUpReport {
+  return {
+    releaseId: '00000000-0000-4000-8000-0000000009a1',
+    releaseVersion: '2.4',
+    releaseCreatedAt: '2026-07-01T09:00:00Z',
+    countedTotal: 27,
+    doneTotal: 21,
+    scopeAddedAfterCreation: 4,
+    points: [
+      { date: '2026-07-01', done: 0, totalScope: 23 },
+      { date: '2026-08-12', done: 12, totalScope: 27 },
+      { date: '2026-09-02', done: 21, totalScope: 27 },
+    ],
+    sufficiency: aReportSufficiency(),
+    ...overrides,
+  }
+}
+
+/**
+ * Four bands, ordered `count` descending then alphabetically — the order the server serves and the
+ * order a test asserting determinism expects.
+ *
+ * `measuredFrom` is `CREATED` and there is no other value to give it (020 D-c).
+ */
+export function aCycleTimeReport(overrides: Partial<CycleTimeReport> = {}): CycleTimeReport {
+  return {
+    measuredFrom: 'CREATED',
+    windowDays: 90,
+    bands: [
+      { typeName: 'Task', count: 41, medianDays: 1.8, p90Days: 4 },
+      { typeName: 'Story', count: 18, medianDays: 6.2, p90Days: 14 },
+      { typeName: 'Bug', count: 9, medianDays: 3.1, p90Days: 9 },
+      { typeName: 'Spike', count: 3, medianDays: 4, p90Days: 7 },
+    ],
+    sufficiency: aReportSufficiency({ issuesConsidered: 71 }),
+    ...overrides,
+  }
+}
+
+/**
+ * `beforeCurrentStatus` shrinks to **zero at the newest point**, which is the property that makes
+ * the fourth band honest rather than a fourth status (020 D-d). A fixture whose last point carried
+ * a non-zero one would be describing something the server cannot produce.
+ */
+export function aCumulativeFlowReport(
+  overrides: Partial<CumulativeFlowReport> = {},
+): CumulativeFlowReport {
+  return {
+    windowWeeks: 12,
+    points: [
+      { date: '2026-06-15', notStarted: 14, inFlight: 4, done: 2, beforeCurrentStatus: 7 },
+      { date: '2026-08-03', notStarted: 9, inFlight: 5, done: 11, beforeCurrentStatus: 2 },
+      { date: '2026-09-01', notStarted: 3, inFlight: 5, done: 19, beforeCurrentStatus: 0 },
+    ],
+    sufficiency: aReportSufficiency(),
     ...overrides,
   }
 }

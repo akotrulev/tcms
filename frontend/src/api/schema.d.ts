@@ -12476,6 +12476,105 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/analytics/burn-up": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Done against total scope over time, for one release
+         * @description Requires `report:view`. `reports.html`'s first panel, and the one figure in this product
+         *     that distinguishes **scope added after the release was created** — the difference between
+         *     `issue_fact.release_assigned_at` and `release.created_at`, which is the one number in the
+         *     chart that cannot be reconstructed after the fact (009 review R12).
+         *
+         *     The counted set is **story-level issues whose type counts toward completion**, identical to
+         *     the release readiness page's `scopeAddedAfterCreation` predicate, so the two screens cannot
+         *     report different numbers for one release (plan 020 D-f). A Task pointed at a release counts
+         *     for nothing — it is a breakdown *of* a story, so counting both counts the work twice — and
+         *     an Epic is excluded by the same flag.
+         *
+         *     `release_assigned_at` is stamped at projection time, one outbox tick after the assignment,
+         *     so "added after creation" means "assigned at least one tick after the release row existed".
+         *     There is no other source for it at all.
+         */
+        get: operations["getBurnUp"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/analytics/cycle-time": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * How long issues take to finish, per issue type
+         * @description Requires `report:view`. `reports.html`'s second panel, one band per issue type — **per type
+         *     and never as one aggregate**, because a median over stories and tasks together is a number
+         *     about neither.
+         *
+         *     **Measured from `created_at`, not from when work started**, and `measuredFrom` says so on
+         *     every response (plan 020 D-c). This product has no status history: `issue_transition` is the
+         *     workflow ALLOW-LIST, not a log of moves that happened, so `status_entered_at` on a completed
+         *     issue is when it entered the *Done* status rather than when somebody picked the work up.
+         *     Subtracting that from `done_at` yields approximately zero for every issue, under a label
+         *     claiming it is how long the work took — which is why this operation reports what it actually
+         *     measured instead.
+         */
+        get: operations["getCycleTime"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/analytics/flow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Issues per status band, weekly
+         * @description Requires `report:view`. `reports.html`'s third panel.
+         *
+         *     **Four bands, not three** (plan 020 D-d). At a past date an issue's band is knowable only
+         *     when one of two things holds: it had already reached done (`done_at` is *first* reached
+         *     done, never cleared by a reopen), or it was already in the status it is in now. Otherwise it
+         *     existed and this product does not know where it was — that is `beforeCurrentStatus`, which
+         *     is zero at the newest point by construction and grows going backwards.
+         *
+         *     Folding that band into `notStarted` would draw a guess as data, and it would be
+         *     *systematically* wrong in one direction: the further back the chart looks, the more of the
+         *     "not started" band would be invention.
+         */
+        get: operations["getCumulativeFlow"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -20611,6 +20710,132 @@ export interface components {
             email?: string | null;
             phone?: string | null;
         };
+        /**
+         * @description Whether there is enough data to draw this, and if not, why — **an answer, not an error**
+         *     (plan 020 D-e). A well-formed question about a project with three issues deserves a true
+         *     statement about what can be said, at 200, rather than a 422 or an empty series that renders
+         *     as a flat line at zero.
+         *
+         *     This is the contract's half of the module's third done-criterion: *a report with too little
+         *     data says so rather than drawing a flat line*. A criterion that lived only in a screen is one
+         *     the second screen forgets.
+         */
+        ReportSufficiency: {
+            sufficient: boolean;
+            /**
+             * @description A sentence for a reader, null exactly when `sufficient` is true. Prose rather than a
+             *     code: every case has a different fix, and a client mapping codes back to sentences is a
+             *     second place the sentence can be wrong.
+             */
+            reason: string | null;
+            /** @description How many non-deleted issues the window actually contained. */
+            issuesConsidered: number;
+        };
+        BurnUpPoint: {
+            /** Format: date */
+            date: string;
+            /** @description Counted issues whose `done_at` is on or before this date. */
+            done: number;
+            /**
+             * @description Counted issues whose `release_assigned_at` is on or before this date. **The step in this
+             *     series is scope added after the release was created** — visible, never absorbed into the
+             *     denominator silently.
+             */
+            totalScope: number;
+        };
+        BurnUpReport: {
+            /** Format: uuid */
+            releaseId: string;
+            /** @example 2.4 */
+            releaseVersion: string;
+            /**
+             * Format: date-time
+             * @description The baseline every "added after" comparison is against (009 review R12).
+             */
+            releaseCreatedAt: string;
+            /** @description Story-level issues counting toward completion that point at this release. */
+            countedTotal: number;
+            doneTotal: number;
+            /**
+             * @description Counted issues whose `release_assigned_at` is later than `releaseCreatedAt` —
+             *     **strictly** later, so an issue assigned in the same instant is original scope. The same
+             *     predicate the release readiness page uses (plan 020 D-f); the two must not disagree
+             *     about one release, and they are kept identical by sharing the predicate rather than by a
+             *     comment asking a future reader to.
+             */
+            scopeAddedAfterCreation: number;
+            /**
+             * @description Weekly from the release's creation to today, oldest first, with today always the last
+             *     point. **Empty when `sufficiency.sufficient` is false** — there is nothing to draw, and
+             *     a zero-valued series is the flat line this design refuses.
+             */
+            points: components["schemas"]["BurnUpPoint"][];
+            sufficiency: components["schemas"]["ReportSufficiency"];
+        };
+        /**
+         * @description Which boundary the elapsed time is measured from. **One member today, deliberately** (plan
+         *     020 D-c): `STARTED` is what this becomes the day a status-history table exists, and an enum
+         *     carrying a member nothing can produce would be a promise in the schema rather than a fact
+         *     about the data. A client written against this field today keeps working when the second
+         *     member arrives.
+         * @enum {string}
+         */
+        CycleTimeMeasuredFrom: "CREATED";
+        CycleTimeBand: {
+            /** @example Story */
+            typeName: string;
+            /** @description Completed issues of this type in the window — the denominator, on the row. */
+            count: number;
+            /**
+             * Format: double
+             * @description Nearest-rank, not interpolated: every value here is a duration some issue actually took,
+             *     so "the median is 6 days" names an issue somebody can go and look at.
+             */
+            medianDays: number;
+            /** Format: double */
+            p90Days: number;
+        };
+        CycleTimeReport: {
+            measuredFrom: components["schemas"]["CycleTimeMeasuredFrom"];
+            /** @example 90 */
+            windowDays: number;
+            /**
+             * @description One per type with at least one completion in the window, ordered by `count` descending
+             *     then `typeName` — deterministic, because a report whose row order changes between two
+             *     identical requests is one nobody trusts.
+             *
+             *     A thin type is **returned with its `count`**, not hidden: the reader decides whether four
+             *     issues is enough, and `sufficiency` names it when the whole report is thin.
+             */
+            bands: components["schemas"]["CycleTimeBand"][];
+            sufficiency: components["schemas"]["ReportSufficiency"];
+        };
+        CumulativeFlowPoint: {
+            /** Format: date */
+            date: string;
+            notStarted: number;
+            inFlight: number;
+            done: number;
+            /**
+             * @description Issues that existed on this date but whose status **on that date** is not recorded
+             *     anywhere (plan 020 D-d). Zero at the newest point by construction; it grows going
+             *     backwards. This is the band that keeps the chart honest and it must not be folded into
+             *     `notStarted` by any client.
+             */
+            beforeCurrentStatus: number;
+        };
+        CumulativeFlowReport: {
+            /** @example 12 */
+            windowWeeks: number;
+            /**
+             * @description Weekly, oldest first. Unlike the burn-up's, these are still served when
+             *     `sufficiency.sufficient` is false, because the reason is *about the shape of the points*
+             *     — a client may render the sentence over a greyed chart. The shipped screen renders the
+             *     sentence alone.
+             */
+            points: components["schemas"]["CumulativeFlowPoint"][];
+            sufficiency: components["schemas"]["ReportSufficiency"];
+        };
     };
     responses: {
         /**
@@ -27319,6 +27544,104 @@ export interface operations {
                     "application/json": components["schemas"]["ClientBillingSummary"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getBurnUp: {
+        parameters: {
+            query: {
+                /**
+                 * @description Required rather than optional-meaning-latest. "The latest release" is a different
+                 *     question with its own answer on the roadmap, and a chart that silently changes which
+                 *     release it is about is the defect a picker exists to prevent.
+                 */
+                releaseId: string;
+            };
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The burn-up, or a sufficiency answer saying why there is not one. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BurnUpReport"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getCycleTime: {
+        parameters: {
+            query?: {
+                /**
+                 * @description The window, ending now. Omitted means 90 — the server's fallback, stated here rather
+                 *     than as a `default:` keyword, which the generator would turn into a required property.
+                 *     A value outside the enum is a 400 with the allowed set in the message, never a silent
+                 *     clamp to the nearest one.
+                 */
+                days?: 30 | 90 | 180;
+            };
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One band per type that has a completed issue in the window. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CycleTimeReport"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getCumulativeFlow: {
+        parameters: {
+            query?: {
+                /**
+                 * @description The window in whole weeks, ending this week. Omitted means 12. A value outside the enum
+                 *     is a 400, for the reason `days` gives above.
+                 */
+                weeks?: 8 | 12 | 26;
+            };
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One point per week, oldest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CumulativeFlowReport"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
