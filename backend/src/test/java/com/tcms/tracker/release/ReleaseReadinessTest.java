@@ -360,7 +360,7 @@ class ReleaseReadinessTest extends TrackerEndpointTestBase {
                                 (SELECT id FROM issue_type
                                   WHERE project_id = CAST(? AS uuid) AND name = ?),
                                 (SELECT id FROM issue_status
-                                  WHERE project_id = CAST(? AS uuid) AND name = 'Backlog'),
+                                  WHERE project_id = CAST(? AS uuid) AND name = 'New'),
                                 (SELECT id FROM issue WHERE issue_key = ?),
                                 ?)
                         """)) {
@@ -387,7 +387,7 @@ class ReleaseReadinessTest extends TrackerEndpointTestBase {
     /**
      * Sets the status directly rather than walking the workflow.
      *
-     * <p>Backlog to Done is not a legal move in the seeded workflow and walking the four steps would
+     * <p>New to Done is not a legal move in the seeded workflow and walking the eight steps would
      * make every fixture here about the workflow instead of about readiness —
      * {@code BoardCardServiceTest} takes the same shortcut for the same reason.
      */

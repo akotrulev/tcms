@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My work · TCMS IA proposal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell-v2.css">
+</head>
+<body data-role="Test Engineer" data-active="mywork" data-proj="ACME|Acme Payments"
+      data-crumbs="My work">
+<template id="caption">
+  <strong>My work becomes the personal home.</strong> It is the post-sign-in landing for anyone with
+  at least one project grant; <code>/</code> (Projects) stays the fallback and the picker. The
+  <strong>Awaiting you</strong> strip is §8.4's five items exactly — reviews assigned · cards at your
+  door <em>on each board where you hold the moving key</em> · your blocked cards · proposals waiting ·
+  a plain <code>Timesheet approvals</code> link — and the rail badge <code>8</code> is the sum of the
+  four that count, <em>the awaiting-you number, not a total</em>, because a badge that says 340 says
+  nothing. Dana is a Test Engineer, so <strong>one</strong> board tile is drawn: she holds the moving
+  key on the QA board and on no other. A Project Manager sees three. Every tile is a project-scoped
+  read the page already knows how to make. <strong>Timesheet approvals carries no count</strong> —
+  the recorded decision stands, because no company-wide "where may I approve" read exists to ask, and
+  it is the one row of §8.3's seven that reads <em>none</em>.
+</template>
+<main class="page">
+<div class="phead">
+  <div><h1>My work</h1><div class="sub">Across ACME, BETA and GAMMA · Dana Petrov</div></div>
+</div>
+
+<section class="panel" style="margin-bottom:16px">
+  <div class="panel-head"><h2>Awaiting you</h2><span class="spacer"></span><span class="hint">8 things · 4 tiles that count, 1 link that does not</span></div>
+  <div class="panel-body">
+    <div class="await">
+      <a class="await-item" href="#" data-mock="Reviews assigned">
+        <span class="n">3</span><span class="l">Reviews assigned</span><span class="d">2 in ACME, 1 in BETA</span>
+      </a>
+      <a class="await-item" href="13-qa-board.html">
+        <span class="n">2</span><span class="l">At the QA board's door</span><span class="d">ACME · <code>Ready for test</code> — the one board you may move</span>
+      </a>
+      <a class="await-item" href="12-dev-board.html">
+        <span class="n">1</span><span class="l">Your blocked cards</span><span class="d">ACME-126 · <span class="chip blockedfrom">⛔ from In test</span></span>
+      </a>
+      <a class="await-item" href="16-test-cases-tabs.html">
+        <span class="n">2</span><span class="l">Proposals waiting</span><span class="d">ACME · Test cases → Proposals</span>
+      </a>
+      <a class="await-item plain" href="#" data-mock="Timesheet approvals — /timesheets/approvals">
+        <span class="n">Timesheet approvals →</span><span class="l">A link, deliberately without a count</span><span class="d">also in the user menu</span>
+      </a>
+    </div>
+  </div>
+  <div class="panel-foot"><span>One tile for each board you may move cards on. <a href="#" data-mock="Open today's board">Open today's board</a>.</span></div>
+</section>
+
+<div class="grid g2">
+  <section class="panel">
+    <div class="panel-head"><h2>Issues assigned to you</h2><span class="spacer"></span><span class="hint">7</span></div>
+    <div class="tw">
+      <table class="t" style="min-width:0">
+        <thead><tr><th>Key</th><th>Title</th><th>Project</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td><span class="ikey">ACME-118</span></td><td class="ttl">Guest checkout drops the cart</td><td><span class="chip">ACME</span></td><td><span class="badge b-prog"><span class="dot"></span>In progress</span></td></tr>
+          <tr><td><span class="ikey">ACME-140</span></td><td class="ttl">Expired-card copy is wrong</td><td><span class="chip">ACME</span></td><td><span class="badge b-review">In review</span></td></tr>
+          <tr><td><span class="ikey">BETA-22</span></td><td class="ttl">Session expiry redirects to 404</td><td><span class="chip">BETA</span></td><td><span class="badge b-blocked"><span class="dot"></span>Blocked</span></td></tr>
+          <tr><td><span class="ikey">GAMMA-7</span></td><td class="ttl">Statement export column order</td><td><span class="chip">GAMMA</span></td><td><span class="badge b-todo">Ready</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="panel-foot"><span>Not a kanban — statuses differ per project, so there is no shared column set.</span></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Executions &amp; reviews</h2><span class="spacer"></span><span class="hint">9</span></div>
+    <div class="tw">
+      <table class="t" style="min-width:0">
+        <thead><tr><th>Item</th><th>Kind</th><th>Project</th><th>State</th></tr></thead>
+        <tbody>
+          <tr><td class="ttl">Regression — 2.4 rc3 · 12 left</td><td><span class="chip">Execution</span></td><td><span class="chip">ACME</span></td><td><span class="badge b-prog"><span class="dot"></span>In progress</span></td></tr>
+          <tr><td class="ttl">TC-411 Address validation</td><td><span class="chip">Review</span></td><td><span class="chip">ACME</span></td><td><span class="badge b-review">Awaiting you</span></td></tr>
+          <tr><td class="ttl">TC-412 Postcode normalisation</td><td><span class="chip">Review</span></td><td><span class="chip">ACME</span></td><td><span class="badge b-review">Awaiting you</span></td></tr>
+          <tr><td class="ttl">TC-88 Session expiry</td><td><span class="chip">Review</span></td><td><span class="chip">BETA</span></td><td><span class="badge b-review">Awaiting you</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="panel-foot"><span>Private notes and due dates on this screen belong to you and are visible to nobody else.</span></div>
+  </section>
+</div>
+</main>
+<script src="assets/shell-v2.js"></script>
+</body>
+</html>

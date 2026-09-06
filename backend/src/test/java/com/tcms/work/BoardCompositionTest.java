@@ -180,26 +180,23 @@ class BoardCompositionTest extends IntegrationTestBase {
     void aDoneIssueLeavesTheBoard() throws Exception {
         String key = givenIssueAssignedTo(DANA, STOREFRONT, "Expired cards decline without a message");
 
-        moveTo(key, "In Progress");
-        moveTo(key, "In Review");
-        moveTo(key, "Done");
+        walkToDone(key);
 
         assertThat(idsOf(myWork(DANA))).doesNotContain(key);
     }
 
     @Test
     void anIssueCardsAllowedTransitionsComeFromTheProjectWorkflow() throws Exception {
-        // The behaviour change from work_item, where every column was legal. The seeded workflow
-        // permits every pair except INTO Done, which only In Review may reach — so from In Review
-        // all five other statuses are legal, and the assertion is written against what
-        // tcms_seed_project_defaults actually inserts rather than against a mockup's right-hand
-        // panel, which illustrates the moves from In Progress.
+        // The behaviour change from work_item, where every column was legal. ~~The seeded workflow
+        // permits every pair except INTO Done.~~ → V13 (021 §2.3): it is a LINE, so from In review
+        // exactly three moves exist — the next step, the return path, and Blocked. The assertion is
+        // written against what tcms_seed_project_defaults actually inserts rather than against a
+        // mockup's right-hand panel, which illustrates the moves from In progress.
         String key = givenIssueAssignedTo(DANA, STOREFRONT, "Expired cards decline without a message");
-        moveTo(key, "In Progress");
-        moveTo(key, "In Review");
+        walkTo(key, "In review");
 
         assertThat(transitionNamesOn(cardFor(myWork(DANA), key)))
-                .containsExactlyInAnyOrder("Backlog", "Ready", "In Progress", "Blocked", "Done");
+                .containsExactlyInAnyOrder("Ready for test", "Rework", "Blocked");
     }
 
     @Test
@@ -285,6 +282,28 @@ class BoardCompositionTest extends IntegrationTestBase {
                 .as(created.getResponse().getContentAsString())
                 .isEqualTo(201);
         return json.readTree(created.getResponse().getContentAsString()).get("key").asText();
+    }
+
+    /** The whole line, New to Done — nine statuses, eight moves (021 §2.3). */
+    private void walkToDone(String key) throws Exception {
+        walkTo(key, "Done");
+    }
+
+    /**
+     * Walks the line from {@code New} up to and including {@code statusName}.
+     *
+     * <p>The seeded workflow is a LINE now, so a fixture cannot jump: every step between where the
+     * issue is and where the test needs it has to be a legal move.
+     */
+    private void walkTo(String key, String statusName) throws Exception {
+        for (String step : List.of("Refining", "Ready to develop", "In progress", "In review",
+                "Ready for test", "In test", "Ready to deploy", "Done")) {
+            moveTo(key, step);
+            if (step.equals(statusName)) {
+                return;
+            }
+        }
+        throw new AssertionError(statusName + " is not on the seeded line");
     }
 
     private void moveTo(String key, String statusName) throws Exception {

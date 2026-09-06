@@ -175,7 +175,11 @@ public class WorkflowService {
 
         UUID companyId = CompanyContext.require();
         List<IssueStatus> live = new ArrayList<>();
-        List<IssueStatus> arrived = new ArrayList<>();
+        // The arriving status, and the one it was placed after — null when it was placed first.
+        // The NEIGHBOUR is what decides which boards claim it (021 §2.2), so it has to be captured
+        // here, where the submitted order is still in hand, rather than recomputed from position
+        // afterwards: the removals below change what "the status at position - 1" resolves to.
+        Map<IssueStatus, IssueStatus> arrived = new LinkedHashMap<>();
         int position = 0;
         for (IssueStatusView status : submitted.statuses()) {
             IssueStatus existing = status.id() == null ? null : stored.get(status.id());
@@ -184,7 +188,7 @@ public class WorkflowService {
                         UUID.randomUUID(), companyId, project.getId(),
                         status.name().strip(), status.kind(), position));
                 live.add(created);
-                arrived.add(created);
+                arrived.put(created, position == 0 ? null : live.get(position - 1));
             } else {
                 existing.redefine(status.name().strip(), status.kind(), position);
                 live.add(statuses.save(existing));
@@ -193,12 +197,13 @@ public class WorkflowService {
         }
 
         // R13, and before the removals below rather than after: a status arriving has no database
-        // event to hang off, so every board claims it here — inside this transaction deliberately,
+        // event to hang off, so the boards claim it here — inside this transaction deliberately,
         // see BoardConfigService#claimNewStatus. The flush is because board_column_status.status_id
         // is a foreign key and Hibernate orders its inserts by entity type, not by call order.
         if (!arrived.isEmpty()) {
             statuses.flush();
-            arrived.forEach(created -> boards.claimNewStatus(project.getId(), created));
+            arrived.forEach((created, neighbour) ->
+                    boards.claimNewStatus(project.getId(), created, neighbour));
         }
 
         // Transitions before statuses: issue_transition's foreign keys point AT issue_status, so a

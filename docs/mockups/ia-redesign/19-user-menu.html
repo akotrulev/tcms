@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The user menu — the person's own things · TCMS IA proposal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell-v2.css">
+</head>
+<body data-role="Test Engineer" data-active="mywork" data-proj="ACME|Acme Payments"
+      data-menu="open" data-crumbs="My work">
+<template id="caption">
+  <strong>The user menu, open, exactly as proposal §4 draws it — and the rail beside it, without
+  Timesheets.</strong> Reversal <strong>R11</strong>: the rail's rule is <em>a place in the product
+  scoped by the project switcher or by the company</em>; a timesheet is the person's own fortnight,
+  so it fails that test and passes the user menu's. <code>Timesheets</code> and
+  <code>Timesheet approvals</code> are now the <strong>first two rows of the menu</strong>, above the
+  account group, because they are the two that moved. The <code>You</code> zone in the rail is
+  therefore <strong>two rows</strong> — My work · Projects — and the whole rail is
+  <strong>20 rows</strong> for a caller holding every gate, <strong>17</strong> for the Test Engineer
+  drawn here. <strong>Approvals carries no count</strong>, alone among §8.3's seven badge rows.
+</template>
+<main class="page">
+<div class="phead">
+  <div>
+    <h1>The user menu</h1>
+    <div class="sub">Open in the header, top right — and drawn again below, at rest, so it can be read</div>
+  </div>
+</div>
+
+<div class="grid g-main">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>§4, drawn</h2><span class="spacer"></span><span class="hint">the same markup the header is using right now</span></div>
+      <div class="panel-body">
+        <div class="row" style="align-items:flex-start;gap:26px">
+          <div class="umenu" style="position:static;width:272px;box-shadow:var(--elevation-2)">
+            <div class="who"><strong>Dana Petrov</strong><span>Test Engineer on ACME, BETA</span></div>
+            <a href="#" data-mock="Timesheets — /timesheets">Timesheets</a>
+            <a href="#" data-mock="Timesheet approvals — /timesheets/approvals">Timesheet approvals</a>
+            <div class="sepr"></div>
+            <div class="grp">Account</div>
+            <a href="#" data-mock="Security">Security</a>
+            <a href="#" data-mock="Tracker connections">Tracker connections</a>
+            <a href="#" data-mock="AI assistants">AI assistants</a>
+            <div class="sepr"></div>
+            <a href="08-your-access.html">Your access</a>
+            <a href="#" data-mock="Keyboard shortcuts">Keyboard shortcuts</a>
+            <a href="#" data-mock="User guide">User guide</a>
+            <div class="sepr"></div>
+            <a href="#" data-mock="Sign out">Sign out</a>
+          </div>
+
+          <div class="stack" style="gap:9px;min-width:240px;flex:1">
+            <div class="dl">
+              <dt>Timesheets</dt><dd><code>/timesheets</code> <span class="basis">moved from the rail — R11</span></dd>
+              <dt>Approvals</dt><dd><code>/timesheets/approvals</code> <span class="basis">no count, deliberately</span></dd>
+              <dt>Account ▸</dt><dd>Security · Tracker connections · AI assistants</dd>
+              <dt>Your access</dt><dd><code>/account/access</code> <span class="basis">new — brief finding 15</span></dd>
+              <dt>Shortcuts</dt><dd>a dialog, not a route</dd>
+              <dt>User guide</dt><dd><code>/help</code> <span class="basis">was "Help &amp; documentation"</span></dd>
+              <dt>Sign out</dt><dd>last, alone, below a rule</dd>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="panel-foot"><span>Order is §4's, verbatim: the two rows that <em>moved</em> come first, then the account group, then the three reference rows, then <code>Sign out</code> alone. Nothing was regrouped to make room.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>The rule that decides what lives here</h2></div>
+      <div class="panel-body stack" style="gap:10px">
+        <div class="bullet"><span aria-hidden="true">▸</span><div><strong>It belongs to the person, not to a project or the company.</strong> That single test moves the timesheet and keeps everything else where it was: the rail is scoped by the project switcher or by the company, and a fortnight of a person's hours is scoped by neither.</div></div>
+        <div class="bullet"><span aria-hidden="true">▸</span><div><strong>The brief already stated this rule</strong> — its §4.3 uses it to put credentials in the user menu. The timesheet fails the same test the credentials failed; it was simply never asked.</div></div>
+        <div class="bullet"><span aria-hidden="true">▸</span><div><strong><code>Timesheet approvals</code> is listed for everyone</strong>, and the page explains its own refusal. That is the disable-don't-hide rule: hiding it would make a person who <em>does</em> hold <em>Approve time</em> hunt for a row they have, to spare a person who does not one sentence of explanation.</div></div>
+        <div class="bullet"><span aria-hidden="true">▸</span><div><strong>And it carries no count.</strong> §8.3's badge table has seven rows and this is the only one that reads <em>none</em>: there is no company-wide "where may I approve" read to ask, and inventing one to feed a badge is a query per sign-in for a number most people will never need. The recorded decision stands.</div></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>What the <code>You</code> zone lost</h2><span class="spacer"></span><span class="hint">§1</span></div>
+      <div>
+        <div class="setrow"><div class="txt"><strong>My work</strong><span>Stays, and is the post-sign-in landing (§8.4)</span></div><span class="spacer"></span><span class="badge b-done">kept</span></div>
+        <div class="setrow"><div class="txt"><strong>Timesheets</strong><span>To the user menu — R11</span></div><span class="spacer"></span><span class="badge b-info">moved</span></div>
+        <div class="setrow"><div class="txt"><strong>Projects</strong><span>Stays; was "All projects"</span></div><span class="spacer"></span><span class="badge b-done">kept</span></div>
+      </div>
+      <div class="panel-foot"><span>Two rows, not three. Look left: the rail on this page has no Timesheets row.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Row count, recomputed</h2></div>
+      <div class="panel-body">
+        <div class="dl">
+          <dt>You</dt><dd><strong class="mono">2</strong> — My work · Projects</dd>
+          <dt>Project</dt><dd><strong class="mono">11</strong> — flat, in usage order</dd>
+          <dt>Company</dt><dd><strong class="mono">7</strong> for every gate · <strong class="mono">4</strong> for a Test Engineer</dd>
+          <dt>Total</dt><dd><strong class="mono">20</strong> / <strong class="mono">17</strong></dd>
+        </div>
+      </div>
+      <div class="panel-foot"><span>Both figures are §1's own, and both now match its diagram exactly — the first draft's 21/18 were one row too many because Timesheets was still in the rail.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Where else it appears</h2></div>
+      <div class="panel-body stack" style="gap:9px">
+        <div class="bullet"><span aria-hidden="true">▸</span><div><a href="07-my-work-home.html">My work</a> ends its <em>Awaiting you</em> strip with a plain <code>Timesheet approvals</code> link — a link, not a tile with a number, for the same reason the menu row has no badge.</div></div>
+        <div class="bullet"><span aria-hidden="true">▸</span><div>The <a href="06-palette.html">⌘K palette</a> indexes the user menu as <em>places</em>, so typing "timesheet" still finds it in one keystroke from anywhere. That is what makes a menu row as reachable as a rail row.</div></div>
+        <div class="bullet"><span aria-hidden="true">▸</span><div><a href="08-your-access.html">Your access</a> is reached from this menu, and is the page that explains why two colleagues screen-sharing see different rails.</div></div>
+      </div>
+    </section>
+  </div>
+</div>
+</main>
+<script src="assets/shell-v2.js"></script>
+</body>
+</html>

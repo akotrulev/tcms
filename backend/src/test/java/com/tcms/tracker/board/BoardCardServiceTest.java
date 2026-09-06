@@ -190,13 +190,13 @@ class BoardCardServiceTest extends TrackerEndpointTestBase {
                         forbidden drop is refused at the drag with the reason rather than accepted \
                         and reverted.""")
                 .extracting(IssueStatusView::name)
-                .contains("Ready");
+                .contains("Refining");
     }
 
     @Test
     @DisplayName("an Epic's card shows its derived status and offers no move")
     void anEpicCardIsDerivedAndUnmovable() throws SQLException {
-        // D31. An epic reading "In Progress" on the board while its detail page says it is done is
+        // D31. An epic reading "In progress" on the board while its detail page says it is done is
         // the disagreement D31 exists to make unrepresentable, so both read the same derived value.
         String epic = epic("Payments");
         String only = story("the only story", epic, null, Priority.MEDIUM);
@@ -233,7 +233,7 @@ class BoardCardServiceTest extends TrackerEndpointTestBase {
         // A WIP limit is a fact about how much is in flight. Narrowing the view does not take work
         // out of a column, so a filter that hid the breach would hide the thing the header exists
         // to shout about.
-        UUID board = boardWithBacklogLimit(1);
+        UUID board = boardWithNewLimit(1);
         UUID red = label("red");
         String tagged = story("tagged", null, null, Priority.MEDIUM);
         story("untagged", null, null, Priority.MEDIUM);
@@ -248,10 +248,101 @@ class BoardCardServiceTest extends TrackerEndpointTestBase {
         assertThat(filtered.breaches().get(0).limit()).isEqualTo(1);
     }
 
+    @Test
+    @DisplayName("a task card carries its story's key as parentKey, and a story its epic's")
+    void aCardCarriesItsImmediateParentsKey() throws SQLException {
+        // parentKey is the IMMEDIATE parent and not epicKey, which is the lane (021 §2.5): the row
+        // a card belongs under is its parent's, one level up, and for a task that is its story
+        // rather than the epic two above it. An implementation that answered epicKey for both would
+        // be green on every story and wrong on every task, which is the half the row header needs.
+        String epic = epic("Payments");
+        String story = story("Guest checkout", epic, null, Priority.MEDIUM);
+        String task = task("the form", story);
+
+        assertThat(cardFor(defaultBoard(), task).parentKey()).isEqualTo(story);
+        assertThat(cardFor(defaultBoard(), story).parentKey()).isEqualTo(epic);
+        assertThat(cardFor(defaultBoard(), epic).parentKey())
+                .as("an epic is top level; there is no level above one")
+                .isNull();
+    }
+
+    @Test
+    @DisplayName("a story row counts its not-shown-here tasks under elsewhere, never total minus shown")
+    void elsewhereCountsTheNotShownHereSetAndNotTheDifference() throws SQLException {
+        // 021 §2.5's arithmetic point, and the one an implementation gets wrong by subtracting.
+        // Ready for test is claimed by BOTH the Dev and QA boards — that is what a hand-off column
+        // is — so on the Dev board a task in it is SHOWN HERE and also on the QA board. Counting
+        // "total minus shown" would report that task as being somewhere else; counting the tasks
+        // this board does not claim reports only the one that really is.
+        String story = story("Guest checkout", null, null, Priority.MEDIUM);
+        String shownOnBoth = task("shown on Dev and QA", story);
+        String onlyOnQa = task("only on QA", story);
+        // The story itself has to be in a status the Dev board claims, or it is not on that board
+        // at all — a board claims a subset (021 R7), and New is the PM board's.
+        moveTo(story, "In progress");
+        moveTo(shownOnBoth, "Ready for test");
+        moveTo(onlyOnQa, "In test");
+
+        BoardIssueCardView onDev = cardFor(boardNamed("Dev board"), story);
+
+        assertThat(onDev.subtaskTotal())
+                .as("two tasks in total, one of which the Dev board shows")
+                .isEqualTo(2);
+        assertThat(onDev.elsewhere()).hasSize(1);
+        assertThat(onDev.elsewhere().get(0).boardName()).isEqualTo("QA board");
+        assertThat(onDev.elsewhere().get(0).count())
+                .as("""
+                        ONE, not two. Total minus shown would say one as well here only by \
+                        accident; make the story's story-row card itself invisible and the two \
+                        diverge. The set counted is the tasks in a status this board does not \
+                        claim — In test — and never the difference of two totals.""")
+                .isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("a card whose every task is shown here carries an empty elsewhere")
+    void elsewhereIsEmptyWhenEveryDescendantIsShownHere() throws SQLException {
+        // The ordinary case, and the one a row header draws no link for. Asserting it is what stops
+        // an implementation that lists every other board with a zero count from passing.
+        String story = story("Guest checkout", null, null, Priority.MEDIUM);
+        task("still to be picked up", story);
+
+        assertThat(cardFor(defaultBoard(), story).elsewhere()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("hasAcceptanceCriteria is the readiness signal, and the criteria stay off the card")
+    void theCardSaysWhetherItHasAcceptanceCriteria() throws SQLException {
+        // 021 §2.6 — the PM board's readiness signal. The array itself stays off the card: it is
+        // the detail page's, and a board that shipped every criterion of every card would ship a
+        // paragraph per card to render a dot.
+        String without = story("nothing agreed yet", null, null, Priority.MEDIUM);
+        String with = story("agreed", null, null, Priority.MEDIUM);
+        giveAcceptanceCriteria(with);
+
+        assertThat(cardFor(defaultBoard(), without).hasAcceptanceCriteria()).isFalse();
+        assertThat(cardFor(defaultBoard(), with).hasAcceptanceCriteria()).isTrue();
+    }
+
     // =====================================================================
 
+    /**
+     * The PM board — the first of the three {@code tcms_seed_project_defaults} makes (021 §2.4).
+     *
+     * <p>It is the one that matters for these fixtures because every issue below is created in
+     * {@code New}, and {@code New} is a PM-board status. A board claims a SUBSET now, so "the
+     * seeded board" is no longer a phrase that picks out a board showing every card.
+     */
     private UUID defaultBoard() {
         return scoped(() -> boardConfig.list(MANAGER, PROJECT).orElseThrow()).get(0).id();
+    }
+
+    private UUID boardNamed(String name) {
+        return scoped(() -> boardConfig.list(MANAGER, PROJECT).orElseThrow()).stream()
+                .filter(board -> board.name().equals(name))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no board called " + name))
+                .id();
     }
 
     private UUID swimlaned(SwimlaneBy axis) {
@@ -262,11 +353,11 @@ class BoardCardServiceTest extends TrackerEndpointTestBase {
         return written(new BoardInput("Lanes", axis, columns));
     }
 
-    private UUID boardWithBacklogLimit(int limit) {
+    private UUID boardWithNewLimit(int limit) {
         List<IssueStatusView> statuses = statuses();
         List<BoardColumnInput> columns = new ArrayList<>();
         statuses.forEach(status -> columns.add(new BoardColumnInput(
-                null, status.name(), status.name().equals("Backlog") ? limit : null,
+                null, status.name(), status.name().equals("New") ? limit : null,
                 List.of(status.id()), status.id())));
         return written(new BoardInput("Limited", SwimlaneBy.NONE, columns));
     }
@@ -368,7 +459,7 @@ class BoardCardServiceTest extends TrackerEndpointTestBase {
                                 (SELECT id FROM issue_type
                                   WHERE project_id = CAST(? AS uuid) AND name = ?),
                                 (SELECT id FROM issue_status
-                                  WHERE project_id = CAST(? AS uuid) AND name = 'Backlog'),
+                                  WHERE project_id = CAST(? AS uuid) AND name = 'New'),
                                 (SELECT id FROM issue WHERE issue_key = ?),
                                 ?)
                         """)) {
@@ -390,19 +481,40 @@ class BoardCardServiceTest extends TrackerEndpointTestBase {
     /**
      * Sets the status directly rather than through {@code TransitionService}.
      *
-     * <p>Backlog to Done is not a legal move in the seeded workflow and walking the four steps would
+     * <p>New to Done is not a legal move in the seeded workflow and walking the eight steps would
      * make every fixture here about the workflow instead of about the board.
      */
     private void moveToDone(String key) throws SQLException {
+        moveTo(key, "Done");
+    }
+
+    /** The same direct write, for a status that is not Done — {@code done_at} stays null. */
+    private void moveTo(String key, String statusName) throws SQLException {
         try (Connection connection = appConnection(ACME);
                 PreparedStatement statement = connection.prepareStatement("""
                         UPDATE issue SET status_id = (SELECT id FROM issue_status
                                                        WHERE project_id = CAST(? AS uuid)
-                                                         AND name = 'Done'),
-                                         done_at = now()
+                                                         AND name = ?),
+                                         done_at = CASE WHEN ? = 'Done' THEN now() ELSE NULL END
                          WHERE issue_key = ?
                         """)) {
             statement.setObject(1, PROJECT);
+            statement.setString(2, statusName);
+            statement.setString(3, statusName);
+            statement.setString(4, key);
+            statement.executeUpdate();
+        }
+    }
+
+    /** One criterion, written as the stored shape — {@code AcceptanceCriteria} is tracker's codec. */
+    private void giveAcceptanceCriteria(String key) throws SQLException {
+        try (Connection connection = appConnection(ACME);
+                PreparedStatement statement = connection.prepareStatement(
+                        "UPDATE issue SET acceptance_criteria = CAST(? AS jsonb) "
+                                + "WHERE issue_key = ?")) {
+            statement.setString(1, """
+                    [{"id":"3f1c8a20-0000-4000-8000-000000000001",\
+                    "text":"The guest can pay without an account.","done":false,"position":0}]""");
             statement.setString(2, key);
             statement.executeUpdate();
         }

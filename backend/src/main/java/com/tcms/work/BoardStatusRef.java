@@ -13,6 +13,12 @@ import java.util.UUID;
  * finds from the client end.
  *
  * <p>{@code kind} is a String here and an enum there, for {@link CardStatus}' reason.
+ *
+ * @param blocking 021 D-b, and it travels here for the same reason the rest of the shape does: the
+ *                 two records serve ONE schema, so a component added to one and not the other is a
+ *                 property every TypeScript consumer reads as absent on half the endpoints that
+ *                 send it. This board offers moves; a client that could not tell which target is
+ *                 the blocking one could not draw the chip that says what a drop there means
  */
-public record BoardStatusRef(UUID id, String name, String kind, int position) {
+public record BoardStatusRef(UUID id, String name, String kind, int position, boolean blocking) {
 }

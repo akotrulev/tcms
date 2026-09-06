@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project settings landing · TCMS IA proposal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell-v2.css">
+</head>
+<body data-role="Test Engineer" data-active="settings" data-proj="ACME|Acme Payments"
+      data-crumbs="Projects>#|ACME>01-rail-expanded-pm.html|Settings">
+<template id="caption">
+  <strong>One rail row becomes a real page.</strong> Eight to twelve rail entries collapse into a
+  single <code>Settings</code> row leading here, and each card carries <em>one live fact</em>, so the
+  page answers "what is configured here?" before a click. Rendered as a <strong>Test Engineer</strong>:
+  <em>Imports</em>, <em>Notifications</em>, <em>Issue tracker</em> and <em>Project audit</em> are
+  absent, by the same test as the rail — <strong>can the page be read?</strong> Seven cards, not
+  eleven. <strong>No route moves</strong>: every pasted <code>/settings/*</code>, <code>/access</code>,
+  <code>/imports</code> and <code>/audit</code> link still lands where it always did.
+</template>
+<main class="page">
+<div class="phead">
+  <div><h1>Settings</h1><div class="sub">Acme Payments · what is configured, and by whom</div></div>
+</div>
+
+<nav class="subnav" aria-label="Settings sections" data-fill="settings-subnav" data-current=""></nav>
+
+<div class="setcards" data-fill="settings-cards"></div>
+
+<div class="note" style="margin-top:16px">
+  <span aria-hidden="true">⚿</span>
+  <div>Four sections are not on this page for you. That is deliberate and it is explained — the user
+  menu's <a href="08-your-access.html"><strong>Your access</strong></a> page names every hidden entry
+  and who holds the key. The nine recorded hide-don't-disable exceptions are unchanged.</div>
+</div>
+</main>
+<script src="assets/shell-v2.js"></script>
+</body>
+</html>

@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings → Boards — the coverage matrix · TCMS IA proposal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell-v2.css">
+</head>
+<body data-role="Project Manager" data-active="settings" data-proj="ACME|Acme Payments"
+      data-crumbs="Projects>#|ACME>01-rail-expanded-pm.html|Settings>04-settings-landing.html|Boards">
+<template id="caption">
+  <strong>The coverage table, asking a different question — now 11 statuses × 3 boards.</strong>
+  It used to ask <em>"is every status claimed on this board?"</em> — a per-board checklist that had
+  to come back all-green or the API refused the board with a 422. It now asks
+  <strong>"which boards show each status?"</strong>: one row per status, one column per board, the
+  <strong>five shared</strong> statuses marked, and a warning row for a status <em>no</em> board
+  claims. That warning is the whole of what the old rule protected — a card nobody can see —
+  reported at the one place boards are configured instead of refused where a board is saved.
+  Reversal R7, and it needs no migration: the surviving half of the old rule (<em>at most once per
+  board</em>) is already a unique index. <strong>The second table is the same table in the other
+  state</strong> — drawn twice here only so both can be looked at on one page; in the product there is
+  one table and it looks like whichever is true, and §2.4's seeded three cover every status, so on day
+  one the warning row is empty. <strong>A status added later</strong> is claimed by every board that
+  claims the status it was inserted after (§2.2, replacing 012 D-g's claim-on-every-board) — a rule
+  that assumes a line, and <code>Rework</code> and <code>Blocked</code> are loops off it, so it has no
+  defined answer beside them. Contract, all additive: the <em>unclaimed</em> 422 leaves
+  <code>createBoard</code> / <code>updateBoard</code>, <code>BoardSummary</code> gains
+  <code>statusCount</code>, and the matrix arrives from <code>GET /projects/{id}/boards/coverage</code>.
+</template>
+<main class="page">
+<nav class="subnav" aria-label="Project settings" data-fill="settings-subnav" data-current="boards"></nav>
+
+<div class="phead">
+  <div>
+    <h1>Boards</h1>
+    <div class="sub">Acme Payments · 3 boards over an 11-status workflow</div>
+  </div>
+  <div class="actions">
+    <button class="btn" data-mock="Reorder boards">Reorder</button>
+    <button class="btn btn-primary" data-mock="New board">New board</button>
+  </div>
+</div>
+
+<section class="panel" style="margin-bottom:16px">
+  <div class="panel-head"><h2>The workflow these boards are lenses on</h2><span class="spacer"></span><span class="hint"><a href="05-settings-subpage.html">Settings → Workflow</a></span></div>
+  <div class="panel-body">
+    <div class="wfline">
+      <span class="st k-ns">New <span class="kd">not started</span></span><span class="arw" aria-hidden="true">→</span>
+      <span class="st k-ns">Refining <span class="kd">not started</span></span><span class="arw" aria-hidden="true">→</span>
+      <span class="st k-ns">Ready to develop <span class="kd">not started</span></span><span class="arw" aria-hidden="true">→</span>
+      <span class="st k-ip">In progress <span class="kd">in progress</span></span><span class="arw" aria-hidden="true">→</span>
+      <span class="st k-ip">In review <span class="kd">in progress</span></span><span class="arw" aria-hidden="true">→</span>
+      <span class="st k-ip">Ready for test <span class="kd">in progress</span></span><span class="arw" aria-hidden="true">→</span>
+      <span class="st k-ip">In test <span class="kd">in progress</span></span><span class="arw" aria-hidden="true">→</span>
+      <span class="st k-ip">Ready to deploy <span class="kd">in progress</span></span><span class="arw" aria-hidden="true">→</span>
+      <span class="st k-dn">Done <span class="kd">done</span></span>
+    </div>
+    <div class="wfoff">
+      <span class="st k-ip" style="display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:999px;border:1px solid color-mix(in srgb, var(--color-warning) 40%, transparent);background:var(--color-surface);font-size:11.5px">Rework <span class="kd" style="font-size:9px;letter-spacing:.05em;color:var(--color-text-ghost);text-transform:uppercase">in progress · off the line</span></span>
+      <span class="st" style="display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:999px;border:1px solid color-mix(in srgb, var(--color-danger) 40%, transparent);background:var(--color-surface);font-size:11.5px">Blocked <span class="kd" style="font-size:9px;letter-spacing:.05em;color:var(--color-text-ghost);text-transform:uppercase">in progress · off the line</span></span>
+    </div>
+  </div>
+  <div class="panel-foot"><span><code>NOT_STARTED</code> ×3 · <code>IN_PROGRESS</code> ×7 · <code>DONE</code> ×1. <code>Rework</code> and <code>Blocked</code> sit <em>off</em> the line: <code>Rework</code> is legal from <code>In review</code>, <code>In test</code> and <code>Ready to deploy</code> and legal to <code>In progress</code>; <code>Blocked</code> is legal from every non-done status and back to the one it came from.</span></div>
+</section>
+
+<div class="grid g3" style="margin-bottom:16px">
+  <section class="panel">
+    <div class="panel-head"><h2>PM board</h2><span class="spacer"></span><span class="hint">position 1</span></div>
+    <div class="panel-body stack" style="gap:9px">
+      <div class="row" style="gap:6px">
+        <span class="chip">New</span><span class="chip">Refining</span><span class="chip on">Ready to develop</span><span class="chip on">Ready to deploy</span><span class="chip">Done <span style="color:var(--color-text-ghost)">collapsed</span></span><span class="chip on">Blocked</span>
+      </div>
+      <div style="font-size:11.5px;color:var(--color-text-faint)"><strong class="mono">5</strong> working columns incl. <code>Blocked</code>, + <code>Done</code> collapsed · <strong class="mono">6 of 11</strong> statuses</div>
+    </div>
+    <div class="panel-foot"><span>Its segment counts cards in <code>Ready to deploy</code> — what is waiting for the PO to ship.</span></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Dev board</h2><span class="spacer"></span><span class="hint">position 2</span></div>
+    <div class="panel-body stack" style="gap:9px">
+      <div class="row" style="gap:6px">
+        <span class="chip on">Ready to develop</span><span class="chip">In progress <span style="color:var(--color-text-ghost)">+ Rework</span></span><span class="chip">In review</span><span class="chip on">Ready for test</span><span class="chip on">Blocked</span>
+      </div>
+      <div style="font-size:11.5px;color:var(--color-text-faint)"><strong class="mono">5</strong> columns · <strong class="mono">6 of 11</strong> statuses · grouped by epic</div>
+    </div>
+    <div class="panel-foot"><span>Five columns for six statuses, because the <code>In progress</code> column claims <code>Rework</code> as well.</span></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>QA board</h2><span class="spacer"></span><span class="hint">position 3</span></div>
+    <div class="panel-body stack" style="gap:9px">
+      <div class="row" style="gap:6px">
+        <span class="chip on">Ready for test</span><span class="chip">In test</span><span class="chip on">Rework</span><span class="chip on">Ready to deploy</span><span class="chip on">Blocked</span>
+      </div>
+      <div style="font-size:11.5px;color:var(--color-text-faint)"><strong class="mono">5</strong> columns · <strong class="mono">5 of 11</strong> statuses · four of them shared</div>
+    </div>
+    <div class="panel-foot"><span>Its segment counts cards in <code>Ready for test</code> — what is waiting for a tester, never a total.</span></div>
+  </section>
+</div>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Coverage — which boards show each status</h2>
+    <span class="spacer"></span>
+    <span class="badge b-done"><span class="dot"></span>every status covered</span>
+  </div>
+  <div class="tw">
+    <table class="t mx" style="min-width:820px">
+      <thead>
+        <tr>
+          <th>Status</th><th>Kind</th>
+          <th class="mark">PM board</th><th class="mark">Dev board</th><th class="mark">QA board</th>
+          <th>Covered by</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="ttl">New</span></td><td><span class="badge b-todo">NOT_STARTED</span></td>
+          <td class="mark on">New</td><td class="mark off">—</td><td class="mark off">—</td>
+          <td><span style="font-size:11.5px;color:var(--color-text-faint)">PM only — nobody sees an idea until it is ready for them</span></td>
+        </tr>
+        <tr>
+          <td><span class="ttl">Refining</span></td><td><span class="badge b-todo">NOT_STARTED</span></td>
+          <td class="mark on">Refining</td><td class="mark off">—</td><td class="mark off">—</td>
+          <td><span style="font-size:11.5px;color:var(--color-text-faint)">PM only — grooming is the PO's column</span></td>
+        </tr>
+        <tr>
+          <td><span class="ttl">Ready to develop</span></td><td><span class="badge b-todo">NOT_STARTED</span></td>
+          <td class="mark both">Ready to develop</td><td class="mark both">Ready to develop</td><td class="mark off">—</td>
+          <td><span class="badge b-info">shared — hand-off, PO → developer</span></td>
+        </tr>
+        <tr>
+          <td><span class="ttl">In progress</span></td><td><span class="badge b-prog"><span class="dot"></span>IN_PROGRESS</span></td>
+          <td class="mark off">—</td><td class="mark on">In progress</td><td class="mark off">—</td>
+          <td><span style="font-size:11.5px;color:var(--color-text-faint)">Dev only</span></td>
+        </tr>
+        <tr>
+          <td><span class="ttl">In review</span></td><td><span class="badge b-prog"><span class="dot"></span>IN_PROGRESS</span></td>
+          <td class="mark off">—</td><td class="mark on">In review</td><td class="mark off">—</td>
+          <td><span style="font-size:11.5px;color:var(--color-text-faint)">Dev only</span></td>
+        </tr>
+        <tr>
+          <td><span class="ttl">Ready for test</span></td><td><span class="badge b-prog"><span class="dot"></span>IN_PROGRESS</span></td>
+          <td class="mark off">—</td><td class="mark both">Ready for test</td><td class="mark both">Ready for test</td>
+          <td><span class="badge b-info">shared — hand-off, developer → tester</span></td>
+        </tr>
+        <tr>
+          <td><span class="ttl">In test</span></td><td><span class="badge b-prog"><span class="dot"></span>IN_PROGRESS</span></td>
+          <td class="mark off">—</td><td class="mark off">—</td><td class="mark on">In test</td>
+          <td><span style="font-size:11.5px;color:var(--color-text-faint)">QA only</span></td>
+        </tr>
+        <tr>
+          <td><span class="ttl">Rework</span></td><td><span class="badge b-prog"><span class="dot"></span>IN_PROGRESS</span></td>
+          <td class="mark off">—</td><td class="mark both">In progress</td><td class="mark both">Rework</td>
+          <td><span class="badge b-info">shared — the way back, with its own chip on the card</span></td>
+        </tr>
+        <tr>
+          <td><span class="ttl">Ready to deploy</span></td><td><span class="badge b-prog"><span class="dot"></span>IN_PROGRESS</span></td>
+          <td class="mark both">Ready to deploy</td><td class="mark off">—</td><td class="mark both">Ready to deploy</td>
+          <td><span class="badge b-info">shared — hand-off, tester → PO, who ships it</span></td>
+        </tr>
+        <tr>
+          <td><span class="ttl">Done</span></td><td><span class="badge b-done">DONE</span></td>
+          <td class="mark on">Done <span class="basis">collapsed</span></td><td class="mark off">—</td><td class="mark off">—</td>
+          <td><span style="font-size:11.5px;color:var(--color-text-faint)">PM only — tested is not shipped, and this is the figure release readiness reads</span></td>
+        </tr>
+        <tr>
+          <td><span class="ttl">Blocked</span></td><td><span class="badge b-prog"><span class="dot"></span>IN_PROGRESS</span></td>
+          <td class="mark both">Blocked</td><td class="mark both">Blocked</td><td class="mark both">Blocked</td>
+          <td><span class="badge b-blocked"><span class="dot"></span>shared by all three — everyone's problem</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="panel-foot"><span>A cell names the <em>column</em> that claims the status. A status may be claimed at most once per board, and the Dev board's <code>In progress</code> column claims two — which is how that board stays at five columns over eleven statuses.</span></div>
+</section>
+
+<section class="panel" style="margin-top:16px">
+  <div class="panel-head">
+    <h2>The same table when a status falls through</h2>
+    <span class="spacer"></span>
+    <span class="hint">1 warning</span>
+  </div>
+  <div class="note warn" style="margin:14px 16px">
+    <span aria-hidden="true">⚠</span>
+    <div><strong>1 status is on no board.</strong> A card in <code>In review</code> is invisible on
+    every board in this project — it still exists, still counts in the epic roll-up, and is still
+    reachable from the Table view and from search, but nobody will see it while working a board.
+    <a href="#" data-mock="Add In review to a board">Add it to a board</a>, or delete the status if
+    nothing is in it.</div>
+  </div>
+  <div class="tw">
+    <table class="t mx" style="min-width:720px">
+      <thead>
+        <tr><th>Status</th><th class="mark">PM board</th><th class="mark">Dev board</th><th class="mark">QA board</th><th>Covered by</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="ttl">New</span></td><td class="mark on">New</td><td class="mark off">—</td><td class="mark off">—</td><td><span style="font-size:11.5px;color:var(--color-text-faint)">PM only</span></td></tr>
+        <tr><td><span class="ttl">Refining</span></td><td class="mark on">Refining</td><td class="mark off">—</td><td class="mark off">—</td><td><span style="font-size:11.5px;color:var(--color-text-faint)">PM only</span></td></tr>
+        <tr><td><span class="ttl">Ready to develop</span></td><td class="mark both">Ready to develop</td><td class="mark both">Ready to develop</td><td class="mark off">—</td><td><span class="badge b-info">shared</span></td></tr>
+        <tr><td><span class="ttl">In progress</span></td><td class="mark off">—</td><td class="mark on">In progress</td><td class="mark off">—</td><td><span style="font-size:11.5px;color:var(--color-text-faint)">Dev only</span></td></tr>
+        <tr class="warn">
+          <td><span class="ttl">In review</span></td>
+          <td class="mark off">—</td><td class="mark off">—</td><td class="mark off">—</td>
+          <td><span class="badge b-blocked"><span class="dot"></span>on no board — 3 cards are invisible</span></td>
+        </tr>
+        <tr><td><span class="ttl">Ready for test</span></td><td class="mark off">—</td><td class="mark both">Ready for test</td><td class="mark both">Ready for test</td><td><span class="badge b-info">shared</span></td></tr>
+        <tr><td><span class="ttl">In test</span></td><td class="mark off">—</td><td class="mark off">—</td><td class="mark on">In test</td><td><span style="font-size:11.5px;color:var(--color-text-faint)">QA only</span></td></tr>
+        <tr><td><span class="ttl">Rework</span></td><td class="mark off">—</td><td class="mark both">In progress</td><td class="mark both">Rework</td><td><span class="badge b-info">shared</span></td></tr>
+        <tr><td><span class="ttl">Ready to deploy</span></td><td class="mark both">Ready to deploy</td><td class="mark off">—</td><td class="mark both">Ready to deploy</td><td><span class="badge b-info">shared</span></td></tr>
+        <tr><td><span class="ttl">Done</span></td><td class="mark on">Done</td><td class="mark off">—</td><td class="mark off">—</td><td><span style="font-size:11.5px;color:var(--color-text-faint)">PM only</span></td></tr>
+        <tr><td><span class="ttl">Blocked</span></td><td class="mark both">Blocked</td><td class="mark both">Blocked</td><td class="mark both">Blocked</td><td><span class="badge b-blocked"><span class="dot"></span>shared by all three</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="panel-foot"><span>Deleting the Dev board's <em>In review</em> column reaches this state. The save is allowed; the consequence is reported here.</span></div>
+</section>
+
+</main>
+<script src="assets/shell-v2.js"></script>
+</body>
+</html>

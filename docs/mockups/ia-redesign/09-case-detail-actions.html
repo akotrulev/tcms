@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Case detail — the button convention · TCMS IA proposal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell-v2.css">
+</head>
+<body data-role="Test Engineer" data-active="cases" data-proj="ACME|Acme Payments"
+      data-topslot="Edit|More actions"
+      data-crumbs="Projects>#|ACME>01-rail-expanded-pm.html|Test cases>02-rail-expanded-te.html|TC-311">
+<template id="caption">
+  <strong>Five header actions become one primary plus <code>⋯</code>.</strong> Case detail is a
+  document-mode screen, so its group is the shell's capped top-strip slot (top right, beside the
+  scheme toggle) — <strong>one primary action and one overflow, never more</strong>. That cap is the
+  fix for the audit finding where a page's action group wrapped <em>through</em> the 52px header onto
+  the content. The <code>⋯</code> contents are drawn open below only so this render can show them.
+  Also here: <strong>disabled-with-reason</strong> in its one sentence shape — the permission's
+  display label, then the roles from §A3 — and destructive actions red, in the menu, never primary.
+</template>
+<main class="page">
+<div class="phead">
+  <div>
+    <div class="row" style="gap:8px;margin-bottom:2px">
+      <span class="ikey">TC-311</span>
+      <span class="badge b-review">In review</span>
+      <span class="badge b-fail"><span class="dot"></span>Failed 40 min ago</span>
+    </div>
+    <h1>Guest order, expired card</h1>
+    <div class="sub">Suite: Checkout · verifies <span class="ikey">ACME-118</span> · v7, edited 2 days ago</div>
+  </div>
+</div>
+
+<div class="grid g-main">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>The action group, opened</h2><span class="spacer"></span><span class="hint">lives in the header — shown here so you can read it</span></div>
+      <div class="panel-body">
+        <div class="row" style="gap:8px;align-items:flex-start">
+          <button class="btn btn-primary" data-mock="Edit">Edit</button>
+
+          <span class="ovf-host">
+            <button class="btn btn-icon" aria-expanded="true" aria-label="More actions">⋯</button>
+            <span class="ovf">
+              <a href="#" data-mock="History">History</a>
+              <a href="#" data-mock="Link to spec">Link to spec</a>
+              <a href="#" data-mock="Link an issue">Link an issue</a>
+              <a href="#" data-mock="Start an import">Start an import</a>
+              <span class="sepr"></span>
+              <button class="danger" data-mock="Delete case">Delete case</button>
+            </span>
+          </span>
+
+          <span class="spacer" style="margin-left:auto"></span>
+
+          <span class="reason-host">
+            <button class="btn" aria-disabled="true" aria-describedby="why-approve">Approve case</button>
+            <span class="reason" id="why-approve" role="tooltip">
+              Needs <em>Approve a case</em>, held by Test Lead and Company Admin.
+            </span>
+          </span>
+        </div>
+      </div>
+      <div class="panel-foot"><span>Was: <span style="text-decoration:line-through">Edit · History · Link to spec · Link issue · Import</span> — five buttons competing for the same 52px.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Procedure</h2><span class="spacer"></span><span class="hint">6 steps · 74ch measure</span></div>
+      <div class="panel-body" style="max-width:74ch">
+        <div class="stack" style="gap:14px">
+          <div><div class="row" style="gap:8px;margin-bottom:4px"><span class="badge b-pass">Given</span><span style="font-weight:500">a guest with a card that expired last month</span></div><div class="excerpt">No account, no saved payment method. Cart holds one item at £24.00.</div></div>
+          <div><div class="row" style="gap:8px;margin-bottom:4px"><span class="badge b-blocked">When</span><span style="font-weight:500">they submit the payment step</span></div><div class="excerpt">Card number valid, expiry <span class="mono">08/25</span>, CVC accepted by the form.</div></div>
+          <div><div class="row" style="gap:8px;margin-bottom:4px"><span class="badge b-info">Then</span><span style="font-weight:500">the expiry is named as the reason and the cart survives</span></div><div class="excerpt">Error text must say <em>expired</em>, not "declined". Returning to the cart shows the same item.</div></div>
+        </div>
+      </div>
+      <div class="panel-foot"><span>One palette serves keywords and results — <em>Given</em> is the green that <em>Passed</em> is.</span></div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Verb vocabulary</h2><span class="spacer"></span><span class="hint">one rule set</span></div>
+      <div>
+        <div class="setrow"><div class="txt"><strong>New …</strong><span>gets its own route or document</span></div><span class="spacer"></span><span class="chip">New case</span></div>
+        <div class="setrow"><div class="txt"><strong>Add …</strong><span>a row that stays on this screen</span></div><span class="spacer"></span><span class="chip">Add tag</span></div>
+        <div class="setrow"><div class="txt"><strong>Link …</strong><span>a traceability edge</span></div><span class="spacer"></span><span class="chip">Link an issue</span></div>
+        <div class="setrow"><div class="txt"><strong>Start …</strong><span>a job the system runs</span></div><span class="spacer"></span><span class="chip">Start an import</span></div>
+      </div>
+      <div class="panel-foot"><span>So <span style="text-decoration:line-through">Create a release</span> becomes <strong>New release</strong>, and the release, plan and run lists finally read the same.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Latest result</h2></div>
+      <div class="panel-body">
+        <dl class="dl">
+          <dt>Result</dt><dd><span class="badge b-fail"><span class="dot"></span>Failed</span></dd>
+          <dt>Run</dt><dd><a href="03-rail-collapsed-flyout.html">Regression — 2.4 rc3</a></dd>
+          <dt>Step</dt><dd>3 of 6</dd>
+          <dt>Defect</dt><dd><span class="ikey">ACME-140</span></dd>
+        </dl>
+      </div>
+    </section>
+  </div>
+</div>
+</main>
+<script src="assets/shell-v2.js"></script>
+</body>
+</html>

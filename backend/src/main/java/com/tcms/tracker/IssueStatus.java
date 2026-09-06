@@ -42,6 +42,21 @@ public class IssueStatus {
     @Column(name = "position", nullable = false)
     private int position;
 
+    /**
+     * The one status per project whose entry records where the card came from (021 D-b).
+     *
+     * <p>A flag rather than a fourth {@link IssueStatusKind}, and that is a decision about what
+     * {@code kind} is <em>for</em>: every percentage, burn-up band and flow band in the product is
+     * computed from it, and blocked work is in flight and not done — which is what
+     * {@code IN_PROGRESS} already means to every one of them. A fourth kind would have to be given
+     * a meaning by all of them to express a distinction none of them cares about.
+     *
+     * <p>At most one per project, held by {@code uq_issue_status_one_blocking}. Written by the
+     * seed and by V13's back-fill; the workflow editor cannot yet move it, which is 021 T3's.
+     */
+    @Column(name = "blocking", nullable = false)
+    private boolean blocking;
+
     /** JPA only. */
     protected IssueStatus() {
     }
@@ -87,5 +102,9 @@ public class IssueStatus {
 
     public int getPosition() {
         return position;
+    }
+
+    public boolean isBlocking() {
+        return blocking;
     }
 }

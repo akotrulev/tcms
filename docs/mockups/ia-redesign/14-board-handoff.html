@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The hand-offs — three boards, three shared columns · TCMS IA proposal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell-v2.css">
+</head>
+<body data-role="Project Manager" data-active="work" data-proj="ACME|Acme Payments"
+      data-crumbs="Projects>#|ACME>01-rail-expanded-pm.html|Work>18-pm-board.html|The hand-offs">
+<template id="caption">
+  <strong>Three boards, one workflow, and the seams drawn.</strong> All three boards small and
+  stacked, the same moment on each. A <strong>shared column is a hand-off</strong> (proposal §2.4):
+  the same status, last working column on one board and first on the next, so a drag on one board
+  <em>is</em> the arrival on the other — <em>no second action, no "send to QA" button, and no
+  notification needed to make it appear</em>. Three of them: <code>ACME-150</code> in
+  <code>Ready to develop</code> (PM → Dev), <code>ACME-120</code> in <code>Ready for test</code>
+  (Dev → QA) and <code>ACME-147</code> in <code>Ready to deploy</code> (QA → PM, and only the PO's
+  next drag says it shipped). <code>Rework</code> and <code>Blocked</code> are shared too, but they
+  are not hand-offs in a line: <code>Rework</code> is the <em>return</em> path and <code>Blocked</code>
+  is on all three because it is everyone's problem.
+</template>
+<main class="page">
+<div class="phead">
+  <div>
+    <h1>The hand-offs</h1>
+    <div class="sub">Acme Payments · three shared working columns, three cards drawn twice each</div>
+  </div>
+  <div class="actions">
+    <a class="btn" href="18-pm-board.html">PM board</a>
+    <a class="btn" href="12-dev-board.html">Dev board</a>
+    <a class="btn" href="13-qa-board.html">QA board</a>
+  </div>
+</div>
+
+<div class="hoff-legend" style="margin-bottom:16px">
+  <div class="hl"><span class="st">Ready to develop</span><span class="arw" aria-hidden="true">→</span>
+    <span>PM's last working column <strong>is</strong> Dev's first. The PO grooms; the developer pulls.</span>
+    <span class="spacer"></span><span class="ikey">ACME-150</span></div>
+  <div class="hl"><span class="st">Ready for test</span><span class="arw" aria-hidden="true">→</span>
+    <span>Dev's last column <strong>is</strong> QA's first. The developer drops; the tester already has it.</span>
+    <span class="spacer"></span><span class="ikey">ACME-120</span></div>
+  <div class="hl"><span class="st">Ready to deploy</span><span class="arw" aria-hidden="true">→</span>
+    <span>QA's last working column <strong>is</strong> a PM column. Tested is not shipped: the PO's drag to <code>Done</code> is the deploy confirmation.</span>
+    <span class="spacer"></span><span class="ikey">ACME-147</span></div>
+  <div class="hl muted"><span class="st">Rework</span><span class="arw" aria-hidden="true">↩</span>
+    <span><strong>Shared, but not a hand-off in the line</strong> — it is the return path, QA → Dev. On the Dev board it rides inside <code>In progress</code>; on the QA board it is a column of its own.</span></div>
+  <div class="hl muted"><span class="st">Blocked</span><span class="arw" aria-hidden="true">⛔</span>
+    <span><strong>Shared by all three</strong>, last column everywhere, because blocked work is everyone's problem and should be visible wherever anyone looks. Each card carries <code>⛔ from &lt;status&gt;</code>, so nobody claims a card that is not theirs to unblock.</span></div>
+</div>
+
+<!-- ═══ PM board ═══════════════════════════════════════════════════════ -->
+<div class="boardstack" style="margin-bottom:6px">
+  <div class="bhead">
+    <span class="type-ic t-epic">P</span>
+    <span>PM board</span>
+    <span class="basis">Checkout redesign · one band, no story rows — no story has tasks yet</span>
+    <span class="spacer"></span>
+    <a class="btn btn-sm" href="18-pm-board.html">Open</a>
+  </div>
+  <div class="bbody">
+      <div class="colheads mini" style="grid-template-columns:repeat(4,150px) 62px 150px" role="row" aria-label="Board columns">
+    <div class="col-head"><span>New</span><span class="n">6</span></div>
+    <div class="col-head"><span>Refining</span><span class="n">5</span></div>
+    <div class="col-head shared"><span>Ready to develop</span><span class="n">6</span></div>
+    <div class="col-head shared"><span>Ready to deploy</span><span class="n">3</span></div>
+    <div class="col-head strip"><span>Done</span><span class="n">41</span></div>
+    <div class="col-head blockedcol"><span>Blocked</span><span class="nblocked">2</span></div>
+      </div>
+    <div class="lanescroll">
+      <div class="egrid mini" style="grid-template-columns:repeat(4,150px) 62px 150px">
+
+        <div class="cell">
+          <a class="card" href="#" data-mock="Open ACME-149">
+            <div class="top"><span class="type-ic t-story">S</span><span class="ikey">ACME-149</span></div>
+            <div class="ttl">Express pay button</div>
+          </a>
+        </div>
+        <div class="cell">
+          <a class="card" href="#" data-mock="Open ACME-148">
+            <div class="top"><span class="type-ic t-story">S</span><span class="ikey">ACME-148</span></div>
+            <div class="ttl">Checkout analytics events</div>
+          </a>
+        </div>
+        <div class="cell shared">
+          <a class="card hi" href="#" data-mock="Open ACME-150">
+            <div class="top"><span class="type-ic t-story">S</span><span class="ikey">ACME-150</span></div>
+            <div class="ttl">Guest order lookup</div>
+            <div class="bot"><span class="badge b-info">also on Dev</span></div>
+          </a>
+        </div>
+        <div class="cell shared">
+          <a class="card hi" href="#" data-mock="Open ACME-147">
+            <div class="top"><span class="type-ic t-story">S</span><span class="ikey">ACME-147</span></div>
+            <div class="ttl">One-page checkout</div>
+            <div class="bot"><span class="badge b-info">also on QA</span></div>
+          </a>
+        </div>
+        <div class="cell strip"><span class="sn">27</span></div>
+        <div class="cell blockedcol">
+          <a class="card" href="#" data-mock="Open ACME-152">
+            <div class="top"><span class="type-ic t-story">S</span><span class="ikey">ACME-152</span></div>
+            <div class="ttl">Payment intent for guests</div>
+            <div class="bot"><span class="chip blockedfrom">⛔ from In progress</span></div>
+          </a>
+          <a class="card" href="#" data-mock="Open ACME-153">
+            <div class="top"><span class="type-ic t-story">S</span><span class="ikey">ACME-153</span></div>
+            <div class="ttl">Guest checkout smoke pass</div>
+            <div class="bot"><span class="chip blockedfrom">⛔ from In test</span></div>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="handoff">
+  <span class="st mono">Ready to develop</span>
+  <span class="arw" aria-hidden="true">↓</span>
+  <span><strong>PM's last working column is Dev's first.</strong> The same status, the same card —
+  <code>ACME-150</code> did not move between boards, the boards overlap.</span>
+</div>
+
+<!-- ═══ Dev board ══════════════════════════════════════════════════════ -->
+<div class="boardstack" style="margin-bottom:6px">
+  <div class="bhead">
+    <span class="type-ic t-task" style="background:var(--color-wip)">D</span>
+    <span>Dev board</span>
+    <span class="basis">the band, then one row for the story whose tasks are the cards</span>
+    <span class="spacer"></span>
+    <a class="btn btn-sm" href="12-dev-board.html">Open</a>
+  </div>
+  <div class="bbody">
+      <div class="colheads mini" style="grid-template-columns:repeat(5,158px)" role="row" aria-label="Board columns">
+    <div class="col-head shared"><span>Ready to develop</span><span class="n">6</span></div>
+    <div class="col-head"><span>In progress</span><span class="claims">+ Rework</span><span class="n">4</span><span class="spacer"></span><span class="wip over">4 / 3 ⚠</span></div>
+    <div class="col-head"><span>In review</span><span class="n">3</span></div>
+    <div class="col-head shared"><span>Ready for test</span><span class="n">5</span></div>
+    <div class="col-head blockedcol"><span>Blocked</span><span class="nblocked">2</span></div>
+      </div>
+    <div class="lanescroll">
+      <div class="egrid mini" style="grid-template-columns:repeat(5,158px)">
+
+        <div class="cell shared">
+          <a class="card hi" href="#" data-mock="Open ACME-150">
+            <div class="top"><span class="type-ic t-story">S</span><span class="ikey">ACME-150</span></div>
+            <div class="ttl">Guest order lookup</div>
+            <div class="bot"><span class="badge b-info">also on PM</span></div>
+          </a>
+        </div>
+        <div class="cell">
+          <a class="card epiccard" href="#" data-mock="Open ACME-101">
+            <div class="top"><span class="type-ic t-epic">E</span><span class="ikey">ACME-101</span></div>
+            <div class="ttl">Checkout redesign</div>
+          </a>
+        </div>
+        <div class="cell">
+          <a class="card" href="#" data-mock="Open ACME-124">
+            <div class="top"><span class="type-ic t-story">S</span><span class="ikey">ACME-124</span></div>
+            <div class="ttl">Saved cards</div>
+          </a>
+        </div>
+        <div class="cell shared"></div>
+        <div class="cell blockedcol">
+          <a class="card" href="#" data-mock="Open ACME-152">
+            <div class="top"><span class="type-ic t-story">S</span><span class="ikey">ACME-152</span></div>
+            <div class="ttl">Payment intent for guests</div>
+            <div class="bot"><span class="chip blockedfrom">⛔ from In progress</span></div>
+          </a>
+          <a class="card" href="#" data-mock="Open ACME-153">
+            <div class="top"><span class="type-ic t-story">S</span><span class="ikey">ACME-153</span></div>
+            <div class="ttl">Guest checkout smoke pass</div>
+            <div class="bot"><span class="chip blockedfrom">⛔ from In test</span></div>
+          </a>
+        </div>
+
+        <div class="srow-bar">
+          <span class="type-ic t-story">S</span><span class="ikey">ACME-118</span>
+          <a class="nm" href="#" data-mock="Open ACME-118">Guest checkout</a>
+          <div class="mt"><span class="cnt">0/4</span> tasks</div>
+        </div>
+        <div class="cell shared"></div>
+        <div class="cell">
+          <a class="card" href="#" data-mock="Open ACME-119">
+            <div class="top"><span class="type-ic t-task">T</span><span class="ikey">ACME-119</span></div>
+            <div class="ttl">Guest form fields</div>
+          </a>
+          <a class="card" href="#" data-mock="Open ACME-121">
+            <div class="top"><span class="type-ic t-task">T</span><span class="ikey">ACME-121</span></div>
+            <div class="ttl">Session hand-off</div>
+            <div class="bot"><span class="chip rework">Rework</span></div>
+          </a>
+        </div>
+        <div class="cell">
+          <a class="card" href="#" data-mock="Open ACME-122">
+            <div class="top"><span class="type-ic t-task">T</span><span class="ikey">ACME-122</span></div>
+            <div class="ttl">Copy for the guest banner</div>
+          </a>
+        </div>
+        <div class="cell shared">
+          <a class="card hi" href="#" data-mock="Open ACME-120">
+            <div class="top"><span class="type-ic t-task">T</span><span class="ikey">ACME-120</span></div>
+            <div class="ttl">Guest checkout API</div>
+            <div class="bot"><span class="badge b-info">also on QA</span></div>
+          </a>
+        </div>
+        <div class="cell blockedcol"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="handoff">
+  <span class="st mono">Ready for test</span>
+  <span class="arw" aria-hidden="true">↓</span>
+  <span><strong>Dev's last column is QA's first.</strong> <code>ACME-120</code> is drawn twice on this
+  page and exists once. The developer's drop <em>is</em> the tester's arrival.</span>
+</div>
+
+<!-- ═══ QA board ═══════════════════════════════════════════════════════ -->
+<div class="boardstack">
+  <div class="bhead">
+    <span class="type-ic t-task" style="background:var(--color-passed)">Q</span>
+    <span>QA board</span>
+    <span class="basis">the same rows, filtered to the five statuses this board claims</span>
+    <span class="spacer"></span>
+    <a class="btn btn-sm" href="13-qa-board.html">Open</a>
+  </div>
+  <div class="bbody">
+      <div class="colheads mini" style="grid-template-columns:repeat(5,158px)" role="row" aria-label="Board columns">
+    <div class="col-head shared"><span>Ready for test</span><span class="n">5</span></div>
+    <div class="col-head"><span>In test</span><span class="n">3</span></div>
+    <div class="col-head shared"><span>Rework</span><span class="n">2</span></div>
+    <div class="col-head shared"><span>Ready to deploy</span><span class="n">3</span></div>
+    <div class="col-head blockedcol"><span>Blocked</span><span class="nblocked">2</span></div>
+      </div>
+    <div class="lanescroll">
+      <div class="egrid mini" style="grid-template-columns:repeat(5,158px)">
+
+        <div class="cell shared"></div>
+        <div class="cell"></div>
+        <div class="cell shared"></div>
+        <div class="cell shared">
+          <a class="card hi" href="#" data-mock="Open ACME-147">
+            <div class="top"><span class="type-ic t-story">S</span><span class="ikey">ACME-147</span></div>
+            <div class="ttl">One-page checkout</div>
+            <div class="bot"><span class="badge b-info">also on PM</span></div>
+          </a>
+        </div>
+        <div class="cell blockedcol">
+          <a class="card" href="#" data-mock="Open ACME-153">
+            <div class="top"><span class="type-ic t-story">S</span><span class="ikey">ACME-153</span></div>
+            <div class="ttl">Guest checkout smoke pass</div>
+            <div class="bot"><span class="chip blockedfrom">⛔ from In test</span></div>
+          </a>
+          <a class="card" href="#" data-mock="Open ACME-152">
+            <div class="top"><span class="type-ic t-story">S</span><span class="ikey">ACME-152</span></div>
+            <div class="ttl">Payment intent for guests</div>
+            <div class="bot"><span class="chip blockedfrom">⛔ from In progress</span></div>
+          </a>
+        </div>
+
+        <div class="srow-bar">
+          <span class="type-ic t-story">S</span><span class="ikey">ACME-118</span>
+          <a class="nm" href="#" data-mock="Open ACME-118">Guest checkout</a>
+          <div class="mt"><span class="cnt">0/4</span> tasks</div>
+        </div>
+        <div class="cell shared">
+          <a class="card hi" href="#" data-mock="Open ACME-120">
+            <div class="top"><span class="type-ic t-task">T</span><span class="ikey">ACME-120</span></div>
+            <div class="ttl">Guest checkout API</div>
+            <div class="bot"><span class="badge b-info">also on Dev</span></div>
+          </a>
+        </div>
+        <div class="cell"></div>
+        <div class="cell shared">
+          <a class="card" href="#" data-mock="Open ACME-121">
+            <div class="top"><span class="type-ic t-task">T</span><span class="ikey">ACME-121</span></div>
+            <div class="ttl">Session hand-off</div>
+            <div class="bot"><span class="chip rework">Rework</span></div>
+          </a>
+        </div>
+        <div class="cell shared"></div>
+        <div class="cell blockedcol"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="handoff" style="margin-bottom:0">
+  <span class="st mono">Ready to deploy</span>
+  <span class="arw" aria-hidden="true">↑</span>
+  <span><strong>QA's last working column is a PM column</strong> — the line closes back where it
+  started. <code>ACME-147</code> is the tester's last word; the PO's drag from there to
+  <code>Done</code> is the deploy confirmation, and nothing automates it.</span>
+</div>
+
+<section class="panel" style="margin-top:18px">
+  <div class="panel-head"><h2>Why a shared column and not a "send to" action</h2><span class="spacer"></span><span class="hint">proposal §2.2, §2.4 · reversal R7</span></div>
+  <div class="panel-body stack" style="gap:10px">
+    <div class="bullet"><span aria-hidden="true">▸</span><div><strong>A card is in one status.</strong> Two boards claiming that status show the same card in two places — <em>one</em> object, drawn twice. Nothing is copied, synchronised or notified, so there is no state that can disagree with itself.</div></div>
+    <div class="bullet"><span aria-hidden="true">▸</span><div><strong>Claimed at most once <em>per board</em> stays</strong> — it is a unique index, and it is what makes a card's column unambiguous. Only <em>claimed by every board</em> went (R7), which is the half that forced one board to carry another team's columns.</div></div>
+    <div class="bullet"><span aria-hidden="true">▸</span><div><strong>The three hand-offs are the three seams of the line</strong>, and each is one drag: PO → developer, developer → tester, tester → PO. <code>Rework</code> is the fourth shared status and runs the other way; <code>Blocked</code> is the fifth and belongs to nobody.</div></div>
+    <div class="bullet"><span aria-hidden="true">▸</span><div><strong>What B2 protected against survives as a warning.</strong> A status no board claims is a card nobody sees — <a href="15-board-coverage.html">the coverage table</a> reports it at the one place boards are configured, instead of a 422 refusing the save.</div></div>
+  </div>
+</section>
+</main>
+<script src="assets/shell-v2.js"></script>
+</body>
+</html>

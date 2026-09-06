@@ -189,8 +189,9 @@ class ProjectKeySequenceSchemaTest extends IntegrationTestBase {
                 () -> new AssertionError("provisioning was asked for a first project and made none"));
 
         // Each of these is a block of tcms_seed_project_defaults. V3 restated the whole function
-        // under CREATE OR REPLACE to add the workflow, and a block dropped in that restatement is
-        // invisible until somebody opens a screen that needs it — which is why this asserts all
+        // under CREATE OR REPLACE to add the workflow, V5 to add the board and V13 to make it
+        // eleven statuses and three boards — and a block dropped in any of those restatements is
+        // invisible until somebody opens a screen that needs it, which is why this asserts all
         // seven rather than the one the newest migration added. THIS TEST IS THE WHOLE SAFETY NET
         // UNDER THE COST D-b ACCEPTED: seeding the workflow in this function rather than from a
         // ProjectCreatedEvent buys a synchronous, race-free seed on every creation path, and pays
@@ -200,7 +201,7 @@ class ProjectKeySequenceSchemaTest extends IntegrationTestBase {
         assertThat(countRows("configuration", projectId)).isEqualTo(1);
         assertThat(countRows("doc_space", projectId)).isEqualTo(1);
         assertThat(countRows("project_key_sequence", projectId)).isEqualTo(1);
-        assertThat(countRows("issue_status", projectId)).isEqualTo(6);
+        assertThat(countRows("issue_status", projectId)).isEqualTo(11);
         assertThat(countRows("issue_type", projectId)).isEqualTo(6);
     }
 

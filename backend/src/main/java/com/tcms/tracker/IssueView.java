@@ -34,6 +34,7 @@ public record IssueView(
         List<AcceptanceCriterion> acceptanceCriteria,
         IssueTypeView type,
         IssueStatusView status,
+        IssueStatusView blockedFromStatus,
         Instant statusEnteredAt,
         UUID projectId,
         String projectKey,

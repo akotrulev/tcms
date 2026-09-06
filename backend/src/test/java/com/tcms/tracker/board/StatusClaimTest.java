@@ -14,9 +14,7 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.AfterEach;
@@ -27,22 +25,41 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 
 /**
- * A status created after the board exists (009 review R13).
+ * A status created after the boards exist (009 review R13, rewritten by 021 §2.2).
  *
- * <p><strong>An unclaimed status is not a state the data can be in.</strong> The workflow is
- * upstream of every board (D2), so a status arriving has to be claimed by all of them in the same
- * transaction that creates it — which is why {@code WorkflowService} calls
- * {@link BoardConfigService#claimNewStatus} directly rather than raising an event. An
- * {@code OutboxEvents} hop has a one-minute delivery floor, and for that minute the project would
- * hold a status no column claims; the third method here is the invariant itself, computed over
- * every board rather than read off the one being looked at.
+ * <h2>The invariant this class used to hold is gone, deliberately</h2>
+ *
+ * <p>~~<strong>An unclaimed status is not a state the data can be in</strong>, and
+ * {@code claimNewStatus} is what made that true rather than merely likely: the new status was
+ * claimed on <em>every</em> board of the project.~~ → <strong>superseded by 021 R7 (D-e).</strong>
+ * That was the other half of the rule that forced every board to show the whole lifecycle, which is
+ * exactly why one Team board was the only board anybody ever made. A board claims a SUBSET now, so
+ * "on every board" is not a property a new status can have without contradicting what a subset
+ * board is for.
+ *
+ * <h2>What replaced it — two rules, and both are here</h2>
+ *
+ * <ol>
+ *   <li><strong>A status is claimed at most once per board.</strong> That half is
+ *       {@code uq_board_column_status}, a real unique index, and it is what makes a card's column
+ *       unambiguous. It survives untouched.</li>
+ *   <li><strong>A status inserted after X is claimed by every board that claims X, in X's
+ *       column.</strong> A board that does not show the neighbour does not show the newcomer —
+ *       which is the subset its owner configured, not a gap. A status with no neighbour at all,
+ *       the workflow editor's "side status", lands on every board as a new last column, because
+ *       it has no column anywhere to join.</li>
+ * </ol>
+ *
+ * <p>The failure the removed rule prevented — a card in a status <em>no</em> board claims, and so
+ * on no board at all — is reported rather than refused now: {@code BoardCoverageTest} is where that
+ * lives.
  *
  * <p>The mirror-image case — a status <em>leaving</em> — is the database's, in {@code V5}'s
  * {@code board_follows_status_removal} trigger, and {@code BoardSchemaTest} covers it. One rule with
  * two homes is how the two come to disagree.
  */
 @AutoConfigureMockMvc
-@DisplayName("The status claim — a status added later lands on every board of the project")
+@DisplayName("The status claim — a status added later lands where its neighbour already is")
 class StatusClaimTest extends TrackerEndpointTestBase {
 
     private static final UUID ACME = UUID.fromString("b5000000-0000-4000-8000-000000000001");
@@ -80,9 +97,9 @@ class StatusClaimTest extends TrackerEndpointTestBase {
     }
 
     /**
-     * Every method here adds a seventh status, and one class over asserts that <em>every</em> seeded
-     * project in the shared container has the six defaults in order. Restoring only on the way in is
-     * green here and red there.
+     * Every method here adds a twelfth status, and one class over asserts that <em>every</em> seeded
+     * project in the shared container has the eleven defaults in order. Restoring only on the way in
+     * is green here and red there.
      */
     @AfterEach
     void putTheWorkflowAndTheBoardsBack() throws SQLException {
@@ -91,68 +108,94 @@ class StatusClaimTest extends TrackerEndpointTestBase {
     }
 
     @Test
-    @DisplayName("an IN_PROGRESS status added later lands beside In Progress, on every board")
-    void anInProgressStatusAddedLaterLandsBesideInProgressOnEveryBoard() {
-        UUID coarse = created(create(coarseBoard())).id();
+    @DisplayName("a status inserted after In review joins In review's column, on the boards that show it")
+    void aStatusInsertedAfterInReviewJoinsThatColumnOnEveryBoardClaimingIt() {
+        // In review is a DEV-board status and nothing else claims it, which is what makes this
+        // assertion about the rule rather than about "all three boards got it anyway".
+        replaceWorkflowInsertingAfter("In review", "Awaiting merge", IssueStatusKind.IN_PROGRESS);
 
-        replaceWorkflowAdding("Awaiting QA", IssueStatusKind.IN_PROGRESS);
-
-        assertThat(columnClaiming(onlySeededBoard(), "Awaiting QA"))
-                .as("the seeded per-status board files it beside the first IN_PROGRESS column")
-                .isEqualTo("In Progress");
-        assertThat(columnClaiming(coarse, "Awaiting QA"))
-                .as("and so does the coarse one — 'every board of the project', not just the one "
-                        + "somebody happens to be looking at")
-                .isEqualTo("In flight");
+        assertThat(columnClaiming("Dev board", "Awaiting merge"))
+                .as("the board that claims the neighbour claims the newcomer, in the "
+                        + "neighbour's own column")
+                .isEqualTo("In review");
+        assertThat(columnClaiming("PM board", "Awaiting merge"))
+                .as("the PM board does not show In review, so it does not show what was "
+                        + "inserted after it — that is the subset, not a gap")
+                .isNull();
+        assertThat(columnClaiming("QA board", "Awaiting merge")).isNull();
     }
 
     @Test
-    @DisplayName("a status of a kind no column defaults to lands in the LAST column")
-    void aStatusOfAKindNoColumnDefaultsToLandsInTheLastColumn() {
-        // Not the first. Left-to-right is direction of travel (§12.2), and a new DONE status filed
-        // at the start of the workflow is worse than one filed late.
-        UUID board = created(create(boardWithNoDoneDefault())).id();
+    @DisplayName("and it is claimed at most once on that board — the half of B2 that survived")
+    void theNewStatusIsClaimedAtMostOncePerBoard() {
+        // uq_board_column_status is what enforces it and this is what says the auto-claim does not
+        // route around it. "At most one per board" is the half of story B2 that makes a card's
+        // column unambiguous; "at least one per board" is the half 021 R7 removed.
+        replaceWorkflowInsertingAfter("In review", "Awaiting merge", IssueStatusKind.IN_PROGRESS);
 
-        replaceWorkflowAdding("Shipped", IssueStatusKind.DONE);
-
-        BoardView after = boardView(board);
-        assertThat(columnClaiming(board, "Shipped"))
-                .isEqualTo(after.columns().get(after.columns().size() - 1).name());
+        assertThat(columnsClaiming("Dev board", "Awaiting merge")).hasSize(1);
     }
 
     @Test
-    @DisplayName("no status is ever unclaimed after a workflow edit, on any board")
-    void noStatusIsEverUnclaimedAfterAWorkflowEdit() {
-        // The invariant itself, computed rather than read — CLAUDE.md's rule. Reading one board and
-        // finding the new status on it is what a per-board assertion proves, and this is the claim
-        // the design actually makes.
-        create(coarseBoard());
+    @DisplayName("a side status with no neighbour lands on every board as a new last column")
+    void aSideStatusWithNoNeighbourLandsOnEveryBoardAsANewLastColumn() {
+        // The workflow editor's "add a side status" — how Rework and Blocked are made — names no
+        // predecessor, so there is no column anywhere for it to join. Every board gets one of its
+        // own, LAST and not first: left to right is direction of travel (§12.2), and a status filed
+        // at the start of a board it does not belong to is worse than one filed late.
+        List<Integer> widthsBefore = List.of(
+                columnCountOf("PM board"), columnCountOf("Dev board"), columnCountOf("QA board"));
 
-        replaceWorkflowAdding("Awaiting QA", IssueStatusKind.IN_PROGRESS);
+        replaceWorkflowInsertingFirst("On hold externally", IssueStatusKind.IN_PROGRESS);
 
-        Set<UUID> all = new LinkedHashSet<>();
-        statuses().forEach(status -> all.add(status.id()));
-        List<BoardSummaryView> boards = boards();
-        assertThat(boards).hasSize(2);
-
-        for (BoardSummaryView board : boards) {
-            List<UUID> claimed = new ArrayList<>();
-            boardView(board.id()).columns()
-                    .forEach(column -> column.statuses()
-                            .forEach(status -> claimed.add(status.id())));
-            assertThat(claimed)
-                    .as("board '" + board.name() + "' claims every status of the project, and each "
-                            + "of them exactly once")
-                    .containsExactlyInAnyOrderElementsOf(all);
+        for (String board : List.of("PM board", "Dev board", "QA board")) {
+            assertThat(columnClaiming(board, "On hold externally"))
+                    .as("board '%s' claims the side status in a column of its own", board)
+                    .isEqualTo("On hold externally");
+            assertThat(lastColumnNameOf(board))
+                    .as("and that column is the LAST one on '%s'", board)
+                    .isEqualTo("On hold externally");
         }
+        assertThat(List.of(
+                columnCountOf("PM board"), columnCountOf("Dev board"), columnCountOf("QA board")))
+                .containsExactly(
+                        widthsBefore.get(0) + 1, widthsBefore.get(1) + 1, widthsBefore.get(2) + 1);
+    }
+
+    @Test
+    @DisplayName("a status inserted after a shared column's status lands on both boards that share it")
+    void aStatusInsertedAfterASharedStatusLandsOnBothBoardsSharingIt() {
+        // Ready for test is the Dev → QA hand-off: the last column of one board and the first of
+        // the next. "Every board that claims the neighbour" is therefore two boards here and one in
+        // the first method, which is the difference a per-board assertion cannot see.
+        replaceWorkflowInsertingAfter("Ready for test", "Awaiting env", IssueStatusKind.IN_PROGRESS);
+
+        assertThat(columnClaiming("Dev board", "Awaiting env")).isEqualTo("Ready for test");
+        assertThat(columnClaiming("QA board", "Awaiting env")).isEqualTo("Ready for test");
+        assertThat(columnClaiming("PM board", "Awaiting env")).isNull();
     }
 
     // =====================================================================
 
-    private void replaceWorkflowAdding(String name, IssueStatusKind kind) {
+    private void replaceWorkflowInsertingAfter(
+            String neighbourName, String name, IssueStatusKind kind) {
+
+        replaceWorkflowInserting(name, kind, indexOf(neighbourName) + 1);
+    }
+
+    private void replaceWorkflowInsertingFirst(String name, IssueStatusKind kind) {
+        // Index zero is how "no neighbour" is expressed: the contract carries no "off the line"
+        // flag, so the status the newcomer was placed after is the one before it in the submitted
+        // order, and a status placed first has none.
+        replaceWorkflowInserting(name, kind, 0);
+    }
+
+    private void replaceWorkflowInserting(String name, IssueStatusKind kind, int index) {
         WorkflowView current = scoped(() -> workflow.workflow(MANAGER, PROJECT).orElseThrow());
         List<IssueStatusView> statuses = new ArrayList<>(current.statuses());
-        statuses.add(new IssueStatusView(null, name, kind, statuses.size()));
+        // blocking = false: the workflow editor cannot move the flag yet (021 T3), and a second
+        // blocking status would be refused by uq_issue_status_one_blocking anyway.
+        statuses.add(index, new IssueStatusView(null, name, kind, index, false));
 
         GateResult<WorkflowService.Outcome> gate = scoped(() -> workflow.replace(MANAGER, PROJECT,
                 new WorkflowView(PROJECT, statuses, current.types(), current.transitions())));
@@ -162,69 +205,50 @@ class StatusClaimTest extends TrackerEndpointTestBase {
                 .isInstanceOf(WorkflowService.Outcome.Replaced.class);
     }
 
-    private String columnClaiming(UUID boardId, String statusName) {
-        return boardView(boardId).columns().stream()
+    private int indexOf(String statusName) {
+        List<IssueStatusView> statuses = statuses();
+        for (int index = 0; index < statuses.size(); index++) {
+            if (statuses.get(index).name().equals(statusName)) {
+                return index;
+            }
+        }
+        throw new AssertionError("no status called " + statusName);
+    }
+
+    /** The column of one board claiming one status, or null when that board does not show it. */
+    private String columnClaiming(String boardName, String statusName) {
+        List<String> columns = columnsClaiming(boardName, statusName);
+        return columns.isEmpty() ? null : columns.get(0);
+    }
+
+    private List<String> columnsClaiming(String boardName, String statusName) {
+        return boardView(boardName).columns().stream()
                 .filter(column -> column.statuses().stream()
                         .anyMatch(status -> status.name().equals(statusName)))
                 .map(BoardColumnView::name)
-                .findFirst()
-                .orElseThrow(() -> new AssertionError(
-                        "no column of board " + boardId + " claims " + statusName));
+                .toList();
     }
 
-    private UUID onlySeededBoard() {
-        return boards().stream()
-                .filter(board -> board.name().equals("Team board"))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("the seeded board is gone"))
-                .id();
+    private int columnCountOf(String boardName) {
+        return boardView(boardName).columns().size();
     }
 
-    /** Six statuses folded into three columns, one of which defaults to a DONE-kind status. */
-    private BoardInput coarseBoard() {
-        List<IssueStatusView> statuses = statuses();
-        return new BoardInput("Coarse", SwimlaneBy.NONE, List.of(
-                column("Not started", statuses, "Backlog", "Ready"),
-                column("In flight", statuses, "In Progress", "In Review", "Blocked"),
-                column("Shipped", statuses, "Done")));
-    }
-
-    /**
-     * Two columns, and <strong>no column defaults to a {@code DONE}-kind status</strong> — the
-     * arrangement that makes the fallback observable at all. Done is claimed by the second column
-     * and is not its default, so a new {@code DONE} status matches no column's default kind.
-     */
-    private BoardInput boardWithNoDoneDefault() {
-        List<IssueStatusView> statuses = statuses();
-        return new BoardInput("Two lanes", SwimlaneBy.NONE, List.of(
-                column("Waiting", statuses, "Backlog", "Ready"),
-                column("Moving", statuses, "In Progress", "In Review", "Blocked", "Done")));
-    }
-
-    private static BoardColumnInput column(
-            String name, List<IssueStatusView> statuses, String... claimed) {
-
-        List<UUID> ids = new ArrayList<>();
-        for (String status : claimed) {
-            ids.add(idOf(statuses, status));
-        }
-        return new BoardColumnInput(null, name, null, ids, ids.get(0));
+    private String lastColumnNameOf(String boardName) {
+        List<BoardColumnView> columns = boardView(boardName).columns();
+        return columns.get(columns.size() - 1).name();
     }
 
     private List<IssueStatusView> statuses() {
         return scoped(() -> workflow.workflow(MANAGER, PROJECT).orElseThrow().statuses());
     }
 
-    private List<BoardSummaryView> boards() {
-        return scoped(() -> boardConfig.list(MANAGER, PROJECT).orElseThrow());
-    }
-
-    private BoardView boardView(UUID boardId) {
+    private BoardView boardView(String boardName) {
+        UUID boardId = scoped(() -> boardConfig.list(MANAGER, PROJECT).orElseThrow()).stream()
+                .filter(board -> board.name().equals(boardName))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("the project has no board called " + boardName))
+                .id();
         return scoped(() -> boardConfig.board(MANAGER, boardId).orElseThrow());
-    }
-
-    private GateResult<BoardConfigService.Outcome> create(BoardInput input) {
-        return scoped(() -> boardConfig.create(MANAGER, PROJECT, input));
     }
 
     /**
@@ -239,22 +263,6 @@ class StatusClaimTest extends TrackerEndpointTestBase {
         try (var ignored = CompanyContext.open(ACME)) {
             return call.get();
         }
-    }
-
-    private static UUID idOf(List<IssueStatusView> statuses, String name) {
-        return statuses.stream()
-                .filter(status -> status.name().equals(name))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("no status called " + name))
-                .id();
-    }
-
-    private static BoardView created(GateResult<BoardConfigService.Outcome> gate) {
-        assertThat(gate).isInstanceOf(GateResult.Allowed.class);
-        BoardConfigService.Outcome outcome =
-                ((GateResult.Allowed<BoardConfigService.Outcome>) gate).value();
-        assertThat(outcome).isInstanceOf(BoardConfigService.Outcome.Written.class);
-        return ((BoardConfigService.Outcome.Written) outcome).view();
     }
 
     /**

@@ -77,6 +77,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -347,10 +348,10 @@ public class DemoWorkspaceSeeder {
                                 Priority.HIGH, "Blocked", cast.engineer(), 9),
                         new Card("Rewrite the search filter cases after the facet change",
                                 "The facet names all changed; the cases still name the old ones.",
-                                Priority.MEDIUM, "In Progress", cast.tester(), 4),
+                                Priority.MEDIUM, "In progress", cast.tester(), 4),
                         new Card("Review the release test plan",
                                 "Needs a second pair of eyes before the release meeting.",
-                                Priority.HIGH, "In Review", cast.lead(), 2),
+                                Priority.HIGH, "In review", cast.lead(), 2),
                         new Card("Retire the duplicated smoke cases",
                                 "Three of them test the same thing twice.",
                                 Priority.LOW, null, cast.engineer(), 21),
@@ -407,11 +408,55 @@ public class DemoWorkspaceSeeder {
             // there afterwards, through the workflow that would refuse an illegal step.
             UUID target = statusNamed(workflow.get(), card.status());
             if (target != null) {
-                transitions.move(cast.lead(), key, target);
+                walkTo(cast.lead(), key, workflow.get(), target);
             }
         }
         report.line(label, created + " issues across the workflow");
         return List.copyOf(keys);
+    }
+
+    /**
+     * Moves one issue to one status, walking the workflow a step at a time when it has to.
+     *
+     * <p><strong>A single hop stopped being enough at V13.</strong> The old six-status seed let
+     * anything reach anything except Done, so "put this card In Progress" was one legal move from
+     * where it was born. The seeded workflow is a LINE now (021 §2.3) — each status reaches the
+     * next, plus Rework and Blocked — so the same single hop is refused, and because this seeder
+     * deliberately ignores a refusal (a status the project does not have must not fail the seed)
+     * the failure would be silent: every demo card sitting in the first column, which is exactly
+     * the single stack this method exists to avoid.
+     *
+     * <p>The direct move is still tried first, and that is not just an optimisation: it is the only
+     * thing that reaches a status <em>off</em> the line. Blocked is the last position but is
+     * entered from every non-done status, so walking positions towards it would go through Done.
+     *
+     * <p>Abandoned at the first refusal rather than reported, for the reason above: demo data that
+     * cannot place a card should leave it where it is, never stop the seed.
+     */
+    private void walkTo(UUID actorId, String key, WorkflowView workflow, UUID target) {
+        if (moveAccepted(actorId, key, target)) {
+            return;
+        }
+        List<IssueStatusView> line = workflow.statuses().stream()
+                .sorted(Comparator.comparingInt(IssueStatusView::position))
+                .toList();
+        int destination = -1;
+        for (int index = 0; index < line.size(); index++) {
+            if (line.get(index).id().equals(target)) {
+                destination = index;
+            }
+        }
+        for (int step = 1; step <= destination; step++) {
+            if (!moveAccepted(actorId, key, line.get(step).id())) {
+                return;
+            }
+        }
+    }
+
+    private boolean moveAccepted(UUID actorId, String key, UUID statusId) {
+        return transitions.move(actorId, key, statusId)
+                instanceof GateResult.Allowed<TransitionService.Outcome> allowed
+                && allowed.value() instanceof TransitionService.Outcome.Moved;
     }
 
     /**

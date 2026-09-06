@@ -33,9 +33,30 @@ import org.springframework.web.bind.annotation.RestController;
 public class BoardConfigController {
 
     private final BoardConfigService boards;
+    private final BoardCoverageService coverage;
 
-    public BoardConfigController(BoardConfigService boards) {
+    public BoardConfigController(BoardConfigService boards, BoardCoverageService coverage) {
         this.boards = boards;
+        this.coverage = coverage;
+    }
+
+    /**
+     * Which boards show each status (021 R7).
+     *
+     * <p><strong>Declared before every other mapping under {@code /projects/&#123;projectId&#125;/boards},
+     * and that placement is load-bearing the moment one of them is a path variable.</strong> There
+     * is no {@code /projects/&#123;projectId&#125;/boards/&#123;something&#125;} today — a board is
+     * addressed at {@code /boards/&#123;boardId&#125;} — so nothing swallows {@code coverage} yet;
+     * the ordering is here so that adding one later does not silently route this literal segment
+     * into it, which is the trap the documentation controller records paying for.
+     */
+    @GetMapping("/projects/{projectId}/boards/coverage")
+    public ResponseEntity<Object> coverage(
+            @AuthenticationPrincipal Jwt jwt, @PathVariable UUID projectId) {
+
+        return coverage.coverageOf(UUID.fromString(jwt.getSubject()), projectId)
+                .<ResponseEntity<Object>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @GetMapping("/projects/{projectId}/boards")

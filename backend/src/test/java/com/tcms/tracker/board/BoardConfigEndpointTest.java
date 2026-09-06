@@ -83,16 +83,21 @@ class BoardConfigEndpointTest extends TrackerEndpointTestBase {
     }
 
     @Test
-    @DisplayName("a project arrives with a board nobody had to configure")
+    @DisplayName("a project arrives with three boards nobody had to configure, in strip order")
     void aProjectArrivesWithABoardNobodyHadToConfigure() throws Exception {
         JsonNode boards = json.readTree(get(MANAGER, "/projects/" + PROJECT + "/boards")
                 .getResponse().getContentAsString());
 
-        assertThat(boards).hasSize(1);
-        assertThat(boards.get(0).get("name").asText()).isEqualTo("Team board");
-        assertThat(boards.get(0).get("columnCount").asInt())
-                .as("one column per status, which is what makes a drop unambiguous")
+        // ~~One "Team board" with one column per status.~~ → V13 seeds PM · Dev · QA (021 §2.4),
+        // and they arrive in board."position" order rather than alphabetically — which would have
+        // put Dev before PM and read the hand-offs right to left (D-f).
+        assertThat(boards).hasSize(3);
+        assertThat(names(boards)).containsExactly("PM board", "Dev board", "QA board");
+        assertThat(boards.get(0).get("columnCount").asInt()).isEqualTo(6);
+        assertThat(boards.get(0).get("statusCount").asInt())
+                .as("a board claims a SUBSET now (021 R7) — the picker reads \"6 of 11\"")
                 .isEqualTo(6);
+        assertThat(boards.get(2).get("statusCount").asInt()).isEqualTo(5);
         assertThat(boards.get(0).get("swimlaneBy").asText()).isEqualTo("EPIC");
     }
 
@@ -100,7 +105,7 @@ class BoardConfigEndpointTest extends TrackerEndpointTestBase {
     @DisplayName("the configuration read carries the columns in position order, statuses in workflow order")
     void theConfigurationReadCarriesTheColumnsInOrder() throws Exception {
         JsonNode board = json.readTree(
-                get(MANAGER, "/boards/" + seededBoardId()).getResponse().getContentAsString());
+                get(MANAGER, "/boards/" + boardNamed("PM board")).getResponse().getContentAsString());
 
         List<String> columnNames = new ArrayList<>();
         List<Integer> positions = new ArrayList<>();
@@ -115,8 +120,8 @@ class BoardConfigEndpointTest extends TrackerEndpointTestBase {
                     .isEqualTo(column.get("statuses").get(0).get("id").asText());
         });
 
-        assertThat(columnNames)
-                .containsExactly("Backlog", "Ready", "In Progress", "In Review", "Blocked", "Done");
+        assertThat(columnNames).containsExactly(
+                "New", "Refining", "Ready to develop", "Ready to deploy", "Done", "Blocked");
         assertThat(positions).containsExactly(0, 1, 2, 3, 4, 5);
         assertThat(board.get("projectId").asText()).isEqualTo(PROJECT.toString());
     }
@@ -126,7 +131,7 @@ class BoardConfigEndpointTest extends TrackerEndpointTestBase {
     void aTestLeadReadsTheBoardsAndCannotConfigureOne() throws Exception {
         assertThat(get(LEAD, "/projects/" + PROJECT + "/boards").getResponse().getStatus())
                 .isEqualTo(200);
-        assertThat(get(LEAD, "/boards/" + seededBoardId()).getResponse().getStatus())
+        assertThat(get(LEAD, "/boards/" + boardNamed("PM board")).getResponse().getStatus())
                 .isEqualTo(200);
 
         assertThat(post(LEAD, "/projects/" + PROJECT + "/boards", coarseBoardBody())
@@ -135,7 +140,7 @@ class BoardConfigEndpointTest extends TrackerEndpointTestBase {
     }
 
     @Test
-    @DisplayName("a second board is created with 201 and the project then has two")
+    @DisplayName("a fourth board is created with 201 and takes the last place in the strip")
     void aSecondBoardIsCreatedAndTheProjectThenHasTwo() throws Exception {
         MvcResult created = post(MANAGER, "/projects/" + PROJECT + "/boards", coarseBoardBody());
 
@@ -144,44 +149,81 @@ class BoardConfigEndpointTest extends TrackerEndpointTestBase {
         assertThat(board.get("name").asText()).isEqualTo("Stakeholder board");
         assertThat(board.get("columns")).hasSize(3);
         assertThat(board.get("columns").get(1).get("statuses"))
-                .as("a folded column claims three statuses and shows a card in any of them")
-                .hasSize(3);
+                .as("a folded column claims seven statuses and shows a card in any of them")
+                .hasSize(7);
 
-        assertThat(json.readTree(get(MANAGER, "/projects/" + PROJECT + "/boards")
-                .getResponse().getContentAsString()))
-                .hasSize(2);
+        JsonNode boards = json.readTree(get(MANAGER, "/projects/" + PROJECT + "/boards")
+                .getResponse().getContentAsString());
+        assertThat(boards).hasSize(4);
+        assertThat(names(boards))
+                .as("max + 1, so a created board is a segment after the seeded three (021 D-f)")
+                .containsExactly("PM board", "Dev board", "QA board", "Stakeholder board");
     }
 
     @Test
-    @DisplayName("a board leaving a status unclaimed is refused with 422 and problem+json")
+    @DisplayName("a board leaving a status unclaimed is stored with 201 — the rule 021 R7 removed")
     void aBoardLeavingAStatusUnclaimedIsRefusedWith422() throws Exception {
+        // ~~Refused with 422 and problem+json.~~ → REVERSED. "Every status is claimed by every
+        // board" is what forced every board to show the whole lifecycle, and it is why one Team
+        // board was the only board anybody made. A board showing one column is a legal board now;
+        // getBoardCoverage is what says which statuses no board shows.
         String body = """
                 {"name":"Half a board","swimlaneBy":"NONE","columns":[
                   {"name":"Everything else","statusIds":["%s"],"defaultStatusId":"%s"}]}
-                """.formatted(statusId("Backlog"), statusId("Backlog"));
+                """.formatted(statusId("New"), statusId("New"));
 
-        MvcResult refused = post(MANAGER, "/projects/" + PROJECT + "/boards", body);
+        MvcResult stored = post(MANAGER, "/projects/" + PROJECT + "/boards", body);
 
-        assertThat(refused.getResponse().getStatus()).isEqualTo(422);
-        assertThat(refused.getResponse().getContentType())
-                .startsWith(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
-        assertThat(json.readTree(refused.getResponse().getContentAsString()).get("detail").asText())
-                .contains("Done");
+        assertThat(stored.getResponse().getStatus())
+                .as(stored.getResponse().getContentAsString())
+                .isEqualTo(201);
+        assertThat(json.readTree(stored.getResponse().getContentAsString()).get("columns"))
+                .hasSize(1);
     }
 
     @Test
-    @DisplayName("deleting the project's only board is refused with 422; a second one deletes with 204")
-    void deletingTheOnlyBoardIsRefusedAndASecondOneDeletes() throws Exception {
-        assertThat(delete(MANAGER, "/boards/" + seededBoardId()).getResponse().getStatus())
-                .isEqualTo(422);
+    @DisplayName("the coverage read names the boards showing each status, and what none of them shows")
+    void theCoverageReadServesTheMatrix() throws Exception {
+        JsonNode coverage = json.readTree(get(MANAGER, "/projects/" + PROJECT + "/boards/coverage")
+                .getResponse().getContentAsString());
 
-        UUID second = UUID.fromString(json.readTree(
+        assertThat(coverage.get("rows")).hasSize(11);
+        assertThat(coverage.get("uncovered"))
+                .as("the three seeded boards claim all eleven between them, so the warning row is "
+                        + "empty on day one — it exists for the day somebody deletes a column")
+                .isEmpty();
+
+        JsonNode readyForTest = rowFor(coverage, "Ready for test");
+        assertThat(claimNames(readyForTest)).containsExactly("Dev board", "QA board");
+        assertThat(readyForTest.get("claims").get(0).get("columnName").asText())
+                .isEqualTo("Ready for test");
+    }
+
+    @Test
+    @DisplayName("a Test Lead reads the coverage too — it is board:read, held by all six roles")
+    void aTestLeadReadsTheCoverage() throws Exception {
+        assertThat(get(LEAD, "/projects/" + PROJECT + "/boards/coverage").getResponse().getStatus())
+                .isEqualTo(200);
+    }
+
+    @Test
+    @DisplayName("deleting the project's last board is refused with 422; the others delete with 204")
+    void deletingTheOnlyBoardIsRefusedAndASecondOneDeletes() throws Exception {
+        UUID pm = boardNamed("PM board");
+
+        assertThat(delete(MANAGER, "/boards/" + boardNamed("QA board")).getResponse().getStatus())
+                .isEqualTo(204);
+        assertThat(delete(MANAGER, "/boards/" + boardNamed("Dev board")).getResponse().getStatus())
+                .isEqualTo(204);
+        assertThat(delete(MANAGER, "/boards/" + pm).getResponse().getStatus()).isEqualTo(422);
+
+        UUID extra = UUID.fromString(json.readTree(
                 post(MANAGER, "/projects/" + PROJECT + "/boards", coarseBoardBody())
                         .getResponse().getContentAsString())
                 .get("id").asText());
 
-        assertThat(delete(MANAGER, "/boards/" + second).getResponse().getStatus()).isEqualTo(204);
-        assertThat(get(MANAGER, "/boards/" + second).getResponse().getStatus()).isEqualTo(404);
+        assertThat(delete(MANAGER, "/boards/" + extra).getResponse().getStatus()).isEqualTo(204);
+        assertThat(get(MANAGER, "/boards/" + extra).getResponse().getStatus()).isEqualTo(404);
     }
 
     @Test
@@ -225,16 +267,41 @@ class BoardConfigEndpointTest extends TrackerEndpointTestBase {
     }
 
     private String coarseBoardBody() throws SQLException {
-        return """
+        return ("""
                 {"name":"Stakeholder board","swimlaneBy":"ASSIGNEE","columns":[
-                  {"name":"Not started","statusIds":["%s","%s"],"defaultStatusId":"%s"},
-                  {"name":"In flight","statusIds":["%s","%s","%s"],"defaultStatusId":"%s","wipLimit":4},
+                  {"name":"Not started","statusIds":["%s","%s","%s"],"defaultStatusId":"%s"},
+                  {"name":"In flight","statusIds":["%s","%s","%s","%s","%s","%s","%s"],
+                   "defaultStatusId":"%s","wipLimit":4},
                   {"name":"Done","statusIds":["%s"],"defaultStatusId":"%s"}]}
-                """.formatted(
-                statusId("Backlog"), statusId("Ready"), statusId("Backlog"),
-                statusId("In Progress"), statusId("In Review"), statusId("Blocked"),
-                statusId("In Progress"),
+                """).formatted(
+                statusId("New"), statusId("Refining"), statusId("Ready to develop"),
+                statusId("New"),
+                statusId("In progress"), statusId("In review"), statusId("Ready for test"),
+                statusId("In test"), statusId("Ready to deploy"), statusId("Rework"),
+                statusId("Blocked"),
+                statusId("In progress"),
                 statusId("Done"), statusId("Done"));
+    }
+
+    private static List<String> names(JsonNode boards) {
+        List<String> found = new ArrayList<>();
+        boards.forEach(board -> found.add(board.get("name").asText()));
+        return found;
+    }
+
+    private static JsonNode rowFor(JsonNode coverage, String statusName) {
+        for (JsonNode row : coverage.get("rows")) {
+            if (statusName.equals(row.get("status").get("name").asText())) {
+                return row;
+            }
+        }
+        throw new AssertionError("the coverage matrix has no row for " + statusName);
+    }
+
+    private static List<String> claimNames(JsonNode row) {
+        List<String> found = new ArrayList<>();
+        row.get("claims").forEach(claim -> found.add(claim.get("boardName").asText()));
+        return found;
     }
 
     private UUID statusId(String name) throws SQLException {
@@ -244,8 +311,11 @@ class BoardConfigEndpointTest extends TrackerEndpointTestBase {
                 """, name);
     }
 
-    private UUID seededBoardId() throws SQLException {
-        return single("SELECT id FROM board WHERE project_id = CAST(? AS uuid) ORDER BY name", null);
+    private UUID boardNamed(String name) throws SQLException {
+        return single("""
+                SELECT id FROM board
+                 WHERE project_id = CAST(? AS uuid) AND name = ?
+                """, name);
     }
 
     private UUID single(String sql, String name) throws SQLException {

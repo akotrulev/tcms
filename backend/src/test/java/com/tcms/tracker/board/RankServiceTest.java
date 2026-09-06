@@ -305,7 +305,7 @@ class RankServiceTest extends TrackerEndpointTestBase {
                                 (SELECT id FROM issue_type
                                   WHERE project_id = CAST(? AS uuid) AND name = 'Task'),
                                 (SELECT id FROM issue_status
-                                  WHERE project_id = CAST(? AS uuid) AND name = 'Backlog'),
+                                  WHERE project_id = CAST(? AS uuid) AND name = 'New'),
                                 ?)
                         """)) {
             statement.setObject(1, UUID.randomUUID());

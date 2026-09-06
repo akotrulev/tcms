@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The rail per role · TCMS IA proposal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell-v2.css">
+</head>
+<body data-shell="none" data-role="Company Admin">
+<template id="caption">
+  <strong>Four rails, one shell.</strong> The permission model makes the rail a different object per
+  person, and the nine hidden entries mean two colleagues screen-sharing see structurally different
+  navigation. Gating here is the real matrix from
+  <code>docs/specs/permission-matrix-summary.md</code>, not an illustration. Read the differences:
+  a <strong>Test Engineer</strong> loses Clients, Billing and the whole Administration folder — and
+  keeps all eleven project rows, because the revision put every one of them at top level, which is
+  <strong>17 rows</strong>, §1's own figure exactly;
+  a <strong>Project Manager</strong> loses the same three company entries and keeps the same eleven;
+  <strong>Finance</strong> has <em>no Project zone at all</em> — a company-scope role holds no
+  <code>project:read</code>, deliberately, because at that scope the key would open every project in
+  the company, present and future; only <strong>Company Admin</strong> sees all three zones whole.
+</template>
+<div class="page wide">
+  <div class="phead">
+    <div><h1>The rail per role</h1><div class="sub">The flat project zone, Administration shut — the 20-row resting state</div></div>
+  </div>
+
+  <div class="railrow" id="rails"></div>
+
+  <section class="panel" style="margin-top:8px">
+    <div class="panel-head"><h2>What each role is missing, and why</h2></div>
+    <div class="tw">
+      <table class="t">
+        <thead><tr><th>Entry</th><th>Key</th><th>Test Engineer</th><th>Project Manager</th><th>Finance</th><th>Company Admin</th></tr></thead>
+        <tbody>
+          <tr><td>Whole <strong>Project</strong> zone</td><td class="mono">project:read</td><td><span class="badge b-done">shown</span></td><td><span class="badge b-done">shown</span></td><td><span class="badge b-blocked"><span class="dot"></span>hidden</span></td><td><span class="badge b-done">shown</span></td></tr>
+          <tr><td>Clients</td><td class="mono">client:read</td><td><span class="badge b-blocked"><span class="dot"></span>hidden</span></td><td><span class="badge b-blocked"><span class="dot"></span>hidden</span></td><td><span class="badge b-done">shown</span></td><td><span class="badge b-done">shown</span></td></tr>
+          <tr><td>Billing</td><td class="mono">billing:read</td><td><span class="badge b-blocked"><span class="dot"></span>hidden</span></td><td><span class="badge b-blocked"><span class="dot"></span>hidden</span></td><td><span class="badge b-done">shown</span></td><td><span class="badge b-done">shown</span></td></tr>
+          <tr><td>API tokens</td><td class="mono">token:issue</td><td><span class="badge b-blocked"><span class="dot"></span>hidden</span></td><td><span class="badge b-blocked"><span class="dot"></span>hidden</span></td><td><span class="badge b-blocked"><span class="dot"></span>hidden</span></td><td><span class="badge b-done">shown</span></td></tr>
+          <tr><td>Single sign-on</td><td class="mono">company:idp</td><td><span class="badge b-blocked"><span class="dot"></span>hidden</span></td><td><span class="badge b-blocked"><span class="dot"></span>hidden</span></td><td><span class="badge b-blocked"><span class="dot"></span>hidden</span></td><td><span class="badge b-done">shown</span></td></tr>
+          <tr><td>Company audit</td><td class="mono">audit:view</td><td><span class="badge b-blocked"><span class="dot"></span>hidden</span></td><td><span class="badge b-blocked"><span class="dot"></span>hidden</span></td><td><span class="badge b-blocked"><span class="dot"></span>hidden</span></td><td><span class="badge b-done">shown</span></td></tr>
+          <tr><td><strong>Administration ▸</strong> folder</td><td class="mono">— derived</td><td><span class="badge b-blocked"><span class="dot"></span>hidden</span></td><td><span class="badge b-blocked"><span class="dot"></span>hidden</span></td><td><span class="badge b-blocked"><span class="dot"></span>hidden</span></td><td><span class="badge b-done">shown</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="panel-foot"><span><strong>A folder whose every child is hidden is itself hidden</strong> — that is why Administration disappears for three of the four rather than sitting there empty. <strong>Nothing in this table is a timesheet</strong>: that row is no longer gated, counted or hidden by any of it, because it is not in the rail at all — see <a href="19-user-menu.html">the user menu</a>.</span></div>
+  </section>
+
+  <div class="note" style="margin-top:16px">
+    <span aria-hidden="true">☖</span>
+    <div>None of this is explained on screen today. <a href="08-your-access.html"><strong>Your access</strong></a>
+    is the page that says which of these rows are missing from <em>your</em> rail and who holds the key.</div>
+  </div>
+</div>
+
+<script src="assets/shell-v2.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const N = window.TCMSNav;
+  const host = document.getElementById('rails');
+  const notes = {
+    'Test Engineer': 'PROJECT scope · the test repository is their day',
+    'Project Manager': 'PROJECT scope · delivery, not the repository',
+    Finance: 'COMPANY scope · no project grant, by design',
+    'Company Admin': 'COMPANY scope · holds every gate',
+  };
+  ['Test Engineer', 'Project Manager', 'Finance', 'Company Admin'].forEach((role) => {
+    const rail = N.buildRail({ role, active: '', project: 'ACME|Acme Payments' });
+    // Destination rows only — the project zone header is the switcher, not a row.
+    const rows = rail.querySelectorAll('.rail-link, .folder-btn').length
+      - rail.querySelectorAll('.folder-kids[hidden] .rail-link').length;
+    const col = document.createElement('div');
+    col.className = 'railcol';
+    col.innerHTML = `<div class="cap"><strong>${N.esc(role)}</strong><span>${N.esc(notes[role])}</span></div>`;
+    const frame = document.createElement('div');
+    frame.className = 'railframe';
+    frame.appendChild(rail);
+    col.appendChild(frame);
+    const tally = document.createElement('div');
+    tally.className = 'tally';
+    tally.innerHTML = `<span><b>${rows}</b> rows closed</span>`;
+    col.appendChild(tally);
+    host.appendChild(col);
+  });
+});
+</script>
+</body>
+</html>

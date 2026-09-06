@@ -162,7 +162,7 @@ class ImportReportMatchesPreviewTest extends ImportTestBase {
                 connection(),
                 "PROJ",
                 List.of(
-                        new StatusMappingEntry("Backlog", target),
+                        new StatusMappingEntry("New", target),
                         new StatusMappingEntry("Awaiting Triage", target)),
                 new ImportOptions(false, true));
 

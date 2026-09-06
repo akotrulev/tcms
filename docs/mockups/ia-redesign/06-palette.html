@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The ⌘K palette · TCMS IA proposal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell-v2.css">
+</head>
+<body data-role="Test Engineer" data-active="cases" data-proj="ACME|Acme Payments"
+      data-crumbs="Projects>#|ACME>01-rail-expanded-pm.html|Test cases">
+<template id="caption">
+  <strong>Phase 1 of the palette — and it says so.</strong> One control, <code>⌘K</code> or
+  <code>/</code> outside an input, replacing the cases-only header field. Phase 1 covers exactly four
+  things with <em>no contract change</em>: <strong>cases</strong> (the search that already exists),
+  <strong>places</strong> (a client-side index of the rail, <em>the tabs</em>, the settings sections
+  <em>and the user menu</em> — which is what keeps <code>Timesheets</code> one keystroke away from
+  anywhere now that it has <a href="19-user-menu.html">left the rail</a>),
+  <strong>projects</strong>, and <strong>key jump</strong>. The placeholder reads
+  <code>Search cases, or jump to…</code>, which is honest — issues and doc pages need a
+  <code>GET /search</code> in <code>openapi.yaml</code> first, and only then does the placeholder
+  become the mockup's <em>Search issues, cases, docs</em>. Press <kbd>Esc</kbd> to close it, or
+  <kbd>⌘K</kbd> to reopen.
+</template>
+<main class="page">
+<div class="phead">
+  <div><h1>Test cases</h1><div class="sub">154 cases · Acme Payments</div></div>
+  <div class="actions"><button class="btn btn-primary" data-mock="New case">New case</button></div>
+</div>
+<section class="panel">
+  <div class="tw">
+    <table class="t">
+      <thead><tr><th>Key</th><th>Title</th><th>State</th><th>Latest result</th></tr></thead>
+      <tbody>
+        <tr><td><span class="ikey">TC-308</span></td><td class="ttl">Guest order, valid card</td><td><span class="badge b-done">Approved</span></td><td><span class="badge b-pass"><span class="dot"></span>Passed</span></td></tr>
+        <tr><td><span class="ikey">TC-311</span></td><td class="ttl">Guest order, expired card</td><td><span class="badge b-review">In review</span></td><td><span class="badge b-fail"><span class="dot"></span>Failed</span></td></tr>
+        <tr><td><span class="ikey">TC-320</span></td><td class="ttl">Cart survives sign-in mid-checkout</td><td><span class="badge b-done">Approved</span></td><td><span class="badge b-pass"><span class="dot"></span>Passed</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+</main>
+
+<div class="pal-scrim">
+  <div class="pal" role="dialog" aria-modal="true" aria-label="Search cases, or jump to a place">
+    <div class="pal-in">
+      <span aria-hidden="true" style="color:var(--color-text-faint)">⌕</span>
+      <span class="q">checkout<span class="caret"></span></span>
+      <kbd style="font-family:var(--font-mono);font-size:10px;border:1px solid var(--color-rule);border-radius:3px;padding:0 4px;color:var(--color-text-ghost)">Esc</kbd>
+    </div>
+    <div class="pal-body">
+      <div class="pal-grp">Cases</div>
+      <a class="pal-row on" href="09-case-detail-actions.html"><span class="ic" aria-hidden="true">✓</span><span class="mono" style="color:var(--color-text-faint)">TC-320</span> Cart survives sign-in mid-checkout <span class="where">ACME</span></a>
+      <a class="pal-row" href="09-case-detail-actions.html"><span class="ic" aria-hidden="true">✓</span><span class="mono" style="color:var(--color-text-faint)">TC-402</span> Checkout card capture without leaving the page <span class="where">ACME</span></a>
+      <a class="pal-row" href="09-case-detail-actions.html"><span class="ic" aria-hidden="true">✓</span><span class="mono" style="color:var(--color-text-faint)">TC-118</span> Checkout rejects an expired session <span class="where">BETA</span></a>
+
+      <div class="pal-grp">Places</div>
+      <a class="pal-row" href="16-test-cases-tabs.html"><span class="ic" aria-hidden="true">⌖</span>Test cases <span class="where">Project</span></a>
+      <a class="pal-row" href="16-test-cases-tabs.html"><span class="ic" aria-hidden="true">⌖</span>Suites <span class="where">Test cases → tab</span></a>
+      <a class="pal-row" href="15-board-coverage.html"><span class="ic" aria-hidden="true">⌖</span>Boards <span class="where">Settings</span></a>
+      <a class="pal-row" href="18-pm-board.html"><span class="ic" aria-hidden="true">⌖</span>PM board <span class="where">Work → view</span></a>
+      <a class="pal-row" href="13-qa-board.html"><span class="ic" aria-hidden="true">⌖</span>QA board <span class="where">Work → view</span></a>
+
+      <div class="pal-grp">Projects</div>
+      <a class="pal-row" href="01-rail-expanded-pm.html"><span class="ic" aria-hidden="true">▤</span><span class="mono" style="color:var(--color-text-faint)">ACME</span> Acme Payments <span class="where">current</span></a>
+      <a class="pal-row" href="01-rail-expanded-pm.html"><span class="ic" aria-hidden="true">▤</span><span class="mono" style="color:var(--color-text-faint)">BETA</span> Beta Checkout <span class="where">switch</span></a>
+
+      <div class="pal-grp">Jump to a key</div>
+      <div class="pal-row" style="color:var(--color-text-ghost)"><span class="ic" aria-hidden="true">↵</span>Type <span class="mono" style="color:var(--color-text-faint)">ACME-118</span> for the issue, or <span class="mono" style="color:var(--color-text-faint)">TC-118</span> for the case <span class="kbd">↵</span></div>
+    </div>
+    <div class="pal-foot">
+      <span><kbd>↑</kbd><kbd>↓</kbd> move</span>
+      <span><kbd>↵</kbd> open</span>
+      <span><kbd>Esc</kbd> close</span>
+      <span class="spacer"></span>
+      <span>Cases · places · projects</span>
+    </div>
+  </div>
+</div>
+<script src="assets/shell-v2.js"></script>
+</body>
+</html>

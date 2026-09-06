@@ -249,7 +249,7 @@ class ImportRunEndpointTest extends ImportTestBase {
     private List<StatusMappingEntry> mappingForEveryStatus() throws SQLException {
         UUID target = firstStatusId();
         return List.of(
-                new StatusMappingEntry("Backlog", target),
+                new StatusMappingEntry("New", target),
                 new StatusMappingEntry("Awaiting Triage", target));
     }
 

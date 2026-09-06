@@ -23,10 +23,11 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
  * <h2>The failures this class exists to catch</h2>
  *
  * <ol>
- *   <li><strong>A deny-list read as an allow-list.</strong> The seeded workflow lets anything reach
- *       anything <em>except</em> Done, which only In Review reaches — so a service that accepts a
- *       pair it has no row for is green on every legal move in the product and wrong on the one gate
- *       the workflow exists to express.</li>
+ *   <li><strong>A deny-list read as an allow-list.</strong> ~~The seeded workflow lets anything
+ *       reach anything except Done, which only In Review reaches.~~ → V13: the seeded workflow is a
+ *       LINE — each status reaches the next one, plus Rework and Blocked — so most pairs have no
+ *       row, and a service that accepts a pair it has no row for is green on every legal move in
+ *       the product and wrong on every gate the workflow exists to express.</li>
  *   <li><strong>An epic whose status somebody set by hand.</strong> D31 derives it; a manual one is
  *       the "In Progress, 100%" disagreement the derivation exists to make unrepresentable.</li>
  *   <li><strong>{@code done_at} cleared by a reopen.</strong> Nothing fails when it is: the row is
@@ -77,25 +78,28 @@ class TransitionEndpointTest extends TrackerEndpointTestBase {
     void aMoveTheWorkflowAllowsIsAccepted() throws Exception {
         JsonNode story = story("Passkeys");
 
-        JsonNode moved = move(LEAD, story.get("key").asText(), statusNamed("In Progress"));
+        // New -> Refining is the first step of the line, and the only non-Blocked move a
+        // brand-new issue has (021 §2.3).
+        JsonNode moved = move(LEAD, story.get("key").asText(), statusNamed("Refining"));
 
-        assertThat(moved.get("status").get("name").asText()).isEqualTo("In Progress");
-        assertThat(moved.get("status").get("kind").asText()).isEqualTo("IN_PROGRESS");
+        assertThat(moved.get("status").get("name").asText()).isEqualTo("Refining");
+        assertThat(moved.get("status").get("kind").asText()).isEqualTo("NOT_STARTED");
     }
 
     @Test
     void aPairTheWorkflowHasNoRowForIsRefusedWithAReason() throws Exception {
-        // The seeded workflow's one gate: only In Review reaches Done. A service that treated the
-        // table as a deny-list would accept this and every other assertion here would still pass.
+        // The deploy gate: only Ready to deploy reaches Done (021 D-l — tested is not shipped). A
+        // service that treated the table as a deny-list would accept this and every other assertion
+        // here would still pass.
         JsonNode story = story("Passkeys");
-        move(LEAD, story.get("key").asText(), statusNamed("In Progress"));
+        move(LEAD, story.get("key").asText(), statusNamed("Refining"));
 
         MvcResult refused =
                 attempt(LEAD, story.get("key").asText(), statusNamed("Done")).andReturn();
 
         assertThat(refused.getResponse().getStatus()).isEqualTo(409);
         assertThat(refused.getResponse().getContentAsString())
-                .contains("from In Progress to Done");
+                .contains("from Refining to Done");
     }
 
     @Test
@@ -103,11 +107,11 @@ class TransitionEndpointTest extends TrackerEndpointTestBase {
         // Story H5: "the card does not move and the board tells me why". A 409 with the issue
         // already moved is the same defect as snapping back — worse, because the two disagree.
         JsonNode story = story("Passkeys");
-        move(LEAD, story.get("key").asText(), statusNamed("In Progress"));
+        move(LEAD, story.get("key").asText(), statusNamed("Refining"));
         attempt(LEAD, story.get("key").asText(), statusNamed("Done"));
 
         assertThat(read(story.get("key").asText()).get("status").get("name").asText())
-                .isEqualTo("In Progress");
+                .isEqualTo("Refining");
     }
 
     @Test
@@ -115,7 +119,7 @@ class TransitionEndpointTest extends TrackerEndpointTestBase {
         JsonNode epic = epic("Authentication");
 
         MvcResult refused =
-                attempt(LEAD, epic.get("key").asText(), statusNamed("In Progress")).andReturn();
+                attempt(LEAD, epic.get("key").asText(), statusNamed("Refining")).andReturn();
 
         assertThat(refused.getResponse().getStatus()).isEqualTo(409);
         assertThat(refused.getResponse().getContentAsString()).contains("It follows its stories");
@@ -125,15 +129,18 @@ class TransitionEndpointTest extends TrackerEndpointTestBase {
     void doneAtSurvivesAReopen() throws Exception {
         // Nothing fails when it does not: the row is valid, the screen renders, and every lead time
         // computed from the column quietly lengthens each time somebody reopens something.
+        //
+        // THE REOPEN IS A DIRECT WRITE, AND THAT IS V13'S DOING RATHER THAN A SHORTCUT. The seeded
+        // workflow is a one-way line and 021 §2.3 enumerates no move OUT of Done, so a finished
+        // issue has no reopen path through this endpoint at all — the first close and the second
+        // are both real transitions, and only the step between them is arranged by hand.
         JsonNode story = story("Passkeys");
         String key = story.get("key").asText();
-        move(LEAD, key, statusNamed("In Progress"));
-        move(LEAD, key, statusNamed("In Review"));
+        walkToReadyToDeploy(key);
         JsonNode done = move(LEAD, key, statusNamed("Done"));
         String firstDoneAt = done.get("doneAt").asText();
 
-        move(LEAD, key, statusNamed("In Progress"));
-        move(LEAD, key, statusNamed("In Review"));
+        putBackTo(key, "Ready to deploy");
         JsonNode reclosed = move(LEAD, key, statusNamed("Done"));
 
         assertThat(firstDoneAt).isNotBlank();
@@ -146,7 +153,7 @@ class TransitionEndpointTest extends TrackerEndpointTestBase {
         String key = story.get("key").asText();
         String atCreation = read(key).get("statusEnteredAt").asText();
 
-        JsonNode moved = move(LEAD, key, statusNamed("Ready"));
+        JsonNode moved = move(LEAD, key, statusNamed("Refining"));
 
         assertThat(moved.get("statusEnteredAt").asText()).isNotEqualTo(atCreation);
     }
@@ -159,9 +166,9 @@ class TransitionEndpointTest extends TrackerEndpointTestBase {
         // move it already made.
         JsonNode story = story("Passkeys");
         String key = story.get("key").asText();
-        JsonNode moved = move(LEAD, key, statusNamed("Ready"));
+        JsonNode moved = move(LEAD, key, statusNamed("Refining"));
 
-        assertThat(move(LEAD, key, statusNamed("Ready")).get("status").get("name").asText())
+        assertThat(move(LEAD, key, statusNamed("Refining")).get("status").get("name").asText())
                 .isEqualTo(moved.get("status").get("name").asText());
     }
 
@@ -180,19 +187,128 @@ class TransitionEndpointTest extends TrackerEndpointTestBase {
         // issue:edit, which a Viewer does not hold.
         JsonNode story = story("Passkeys");
 
-        assertThat(attempt(VIEWER, story.get("key").asText(), statusNamed("In Progress"))
+        assertThat(attempt(VIEWER, story.get("key").asText(), statusNamed("Refining"))
                 .andReturn().getResponse().getStatus())
                 .isEqualTo(403);
     }
 
     @Test
     void anIssueTheCallerCannotSeeIsA404() throws Exception {
-        assertThat(attempt(LEAD, "MOVA-99999", statusNamed("In Progress"))
+        assertThat(attempt(LEAD, "MOVA-99999", statusNamed("Refining"))
                 .andReturn().getResponse().getStatus())
                 .isEqualTo(404);
     }
 
+    @Test
+    @DisplayName("Blocked records where the card came from, and Unblock returns it there")
+    void blockingRecordsTheOriginAndUnblockReturnsToIt() throws Exception {
+        // 021 D-c. Blocked is a place work WAITS, not a place work goes, so the return trip should
+        // cost one click and no decision — which is why the origin is a column on the issue and not
+        // ten reverse issue_transition pairs. Ten pairs would make "back to where it was"
+        // indistinguishable from "to anywhere", which is the whole distinction the column buys.
+        String key = story("Passkeys").get("key").asText();
+        move(LEAD, key, statusNamed("Refining"));
+        move(LEAD, key, statusNamed("Ready to develop"));
+        move(LEAD, key, statusNamed("In progress"));
+
+        JsonNode blocked = move(LEAD, key, statusNamed("Blocked"));
+
+        assertThat(blocked.get("status").get("name").asText()).isEqualTo("Blocked");
+        assertThat(blocked.get("status").get("blocking").asBoolean())
+                .as("the flag is on the wire, so a client knows which status remembers")
+                .isTrue();
+        assertThat(blocked.get("blockedFromStatus").get("name").asText())
+                .as("the status it was LEAVING, not the one it entered")
+                .isEqualTo("In progress");
+        assertThat(allowedNames(blocked))
+                .as("""
+                        The origin is offered even though issue_transition has NO row from Blocked \
+                        to it. §12.4 the wrong way round would be a client refusing at the drag a \
+                        move the server accepts, which is exactly what an unoffered legal target \
+                        produces.""")
+                .containsExactly("In progress");
+
+        JsonNode back = move(LEAD, key, statusNamed("In progress"));
+
+        assertThat(back.get("status").get("name").asText()).isEqualTo("In progress");
+        assertThat(back.get("blockedFromStatus").isNull())
+                .as("cleared on the way out — a card that is not blocked must not say where it "
+                        + "was blocked from")
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("from Blocked, only the remembered origin is legal — the column widens nothing else")
+    void fromBlockedOnlyTheRememberedOriginIsLegal() throws Exception {
+        // The check that says the widening is scoped. issue_transition has no row FROM Blocked at
+        // all, so if the column made any target legal rather than one, this move would be accepted
+        // and every workflow in the product would have a hole in it shaped like its blocking status.
+        String key = story("Passkeys").get("key").asText();
+        move(LEAD, key, statusNamed("Refining"));
+        move(LEAD, key, statusNamed("Ready to develop"));
+        move(LEAD, key, statusNamed("In progress"));
+        move(LEAD, key, statusNamed("Blocked"));
+
+        MvcResult refused = attempt(LEAD, key, statusNamed("In review")).andReturn();
+
+        assertThat(refused.getResponse().getStatus()).isEqualTo(409);
+        assertThat(refused.getResponse().getContentAsString())
+                .contains("from Blocked to In review");
+        assertThat(read(key).get("status").get("name").asText()).isEqualTo("Blocked");
+    }
+
+    @Test
+    @DisplayName("blocking from a different status remembers that one instead")
+    void theOriginIsWhicheverStatusTheIssueWasIn() throws Exception {
+        // The column is not a constant. Blocking from Refining must return to Refining, or the
+        // "origin" is a default wearing a column's name — which is the shape D-c exists to refuse.
+        String key = story("Passkeys").get("key").asText();
+        move(LEAD, key, statusNamed("Refining"));
+
+        JsonNode blocked = move(LEAD, key, statusNamed("Blocked"));
+
+        assertThat(blocked.get("blockedFromStatus").get("name").asText()).isEqualTo("Refining");
+        assertThat(move(LEAD, key, statusNamed("Refining")).get("status").get("name").asText())
+                .isEqualTo("Refining");
+    }
+
     // =====================================================================
+
+    private static List<String> allowedNames(JsonNode issue) {
+        List<String> names = new java.util.ArrayList<>();
+        issue.get("allowedTransitions").forEach(status -> names.add(status.get("name").asText()));
+        return names;
+    }
+
+    /**
+     * The seven moves from {@code New} to {@code Ready to deploy} — the whole line short of the
+     * deploy step (021 §2.3).
+     *
+     * <p>Spelled out rather than shortcut, because the walk is itself an assertion: every one of
+     * these pairs has to be a row, and a missing one fails here naming the step.
+     */
+    private void walkToReadyToDeploy(String key) throws Exception {
+        for (String name : List.of("Refining", "Ready to develop", "In progress", "In review",
+                "Ready for test", "In test", "Ready to deploy")) {
+            move(LEAD, key, statusNamed(name));
+        }
+    }
+
+    /** A status written straight onto the row, for the one step the workflow has no move for. */
+    private void putBackTo(String key, String statusName) throws Exception {
+        try (var connection = appConnection(ACME);
+                var statement = connection.prepareStatement("""
+                        UPDATE issue SET status_id = (SELECT id FROM issue_status
+                                                       WHERE project_id = CAST(? AS uuid)
+                                                         AND name = ?)
+                         WHERE issue_key = ?
+                        """)) {
+            statement.setObject(1, PROJECT);
+            statement.setString(2, statusName);
+            statement.setString(3, key);
+            statement.executeUpdate();
+        }
+    }
 
     private JsonNode story(String title) throws Exception {
         return create(typeNamed("Story"), title, null);

@@ -27,16 +27,17 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
  * The board rules the database cannot hold, checked where they live.
  *
  * <p>{@code uq_board_column_status} is the half of "every status is claimed by exactly one column"
- * Postgres <em>can</em> enforce, and {@code BoardSchemaTest} covers it. This class covers the other
- * half and the two rules that travel with it: <strong>claimed at least once</strong>, which is a
- * statement about the absence of a row and so a cross-table assertion no CHECK can express; a
- * column whose default is outside its own claim set, which would move a card to a status the column
- * does not show it in; and the project's last board, which cannot be deleted because a project with
- * no board has no board view at all.
+ * Postgres <em>can</em> enforce, and {@code BoardSchemaTest} covers it. ~~This class covers the
+ * other half~~ — <strong>claimed at least once</strong> — ~~which is a statement about the absence
+ * of a row and so a cross-table assertion no CHECK can express.~~ → <strong>superseded by 021
+ * R7</strong>: a board claims a SUBSET, so leaving a status unclaimed is not a refusal any more.
+ * The first method here is the reversal itself, written as an assertion rather than deleted, so a
+ * reader who greps for the old rule finds where it went.
  *
- * <p>A trigger was refused for the first of those and the reason is worth keeping in sight: it
- * would fire while a {@code PATCH} rebuilds a board column by column, and reject the legal
- * intermediate state.
+ * <p>What this class still covers: a column whose default is outside its own claim set, which would
+ * move a card to a status the column does not show it in; a status claimed twice on one board,
+ * refused here as well as by the index so the caller is told which status; and the project's last
+ * board, which cannot be deleted because a project with no board has no board view at all.
  */
 @AutoConfigureMockMvc
 @DisplayName("Board configuration — the claim rules, and the board that owns nothing")
@@ -88,8 +89,16 @@ class BoardConfigServiceTest extends TrackerEndpointTestBase {
     }
 
     @Test
-    @DisplayName("a board that leaves a status unclaimed is refused, and the message names it")
-    void refusesABoardThatLeavesAStatusUnclaimed() {
+    @DisplayName("a board may leave a status unclaimed, and its statusCount says how many it shows")
+    void aBoardMayLeaveAStatusUnclaimed() {
+        // ~~"a board that leaves a status unclaimed is refused, and the message names it"~~ →
+        // REVERSED by 021 R7. That rule is why a board had to show the whole lifecycle, and so why
+        // one Team board was the only board anybody made. A status a board does not claim is a
+        // status THAT BOARD DOES NOT SHOW, which is what makes a PM board and a Dev board different
+        // boards rather than two orderings of the same one.
+        //
+        // The protection it gave — no card invisible on every board — did not evaporate: it is a
+        // read now, and BoardCoverageTest is where it is asserted.
         List<IssueStatusView> statuses = statuses();
         List<BoardColumnInput> columns = new ArrayList<>();
         statuses.stream()
@@ -97,13 +106,29 @@ class BoardConfigServiceTest extends TrackerEndpointTestBase {
                 .forEach(status -> columns.add(new BoardColumnInput(
                         null, status.name(), null, List.of(status.id()), status.id())));
 
-        BoardConfigService.Outcome.Unprocessable refused = refusal(create(new BoardInput("Partial", SwimlaneBy.NONE, columns)));
+        BoardView stored = written(create(new BoardInput("Partial", SwimlaneBy.NONE, columns)))
+                .view();
 
-        assertThat(refused.detail())
-                .as("""
-                        An issue in an unclaimed status would be on no board at all, and "invalid \
-                        board" sends somebody to count six columns against six statuses by hand.""")
-                .contains("Blocked");
+        assertThat(stored.columns()).hasSize(statuses.size() - 1);
+        assertThat(stored.columns()).extracting(BoardColumnView::name).doesNotContain("Blocked");
+        assertThat(statusCountOf("Partial"))
+                .as("the picker reads \"%d of %d\" — a subset, and the count is what says so",
+                        statuses.size() - 1, statuses.size())
+                .isEqualTo(statuses.size() - 1);
+    }
+
+    @Test
+    @DisplayName("a seeded board claims a subset too — PM shows six of the eleven")
+    void aSeededBoardAlreadyClaimsASubset() {
+        // The seed is the first consumer of the reversal rather than a special case exempted from
+        // it: PM, Dev and QA each show the part of the line their reader works on. If the removed
+        // rule were still enforced anywhere, seeding would be the place it fired.
+        assertThat(statuses()).hasSize(11);
+
+        assertThat(boards()).extracting(BoardSummaryView::name)
+                .containsExactly("PM board", "Dev board", "QA board");
+        assertThat(boards()).extracting(BoardSummaryView::statusCount)
+                .containsExactly(6, 6, 5);
     }
 
     @Test
@@ -111,46 +136,54 @@ class BoardConfigServiceTest extends TrackerEndpointTestBase {
     void refusesADefaultStatusTheColumnDoesNotClaim() {
         // D2: a drop into a column takes that column's default status. A default outside the claim
         // set would move the card to a status the column does not show it in, so the card would
-        // vanish from the board on being dropped onto it.
+        // vanish from the board on being dropped onto it. This one is NOT touched by 021 R7: it is
+        // about a column contradicting itself, not about a board showing less than everything.
         List<IssueStatusView> statuses = statuses();
         UUID done = idOf(statuses, "Done");
         List<BoardColumnInput> columns = new ArrayList<>();
         for (IssueStatusView status : statuses) {
             columns.add(new BoardColumnInput(
                     null, status.name(), null, List.of(status.id()),
-                    status.name().equals("Backlog") ? done : status.id()));
+                    status.name().equals("New") ? done : status.id()));
         }
 
         BoardConfigService.Outcome.Unprocessable refused = refusal(create(new BoardInput("Wrong default", SwimlaneBy.NONE, columns)));
 
-        assertThat(refused.detail()).contains("Backlog");
+        assertThat(refused.detail()).contains("New");
     }
 
     @Test
     @DisplayName("a status claimed by two columns is refused before the unique index sees it")
     void refusesAStatusClaimedByTwoColumns() {
         // The index would refuse it too, and with a constraint name. Refusing it here is what lets
-        // the caller be told WHICH status, which is the whole reason the rule is stated twice.
+        // the caller be told WHICH status, which is the whole reason the rule is stated twice. This
+        // is the half of story B2 that SURVIVED 021 R7, and it survived because it is what makes a
+        // card's column unambiguous.
         List<IssueStatusView> statuses = statuses();
-        UUID backlog = idOf(statuses, "Backlog");
+        UUID first = idOf(statuses, "New");
         List<BoardColumnInput> columns = new ArrayList<>();
         for (IssueStatusView status : statuses) {
             columns.add(new BoardColumnInput(
                     null, status.name(), null, List.of(status.id()), status.id()));
         }
         columns.add(new BoardColumnInput(
-                null, "Backlog again", null, List.of(backlog), backlog));
+                null, "New again", null, List.of(first), first));
 
         BoardConfigService.Outcome.Unprocessable refused = refusal(create(new BoardInput("Twice", SwimlaneBy.NONE, columns)));
 
-        assertThat(refused.detail()).contains("Backlog");
+        assertThat(refused.detail()).contains("New");
     }
 
     @Test
     @DisplayName("the project's last board cannot be deleted")
     void refusesDeletingTheProjectsLastBoard() {
+        // Down to one first, because a seeded project now has three (021 §2.4) and the refusal is
+        // about the LAST one. Deleting two to reach it is also what says the refusal is a count and
+        // not a flag on the seeded board.
         List<BoardSummaryView> boards = boards();
-        assertThat(boards).hasSize(1);
+        assertThat(boards).hasSize(3);
+        allowed(deleteBoard(boards.get(2).id()));
+        allowed(deleteBoard(boards.get(1).id()));
 
         BoardConfigService.Outcome.Unprocessable refused =
                 refusal(deleteBoard(boards.get(0).id()));
@@ -171,7 +204,19 @@ class BoardConfigServiceTest extends TrackerEndpointTestBase {
 
         assertThat(deleted).isInstanceOf(BoardConfigService.Outcome.Deleted.class);
         assertThat(issueCount()).isEqualTo(before);
-        assertThat(boards()).hasSize(1);
+        assertThat(boards()).hasSize(3);
+    }
+
+    @Test
+    @DisplayName("a created board goes to the right of every board the project has")
+    void aCreatedBoardTakesTheLastPositionInTheStrip() {
+        // 021 D-f: the Work strip's segments are the project's boards in position order, so a
+        // fourth board is a fourth segment after the three seeded ones. max + 1 rather than a
+        // count, because board."position" is not unique and a count would land on a renumbered row.
+        written(create(coarseBoard()));
+
+        assertThat(boards()).extracting(BoardSummaryView::name)
+                .containsExactly("PM board", "Dev board", "QA board", "Coarse");
     }
 
     @Test
@@ -206,13 +251,25 @@ class BoardConfigServiceTest extends TrackerEndpointTestBase {
 
     // =====================================================================
 
-    /** Six statuses folded into three columns — the stakeholder board V5 deliberately does not seed. */
+    /**
+     * The eleven statuses folded into three columns — the stakeholder board the seed deliberately
+     * does not make, because which three is a decision about who is looking.
+     */
     private BoardInput coarseBoard() {
         List<IssueStatusView> statuses = statuses();
         return new BoardInput("Coarse", SwimlaneBy.NONE, List.of(
-                column("Not started", statuses, "Backlog", "Ready"),
-                column("In flight", statuses, "In Progress", "In Review", "Blocked"),
+                column("Not started", statuses, "New", "Refining", "Ready to develop"),
+                column("In flight", statuses, "In progress", "In review", "Ready for test",
+                        "In test", "Ready to deploy", "Rework", "Blocked"),
                 column("Done", statuses, "Done")));
+    }
+
+    private int statusCountOf(String boardName) {
+        return boards().stream()
+                .filter(board -> board.name().equals(boardName))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no board called " + boardName))
+                .statusCount();
     }
 
     private static BoardColumnInput column(
@@ -303,7 +360,7 @@ class BoardConfigServiceTest extends TrackerEndpointTestBase {
                                 (SELECT id FROM issue_type
                                   WHERE project_id = CAST(? AS uuid) AND name = 'Task'),
                                 (SELECT id FROM issue_status
-                                  WHERE project_id = CAST(? AS uuid) AND name = 'Backlog'),
+                                  WHERE project_id = CAST(? AS uuid) AND name = 'New'),
                                 ?)
                         """)) {
             statement.setObject(1, UUID.randomUUID());

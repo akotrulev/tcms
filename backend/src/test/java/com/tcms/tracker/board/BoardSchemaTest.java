@@ -15,6 +15,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,10 +45,11 @@ class BoardSchemaTest extends IntegrationTestBase {
     @DisplayName("a second column cannot claim a status the first already holds")
     void aSecondColumnCannotClaimAStatusTheFirstAlreadyHolds() throws SQLException {
         // uq_board_column_status is the half of "exactly one column claims each status" that
-        // Postgres CAN enforce. The other half — at least one — is BoardConfigService's, because it
-        // is a cross-table assertion no CHECK can express, and T3 tests it there.
+        // Postgres CAN enforce, and it is the half that SURVIVED 021 R7 — a board claims a subset
+        // now, but a card's column still has to be unambiguous. ~~The other half — at least one —
+        // is BoardConfigService's.~~ → removed; BoardCoverageTest reports it instead of refusing it.
         Seeded seeded = seedCompany("bs-claim", "BSC");
-        UUID board = onlyBoardOf(seeded.projectId());
+        UUID board = boardNamed(seeded.projectId(), "PM board");
         UUID claimedStatus = firstColumnStatusOf(board);
 
         UUID spareColumn = insertColumn(seeded, board, "Duplicate", 99, claimedStatus);
@@ -61,32 +63,39 @@ class BoardSchemaTest extends IntegrationTestBase {
     }
 
     @Test
-    @DisplayName("every new project gets a board with one column per status, each claiming its own")
+    @DisplayName("every new project gets three boards, and between them they claim every status")
     void everyNewProjectGetsABoardWithOneColumnPerStatus() throws SQLException {
+        // ~~One board with one column per status.~~ → V13 seeds THREE (021 §2.4), each claiming the
+        // part of the line its reader works on. What has to hold is no longer per board — it is
+        // across them: a status no board claims is a card nowhere, which is the failure that
+        // reports success.
         Seeded seeded = seedCompany("bs-default", "BSD");
-        UUID board = onlyBoardOf(seeded.projectId());
+        UUID pmBoard = boardNamed(seeded.projectId(), "PM board");
 
-        assertThat(count("SELECT count(*) FROM board_column WHERE board_id = CAST(? AS uuid)", board))
+        assertThat(count(
+                "SELECT count(*) FROM board_column WHERE board_id = CAST(? AS uuid)", pmBoard))
                 .as("""
-                        The seeded board has one column per status, which is what makes a drop \
-                        unambiguous about the status it means. A different number is the board \
-                        block of tcms_seed_project_defaults having been changed or dropped.""")
+                        The PM board's six columns — New, Refining, Ready to develop, Ready to \
+                        deploy, Done, Blocked. A different number is the board block of \
+                        tcms_seed_project_defaults having been changed or dropped.""")
                 .isEqualTo(6);
         assertThat(count(
                         "SELECT count(*) FROM board_column_status WHERE board_id = CAST(? AS uuid)",
-                        board))
-                .as("every column of the seeded board claims exactly one status")
+                        pmBoard))
+                .as("every column of the PM board claims exactly one status")
                 .isEqualTo(6);
         assertThat(count("""
                 SELECT count(*) FROM issue_status s
                  WHERE s.project_id = CAST(? AS uuid)
                    AND NOT EXISTS (SELECT 1 FROM board_column_status c
-                                    WHERE c.board_id = CAST(? AS uuid) AND c.status_id = s.id)
-                """, seeded.projectId(), board))
+                                     JOIN board b ON b.id = c.board_id
+                                    WHERE b.project_id = CAST(? AS uuid) AND c.status_id = s.id)
+                """, seeded.projectId(), seeded.projectId()))
                 .as("""
-                        Statuses no column of the seeded board claims. An issue in one of them has \
-                        nowhere to be drawn, so it vanishes from the board rather than appearing \
-                        somewhere wrong — which is the failure that reports success.""")
+                        Statuses NO board of the project claims. An issue in one of them has \
+                        nowhere to be drawn on any board, so it vanishes rather than appearing \
+                        somewhere wrong — which is the failure that reports success, and the one \
+                        021 R7 traded a refusal for a read of.""")
                 .isZero();
     }
 
@@ -94,9 +103,10 @@ class BoardSchemaTest extends IntegrationTestBase {
     @DisplayName("every block of the seed function survived the reproduction — all nine")
     void everyBlockOfTheSeedFunctionSurvivedTheReproduction() throws SQLException {
         // Named individually rather than counted: a count passes when one block is dropped and
-        // another duplicated. V5 restates tcms_seed_project_defaults in full under CREATE OR
-        // REPLACE to add the board, and a block missing from that restatement stops being seeded
-        // for every project created from here on, with no error anywhere.
+        // another duplicated. V5 restated tcms_seed_project_defaults in full under CREATE OR
+        // REPLACE to add the board and V13 restated it again for the eleven statuses and the three
+        // boards, and a block missing from either restatement stops being seeded for every project
+        // created from there on, with no error anywhere.
         Seeded seeded = seedCompany("bs-blocks", "BSB");
         UUID project = seeded.projectId();
 
@@ -105,15 +115,16 @@ class BoardSchemaTest extends IntegrationTestBase {
         assertThat(rowsFor("configuration", project)).isEqualTo(1);
         assertThat(rowsFor("doc_space", project)).isEqualTo(1);
         assertThat(rowsFor("project_key_sequence", project)).isEqualTo(1);
-        assertThat(rowsFor("issue_status", project)).isEqualTo(6);
+        assertThat(rowsFor("issue_status", project)).isEqualTo(11);
         assertThat(rowsFor("issue_type", project)).isEqualTo(6);
-        assertThat(rowsFor("board", project)).isEqualTo(1);
+        assertThat(rowsFor("board", project)).isEqualTo(3);
         assertThat(count("""
                 SELECT count(*) FROM issue_transition WHERE project_id = CAST(? AS uuid)
                 """, project))
                 .as("the workflow's transitions — the eighth block, and the one with no table of "
-                        + "its own to count by project_id anywhere else in this class")
-                .isEqualTo(26);
+                        + "its own to count by project_id anywhere else in this class. Eight along "
+                        + "the line, four for Rework, nine into Blocked (021 §2.3)")
+                .isEqualTo(21);
     }
 
     @Test
@@ -169,10 +180,10 @@ class BoardSchemaTest extends IntegrationTestBase {
         // canonical status on the issue and leaves a board mapping statuses onto columns, so the
         // board follows. Thirty-eight tests said so on the first run of this migration.
         Seeded seeded = seedCompany("bs-retire", "BSX");
-        UUID board = onlyBoardOf(seeded.projectId());
-        UUID ready = statusOf(seeded.projectId(), "Ready");
+        UUID board = boardNamed(seeded.projectId(), "PM board");
+        UUID ready = statusOf(seeded.projectId(), "Refining");
 
-        retireStatus(seeded.projectId(), "Ready");
+        retireStatus(seeded.projectId(), "Refining");
 
         assertThat(count("""
                 SELECT count(*) FROM board_column
@@ -181,7 +192,7 @@ class BoardSchemaTest extends IntegrationTestBase {
                 .as("the column that claimed only the departing status goes with it")
                 .isZero();
         assertThat(count("SELECT count(*) FROM board_column WHERE board_id = CAST(? AS uuid)", board))
-                .as("and nothing else on the board moved")
+                .as("and nothing else on the board moved — six columns become five")
                 .isEqualTo(5);
     }
 
@@ -192,49 +203,112 @@ class BoardSchemaTest extends IntegrationTestBase {
         // claiming three statuses would VANISH when its default one was retired, taking two live
         // statuses off the board with it and leaving them claimed by nothing.
         Seeded seeded = seedCompany("bs-folded", "BSF");
-        UUID board = onlyBoardOf(seeded.projectId());
-        UUID inProgress = statusOf(seeded.projectId(), "In Progress");
-        UUID inReview = statusOf(seeded.projectId(), "In Review");
+        UUID board = boardNamed(seeded.projectId(), "Dev board");
+        UUID inProgress = statusOf(seeded.projectId(), "In progress");
+        UUID inReview = statusOf(seeded.projectId(), "In review");
         UUID folded = insertColumn(seeded, board, "In flight", 90, inProgress);
         moveClaims(seeded, board, folded, inProgress, inReview);
 
-        retireStatus(seeded.projectId(), "In Progress");
+        retireStatus(seeded.projectId(), "In progress");
 
         assertThat(count("SELECT count(*) FROM board_column WHERE id = CAST(? AS uuid)", folded))
-                .as("the folded column still holds In Review, so it stays")
+                .as("the folded column still holds In review, so it stays")
                 .isEqualTo(1);
         assertThat(uuids("SELECT default_status_id FROM board_column WHERE id = CAST(? AS uuid)",
                 folded).getFirst())
                 .as("and defaults to the earliest status it still claims, rather than to nothing")
                 .isEqualTo(inReview);
         assertThat(count("""
-                SELECT count(*) FROM issue_status s
-                 WHERE s.project_id = CAST(? AS uuid)
-                   AND NOT EXISTS (SELECT 1 FROM board_column_status c
-                                    WHERE c.board_id = CAST(? AS uuid) AND c.status_id = s.id)
-                """, seeded.projectId(), board))
+                SELECT count(*) FROM board_column_status c
+                 WHERE c.board_id = CAST(? AS uuid) AND c.status_id = CAST(? AS uuid)
+                """, board, inReview))
                 .as("""
-                        Statuses no column claims after the retirement. This is the invariant the                         cascade would have broken without failing: the board would still render,                         with two statuses missing from it.""")
-                .isZero();
+                        In review is still claimed by this board after the retirement. ~~Statuses \
+                        no column claims — zero.~~ -> superseded by 021 R7: a board claims a \
+                        SUBSET, so a status this board never showed is not evidence of anything. \
+                        What the cascade would have broken without failing is narrower and still \
+                        true: the folded column would have VANISHED, taking a live status off the \
+                        board with it, and the board would still have rendered.""")
+                .isEqualTo(1);
     }
 
     /** A provisioned company and the project provisioning made with it. */
     private record Seeded(UUID companyId, UUID projectId) {}
 
+    /**
+     * Every project this class provisioned in the current test, so the workflow can be put back.
+     *
+     * <p>Two methods here <strong>retire a status</strong>, which is the whole point of them — and
+     * one class over, {@code WorkflowSeedTest} asserts that <em>every</em> seeded project in the
+     * shared container has the eleven defaults in order. Leaving one short is green here and red
+     * there, in a class that has nothing to do with this one, and which of the two runs first is
+     * not a thing either of them decides. That is §19's shape, reached through a status name.
+     */
+    private final List<Seeded> provisioned = new ArrayList<>();
+
     private Seeded seedCompany(String slug, String projectKey) {
         ProvisionCompanyResult result = provisioning.provision(ProvisionCompanyRequest.withFirstProject(
                 slug, slug + " Ltd", "ops@" + slug + ".test", "Ops Person",
                 projectKey, slug + " Product"));
-        return new Seeded(result.companyId(), result.projectId().orElseThrow(
+        Seeded seeded = new Seeded(result.companyId(), result.projectId().orElseThrow(
                 () -> new AssertionError("provisioning was asked for a first project and made none")));
+        provisioned.add(seeded);
+        return seeded;
     }
 
-    private static UUID onlyBoardOf(UUID projectId) throws SQLException {
-        List<UUID> boards = uuids(
-                "SELECT id FROM board WHERE project_id = CAST(? AS uuid) ORDER BY name", projectId);
+    /**
+     * Re-seeds every project this test provisioned, which puts back any status it retired.
+     *
+     * <p>{@code tcms_seed_project_defaults} is idempotent per NAME and inserts each status at the
+     * position the seed gives it, so a retired one comes back where it was rather than at the end.
+     * The board block is guarded by {@code NOT EXISTS (SELECT 1 FROM board …)} and is therefore
+     * skipped — which is right: the columns the trigger removed are what those methods asserted
+     * about, and re-making them would undo the thing under test after it had been read.
+     */
+    @AfterEach
+    void putTheWorkflowsBack() throws SQLException {
+        for (Seeded seeded : provisioned) {
+            try (Connection connection = superuserConnection()) {
+                try (PreparedStatement guc = connection.prepareStatement(
+                        "SELECT set_config('app.current_company', ?, false)")) {
+                    guc.setString(1, seeded.companyId().toString());
+                    guc.execute();
+                }
+                try (PreparedStatement seed = connection.prepareStatement(
+                        "SELECT tcms_seed_project_defaults(CAST(? AS uuid), CAST(? AS uuid))")) {
+                    seed.setString(1, seeded.companyId().toString());
+                    seed.setString(2, seeded.projectId().toString());
+                    seed.execute();
+                }
+            }
+        }
+        provisioned.clear();
+    }
+
+    /**
+     * One of the three boards {@code tcms_seed_project_defaults} makes, by name.
+     *
+     * <p>~~{@code onlyBoardOf}, which asserted the seeded project has exactly one.~~ → V13 seeds
+     * three (021 §2.4), so "the board" is no longer a thing a fixture can name without saying
+     * which. The assertion the old helper carried survives as this one's {@code hasSize(1)}: a
+     * board named twice, or not at all, is the seed having been changed under the test.
+     */
+    private static UUID boardNamed(UUID projectId, String name) throws SQLException {
+        List<UUID> boards = new ArrayList<>();
+        try (Connection connection = superuserConnection();
+                PreparedStatement statement = connection.prepareStatement(
+                        "SELECT id FROM board WHERE project_id = CAST(? AS uuid) AND name = ?")) {
+            statement.setString(1, projectId.toString());
+            statement.setString(2, name);
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    boards.add(UUID.fromString(rs.getString(1)));
+                }
+            }
+        }
         assertThat(boards)
-                .as("the seeded project must have exactly one board — the fixture asserts nothing "
-                        + "otherwise")
+                .as("the seeded project must have exactly one board called '%s' — the fixture "
+                        + "asserts nothing otherwise", name)
                 .hasSize(1);
         return boards.getFirst();
     }
@@ -296,7 +370,7 @@ class BoardSchemaTest extends IntegrationTestBase {
         String values = """
                 CAST(? AS uuid), CAST(? AS uuid), CAST(? AS uuid), ?, ?,
                 (SELECT id FROM issue_type WHERE project_id = CAST(? AS uuid) AND name = 'Task'),
-                (SELECT id FROM issue_status WHERE project_id = CAST(? AS uuid) AND name = 'Backlog'),
+                (SELECT id FROM issue_status WHERE project_id = CAST(? AS uuid) AND name = 'New'),
                 ?""" + (rank == null ? "" : ", ?");
 
         try (Connection connection = superuserConnection();

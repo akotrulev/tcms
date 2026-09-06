@@ -21,7 +21,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
- * The default workflow every project arrives with — six statuses, their legal moves, six types.
+ * The default workflow every project arrives with — ~~six~~ <strong>eleven</strong> statuses (V13),
+ * their legal moves, six types.
  *
  * <p><strong>Seeded by {@code tcms_seed_project_defaults}, not by a {@code ProjectCreatedEvent}</strong>
  * (plan 011 decision D-b, owner-confirmed). Plan 009 M1 and its review R5 both called for the event,
@@ -42,8 +43,25 @@ class WorkflowSeedTest extends IntegrationTestBase {
     @Autowired
     private CompanyProvisioningService provisioning;
 
+    /**
+     * The eleven names V13 seeds, in position order (021 §2.3).
+     *
+     * <p>Nine on one line and two off it. {@code Ready to deploy} sits between {@code In test} and
+     * {@code Done} because tested is not shipped (021 D-l): it is the tester's last word, and the
+     * move to Done is the deploy confirmation the PO makes.
+     *
+     * <p>~~{@code Backlog, Ready, In Progress, In Review, Blocked, Done}~~ → superseded by V13. The
+     * list is spelled out rather than counted, and rewritten rather than weakened to "at least six",
+     * for the reason this class exists at all: the seed function is restated whole by every
+     * migration that touches it, so a block silently dropped from the reproduction is exactly the
+     * failure a size assertion cannot see.
+     */
+    private static final List<String> SEEDED_STATUSES = List.of(
+            "New", "Refining", "Ready to develop", "In progress", "In review",
+            "Ready for test", "In test", "Ready to deploy", "Done", "Rework", "Blocked");
+
     @Test
-    @DisplayName("every seeded project in the database has the six statuses, in order")
+    @DisplayName("every seeded project in the database has the eleven statuses, in order")
     void everyProjectThatExistedBeforeTheMigrationHasTheSixStatuses() throws SQLException {
         // Over whatever the shared container holds rather than over a project this test made,
         // which is what makes it a statement about the BACKFILL and not about the create path.
@@ -59,7 +77,7 @@ class WorkflowSeedTest extends IntegrationTestBase {
         for (UUID projectId : projects) {
             assertThat(statusNamesOf(projectId))
                     .as("project %s", projectId)
-                    .containsExactly("Backlog", "Ready", "In Progress", "In Review", "Blocked", "Done");
+                    .containsExactlyElementsOf(SEEDED_STATUSES);
         }
     }
 
@@ -68,26 +86,102 @@ class WorkflowSeedTest extends IntegrationTestBase {
     void everyStatusCarriesItsKind() throws SQLException {
         UUID projectId = ownSeededProject();
 
-        // Blocked is IN_PROGRESS deliberately: something blocked is started and not done, and a
-        // kind of its own would have to be given a meaning by every percentage in the product.
-        assertThat(kindsByName(projectId)).containsExactlyInAnyOrderEntriesOf(Map.of(
-                "Backlog", "NOT_STARTED",
-                "Ready", "NOT_STARTED",
-                "In Progress", "IN_PROGRESS",
-                "In Review", "IN_PROGRESS",
-                "Blocked", "IN_PROGRESS",
-                "Done", "DONE"));
+        // Blocked is IN_PROGRESS deliberately (021 D-b restating V5's reason): something blocked is
+        // started and not done, and a kind of its own would have to be given a meaning by every
+        // percentage in the product. Rework is IN_PROGRESS for the same reason — work that came
+        // back is work in flight. THREE KINDS, still, so every burn-up, cycle-time and flow figure
+        // keeps the meaning it had before eleven statuses existed.
+        Map<String, String> kinds = new LinkedHashMap<>();
+        kinds.put("New", "NOT_STARTED");
+        kinds.put("Refining", "NOT_STARTED");
+        kinds.put("Ready to develop", "NOT_STARTED");
+        kinds.put("In progress", "IN_PROGRESS");
+        kinds.put("In review", "IN_PROGRESS");
+        kinds.put("Ready for test", "IN_PROGRESS");
+        kinds.put("In test", "IN_PROGRESS");
+        kinds.put("Ready to deploy", "IN_PROGRESS");
+        kinds.put("Done", "DONE");
+        kinds.put("Rework", "IN_PROGRESS");
+        kinds.put("Blocked", "IN_PROGRESS");
+
+        assertThat(kindsByName(projectId)).containsExactlyInAnyOrderEntriesOf(kinds);
     }
 
     @Test
-    @DisplayName("Done is reachable only from In Review — the review gate, as an allow-list")
+    @DisplayName("exactly one status is the blocking one, and it is Blocked")
+    void exactlyOneStatusIsTheBlockingOne() throws SQLException {
+        UUID projectId = ownSeededProject();
+
+        // 021 D-b. The flag is what makes issue.blocked_from_status_id writable at all — entering
+        // THIS status is what records the origin — and uq_issue_status_one_blocking is why "which
+        // status is the blocking one" has an answer rather than a choice.
+        assertThat(blockingStatusNamesOf(projectId)).containsExactly("Blocked");
+    }
+
+    @Test
+    @DisplayName("Done is reachable only from Ready to deploy — the deploy step, as an allow-list")
     void doneIsReachableOnlyFromInReview() throws SQLException {
         UUID projectId = ownSeededProject();
 
-        // issue_transition is an ALLOW-LIST: a pair that is not a row is refused. This is the one
-        // shape in the default set, and it is what settings-workflow.html states — "Not to Done, a
-        // review gate stands between them".
-        assertThat(namesOfStatusesThatReach(projectId, "Done")).containsExactly("In Review");
+        // issue_transition is an ALLOW-LIST: a pair that is not a row is refused. ~~Only In Review
+        // reaches Done, the review gate.~~ → superseded by V13: the gate moved to the END of the
+        // line, because TESTED IS NOT SHIPPED (021 D-l). Ready to deploy is the tester's last word
+        // and the drag to Done is the PO's deploy confirmation — which is also the figure release
+        // readiness reads.
+        assertThat(namesOfStatusesThatReach(projectId, "Done")).containsExactly("Ready to deploy");
+    }
+
+    @Test
+    @DisplayName("twenty-one legal moves: eight along the line, four for Rework, nine into Blocked")
+    void theSeededWorkflowHasTwentyOneMoves() throws SQLException {
+        UUID projectId = ownSeededProject();
+
+        // TWENTY-ONE AND NOT PLAN 021's TWENTY-TWO. Its tally reads "10 into Blocked" from §2.4's
+        // "into it from every non-done status", and there are ten of those — but one of them IS
+        // Blocked, and ck_issue_transition_distinct refuses a self-pair anyway. The rule is the
+        // plan's; only the arithmetic counted the status as its own source.
+        assertThat(moveCountOf(projectId)).isEqualTo(21);
+
+        // Every non-DONE status but Blocked itself reaches Blocked, which is what "any card can be
+        // blocked from any non-done status" means as rows.
+        assertThat(namesOfStatusesThatReach(projectId, "Blocked")).containsExactlyInAnyOrder(
+                "New", "Refining", "Ready to develop", "In progress", "In review",
+                "Ready for test", "In test", "Ready to deploy", "Rework");
+
+        // Out of Blocked is NOT a row (021 D-c): the destination is the remembered origin, and ten
+        // reverse pairs would make "back to where it was" indistinguishable from "to anywhere".
+        assertThat(namesOfStatusesReachableFrom(projectId, "Blocked")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("three boards, in strip order, and between them they claim all eleven statuses")
+    void aSeededProjectGetsThreeBoards() throws SQLException {
+        UUID projectId = ownSeededProject();
+
+        // 021 §2.4. The names are the seed's and nothing hardcodes them anywhere else (D-f) — what
+        // is pinned here is that there are three, in the order the Work strip draws them.
+        assertThat(boardNamesOf(projectId)).containsExactly("PM board", "Dev board", "QA board");
+
+        // FULL COVERAGE ACROSS THE THREE, which is the claim that replaced "every board claims
+        // every status" (021 R7). No board shows the whole lifecycle any more; together they must
+        // still leave no card invisible.
+        assertThat(claimedStatusNamesOf(projectId))
+                .containsExactlyInAnyOrderElementsOf(SEEDED_STATUSES);
+
+        // The hand-offs: a status claimed by two boards, last column on one and first on the next,
+        // so a drag on one board IS the arrival on the other.
+        assertThat(boardsClaiming(projectId, "Ready to develop"))
+                .containsExactlyInAnyOrder("PM board", "Dev board");
+        assertThat(boardsClaiming(projectId, "Ready for test"))
+                .containsExactlyInAnyOrder("Dev board", "QA board");
+        assertThat(boardsClaiming(projectId, "Ready to deploy"))
+                .containsExactlyInAnyOrder("PM board", "QA board");
+        assertThat(boardsClaiming(projectId, "Blocked"))
+                .containsExactlyInAnyOrder("PM board", "Dev board", "QA board");
+
+        // Done is on the PM board ONLY (D-l): shipping is the PO's call, so the boards a developer
+        // and a tester look at do not fill with finished work.
+        assertThat(boardsClaiming(projectId, "Done")).containsExactly("PM board");
     }
 
     @Test
@@ -102,7 +196,7 @@ class WorkflowSeedTest extends IntegrationTestBase {
         UUID projectId = result.projectId().orElseThrow(
                 () -> new AssertionError("provisioning was asked for a first project and made none"));
 
-        assertThat(statusNamesOf(projectId)).hasSize(6);
+        assertThat(statusNamesOf(projectId)).hasSize(11);
         assertThat(typeNamesOf(projectId))
                 .containsExactlyInAnyOrder("Epic", "Story", "Task", "Bug", "Spike", "Sub-task");
     }
@@ -219,6 +313,55 @@ class WorkflowSeedTest extends IntegrationTestBase {
                  WHERE tr.project_id = '%s' AND t.name = '%s'
                  ORDER BY 1
                 """.formatted(projectId, destination));
+    }
+
+    private List<String> namesOfStatusesReachableFrom(UUID projectId, String origin)
+            throws SQLException {
+        return superuserQuery("""
+                SELECT t.name
+                  FROM issue_transition tr
+                  JOIN issue_status f ON f.id = tr.from_status_id
+                  JOIN issue_status t ON t.id = tr.to_status_id
+                 WHERE tr.project_id = '%s' AND f.name = '%s'
+                 ORDER BY 1
+                """.formatted(projectId, origin));
+    }
+
+    private int moveCountOf(UUID projectId) throws SQLException {
+        return Integer.parseInt(superuserQuery(
+                "SELECT count(*)::text FROM issue_transition WHERE project_id = '"
+                        + projectId + "'").get(0));
+    }
+
+    private List<String> blockingStatusNamesOf(UUID projectId) throws SQLException {
+        return superuserQuery("SELECT name FROM issue_status WHERE project_id = '"
+                + projectId + "' AND blocking ORDER BY \"position\"");
+    }
+
+    /** In Work-strip order — {@code position} first, the name only as a tie-break (021 D-f). */
+    private List<String> boardNamesOf(UUID projectId) throws SQLException {
+        return superuserQuery("SELECT name FROM board WHERE project_id = '"
+                + projectId + "' ORDER BY \"position\", name");
+    }
+
+    private List<String> claimedStatusNamesOf(UUID projectId) throws SQLException {
+        return superuserQuery("""
+                SELECT DISTINCT s.name
+                  FROM board_column_status bcs
+                  JOIN issue_status s ON s.id = bcs.status_id
+                 WHERE s.project_id = '%s'
+                """.formatted(projectId));
+    }
+
+    private List<String> boardsClaiming(UUID projectId, String statusName) throws SQLException {
+        return superuserQuery("""
+                SELECT b.name
+                  FROM board_column_status bcs
+                  JOIN board b ON b.id = bcs.board_id
+                  JOIN issue_status s ON s.id = bcs.status_id
+                 WHERE b.project_id = '%s' AND s.name = '%s'
+                 ORDER BY b."position"
+                """.formatted(projectId, statusName));
     }
 
     private static List<String> superuserQuery(String sql) throws SQLException {

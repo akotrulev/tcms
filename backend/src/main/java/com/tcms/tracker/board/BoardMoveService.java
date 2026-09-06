@@ -186,8 +186,12 @@ public class BoardMoveService {
                 : null;
 
         UUID columnId = columnOfStatus.get(facts.shownStatus(moved).id());
+        // The same scope the board read builds, and for the same reason a card is re-read rather
+        // than patched: `elsewhere` is a fact about this board against the project's others, so a
+        // card answered here without it would lose its row-header link on every drag.
+        BoardCardService.BoardScope scope = cards.scopeOf(board, board.getProjectId());
         return new Outcome.Moved(new CardMoveResultView(
-                facts.cardOf(moved, columnId == null ? column.getId() : columnId), breach));
+                facts.cardOf(moved, columnId == null ? column.getId() : columnId, scope), breach));
     }
 
     private List<UUID> claimed(UUID boardId, UUID columnId) {

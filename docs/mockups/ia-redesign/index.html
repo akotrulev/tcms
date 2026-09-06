@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Navigation &amp; IA redesign — renders · TCMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell-v2.css">
+</head>
+<body data-shell="none" data-role="Company Admin">
+<template id="caption">
+  <strong>Twenty renders of one document.</strong> Every screen here draws
+  <code>docs/specs/2026-09-06-navigation-ia-redesign-proposal.md</code> — its labels, order, zones,
+  gates and badges, verbatim. Nothing here is a new design, and nothing in the app was changed to
+  make it. Start with <a href="00-before-after.html"><strong>00</strong></a> if you want the argument
+  in one screen, or read the boards in workflow order:
+  <a href="18-pm-board.html"><strong>18</strong></a> →
+  <a href="12-dev-board.html"><strong>12</strong></a> →
+  <a href="13-qa-board.html"><strong>13</strong></a> →
+  <a href="14-board-handoff.html"><strong>14</strong></a>.
+  <em>Revised twice on 2026-09-06, with the proposal.</em> First revision: the project zone went flat
+  and usage-ordered and the <code>Repository ▸</code> / <code>Quality ▸</code> folders went. Second:
+  <strong>Timesheets left the rail</strong> for the user menu (R11), and the board became
+  <strong>three</strong> — PM · Dev · QA — over an <strong>eleven-status</strong> workflow with
+  <code>Blocked</code> on every board and an epic that now has a status, and a card, of its own (R10).
+  <em>File numbers are names, not a reading order</em> — 18 and 19 were added last and belong beside
+  12 and 08.
+</template>
+<div class="page">
+<div class="phead">
+  <div>
+    <h1>Navigation &amp; IA redesign — renders</h1>
+    <div class="sub">Static pictures of the proposal, in the product's own palette. Light/dark toggles on every render.</div>
+  </div>
+</div>
+
+<div class="note" style="margin-bottom:18px">
+  <span aria-hidden="true">▸</span>
+  <div>These render the <strong>proposal</strong>, not the build. The current mockup set lives one
+  directory up at <a href="../index.html">docs/mockups/index.html</a> and still draws the IA it was
+  written against — nothing there was edited.</div>
+</div>
+
+<div class="rset">
+  <a href="00-before-after.html"><span class="n">00</span><span><strong>Before and after</strong><span>The rail as built — 36 rows, five mixed group headings, two duplicate labels — beside the proposed rail as it rests and with its one folder open, at the same scale. The renames table in full.</span></span></a>
+  <a href="01-rail-expanded-pm.html"><span class="n">01</span><span><strong>Rail expanded — Project Manager</strong><span>Project overview, and the flat project zone in usage order — Work first, Overview seventh. No folder anywhere in the zone. 17 rows.</span></span></a>
+  <a href="02-rail-expanded-te.html"><span class="n">02</span><span><strong>Rail expanded — Test Engineer</strong><span>Test cases with every project screen one click away and none of them in a folder. 17 rows, one badge, and no Clients, Billing or Administration.</span></span></a>
+  <a href="03-rail-collapsed-flyout.html"><span class="n">03</span><span><strong>Collapsed rail with a flyout</strong><span>The 64px rail on Test runs — 20 icons, the same list in the same order as expanded, with the surviving Administration folder's flyout open and labelled.</span></span></a>
+  <a href="04-settings-landing.html"><span class="n">04</span><span><strong>Settings landing</strong><span><code>/projects/:id/settings</code> as a real page: one card per section carrying one live fact, plus the subnav row. Test Engineer, so four gated cards are absent.</span></span></a>
+  <a href="05-settings-subpage.html"><span class="n">05</span><span><strong>Settings subpage</strong><span><code>/settings/workflow</code> with the subnav row the mockup and two router comments already assumed. Project Manager, so all eleven sections show.</span></span></a>
+  <a href="06-palette.html"><span class="n">06</span><span><strong>The ⌘K palette</strong><span>Phase 1 scope and honest about it — cases, places, projects and key jump, with the placeholder that says exactly that.</span></span></a>
+  <a href="07-my-work-home.html"><span class="n">07</span><span><strong>My work as the personal home</strong><span>The Awaiting you strip and the rail badge — the awaiting-you number, never a total. Timesheet approvals deliberately carries no count.</span></span></a>
+  <a href="08-your-access.html"><span class="n">08</span><span><strong>Your access</strong><span><code>/account/access</code> — the page that explains why two colleagues screen-sharing see different rails, naming all nine hidden entries and who holds each key.</span></span></a>
+  <a href="09-case-detail-actions.html"><span class="n">09</span><span><strong>Case detail — the button convention</strong><span>Five header actions become one primary plus an overflow, with a disabled-with-reason tooltip open and the verb vocabulary beside it.</span></span></a>
+  <a href="10-mobile-drawer.html"><span class="n">10</span><span><strong>The mobile drawer</strong><span>Below <code>md</code>: the same three zones as accordions, at 390px in a phone frame. 44px touch targets; the accordions really open.</span></span></a>
+  <a href="11-role-comparison.html"><span class="n">11</span><span><strong>Four rails, one shell</strong><span>Test Engineer, Project Manager, Finance and Company Admin side by side, gated by the real permission matrix. Finance has no Project zone at all.</span></span></a>
+  <a href="18-pm-board.html"><span class="n">18</span><span><strong>The PM board</strong> <span class="sref">read this one first</span><span>Grooming in, shipping out: <code>New · Refining · Ready to develop · Ready to deploy · Done · Blocked</code>. One dense band per epic and no story rows — no story has tasks yet — readiness signals on every card, <code>Done</code> as a single strip, and <code>Ship it → Done</code> open in a card's menu.</span></span></a>
+  <a href="12-dev-board.html"><span class="n">12</span><span><strong>The Dev board</strong><span>Five columns including <code>Blocked</code>. The band carries the epic's card — its status is <code>In progress</code>, which this board claims — plus two card-stories and the blocked pair; then a row each for the two stories whose tasks are the cards. The second epic is in <code>Refining</code>, so its lane bar shows a chip and an <em>epic on PM board</em> link.</span></span></a>
+  <a href="13-qa-board.html"><span class="n">13</span><span><strong>The QA board</strong><span>Five columns ending at <code>Ready to deploy</code> — the tester's last word, shared with the PM board. The segment's waiting-for-a-tester badge, a band plus three story rows, both epics linking out, and the linked-cases card face.</span></span></a>
+  <a href="14-board-handoff.html"><span class="n">14</span><span><strong>The hand-offs</strong><span>All three boards small and stacked, three cards highlighted twice each — <code>Ready to develop</code> (PM→Dev), <code>Ready for test</code> (Dev→QA), <code>Ready to deploy</code> (QA→PM) — plus <code>Rework</code> and <code>Blocked</code> marked as shared but not hand-offs. No second action anywhere.</span></span></a>
+  <a href="15-board-coverage.html"><span class="n">15</span><span><strong>Settings → Boards, the coverage matrix</strong><span>Eleven statuses × three boards with the workflow line drawn above it, the five shared statuses marked, and the warning row that replaces the 422 a board used to be refused with.</span></span></a>
+  <a href="16-test-cases-tabs.html"><span class="n">16</span><span><strong>Test cases — Cases · Suites · Proposals</strong><span>Where two rail rows went, all three tabs drawn, and the table of every row that left the rail with its route unchanged.</span></span></a>
+  <a href="17-test-runs-tabs.html"><span class="n">17</span><span><strong>Test runs — Runs · Schedules · CI results</strong><span>The <code>/run-schedules</code> orphan rescued as a tab rather than a row, and the unmatched-tests badge on the tab that owns the list.</span></span></a>
+  <a href="19-user-menu.html"><span class="n">19</span><span><strong>The user menu</strong> <span class="sref">belongs beside 08</span><span>§4 open and drawn twice — in the header and again at rest in the page. <code>Timesheets</code> and <code>Timesheet approvals</code> as the first two rows, the rail beside it with no Timesheets row, the rule that decides what lives here, and the recomputed 20 / 17.</span></span></a>
+</div>
+
+<section class="panel" style="margin-top:22px">
+  <div class="panel-head"><h2>What is real in these renders</h2></div>
+  <div>
+    <div class="setrow"><div class="txt"><strong>The <code>Administration ▸</code> folder</strong><span>A real accordion — click it and it opens, in the rail and in the drawer. It is the only folder left; the project zone has none.</span></div><span class="spacer"></span><span class="badge b-done">live</span></div>
+    <div class="setrow"><div class="txt"><strong>Tab strips</strong><span>Drawn from the same model as the rail, so a row that moved out of one and into the other cannot end up in both — or in neither.</span></div><span class="spacer"></span><span class="badge b-done">live</span></div>
+    <div class="setrow"><div class="txt"><strong>The <code>as …</code> role switcher</strong><span>Rebuilds the rail, the user menu and the settings landing from the real permission matrix. Entries are absent, not greyed.</span></div><span class="spacer"></span><span class="badge b-done">live</span></div>
+    <div class="setrow"><div class="txt"><strong>The collapse toggle</strong><span>Swaps 236px for 64px on any render. Collapsed, the <code>T</code> mark expands it again.</span></div><span class="spacer"></span><span class="badge b-done">live</span></div>
+    <div class="setrow"><div class="txt"><strong>⌘K</strong><span>Opens the palette on render 06; goes to it from anywhere else. <kbd class="mono">Esc</kbd> closes.</span></div><span class="spacer"></span><span class="badge b-done">live</span></div>
+    <div class="setrow"><div class="txt"><strong>☾ / ☀</strong><span>Swaps light and dark. Both palettes are the app's own tokens, not invented for this set.</span></div><span class="spacer"></span><span class="badge b-done">live</span></div>
+    <div class="setrow"><div class="txt"><strong>Everything else</strong><span>Says "not wired in the render" rather than pretending. Nothing is saved, and no route here is the real app.</span></div><span class="spacer"></span><span class="badge b-neutral">static</span></div>
+  </div>
+</section>
+</div>
+<script src="assets/shell-v2.js"></script>
+</body>
+</html>

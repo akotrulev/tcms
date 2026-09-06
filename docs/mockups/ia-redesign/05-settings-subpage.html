@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings · Workflow · TCMS IA proposal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell-v2.css">
+</head>
+<body data-role="Project Manager" data-active="settings" data-proj="ACME|Acme Payments"
+      data-crumbs="Projects>#|ACME>01-rail-expanded-pm.html|Settings>04-settings-landing.html|Workflow">
+<template id="caption">
+  <strong><code>/settings/workflow</code> with the subnav row every subpage now carries</strong> —
+  the row the mockup and two router comments already assumed and the build never had. Rendered as a
+  <strong>Project Manager</strong>, so the four gated sections a Test Engineer cannot see are present
+  here; each shows the permission it is held by. The rail keeps <em>one</em> highlighted
+  <code>Settings</code> row rather than eleven siblings, and the breadcrumb — shell-owned now, fed by
+  the route handle rather than by 44 page files — carries the depth instead. The page itself now
+  draws the <strong>eleven-status seed</strong> of §2.3 — the nine-status line plus <code>Rework</code>
+  and <code>Blocked</code> off it — because that is what the three boards in §2.4 are lenses on.
+</template>
+<main class="page">
+<div class="phead">
+  <div><h1>Workflow</h1><div class="sub">Statuses, kinds and the moves that are legal between them</div></div>
+  <div class="actions"><button class="btn btn-primary" data-mock="New status">New status</button></div>
+</div>
+
+<nav class="subnav" aria-label="Settings sections" data-fill="settings-subnav" data-current="workflow"></nav>
+
+<div class="grid g-main">
+  <div class="stack">
+    <section class="panel">
+      <div class="panel-head"><h2>Statuses</h2><span class="spacer"></span><span class="hint">11 · three kinds · used by 3 boards</span></div>
+      <div>
+        <div class="setrow"><span class="badge b-todo">New</span><div class="txt"><strong>New</strong><span>Not started. The default for a new issue, at any level.</span></div><span class="spacer"></span><span class="badge b-neutral">kind: not started</span></div>
+        <div class="setrow"><span class="badge b-todo">Refining</span><div class="txt"><strong>Refining</strong><span>Being groomed. Where an epic or a story earns its readiness signals.</span></div><span class="spacer"></span><span class="badge b-neutral">kind: not started</span></div>
+        <div class="setrow"><span class="badge b-todo">Ready to develop</span><div class="txt"><strong>Ready to develop</strong><span>The hand-off out of grooming. Was <em>To do</em> — the new name says who it is ready for.</span></div><span class="spacer"></span><span class="badge b-neutral">kind: not started</span></div>
+        <div class="setrow"><span class="badge b-prog"><span class="dot"></span>In progress</span><div class="txt"><strong>In progress</strong><span>Somebody is on it. Starts the cycle-time clock.</span></div><span class="spacer"></span><span class="badge b-neutral">kind: in progress</span></div>
+        <div class="setrow"><span class="badge b-review">In review</span><div class="txt"><strong>In review</strong><span>Waiting on a reviewer.</span></div><span class="spacer"></span><span class="badge b-neutral">kind: in progress</span></div>
+        <div class="setrow"><span class="badge b-prog"><span class="dot"></span>Ready for test</span><div class="txt"><strong>Ready for test</strong><span>The hand-off to QA. A drop here <em>is</em> the arrival on the QA board.</span></div><span class="spacer"></span><span class="badge b-neutral">kind: in progress</span></div>
+        <div class="setrow"><span class="badge b-prog"><span class="dot"></span>In test</span><div class="txt"><strong>In test</strong><span>A tester has it.</span></div><span class="spacer"></span><span class="badge b-neutral">kind: in progress</span></div>
+        <div class="setrow"><span class="badge b-prog"><span class="dot"></span>Ready to deploy</span><div class="txt"><strong>Ready to deploy</strong><span>Tested, not shipped. The tester's last word; the PO's next drag is the deploy.</span></div><span class="spacer"></span><span class="badge b-neutral">kind: in progress</span></div>
+        <div class="setrow"><span class="badge b-done">Done</span><div class="txt"><strong>Done</strong><span>Shipped. Stops the clock, and is what release readiness reads.</span></div><span class="spacer"></span><span class="badge b-neutral">kind: done</span></div>
+        <div class="setrow"><span class="chip rework" style="margin:0">Rework</span><div class="txt"><strong>Rework</strong><span>Off the line — the return path from review or test back to a developer.</span></div><span class="spacer"></span><span class="badge b-neutral">kind: in progress</span></div>
+        <div class="setrow"><span class="badge b-blocked"><span class="dot"></span>Blocked</span><div class="txt"><strong>Blocked</strong><span>Off the line, and on every board. Remembers the status it came from; counts as unfinished in its epic.</span></div><span class="spacer"></span><span class="badge b-neutral">kind: in progress</span></div>
+      </div>
+      <div class="panel-foot"><span>Reordering has a keyboard twin on every row — WCAG 2.2 <em>Dragging Movements</em>. <strong>3 not started · 7 in progress · 1 done.</strong> Changing a status kind changes what "complete" means on every chart in Analytics.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Legal moves</h2><span class="spacer"></span><span class="hint">22 of 110 possible</span></div>
+      <div class="panel-body stack" style="gap:10px">
+        <div>
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--color-text-ghost);margin-bottom:6px">Along the line — 8</div>
+          <div class="chips">
+            <span class="chip">New → Refining</span><span class="chip">Refining → Ready to develop</span>
+            <span class="chip">Ready to develop → In progress</span><span class="chip">In progress → In review</span>
+            <span class="chip">In review → Ready for test</span><span class="chip">Ready for test → In test</span>
+            <span class="chip">In test → Ready to deploy</span><span class="chip">Ready to deploy → Done</span>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--color-text-ghost);margin-bottom:6px">Rework, off the line — 4</div>
+          <div class="chips">
+            <span class="chip">In review → Rework</span><span class="chip">In test → Rework</span>
+            <span class="chip">Ready to deploy → Rework</span><span class="chip">Rework → In progress</span>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--color-text-ghost);margin-bottom:6px">Blocked, off the line — 10</div>
+          <div class="chips">
+            <span class="chip">any non-done status → Blocked <span style="color:var(--color-text-ghost)">×9</span></span>
+            <span class="chip">Blocked → wherever it came from <span style="color:var(--color-text-ghost)">×1</span></span>
+          </div>
+        </div>
+      </div>
+      <div class="panel-foot"><span>Out of <code>Blocked</code> is the remembered return, not a listed move: a blocked card goes back to the status it came from, which is why it is one status and not nine.</span></div>
+    </section>
+  </div>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Where this is used</h2></div>
+    <div class="panel-body">
+      <dl class="dl">
+        <dt>Boards</dt><dd>3 — <a href="18-pm-board.html">PM board</a>, <a href="12-dev-board.html">Dev board</a>, <a href="13-qa-board.html">QA board</a> · <a href="15-board-coverage.html">every status covered</a></dd>
+        <dt>Open issues</dt><dd><span class="mono">247</span></dd>
+        <dt>Last change</dt><dd>12 Aug, R. Lindqvist</dd>
+      </dl>
+    </div>
+    <div class="panel-foot"><span>Changing a status kind changes what "complete" means on every chart in Analytics. Adding a <em>status</em> no longer has to be claimed by every board — it is claimed by the board holding its neighbour, and <a href="15-board-coverage.html">the coverage table</a> reports anything that ends up on none.</span></div>
+  </section>
+</div>
+</main>
+<script src="assets/shell-v2.js"></script>
+</body>
+</html>

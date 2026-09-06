@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Collapsed rail with a flyout · TCMS IA proposal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell-v2.css">
+</head>
+<body data-role="Company Admin" data-rail="collapsed" data-active="runs" data-flyout="admin"
+      data-proj="ACME|Acme Payments" data-crumbs="Projects>#|ACME>01-rail-expanded-pm.html|Test runs">
+<template id="caption">
+  <strong>The 64px rail — 20 icons, not 36, and the same list in the same order.</strong> Because the
+  project zone is now flat, the collapsed rail is <em>the expanded rail with the labels removed</em>:
+  no row changes depth, nothing appears or disappears, and the reader's muscle memory survives the
+  collapse. That is the property the brief's finding 10 asked for and the folder draft could not give.
+  One folder is left anywhere in the rail — <code>Administration ▸</code>, drawn here with its
+  <strong>labelled flyout</strong> open — and it survives because all three of its children are gated,
+  so a closed folder is where their absence is least conspicuous. Rendered as a
+  <strong>Company Admin</strong>, the only role that can see it at all. The project zone header
+  collapses to the key chip <code>ACME</code> and still opens the switcher; click the <code>T</code>
+  mark to expand again.
+</template>
+<main class="page">
+<div class="phead">
+  <div><h1>Test runs</h1><div class="sub">Manual and ingested runs, one list · Acme Payments</div></div>
+  <div class="actions">
+    <a class="btn" href="17-test-runs-tabs.html">Schedules</a>
+    <button class="btn btn-primary" data-mock="New test run">New test run</button>
+  </div>
+</div>
+
+<div class="note" style="margin-bottom:14px">
+  <span aria-hidden="true">◷</span>
+  <div><strong>Run schedules were an orphan</strong> — a shipped feature with no rail entry and no
+  inbound link from any screen, reachable only by typing the URL. It is now a
+  <a href="17-test-runs-tabs.html"><em>Schedules</em> tab on this screen</a>, which rescues it
+  without spending a rail row on something opened weekly.</div>
+</div>
+
+<section class="panel">
+  <div class="tw">
+    <table class="t">
+      <thead><tr><th>Run</th><th>Plan</th><th>Source</th><th class="num">Passed</th><th class="num">Failed</th><th>State</th></tr></thead>
+      <tbody>
+        <tr><td><a class="ttl" href="#" data-mock="Run detail">Regression — 2.4 rc3</a></td><td>Release 2.4 sweep</td><td><span class="chip">Manual</span></td><td class="num mono">131</td><td class="num mono">7</td><td><span class="badge b-prog"><span class="dot"></span>In progress</span></td></tr>
+        <tr><td><a class="ttl" href="#" data-mock="Run detail">Nightly — main</a></td><td>Smoke</td><td><span class="chip">CI · GitHub</span></td><td class="num mono">88</td><td class="num mono">0</td><td><span class="badge b-done">Complete</span></td></tr>
+        <tr><td><a class="ttl" href="#" data-mock="Run detail">Checkout hotfix verify</a></td><td>Checkout</td><td><span class="chip">Manual</span></td><td class="num mono">22</td><td class="num mono">1</td><td><span class="badge b-done">Complete</span></td></tr>
+        <tr><td><a class="ttl" href="#" data-mock="Run detail">Nightly — main</a></td><td>Smoke</td><td><span class="chip">CI · GitHub</span></td><td class="num mono">86</td><td class="num mono">2</td><td><span class="badge b-blocked"><span class="dot"></span>4 unmatched</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="panel-foot"><span>The four unmatched tests are the <strong>CI results</strong> <a href="17-test-runs-tabs.html">tab's</a> badge — the awaiting-you number, not a total.</span></div>
+</section>
+</main>
+<script src="assets/shell-v2.js"></script>
+</body>
+</html>

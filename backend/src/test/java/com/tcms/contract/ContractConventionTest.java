@@ -852,6 +852,29 @@ class ContractConventionTest {
             // BoardIssueCard is deliberately NOT `BoardCard` — that schema is work's composite card
             // and carries four kinds, a `derived` flag and a synthetic id, none of which means
             // anything about an issue with a real key.
+            // ---- 021 T2's subset-board block ----
+            //
+            // BoardCoverage is the READ that replaced a RULE (021 R7, D-e): "every status is
+            // claimed by every board" refused a partial board, which is why every board showed the
+            // whole lifecycle and one Team board was the only board anybody made. The three records
+            // are one shape each because the matrix is read rather than navigated — a cell says
+            // "Dev board · In progress", and a client resolving two ids to draw it would fetch
+            // every board of the project to render one screen.
+            Map.entry("BoardCoverage", List.of(com.tcms.tracker.board.BoardCoverageView.class)),
+            Map.entry("BoardCoverageRow",
+                    List.of(com.tcms.tracker.board.BoardCoverageRowView.class)),
+            Map.entry("BoardClaim", List.of(com.tcms.tracker.board.BoardClaimView.class)),
+            // CardElsewhere counts the NOT-SHOWN-HERE set and never total minus shown: a status may
+            // be claimed by two boards — that is what a hand-off column is — so "shown here" and
+            // "elsewhere" overlap and the difference of two totals is not the count.
+            Map.entry("CardElsewhere", List.of(com.tcms.tracker.board.CardElsewhereView.class)),
+            // LinkedCasesSummary is DECLARED and not yet SERVED, and the contract says so in words:
+            // BoardIssueCard.linkedCases is nullable with "null until served (021 T4)". The record
+            // exists here because a component the schema declares and no record carries is a
+            // divergence nothing else in this build can see; the read behind it is T4's.
+            Map.entry("LinkedCasesSummary",
+                    List.of(com.tcms.tracker.board.LinkedCasesSummaryView.class)),
+            Map.entry("IssueSearchHit", List.of(com.tcms.tracker.IssueSearchHitView.class)),
             Map.entry("BoardContents", List.of(com.tcms.tracker.board.BoardContentsView.class)),
             Map.entry("BoardLane", List.of(com.tcms.tracker.board.BoardLaneView.class)),
             Map.entry("WipBreach", List.of(com.tcms.tracker.board.WipBreachView.class)),

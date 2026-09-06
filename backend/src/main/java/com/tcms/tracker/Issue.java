@@ -70,6 +70,20 @@ public class Issue {
     @Column(name = "status_id", nullable = false)
     private UUID statusId;
 
+    /**
+     * Where this issue was before it entered the project's blocking status; null otherwise (021
+     * D-c).
+     *
+     * <p>Blocked is a place work <em>waits</em>, not a place work goes, so the return trip should
+     * cost one click and no decision. The alternative was ten reverse {@code issue_transition}
+     * pairs, and that would make "back to where it was" indistinguishable from "to anywhere" — the
+     * whole distinction this column buys. Written on entry and cleared on exit by
+     * {@link #moveTo}, which is the only writer of {@link #statusId} and therefore the only place
+     * the two can be kept in step.
+     */
+    @Column(name = "blocked_from_status_id")
+    private UUID blockedFromStatusId;
+
     @Column(name = "parent_id")
     private UUID parentId;
 
@@ -363,8 +377,20 @@ public class Issue {
      *
      * <p>{@link #statusEnteredAt} moves on every accepted transition; {@link #doneAt} is set the
      * first time a {@code DONE}-kind status is reached and is never cleared — see its own comment.
+     *
+     * <p>{@link #blockedFromStatusId} is written here and nowhere else, for the reason this method
+     * is the only writer of {@link #statusId}: the origin only means anything relative to the
+     * status the issue is in, so a second writer of one and not the other is how an issue comes to
+     * remember a block it is no longer in. <strong>Recorded on the way IN and cleared on the way
+     * OUT</strong>, and the entry value is the status being left rather than the target — which is
+     * what makes {@code Unblock} a return rather than a guess.
+     *
+     * @param targetIsBlocking whether the status being entered is the project's blocking one
      */
-    void moveTo(UUID targetStatusId, boolean targetIsDone, UUID actorId, Instant now) {
+    void moveTo(UUID targetStatusId, boolean targetIsDone, boolean targetIsBlocking,
+            UUID actorId, Instant now) {
+
+        this.blockedFromStatusId = targetIsBlocking ? this.statusId : null;
         this.statusId = targetStatusId;
         this.statusEnteredAt = now;
         if (targetIsDone && this.doneAt == null) {
@@ -443,6 +469,23 @@ public class Issue {
 
     public String getAcceptanceCriteria() {
         return acceptanceCriteria;
+    }
+
+    public UUID getBlockedFromStatusId() {
+        return blockedFromStatusId;
+    }
+
+    /**
+     * Whether this issue has any acceptance criteria at all — the PM board's readiness signal
+     * (021 §2.6).
+     *
+     * <p>A method here rather than a check at the call site because {@link AcceptanceCriteria} is
+     * this package's codec and the board is a sub-package: the stored column is {@code jsonb} whose
+     * shape only that class knows, and a caller testing the raw string for {@code "[]"} would be a
+     * second definition of "empty" that the first change to the shape breaks silently.
+     */
+    public boolean hasAcceptanceCriteria() {
+        return !AcceptanceCriteria.parse(acceptanceCriteria).isEmpty();
     }
 
     public Priority getPriority() {

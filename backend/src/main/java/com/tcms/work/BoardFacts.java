@@ -240,7 +240,8 @@ class BoardFacts {
             UUID toStatusId,
             String toName,
             String toKind,
-            int toPosition) {
+            int toPosition,
+            boolean toBlocking) {
     }
 
     /**
@@ -258,7 +259,7 @@ class BoardFacts {
     List<LegalMove> legalMoves(Collection<UUID> projectIds) {
         @SuppressWarnings("unchecked")
         List<Object[]> rows = entities.createNativeQuery("""
-                SELECT t.from_status_id, s.id, s.name, s.kind, s."position"
+                SELECT t.from_status_id, s.id, s.name, s.kind, s."position", s.blocking
                   FROM issue_transition t
                   JOIN issue_status s ON s.id = t.to_status_id
                  WHERE t.project_id IN (:projectIds)
@@ -273,7 +274,8 @@ class BoardFacts {
                         (UUID) row[1],
                         (String) row[2],
                         (String) row[3],
-                        ((Number) row[4]).intValue()))
+                        ((Number) row[4]).intValue(),
+                        (Boolean) row[5]))
                 .toList();
     }
 

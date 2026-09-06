@@ -1266,7 +1266,7 @@ class BoardEndpointTest extends IntegrationTestBase {
      * another module's endpoint makes a failure there read as a failure here, and
      * {@code IssueEndpointTest} already owns whether a create works. The type and the opening status
      * come from {@code tcms_seed_project_defaults}, which this fixture already runs — a project's
-     * first status is taken <strong>by position</strong> and never by the word "Backlog", for story
+     * first status is taken <strong>by position</strong> and never by the word "New", for story
      * B1's reason.
      */
     private void issue(

@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test runs — Runs · Schedules · CI results · TCMS IA proposal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell-v2.css">
+</head>
+<body data-role="Test Engineer" data-active="runs" data-proj="ACME|Acme Payments"
+      data-crumbs="Projects>#|ACME>01-rail-expanded-pm.html|Test runs">
+<template id="caption">
+  <strong>The orphan is rescued as a tab, not as a rail row.</strong> <code>/run-schedules</code> is
+  a shipped feature that had <em>no</em> rail entry and no inbound link from any screen — reachable
+  only by typing the URL. It is now the <strong>Schedules</strong> tab here, and
+  <code>CI ingestion</code> is <strong>CI results</strong> beside it, carrying the §8.3 badge:
+  <strong>4</strong> unmatched tests from the last ingestion — an <em>awaiting you</em> number, not a
+  total of anything. All three tabs keep their own URLs (<code>…/runs</code>,
+  <code>…/run-schedules</code>, <code>…/ingestions</code>), so nothing that was ever pasted into a
+  ticket stops working.
+</template>
+<main class="page">
+<div class="phead">
+  <div>
+    <h1>Test runs</h1>
+    <div class="sub">Manual and ingested runs, one list · Acme Payments</div>
+  </div>
+  <div class="actions">
+    <button class="btn btn-primary" data-mock="New test run">New test run</button>
+  </div>
+</div>
+
+<div class="row" style="margin-bottom:14px">
+  <nav class="tabs" aria-label="Test run views" data-fill="tabs" data-tabs="runs" data-current="runs"></nav>
+  <span class="spacer" style="margin-left:auto"></span>
+  <span style="font-size:11.5px;color:var(--color-text-faint)">one screen, three routes — none of them a rail row</span>
+</div>
+
+<section class="panel">
+  <div class="tw">
+    <table class="t">
+      <thead><tr><th>Run</th><th>Plan</th><th>Source</th><th class="num">Passed</th><th class="num">Failed</th><th>State</th></tr></thead>
+      <tbody>
+        <tr><td><a class="ttl" href="#" data-mock="Run detail">Regression — 2.4 rc3</a></td><td>Release 2.4 sweep</td><td><span class="chip">Manual</span></td><td class="num mono">131</td><td class="num mono">7</td><td><span class="badge b-prog"><span class="dot"></span>In progress</span></td></tr>
+        <tr><td><a class="ttl" href="#" data-mock="Run detail">Nightly — main</a></td><td>Smoke</td><td><span class="chip">CI · GitHub</span></td><td class="num mono">88</td><td class="num mono">0</td><td><span class="badge b-done">Complete</span></td></tr>
+        <tr><td><a class="ttl" href="#" data-mock="Run detail">Checkout hotfix verify</a></td><td>Checkout</td><td><span class="chip">Manual</span></td><td class="num mono">22</td><td class="num mono">1</td><td><span class="badge b-done">Complete</span></td></tr>
+        <tr><td><a class="ttl" href="#" data-mock="Run detail">Nightly — main</a></td><td>Smoke</td><td><span class="chip">CI · GitHub</span></td><td class="num mono">86</td><td class="num mono">2</td><td><span class="badge b-blocked"><span class="dot"></span>4 unmatched</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="panel-foot"><span>Those four unmatched tests are the number on the <strong>CI results</strong> tab. A run and an ingested run are the same object seen from two sides, which is why they are two tabs on one screen and not two rows in a rail.</span></div>
+</section>
+
+<section class="panel" style="margin-top:16px">
+  <div class="panel-head"><h2>What the other two tabs look like</h2><span class="spacer"></span><span class="hint">drawn here so one file shows all three</span></div>
+  <div class="panel-body stack" style="gap:14px">
+    <div>
+      <div class="row" style="margin-bottom:8px"><nav class="tabs" aria-label="Test run views, Schedules selected" data-fill="tabs" data-tabs="runs" data-current="schedules"></nav></div>
+      <div class="note" style="margin-bottom:10px">
+        <span aria-hidden="true">◷</span>
+        <div><strong>This screen already exists and already works.</strong> Nothing here is new
+        behaviour — the only defect was that no navigation anywhere led to it.</div>
+      </div>
+      <div class="tw"><table class="t" style="min-width:0">
+        <thead><tr><th>Schedule</th><th>Plan</th><th>When</th><th>Next</th><th>State</th></tr></thead>
+        <tbody>
+          <tr><td><span class="ttl">Nightly smoke</span></td><td>Smoke</td><td class="mono">0 2 * * *</td><td>in 6h 12m</td><td><span class="badge b-done">Active</span></td></tr>
+          <tr><td><span class="ttl">Weekly regression</span></td><td>Release 2.4 sweep</td><td class="mono">0 3 * * 6</td><td>Saturday</td><td><span class="badge b-done">Active</span></td></tr>
+          <tr><td><span class="ttl">Pre-release checkout</span></td><td>Checkout</td><td class="mono">on release cut</td><td>—</td><td><span class="badge b-neutral">Paused</span></td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div>
+      <div class="row" style="margin-bottom:8px"><nav class="tabs" aria-label="Test run views, CI results selected" data-fill="tabs" data-tabs="runs" data-current="ci"></nav></div>
+      <div class="note warn" style="margin-bottom:10px">
+        <span aria-hidden="true">⚠</span>
+        <div><strong>4 tests in the last ingestion matched no case in the repository.</strong> They
+        are the tab's badge. Match them to a case, or file them as proposals — until then their
+        results count towards nothing.</div>
+      </div>
+      <div class="tw"><table class="t" style="min-width:0">
+        <thead><tr><th>Ingestion</th><th>Source</th><th class="num">Matched</th><th class="num">Unmatched</th><th>When</th></tr></thead>
+        <tbody>
+          <tr><td><span class="ttl">JUnit — build 4821</span></td><td><span class="chip">GitHub Actions</span></td><td class="num mono">88</td><td class="num mono">4</td><td>40 min ago</td></tr>
+          <tr><td><span class="ttl">JUnit — build 4816</span></td><td><span class="chip">GitHub Actions</span></td><td class="num mono">88</td><td class="num mono">0</td><td>yesterday</td></tr>
+          <tr><td><span class="ttl">Cucumber — nightly</span></td><td><span class="chip">GitLab CI</span></td><td class="num mono">31</td><td class="num mono">0</td><td>yesterday</td></tr>
+        </tbody>
+      </table></div>
+      <div style="font-size:11.5px;color:var(--color-text-faint);padding:8px 2px 0"><strong>CI ingestion → CI results.</strong> "Ingestion" is the system's verb for what it did; "results" is the reader's noun for what they came to look at.</div>
+    </div>
+  </div>
+</section>
+
+<section class="panel" style="margin-top:16px">
+  <div class="panel-head"><h2>Why a tab and not a row</h2></div>
+  <div class="panel-body stack" style="gap:10px">
+    <div class="bullet"><span aria-hidden="true">▸</span><div><strong>The rail is ordered by how often a screen is opened.</strong> Schedules and CI results are opened weekly or less; giving each a permanent row pushed <em>Work</em> and <em>Test cases</em> further from the top for every reader, every day.</div></div>
+    <div class="bullet"><span aria-hidden="true">▸</span><div><strong>A tab is where the reader already is.</strong> Whoever wants a schedule was looking at runs a moment ago — the two are the same subject at different times.</div></div>
+    <div class="bullet"><span aria-hidden="true">▸</span><div><strong>Nothing is hidden by this.</strong> The badge on <em>CI results</em> is visible from the Runs tab, so the reason to open it is on screen before it is opened — the same test a folder had to pass in the first draft.</div></div>
+    <div class="bullet"><span aria-hidden="true">▸</span><div><strong>And the URL is untouched</strong>, so the tab is discoverable navigation added to a route that already worked, not a move.</div></div>
+  </div>
+</section>
+</main>
+<script src="assets/shell-v2.js"></script>
+</body>
+</html>

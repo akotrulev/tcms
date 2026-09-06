@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test cases as a Test Engineer · TCMS IA proposal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell-v2.css">
+</head>
+<body data-role="Test Engineer" data-active="cases" data-proj="ACME|Acme Payments"
+      data-crumbs="Projects>#|ACME>01-rail-expanded-pm.html|Test cases">
+<template id="caption">
+  <strong>The Test Engineer's rail — every project screen one click away, and none of them in a
+  folder.</strong> <strong>17 rows</strong> against 27–36 flat today, none of which can be shut.
+  The four rows a tester lives in — Work, Test cases, Test plans, Test runs — are the first four
+  under the project switcher. Note what a Test Engineer does <em>not</em> see: no Clients, no
+  Billing, and no Administration folder at all (all three of its children are gated on keys a TE
+  lacks). The rail carries exactly <strong>one</strong> badge, on <code>My work</code>; the other
+  two the proposal grants — proposals pending, unmatched CI tests — sit on the
+  <a href="16-test-cases-tabs.html">tabs</a> that own those lists, and are drawn there.
+</template>
+<main class="page">
+<div class="phead">
+  <div><h1>Test cases</h1><div class="sub">154 cases · Acme Payments</div></div>
+  <div class="actions"><button class="btn btn-primary" data-mock="New case">New case</button></div>
+</div>
+
+<div class="filters">
+  <span class="sel on">Suite: Checkout</span>
+  <span class="sel" data-mock="Status filter">Status: any</span>
+  <span class="sel" data-mock="Tag filter">Tag: any</span>
+  <span class="spacer"></span>
+  <span class="chip on">Verifies a story <span class="x">×</span></span>
+</div>
+
+<section class="panel">
+  <div class="tw">
+    <table class="t">
+      <thead><tr><th>Key</th><th class="sorted-asc">Title</th><th>State</th><th>Latest result</th><th>Verifies</th></tr></thead>
+      <tbody>
+        <tr><td><span class="ikey">TC-308</span></td><td><a class="ttl" href="09-case-detail-actions.html">Guest order, valid card</a></td><td><span class="badge b-done">Approved</span></td><td><span class="badge b-pass"><span class="dot"></span>Passed</span></td><td><span class="ikey">ACME-118</span></td></tr>
+        <tr><td><span class="ikey">TC-309</span></td><td><a class="ttl" href="09-case-detail-actions.html">Guest order, declined card</a></td><td><span class="badge b-done">Approved</span></td><td><span class="badge b-pass"><span class="dot"></span>Passed</span></td><td><span class="ikey">ACME-118</span></td></tr>
+        <tr style="background:color-mix(in srgb, var(--color-danger) 8%, transparent)"><td><span class="ikey">TC-311</span></td><td><a class="ttl" href="09-case-detail-actions.html">Guest order, expired card</a></td><td><span class="badge b-review">In review</span></td><td><span class="badge b-fail"><span class="dot"></span>Failed</span></td><td><span class="ikey">ACME-118</span></td></tr>
+        <tr><td><span class="ikey">TC-314</span></td><td><a class="ttl" href="09-case-detail-actions.html">Account offer declined, order stands</a></td><td><span class="badge b-done">Approved</span></td><td><span class="badge b-pass"><span class="dot"></span>Passed</span></td><td><span class="ikey">ACME-118</span></td></tr>
+        <tr><td><span class="ikey">TC-320</span></td><td><a class="ttl" href="09-case-detail-actions.html">Cart survives sign-in mid-checkout</a></td><td><span class="badge b-done">Approved</span></td><td><span class="badge b-pass"><span class="dot"></span>Passed</span></td><td><span class="ikey">ACME-112</span></td></tr>
+        <tr><td><span class="ikey">TC-402</span></td><td><a class="ttl" href="09-case-detail-actions.html">Card capture without leaving the page</a></td><td><span class="badge b-done">Approved</span></td><td><span class="badge b-fail"><span class="dot"></span>Failed</span></td><td><span class="ikey">ACME-122</span></td></tr>
+        <tr><td><span class="ikey">TC-410</span></td><td><a class="ttl" href="09-case-detail-actions.html">Address validation rejects a bad postcode</a></td><td><span class="badge b-neutral">Draft</span></td><td><span class="badge b-untested"><span class="dot"></span>Untested</span></td><td><span style="color:var(--color-text-ghost)">—</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="panel-foot"><span><strong>Suites</strong> now has a route
+    (<code class="mono">/projects/:id/suites</code>) and a <a href="16-test-cases-tabs.html">tab on
+    this screen</a> — they were a panel inside it with no navigation presence at all. A tab and not
+    a rail row: the rail is ordered by how often a screen is opened, and a permanent row for suites
+    would push Work and Test cases down for every reader, every day.</span></div>
+</section>
+</main>
+<script src="assets/shell-v2.js"></script>
+</body>
+</html>

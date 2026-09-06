@@ -449,7 +449,8 @@ public class BoardService {
         for (BoardFacts.LegalMove move : facts.legalMoves(projectIds)) {
             byStatus.computeIfAbsent(move.fromStatusId(), status -> new ArrayList<>())
                     .add(new BoardStatusRef(
-                            move.toStatusId(), move.toName(), move.toKind(), move.toPosition()));
+                            move.toStatusId(), move.toName(), move.toKind(), move.toPosition(),
+                            move.toBlocking()));
         }
         return byStatus;
     }

@@ -32,10 +32,13 @@ import org.springframework.stereotype.Service;
  *       so a pair with no row is refused — story H5: "a move the project forbids is never offered",
  *       and on the board "the card does not move and the board tells me why" rather than snapping
  *       back in silence.</li>
- *   <li><strong>The issue is an Epic.</strong> D31 derives an epic's status from its stories and it
- *       is not editable. Refused here rather than by omitting rows from the workflow table, and
- *       deliberately: an epic has no status rows of its own to omit, and a manual epic status is
- *       exactly the "In Progress, 100%" disagreement D31 exists to make unrepresentable.</li>
+ *   <li><strong>A {@code blocking} target from a {@code DONE} status.</strong> Blocked is where
+ *       work waits, and finished work is not waiting for anything — 021 §2.3 seeds the pair from
+ *       every <em>non-done</em> status for exactly that reason. Refused here as well as omitted
+ *       from the seed, because {@code blocking} is a flag a workflow editor can move onto any
+ *       status and the seed is only the shape a new project starts in: a project that listed the
+ *       pair by hand would otherwise get a card that is Done, blocked, and remembers Done as the
+ *       place to return to.</li>
  *   <li><strong>The caller is closing their own work and the project requires review to close
  *       it</strong> (D33). Refused only when the project has switched
  *       {@code review_enabled_issue} on, {@code author_may_approve_own_work} is off, and the caller
@@ -56,6 +59,16 @@ import org.springframework.stereotype.Service;
  * time a {@code DONE}-kind status is reached and is <strong>never cleared by a reopen</strong> — an
  * issue that has been done once has been done once, and a lead time computed from a cleared column
  * silently lengthens every time somebody reopens something.
+ *
+ * <h2>The one legal move with no row behind it (021 D-c)</h2>
+ *
+ * <p>Entering the project's {@code blocking} status records the status being left in
+ * {@code issue.blocked_from_status_id}, and <strong>that origin is a legal target on the way
+ * out</strong> even though {@code issue_transition} has no pair for it. Blocked is reached from
+ * every non-done status, so the alternative was ten reverse pairs — and ten reverse pairs make
+ * "back to where it was" indistinguishable from "to anywhere", which is the whole distinction the
+ * column buys. The widening applies only <em>from</em> a blocking status, so no other pair in the
+ * project becomes legal because a column exists.
  */
 @Service
 public class TransitionService {
@@ -112,10 +125,6 @@ public class TransitionService {
         record NotAllowed(String from, String to) implements Outcome {
         }
 
-        /** D31 — an epic's status is derived from its stories and is not editable. */
-        record DerivedStatus() implements Outcome {
-        }
-
         /**
          * D33 — the caller is the assignee and this project requires a second person to close.
          *
@@ -139,12 +148,13 @@ public class TransitionService {
     }
 
     private Outcome apply(UUID userId, Project project, Issue issue, UUID targetStatusId) {
-        IssueType type = types.findById(issue.getTypeId()).orElseThrow(() ->
+        // The type is read for the exception, and no longer for a refusal: 021 R10 gives an epic a
+        // stored status and a lifecycle of its own, so an epic moves along the workflow exactly as
+        // a story does. What stays derived is the COMPLETION, which is Completion's and was never
+        // this method's.
+        types.findById(issue.getTypeId()).orElseThrow(() ->
                 new IllegalStateException("issue " + issue.getIssueKey()
                         + " points at a type that is not in its project"));
-        if (type.getLevel() == IssueLevel.EPIC) {
-            return new Outcome.DerivedStatus();
-        }
 
         List<IssueStatus> projectStatuses =
                 statuses.findByProjectIdOrderByPositionAsc(project.getId());
@@ -191,7 +201,14 @@ public class TransitionService {
             }
         }
 
-        boolean allowed = transitions.findByFromStatusId(issue.getStatusId()).stream()
+        // THE REMEMBERED ORIGIN IS LEGAL WITHOUT A ROW (021 D-c). Blocked is entered from every
+        // non-done status, and listing ten reverse pairs would make "back to where it was"
+        // indistinguishable from "to anywhere" — so the way out is the one status the issue was in
+        // when it was blocked, and nothing else the workflow does not already allow. Checked only
+        // FROM a blocking status, so the column cannot widen the legal set anywhere else.
+        boolean unblocking = current.isBlocking()
+                && targetStatusId.equals(issue.getBlockedFromStatusId());
+        boolean allowed = unblocking || transitions.findByFromStatusId(issue.getStatusId()).stream()
                 .anyMatch(move -> move.getToStatusId().equals(targetStatusId));
         if (!allowed) {
             return new Outcome.NotAllowed(current.getName(), target.get().getName());
@@ -201,7 +218,8 @@ public class TransitionService {
         // Inside the transaction that moves the issue, so issue_fact cannot be told about a move
         // that then rolls back. Coalesced: a board drag-and-drop session is one recompute.
         outbox.recordCoalesced(OutboxEvents.ISSUES_CHANGED);
-        issue.moveTo(targetStatusId, target.get().getKind() == IssueStatusKind.DONE, userId, now);
+        issue.moveTo(targetStatusId, target.get().getKind() == IssueStatusKind.DONE,
+                target.get().isBlocking(), userId, now);
         Issue moved = issues.save(issue);
 
         auditEvents.save(AuditEvent.record(

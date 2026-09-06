@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project overview as a Project Manager · TCMS IA proposal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell-v2.css">
+</head>
+<body data-role="Project Manager" data-active="overview" data-proj="ACME|Acme Payments"
+      data-crumbs="Projects>#|ACME>01-rail-expanded-pm.html|Overview">
+<template id="caption">
+  <strong>The Project Manager's rail — flat, and ordered by how often a screen is opened.</strong>
+  Work first, because the day starts and ends on the board; the three test-repository screens next,
+  because a Test Engineer opens them next; <strong>Overview seventh</strong>, because it is the
+  project's dashboard — read at stand-up and by a PM — not the place work is done (reversal R8, and
+  it is this page). No folder stands anywhere in the project zone: the
+  <s><code>Repository ▸</code> / <code>Quality ▸</code></s> split of the first draft was withdrawn.
+  <strong>17 rows</strong> for a PM; a Company Admin, who holds every gate, sees 20 — one fewer
+  each than the first revision, because <code>Timesheets</code> left the rail for
+  <a href="19-user-menu.html">the user menu</a> (R11). The switcher is
+  the <em>Project</em> zone header, not a header control (reversal R1); the breadcrumb states the
+  frame at full width beside it. Administration is absent entirely — a PM holds none of
+  <code>token:issue</code>, <code>company:idp</code>, <code>audit:view</code>, so the folder has no
+  visible child.
+  The Overview tile that used to carry a note about the composite board now simply links to it —
+  <code>/board</code> was orphaned, with no rail entry and no inbound link from any screen, and it is
+  retired for good once its QA half becomes the QA board's card face (§2.7, Phase 2).
+</template>
+<main class="page">
+<div class="phead">
+  <div>
+    <div class="row" style="gap:8px;margin-bottom:2px">
+      <span class="ikey">ACME</span>
+      <span class="chip">Client: Acme Retail</span>
+      <span class="chip">Lead: Rae Lindqvist</span>
+    </div>
+    <h1>Acme Payments</h1>
+    <div class="sub">Delivery and quality, together — this is where opening a project lands.</div>
+  </div>
+  <div class="actions">
+    <button class="btn" data-mock="Roadmap">Roadmap</button>
+    <a class="btn btn-primary" href="12-dev-board.html">Open Work</a>
+  </div>
+</div>
+
+<div class="grid g4" style="margin-bottom:16px">
+  <section class="panel"><div class="panel-body"><div class="kpi"><span class="n">62%</span><span class="l">Release 2.4 readiness</span><span class="d">3 blockers open</span></div></div></section>
+  <section class="panel"><div class="panel-body"><div class="kpi"><span class="n">18</span><span class="l">Unscheduled stories</span><span class="d">no release assigned</span></div></div></section>
+  <section class="panel"><div class="panel-body"><div class="kpi"><span class="n">7</span><span class="l">Cases failed today</span><span class="d">of 154 in the repository</span></div></div></section>
+  <section class="panel"><div class="panel-body"><div class="kpi"><span class="n">1.9d</span><span class="l">Median cycle time</span><span class="d">last 30 days</span></div></div></section>
+</div>
+
+<div class="grid g2">
+  <section class="panel">
+    <div class="panel-head"><h2>Epics in flight</h2><span class="spacer"></span><span class="hint">4 of 9</span></div>
+    <div class="panel-body stack" style="gap:12px">
+      <div><div class="row" style="margin-bottom:5px"><span class="type-ic t-epic">E</span><span>Checkout rebuild</span><span class="spacer" style="margin-left:auto"></span><span class="ikey">72%</span></div><div class="meter"><span class="done" style="width:72%"></span><span class="prog" style="width:14%"></span></div></div>
+      <div><div class="row" style="margin-bottom:5px"><span class="type-ic t-epic">E</span><span>Refunds &amp; disputes</span><span class="spacer" style="margin-left:auto"></span><span class="ikey">41%</span></div><div class="meter"><span class="done" style="width:41%"></span><span class="prog" style="width:22%"></span></div></div>
+      <div><div class="row" style="margin-bottom:5px"><span class="type-ic t-epic">E</span><span>Fraud signals</span><span class="spacer" style="margin-left:auto"></span><span class="ikey">18%</span></div><div class="meter"><span class="done" style="width:18%"></span><span class="risk" style="width:9%"></span></div></div>
+      <div><div class="row" style="margin-bottom:5px"><span class="type-ic t-epic">E</span><span>Statement exports</span><span class="spacer" style="margin-left:auto"></span><span class="ikey">88%</span></div><div class="meter"><span class="done" style="width:88%"></span></div></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Quality today</h2><span class="spacer"></span><span class="hint">last run 40 min ago</span></div>
+    <div class="panel-body stack" style="gap:12px">
+      <div class="row" style="gap:6px">
+        <span class="badge b-pass"><span class="dot"></span>131 passed</span>
+        <span class="badge b-fail"><span class="dot"></span>7 failed</span>
+        <span class="badge b-untested"><span class="dot"></span>16 untested</span>
+      </div>
+      <div class="tw"><table class="t" style="min-width:0">
+        <tbody>
+          <tr><td><span class="ikey">TC-311</span></td><td><span class="ttl">Guest order, expired card</span></td><td><span class="badge b-fail"><span class="dot"></span>Failed</span></td></tr>
+          <tr><td><span class="ikey">TC-402</span></td><td><span class="ttl">Card capture without leaving the page</span></td><td><span class="badge b-fail"><span class="dot"></span>Failed</span></td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <div class="panel-foot"><span>Every count links to its filtered table — design language rule 8.</span></div>
+  </section>
+</div>
+</main>
+<script src="assets/shell-v2.js"></script>
+</body>
+</html>

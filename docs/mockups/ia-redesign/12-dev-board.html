@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dev board — grouped by epic · TCMS IA proposal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell-v2.css">
+</head>
+<body data-role="Project Manager" data-active="work" data-proj="ACME|Acme Payments"
+      data-crumbs="Projects>#|ACME>01-rail-expanded-pm.html|Work>18-pm-board.html|Dev board">
+<template id="caption">
+  <strong>The Dev board — five columns, grouped by epic.</strong> Proposal §2.4: this board claims a
+  <em>subset</em> of the workflow's eleven statuses (reversal R7) —
+  <code>Ready to develop · In progress (+ Rework) · In review · Ready for test · Blocked</code>.
+  There is no <code>New</code> or <code>Refining</code>, so a developer sees nothing until it is ready
+  for them, and no <code>Done</code>, which is the PM board's because tested is not shipped (R12).
+  <strong>§2.5 — cards stack, rows are earned.</strong> Each lane opens with one band where the
+  epic's own card and every card-story sit in their status columns; a story earns a row of its own
+  only when its <em>tasks</em> are the cards here, which is why <code>ACME-118</code> and
+  <code>ACME-130</code> have rows and the rest do not. Reversal <strong>R10</strong>:
+  <code>ACME-101</code>'s status is <code>In progress</code>, which this board claims, so the epic is
+  a <strong>card in that column</strong>, draggable like any other. <code>ACME-102</code> is in
+  <code>Refining</code>, which this board does not claim, so its lane bar carries the chip and a link
+  instead. <code>ACME-153</code> in <code>Blocked</code> reads <em>⛔ from In test</em>, so nobody on
+  Dev mistakes a tester's blocked card for theirs. <em>In progress</em> is one over its WIP limit;
+  the drop was accepted and the breach is reported on the column header, never on the card.
+</template>
+<main class="page">
+<div class="phead">
+  <div>
+    <h1>Work</h1>
+    <div class="sub">Dev board · Acme Payments</div>
+  </div>
+  <div class="actions">
+    <a class="btn" href="15-board-coverage.html">Configure boards</a>
+    <button class="btn btn-primary" data-mock="New issue — epic, story or task, chosen in the dialog">New issue</button>
+  </div>
+</div>
+
+<div class="row" style="margin-bottom:12px">
+  <nav class="tabs" aria-label="Work views" data-fill="tabs" data-tabs="work" data-current="dev"></nav>
+  <span class="spacer" style="margin-left:auto"></span>
+  <span class="sel on" data-mock="Group by">Group by: Epic</span>
+</div>
+
+<div class="filters">
+  <span class="chip on">checkout <span class="x">×</span></span>
+  <span class="sel" data-mock="Assignee filter">Assignee: any</span>
+  <span class="sel" data-mock="Add a filter">+ Filter</span>
+</div>
+
+<div class="boardscroll">
+  <div class="colheads c5" role="row" aria-label="Board columns">
+    <div class="col-head shared"><span>Ready to develop</span><span class="claims">shared with PM</span><span class="n">6</span><span class="spacer"></span><span class="wip">—</span></div>
+    <div class="col-head"><span>In progress</span><span class="claims">+ Rework</span><span class="n">4</span><span class="spacer"></span><span class="wip over" title="Work-in-progress limit exceeded">4 / 3 ⚠</span></div>
+    <div class="col-head"><span>In review</span><span class="n">3</span><span class="spacer"></span><span class="wip">3 / 4</span></div>
+    <div class="col-head shared"><span>Ready for test</span><span class="claims">shared with QA</span><span class="n">5</span><span class="spacer"></span><span class="wip">—</span></div>
+    <div class="col-head blockedcol"><span>Blocked</span><span class="nblocked">2</span><span class="spacer"></span><span class="wip">—</span></div>
+  </div>
+<div class="lane">
+  <div class="lane-head">
+    <button class="btn btn-icon btn-sm" data-mock="Collapse lane" aria-label="Collapse the Checkout redesign lane">▾</button>
+    <span class="type-ic t-epic">E</span>
+    <a href="#" data-mock="Open ACME-101"><strong style="font-size:13px">Checkout redesign</strong></a>
+    <span class="ikey">ACME-101</span>
+    <span class="spacer"></span>
+    <span class="mono" style="font-size:11.5px">38%</span>
+    <span class="meter"><span class="done" style="width:38%"></span><span class="prog" style="width:17%"></span></span>
+    <span class="basis">by estimate · 5 of 13</span>
+  </div>
+
+  <div class="lanescroll">
+    <div class="egrid c5">
+
+      <div class="cell shared">
+        <a class="card" href="#" data-mock="Open ACME-150">
+          <div class="top"><span class="type-ic t-story">S</span><span class="ikey">ACME-150</span><span class="spacer"></span><button class="btn btn-icon btn-sm btn-ghost" data-mock="ACME-150: Move to… · Block… · Add note · Open" aria-label="Actions for ACME-150">⋮</button></div>
+          <div class="ttl">Guest order lookup</div>
+          <div class="bot"><span class="chip">checkout</span><span class="badge b-info">also on PM</span><span class="spacer"></span><span class="est">8h</span><span class="avatar sm">—</span></div>
+        </a>
+      </div>
+      <div class="cell">
+        <a class="card epiccard" href="#" data-mock="Open ACME-101">
+          <div class="top"><span class="type-ic t-epic">E</span><span class="ikey">ACME-101</span><span class="spacer"></span><button class="btn btn-icon btn-sm btn-ghost" data-mock="ACME-101: Move to… · Block… · Add note · Open" aria-label="Actions for ACME-101">⋮</button></div>
+          <div class="ttl">Checkout redesign</div>
+          <div class="bot"><span class="chip">checkout</span><span class="spacer"></span><span class="est">13d</span><span class="avatar sm">DP</span></div>
+        </a>
+      </div>
+      <div class="cell">
+        <a class="card" href="#" data-mock="Open ACME-124">
+          <div class="top"><span class="type-ic t-story">S</span><span class="ikey">ACME-124</span><span class="spacer"></span><button class="btn btn-icon btn-sm btn-ghost" data-mock="ACME-124: Move to… · Block… · Add note · Open" aria-label="Actions for ACME-124">⋮</button></div>
+          <div class="ttl">Saved cards</div>
+          <div class="bot"><span class="chip">checkout</span><span class="spacer"></span><span class="est">10h</span><span class="avatar sm">MS</span></div>
+        </a>
+      </div>
+      <div class="cell shared"></div>
+      <div class="cell blockedcol">
+        <a class="card" href="#" data-mock="Open ACME-152">
+          <div class="top"><span class="type-ic t-story">S</span><span class="ikey">ACME-152</span><span class="spacer"></span><button class="btn btn-icon btn-sm btn-ghost" data-mock="ACME-152: Unblock → In progress · Move to… · Add note · Open" aria-label="Actions for ACME-152">⋮</button></div>
+          <div class="ttl">Payment intent for guests</div>
+          <div class="bot"><span class="chip blockedfrom">⛔ from In progress</span><span class="spacer"></span><span class="est">5h</span><span class="avatar sm">DP</span></div>
+        </a>
+        <a class="card" href="#" data-mock="Open ACME-153">
+          <div class="top"><span class="type-ic t-story">S</span><span class="ikey">ACME-153</span><span class="spacer"></span><button class="btn btn-icon btn-sm btn-ghost" data-mock="ACME-153: Unblock → In test · Move to… · Add note · Open" aria-label="Actions for ACME-153">⋮</button></div>
+          <div class="ttl">Guest checkout smoke pass</div>
+          <div class="bot"><span class="chip blockedfrom">⛔ from In test</span><span class="spacer"></span><span class="est">3h</span><span class="avatar sm">TE</span></div>
+        </a>
+      </div>
+
+      <div class="srow-bar">
+        <button class="btn btn-icon btn-sm btn-ghost" data-mock="Collapse story row" aria-label="Collapse ACME-118">▾</button>
+        <span class="type-ic t-story">S</span><span class="ikey">ACME-118</span>
+        <a class="nm" href="#" data-mock="Open ACME-118">Guest checkout</a>
+        <div class="mt"><span class="cnt">0/4</span> tasks <span class="badge b-prog"><span class="dot"></span>In progress</span></div>
+        <span class="spacer"></span>
+        <button class="btn btn-icon btn-sm btn-ghost" data-mock="ACME-118: Move to… · Add note · Open" aria-label="Actions for ACME-118">⋮</button>
+      </div>
+      <div class="cell shared"></div>
+      <div class="cell">
+        <a class="card" href="#" data-mock="Open ACME-119">
+          <div class="top"><span class="type-ic t-task">T</span><span class="ikey">ACME-119</span><span class="ai-tag">AI</span><span class="spacer"></span><button class="btn btn-icon btn-sm btn-ghost" data-mock="ACME-119: Move to… · Block… · Add note · Open" aria-label="Actions for ACME-119">⋮</button></div>
+          <div class="ttl">Guest form fields and validation</div>
+          <div class="bot"><span class="chip">checkout</span><span class="due-soon">Today</span><span class="spacer"></span><span class="est">6h</span><span class="avatar sm">DP</span></div>
+        </a>
+        <a class="card" href="#" data-mock="Open ACME-121">
+          <div class="top"><span class="type-ic t-task">T</span><span class="ikey">ACME-121</span><span class="spacer"></span><button class="btn btn-icon btn-sm btn-ghost" data-mock="ACME-121: Move to… · Block… · Add note · Open" aria-label="Actions for ACME-121">⋮</button></div>
+          <div class="ttl">Session hand-off after sign-in</div>
+          <div class="bot"><span class="chip rework">Rework</span><span class="badge b-info">also on QA</span><span class="spacer"></span><span class="est">4h</span><span class="avatar sm">DP</span></div>
+        </a>
+      </div>
+      <div class="cell">
+        <a class="card" href="#" data-mock="Open ACME-122">
+          <div class="top"><span class="type-ic t-task">T</span><span class="ikey">ACME-122</span><span class="spacer"></span><button class="btn btn-icon btn-sm btn-ghost" data-mock="ACME-122: Move to… · Block… · Add note · Open" aria-label="Actions for ACME-122">⋮</button></div>
+          <div class="ttl">Copy for the guest banner</div>
+          <div class="bot"><span class="chip">checkout</span><span class="spacer"></span><span class="est">2h</span><span class="avatar sm">MS</span></div>
+        </a>
+      </div>
+      <div class="cell shared">
+        <a class="card" href="#" data-mock="Open ACME-120">
+          <div class="top"><span class="type-ic t-task">T</span><span class="ikey">ACME-120</span><span class="spacer"></span><button class="btn btn-icon btn-sm btn-ghost" data-mock="ACME-120: Move to… · Block… · Add note · Open" aria-label="Actions for ACME-120">⋮</button></div>
+          <div class="ttl">Guest checkout API</div>
+          <div class="bot"><span class="chip">checkout</span><span class="badge b-info">also on QA</span><span class="spacer"></span><span class="est">8h</span><span class="avatar sm">DP</span></div>
+        </a>
+      </div>
+      <div class="cell blockedcol"></div>
+
+      <div class="srow-bar">
+        <button class="btn btn-icon btn-sm btn-ghost" data-mock="Collapse story row" aria-label="Collapse ACME-130">▾</button>
+        <span class="type-ic t-story">S</span><span class="ikey">ACME-130</span>
+        <a class="nm" href="#" data-mock="Open ACME-130">Address book</a>
+        <div class="mt"><span class="cnt">0/3</span> tasks <span class="badge b-prog"><span class="dot"></span>Ready for test</span></div>
+        <a class="elsewhere" href="13-qa-board.html">1 on QA board →</a>
+        <span class="spacer"></span>
+        <button class="btn btn-icon btn-sm btn-ghost" data-mock="ACME-130: Move to… · Add note · Open" aria-label="Actions for ACME-130">⋮</button>
+      </div>
+      <div class="cell shared"></div>
+      <div class="cell"></div>
+      <div class="cell"></div>
+      <div class="cell shared">
+        <a class="card" href="#" data-mock="Open ACME-131">
+          <div class="top"><span class="type-ic t-task">T</span><span class="ikey">ACME-131</span><span class="spacer"></span><button class="btn btn-icon btn-sm btn-ghost" data-mock="ACME-131: Move to… · Block… · Add note · Open" aria-label="Actions for ACME-131">⋮</button></div>
+          <div class="ttl">Address list and default flag</div>
+          <div class="bot"><span class="chip">checkout</span><span class="badge b-info">also on QA</span><span class="spacer"></span><span class="est">5h</span><span class="avatar sm">TE</span></div>
+        </a>
+        <a class="card" href="#" data-mock="Open ACME-132">
+          <div class="top"><span class="type-ic t-task">T</span><span class="ikey">ACME-132</span><span class="spacer"></span><button class="btn btn-icon btn-sm btn-ghost" data-mock="ACME-132: Move to… · Block… · Add note · Open" aria-label="Actions for ACME-132">⋮</button></div>
+          <div class="ttl">Edit an address in place</div>
+          <div class="bot"><span class="chip">checkout</span><span class="badge b-info">also on QA</span><span class="spacer"></span><span class="est">3h</span><span class="avatar sm">TE</span></div>
+        </a>
+      </div>
+      <div class="cell blockedcol"></div>
+    </div>
+  </div>
+</div>
+
+<div class="lane">
+  <div class="lane-head">
+    <button class="btn btn-icon btn-sm" data-mock="Collapse lane" aria-label="Collapse the Payments v2 lane">▾</button>
+    <span class="type-ic t-epic">E</span>
+    <a href="#" data-mock="Open ACME-102"><strong style="font-size:13px">Payments v2</strong></a>
+    <span class="ikey">ACME-102</span>
+    <span class="epicstate"><span class="badge b-todo">Refining</span><a class="epiclink" href="18-pm-board.html">epic on PM board →</a></span>
+    <span class="spacer"></span>
+    <span class="mono" style="font-size:11.5px">12%</span>
+    <span class="meter"><span class="done" style="width:12%"></span><span class="prog" style="width:20%"></span></span>
+    <span class="basis">by count · 1 of 8</span>
+  </div>
+
+  <div class="lanescroll">
+    <div class="egrid c5">
+
+      <div class="srow-bar">
+        <button class="btn btn-icon btn-sm btn-ghost" data-mock="Collapse story row" aria-label="Collapse ACME-136">▾</button>
+        <span class="type-ic t-story">S</span><span class="ikey">ACME-136</span>
+        <a class="nm" href="#" data-mock="Open ACME-136">Refund receipts</a>
+        <div class="mt"><span class="cnt">0/3</span> tasks <span class="badge b-prog"><span class="dot"></span>In test</span></div>
+        <a class="elsewhere" href="13-qa-board.html">1 on QA board →</a>
+        <span class="spacer"></span>
+        <button class="btn btn-icon btn-sm btn-ghost" data-mock="ACME-136: Move to… · Add note · Open" aria-label="Actions for ACME-136">⋮</button>
+      </div>
+      <div class="cell shared"></div>
+      <div class="cell">
+        <a class="card" href="#" data-mock="Open ACME-142">
+          <div class="top"><span class="type-ic t-task">T</span><span class="ikey">ACME-142</span><span class="spacer"></span><button class="btn btn-icon btn-sm btn-ghost" data-mock="ACME-142: Move to… · Block… · Add note · Open" aria-label="Actions for ACME-142">⋮</button></div>
+          <div class="ttl">Refund total excludes shipping</div>
+          <div class="bot"><span class="chip rework">Rework</span><span class="badge b-info">also on QA</span><span class="spacer"></span><span class="est">4h</span><span class="avatar sm">DP</span></div>
+        </a>
+      </div>
+      <div class="cell">
+        <a class="card" href="#" data-mock="Open ACME-143">
+          <div class="top"><span class="type-ic t-task">T</span><span class="ikey">ACME-143</span><span class="spacer"></span><button class="btn btn-icon btn-sm btn-ghost" data-mock="ACME-143: Move to… · Block… · Add note · Open" aria-label="Actions for ACME-143">⋮</button></div>
+          <div class="ttl">Refund audit entry</div>
+          <div class="bot"><span class="chip">payments</span><span class="spacer"></span><span class="est">3h</span><span class="avatar sm">MS</span></div>
+        </a>
+      </div>
+      <div class="cell shared"></div>
+      <div class="cell blockedcol"></div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<div class="lane">
+  <div class="lane-head">
+    <button class="btn btn-icon btn-sm" data-mock="Expand lane" aria-label="Expand the No epic lane">▸</button>
+    <span style="color:var(--color-text-faint);font-size:13px">No epic</span>
+    <span class="spacer"></span>
+    <span style="font-size:11.5px;color:var(--color-text-faint)">3 stories</span>
+  </div>
+</div>
+</main>
+<script src="assets/shell-v2.js"></script>
+</body>
+</html>

@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Before and after · TCMS IA proposal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell-v2.css">
+</head>
+<body data-shell="none" data-role="Company Admin">
+<template id="caption">
+  <strong>The rail as built, beside the rail proposed — same scale, same scheme, both scrolling.</strong>
+  Left is <code>AppShell.tsx</code>'s <code>projectNav()</code> exactly as the brief §4.1 records it:
+  27 entries minimum, <strong>36 maximum</strong>, one flat scrolling column, five group headings that
+  mix <em>subject matter</em> (Repository, Execution, Authoring) with <em>scope</em> (Project, Company),
+  one group holding a single item, and two labels — <code>Staffing</code> and <code>Audit trail</code> —
+  appearing twice about fifteen rows apart. Right, the proposal: three scope zones, a
+  <strong>flat project zone in usage order</strong>, and <strong>20 rows</strong> for a Company Admin —
+  23 with the one surviving folder open. <em>The second revision took one more row out</em>:
+  <code>Timesheets</code> left the rail for <a href="19-user-menu.html">the user menu</a> (R11),
+  because a timesheet is the person's own fortnight and the rail is scoped by the project switcher
+  or by the company. <em>The revision withdrew the first draft's
+  <code>Repository ▸</code> / <code>Quality ▸</code> folders</em>: they filed the most-used screens one
+  click down and named a distinction nobody working the board makes. Five rows they held became
+  <a href="16-test-cases-tabs.html">tabs on the screen they extend</a>, and eight to twelve settings
+  rows are still one entry leading to a page.
+</template>
+<div class="page wide">
+  <div class="phead">
+    <div><h1>Before and after</h1><div class="sub">Company Admin — the role that sees the most, so nothing is hidden by gating</div></div>
+  </div>
+
+  <div class="railrow" id="rails"></div>
+
+  <div class="grid g2" style="margin-top:8px">
+    <section class="panel">
+      <div class="panel-head"><h2>What the left column costs</h2></div>
+      <div class="panel-body stack" style="gap:10px">
+        <div class="bullet"><span aria-hidden="true">▸</span><div><strong>Up to 36 rows in one scroll</strong>, of which 8–12 are project settings. The rail is doing a job a settings section should do.</div></div>
+        <div class="bullet"><span aria-hidden="true">▸</span><div><strong>Two labels appear twice.</strong> <code>Staffing</code> is both the project screen and the company one; so is <code>Audit trail</code>. That is the exact ambiguity the Company/Project split exists to prevent.</div></div>
+        <div class="bullet"><span aria-hidden="true">▸</span><div><strong>Mixed taxonomy.</strong> Three groups name a subject, two name a scope, and <code>Authoring</code> holds one item.</div></div>
+        <div class="bullet"><span aria-hidden="true">▸</span><div><strong>Collapsed, it is 36 unlabelled icons</strong> separated by five rules — the grouping, which is the thing that told you Reports was about execution, is gone.</div></div>
+        <div class="bullet"><span aria-hidden="true">▸</span><div><strong>Two shipped screens are unreachable</strong> from it: <code>/board</code> and <code>/run-schedules</code> have no entry and no inbound link from anywhere.</div></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>What the right column changes</h2></div>
+      <div class="panel-body stack" style="gap:10px">
+        <div class="bullet"><span aria-hidden="true">▸</span><div><strong>Three scope zones, fixed order, never mixed</strong> — You, Project, Company. The zone rules replace group headings that meant two different things.</div></div>
+        <div class="bullet"><span aria-hidden="true">▸</span><div><strong>The project zone is ordered by how often a screen is opened</strong>, not by subject: Work · Test cases · Test plans · Test runs · Releases · Documents, then Overview seventh — it is the project's dashboard, read at stand-up, not the place work is done. No folder stands between a reader and any of them.</div></div>
+        <div class="bullet"><span aria-hidden="true">▸</span><div><strong>Every duplicate label is resolved by naming</strong>: Team / Capacity, Project audit / Company audit, Test reports / Analytics.</div></div>
+        <div class="bullet"><span aria-hidden="true">▸</span><div><strong>Both orphans are rescued without costing a row</strong> — Run schedules is a <a href="17-test-runs-tabs.html">Schedules tab on Test runs</a>, and the composite <code>/board</code> is retired into <a href="13-qa-board.html">the QA board's card face</a> (Phase 2), linked from Overview until then.</div></div>
+        <div class="bullet"><span aria-hidden="true">▸</span><div><strong>One row leaves the rail entirely.</strong> <code>Timesheets</code> is in <a href="19-user-menu.html">the user menu</a> with <code>Timesheet approvals</code> beneath it — the rule being that the rail holds places scoped by the switcher or by the company, and a fortnight of one person's hours is scoped by neither (R11).</div></div>
+        <div class="bullet"><span aria-hidden="true">▸</span><div><strong>No route moves.</strong> Every path in the screen inventory keeps its URL; only the navigation changes.</div></div>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel" style="margin-top:16px">
+    <div class="panel-head"><h2>The renames, in full</h2><span class="spacer"></span><span class="hint">only labels that collide, mislead, or say the system's word</span></div>
+    <div class="tw">
+      <table class="t">
+        <thead><tr><th>Today</th><th>Proposed</th><th>Reason</th></tr></thead>
+        <tbody>
+          <tr><td>All projects</td><td class="ttl">Projects</td><td>"All" implied a filtered alternative that does not exist</td></tr>
+          <tr><td>Documentation <span class="chip">project</span></td><td class="ttl">Documents</td><td>Kills the collision with Help</td></tr>
+          <tr><td>Help &amp; documentation</td><td class="ttl">User guide</td><td>It <em>is</em> the eleven-section user guide</td></tr>
+          <tr><td>Staffing <span class="chip">project</span></td><td class="ttl">Team</td><td>Duplicate label; answers "who is on this project"</td></tr>
+          <tr><td>Staffing <span class="chip">company</span></td><td class="ttl">Capacity</td><td>Duplicate label; the page's own title is "Company capacity"</td></tr>
+          <tr><td>Audit trail ×2</td><td class="ttl">Project audit / Company audit</td><td>Both also need distinct names in the palette and the flyout</td></tr>
+          <tr><td>Reports</td><td class="ttl">Test reports</td><td>Answers "reports of what?" next to Analytics</td></tr>
+          <tr><td>CI ingestion</td><td class="ttl">CI results</td><td>"Ingestion" is the system's verb, not the reader's</td></tr>
+          <tr><td>Repositories <span class="chip">settings</span></td><td class="ttl">Code repositories</td><td>Says what they are — code, not test cases</td></tr>
+          <tr><td>Generated cases</td><td class="ttl">Proposals <span class="chip">tab</span></td><td>"Proposals" denies repository membership before anyone clicks; it is a tab on Test cases, not a rail row</td></tr>
+          <tr><td>Board <span class="chip">single</span></td><td class="ttl">PM board / Dev board / QA board</td><td>Three boards, named by who moves the cards</td></tr>
+          <tr><td>To do <span class="chip">seeded status</span></td><td class="ttl">Ready to develop</td><td>It is the hand-off out of grooming, and the name says who it is ready for</td></tr>
+          <tr><td>Timesheets <span class="chip">rail row</span></td><td class="ttl">Timesheets <span class="chip">user menu</span></td><td>Not a rename — a move. It belongs to the person, not to a project or the company (R11)</td></tr>
+          <tr><td>Review <span class="chip">settings</span></td><td class="ttl">Review policy</td><td>The page title already says it</td></tr>
+          <tr><td>Authoring <span class="chip">group</span></td><td class="ttl">removed</td><td>A one-item group cost more legibility than it bought</td></tr>
+          <tr><td>Repository / Execution / Authoring / Project <span class="chip">groups</span></td><td class="ttl">removed</td><td>Subject headings inside a scope zone were the confusion; the revision removes the replacement folders too, so the project zone is flat</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="panel-foot"><span>Not renamed, because each is either the mockup's word or unambiguous where it sits: My work · Work · Overview · Releases · Test cases · Test plans · Test runs · Artifacts · Access &amp; roles · General · Workflow · Boards · Classification · Notifications · Issue tracker · Org chart · Directory · Teams &amp; roles · Clients · Billing · API tokens · Single sign-on.</span></div>
+  </section>
+</div>
+
+<script src="assets/shell-v2.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const N = window.TCMSNav;
+  const host = document.getElementById('rails');
+
+  const before = document.createElement('div');
+  before.className = 'railcol';
+  before.innerHTML = '<div class="cap"><strong>As built today</strong><span>AppShell.tsx · projectNav() — brief §4.1, verbatim</span></div>';
+  const bf = document.createElement('div');
+  bf.className = 'railframe';
+  bf.appendChild(N.buildLegacyRail());
+  before.appendChild(bf);
+  const bt = document.createElement('div');
+  bt.className = 'tally';
+  bt.innerHTML = '<span><b>36</b> rows, all visible</span><span>·</span><span><b>5</b> group headings</span><span>·</span><span><b>2</b> labels used twice</span>';
+  before.appendChild(bt);
+  host.appendChild(before);
+
+  [['Proposed — as it rests', 'flat project zone, Administration shut', ''],
+   ['Proposed — Administration open', 'the maximum it ever reaches', 'admin']]
+    .forEach(([title, sub, open]) => {
+      const col = document.createElement('div');
+      col.className = 'railcol';
+      col.innerHTML = `<div class="cap"><strong>${title}</strong><span>${sub}</span></div>`;
+      const rail = N.buildRail({ role: 'Company Admin', active: '', open, project: 'ACME|Acme Payments' });
+      const fr = document.createElement('div');
+      fr.className = 'railframe';
+      fr.appendChild(rail);
+      col.appendChild(fr);
+      // The project zone header is the switcher, not a destination row — the proposal's own
+      // count excludes it, so this one does too.
+      const n = rail.querySelectorAll('.rail-link, .folder-btn').length
+        - rail.querySelectorAll('.folder-kids[hidden] .rail-link').length;
+      const t = document.createElement('div');
+      t.className = 'tally';
+      t.innerHTML = `<span><b>${n}</b> rows visible</span><span>·</span><span><b>3</b> scope zones</span><span>·</span><span><b>0</b> labels used twice</span>`;
+      col.appendChild(t);
+      host.appendChild(col);
+    });
+});
+</script>
+</body>
+</html>

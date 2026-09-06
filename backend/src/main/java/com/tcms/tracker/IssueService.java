@@ -670,6 +670,7 @@ public class IssueService {
                 AcceptanceCriteria.parse(issue.getAcceptanceCriteria()),
                 IssueTypeView.of(type),
                 statusView,
+                blockedFromStatusOf(issue, statusesById),
                 issue.getStatusEnteredAt(),
                 project.getId(),
                 project.getKey(),
@@ -736,16 +737,53 @@ public class IssueService {
         }
         boolean withholdDone =
                 closeGuardBinds(settings.effective(issue.getProjectId()), issue, userId);
-        return transitions.findByFromStatusId(issue.getStatusId()).stream()
+        Map<UUID, IssueStatus> offered = new LinkedHashMap<>();
+        transitions.findByFromStatusId(issue.getStatusId()).stream()
                 .map(move -> statusesById.get(move.getToStatusId()))
                 .filter(java.util.Objects::nonNull)
                 // The workflow set is the base and DONE is SUBTRACTED from it — never a
                 // replacement set built from the guard. A caller under the guard must still be
                 // offered In Review and Blocked, which is what makes the refusal actionable.
                 .filter(status -> !withholdDone || status.getKind() != IssueStatusKind.DONE)
+                .forEach(status -> offered.put(status.getId(), status));
+
+        // The remembered origin, added to the workflow set rather than replacing it (021 D-c). It
+        // has no issue_transition row and TransitionService accepts it anyway, so the card and the
+        // detail page have to offer it or the drag is refused client-side for a move the server
+        // allows — §12.4 the wrong way round. Withheld under the close guard like any other DONE
+        // target, because an unblock back into Done is still a close.
+        IssueStatus origin = blockedOriginOf(issue, statusesById);
+        if (origin != null && (!withholdDone || origin.getKind() != IssueStatusKind.DONE)) {
+            offered.put(origin.getId(), origin);
+        }
+
+        return offered.values().stream()
                 .sorted(Comparator.comparingInt(IssueStatus::getPosition))
                 .map(IssueStatusView::of)
                 .toList();
+    }
+
+    /**
+     * The status this issue was in when it was blocked, or null (021 D-c).
+     *
+     * <p>Read only while the issue is IN the blocking status. The column is cleared on the way out,
+     * so a stale value is not a state the data can be in — but reading it unconditionally would
+     * make the view depend on that being true forever, and this is the one place a screen would
+     * show "blocked from" beside a card that is not blocked.
+     */
+    private static IssueStatus blockedOriginOf(Issue issue, Map<UUID, IssueStatus> statusesById) {
+        IssueStatus current = statusesById.get(issue.getStatusId());
+        if (current == null || !current.isBlocking() || issue.getBlockedFromStatusId() == null) {
+            return null;
+        }
+        return statusesById.get(issue.getBlockedFromStatusId());
+    }
+
+    private static IssueStatusView blockedFromStatusOf(
+            Issue issue, Map<UUID, IssueStatus> statusesById) {
+
+        IssueStatus origin = blockedOriginOf(issue, statusesById);
+        return origin == null ? null : IssueStatusView.of(origin);
     }
 
     private List<IssueSummaryView> summaries(Project project, Filter filter) {

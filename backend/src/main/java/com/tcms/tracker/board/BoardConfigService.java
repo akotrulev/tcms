@@ -33,14 +33,21 @@ import org.springframework.transaction.annotation.Transactional;
  * <em>last</em> board, because a project with none cannot render {@code ?view=board} at all and an
  * empty board picker is a dead end rather than a state the SPA can explain.
  *
- * <h2>"Every status is claimed by exactly one column" is two rules, and only one is a constraint</h2>
+ * <h2>A board claims a SUBSET, and half of B2's rule went with that (021 R7, D-e)</h2>
  *
  * <p>{@code uq_board_column_status (company_id, board_id, status_id)} rejects a status claimed
- * twice. <strong>"Claimed at least once" is a statement about the absence of a row</strong> — a
- * cross-table assertion Postgres has no CHECK for — so it lives in {@link #validateClaims} instead.
- * A trigger was refused for it: it would fire while a {@code PATCH} is rebuilding a board column by
- * column and reject the legal intermediate state. The message names the unclaimed statuses, because
- * "invalid board" sends somebody to count six columns against six statuses by hand.
+ * twice <em>on one board</em>, and that half stays: it is what makes a card's column unambiguous
+ * and a drop resolvable. ~~<strong>"Claimed at least once" is a statement about the absence of a
+ * row</strong> — a cross-table assertion Postgres has no CHECK for — so it lives in
+ * {@link #validateClaims} instead.~~ → <strong>superseded</strong>: that half is the rule that
+ * forced every board to show the whole lifecycle, which is why one Team board was the only board
+ * anybody made. A status a board does not claim is now simply a status <em>that board does not
+ * show</em>.
+ *
+ * <p>What the removed half protected — no card invisible on every board — is a read now rather
+ * than a refusal: {@link BoardCoverageService} reports the status × board matrix and names the
+ * statuses no board claims. The seeded PM · Dev · QA boards cover all eleven between them, so the
+ * warning is empty on day one; it exists for the day somebody deletes a column.
  *
  * <h2>The repair when a status LEAVES is not here, deliberately</h2>
  *
@@ -123,39 +130,59 @@ public class BoardConfigService {
     }
 
     /**
-     * A status created after a board exists (009 review R13).
+     * A status created after a board exists (009 review R13, rewritten by 021 §2.2).
      *
-     * <p><strong>An unclaimed status is not a state the data can be in</strong>, and this method is
-     * what makes that true rather than merely likely. The new status is claimed on <em>every</em>
-     * board of the project, by the column holding the default status of the same
-     * {@link IssueStatusKind} — a new {@code IN_PROGRESS} status lands beside In Progress — so the
-     * settings screen shows it somewhere it can be moved from.
+     * <p><strong>The new status goes where its neighbour already is.</strong> ~~It is claimed on
+     * every board of the project, by the column holding the default status of the same
+     * {@link IssueStatusKind}.~~ → superseded, because a board claims a subset now and "beside the
+     * first column of the same kind" would put a new {@code IN_PROGRESS} status on the PM board,
+     * which shows no working column at all. The rule instead: a status inserted after
+     * {@code insertedAfter} is claimed by <strong>every board that claims {@code insertedAfter}</strong>,
+     * in that board's column for it, until somebody moves it. A board that does not show the
+     * neighbour does not show the newcomer either, which is what a subset board means.
+     *
+     * <p><strong>{@code insertedAfter} null is the workflow editor's "side status"</strong> — the
+     * way {@code Rework} and {@code Blocked} are made, a status off the line naming no predecessor.
+     * It has no neighbour's column to join, so it lands on <em>every</em> board as a new last
+     * column of its own. Last and not first for §12.2's reason: left to right is direction of
+     * travel, and a status filed at the start of a board it does not belong to is worse than one
+     * filed late.
      *
      * <p><strong>Called directly, not through an event</strong> (D-g). {@code WorkflowService} and
      * this class are in the same Spring Modulith module — {@code board} is a sub-package of
      * {@code tracker}, not a module of its own — so this runs inside the caller's transaction. An
-     * {@code OutboxEvents} hop has a one-minute delivery floor, and for that minute the project
-     * would hold a status no column claims, which is the state this method exists to make
-     * impossible.
+     * {@code OutboxEvents} hop has a one-minute delivery floor, and for that minute a status added
+     * to a workflow would be on no board of a project whose boards all show its neighbour.
      *
-     * <p>The fallback when no column defaults to a status of that kind is the <em>last</em> column,
-     * not the first: left-to-right is direction of travel (§12.2), and a new {@code DONE} status
-     * filed at the start of the workflow is worse than one filed late.
+     * @param insertedAfter the status the new one was placed after, or {@code null} when it was
+     *                      placed first or off the line
      */
     @Transactional
-    public void claimNewStatus(UUID projectId, IssueStatus created) {
-        Map<UUID, IssueStatusKind> kinds = kindsOf(projectId);
+    public void claimNewStatus(UUID projectId, IssueStatus created, IssueStatus insertedAfter) {
         UUID companyId = CompanyContext.require();
 
-        for (Board board : boards.findByProjectIdOrderByNameAsc(projectId)) {
+        for (Board board : boards.findByProjectIdOrderByPositionAscNameAsc(projectId)) {
             List<BoardColumn> ordered = columns.findByBoardIdOrderByPositionAsc(board.getId());
-            if (ordered.isEmpty()) {
+            BoardColumn target = insertedAfter == null
+                    ? null
+                    : columnClaiming(board, ordered, insertedAfter.getId());
+
+            if (target == null && insertedAfter != null) {
+                // This board does not show the neighbour, so it does not show the newcomer. Not an
+                // omission and not a gap to fill: it is the subset the board's owner configured,
+                // and getBoardCoverage is where a status no board at all claims becomes visible.
                 continue;
             }
-            BoardColumn target = ordered.stream()
-                    .filter(column -> kinds.get(column.getDefaultStatusId()) == created.getKind())
-                    .findFirst()
-                    .orElseGet(() -> ordered.get(ordered.size() - 1));
+            if (target == null) {
+                target = columns.save(BoardColumn.create(
+                        UUID.randomUUID(), companyId, board.getId(), created.getName(),
+                        ordered.isEmpty() ? 0 : ordered.get(ordered.size() - 1).getPosition() + 1,
+                        null, created.getId()));
+                // board_column_status.column_id is a foreign key and Hibernate orders its inserts
+                // by entity type rather than by the order they were made in, so the column is on
+                // disk before the claim below names it.
+                columns.flush();
+            }
             claims.save(BoardColumnStatus.claim(
                     companyId, board.getId(), target.getId(), created.getId()));
         }
@@ -184,14 +211,22 @@ public class BoardConfigService {
                         .orElseThrow());
     }
 
+    /**
+     * A created board goes to the <em>right</em> of every board the project has.
+     *
+     * <p>{@code max + 1} rather than a count, because {@code board."position"} is not unique and a
+     * count would put a fourth board on top of a third that had been renumbered. Nothing reorders
+     * boards yet (021 D-f), so the strip's order is creation order after the three seeded ones.
+     */
     private Outcome applyCreate(Project project, BoardInput input) {
         Optional<Outcome> refused = validate(project.getId(), input);
         if (refused.isPresent()) {
             return refused.get();
         }
+        Integer last = boards.maxPositionOf(project.getId());
         return store(Board.create(
                 UUID.randomUUID(), CompanyContext.require(), project.getId(),
-                nameOf(input), swimlaneOf(input)), input);
+                nameOf(input), swimlaneOf(input), last == null ? 0 : last + 1), input);
     }
 
     private Outcome applyUpdate(UUID projectId, Board board, BoardInput input) {
@@ -321,10 +356,11 @@ public class BoardConfigService {
      * that go with it.
      *
      * <p>A status claimed twice is caught here as well as by the unique index, so the caller is told
-     * which status rather than being handed a constraint name. A status claimed by nothing is caught
-     * <em>only</em> here. And a column whose default is outside its own claim set is refused because
-     * a drop into it would move the card to a status the column does not show — the card would
-     * vanish from the board on being dropped onto it (D2).
+     * which status rather than being handed a constraint name. ~~A status claimed by nothing is
+     * caught <em>only</em> here.~~ → superseded (021 R7): it is not caught at all any more, it is
+     * <em>reported</em>, by {@link BoardCoverageService}. And a column whose default is outside its
+     * own claim set is refused because a drop into it would move the card to a status the column
+     * does not show — the card would vanish from the board on being dropped onto it (D2).
      */
     private Optional<Outcome> validateClaims(UUID projectId, BoardInput input) {
         Map<UUID, String> known = new LinkedHashMap<>();
@@ -358,14 +394,12 @@ public class BoardConfigService {
                             + "move an issue and leave the card where it was."));
         }
 
-        Set<UUID> unclaimed = new LinkedHashSet<>(known.keySet());
-        unclaimed.removeAll(claimed);
-        if (!unclaimed.isEmpty()) {
-            return Optional.of(new Outcome.Unprocessable(
-                    "Every status needs a column",
-                    "No column claims: " + names(known, unclaimed) + ". An issue in one of those "
-                            + "statuses would be on no board at all."));
-        }
+        // ~~"Every status needs a column" was refused here.~~ → REMOVED by 021 R7. A board claims
+        // a SUBSET: a status this board does not claim is a status this board does not show, which
+        // is what makes a PM board and a Dev board different boards rather than two orderings of
+        // the same one. The failure the refusal guarded — a card in a status NO board claims, and
+        // so on no board at all — is reported by BoardCoverageService instead of prevented here,
+        // because preventing it is what forced every board to show the whole lifecycle.
 
         for (BoardColumnInput column : input.columns()) {
             if (!column.statusIds().contains(column.defaultStatusId())) {
@@ -379,28 +413,50 @@ public class BoardConfigService {
         return Optional.empty();
     }
 
-    private Map<UUID, IssueStatusKind> kindsOf(UUID projectId) {
-        Map<UUID, IssueStatusKind> kinds = new HashMap<>();
-        statuses.findByProjectIdOrderByPositionAsc(projectId)
-                .forEach(status -> kinds.put(status.getId(), status.getKind()));
-        return kinds;
+    /**
+     * The column of one board claiming one status, or null when that board does not show it.
+     *
+     * <p>Resolved against the columns already in hand rather than by {@code findById}: a
+     * query-based lookup is what applies the company filter in the application layer too, and the
+     * caller has just made one.
+     */
+    private BoardColumn columnClaiming(Board board, List<BoardColumn> ordered, UUID statusId) {
+        UUID columnId = claims.findByBoardId(board.getId()).stream()
+                .filter(claim -> claim.getStatusId().equals(statusId))
+                .map(BoardColumnStatus::getColumnId)
+                .findFirst()
+                .orElse(null);
+        if (columnId == null) {
+            return null;
+        }
+        return ordered.stream()
+                .filter(column -> column.getId().equals(columnId))
+                .findFirst()
+                .orElse(null);
     }
 
+    /**
+     * The picker's rows, in Work-strip order.
+     *
+     * <p>{@code statusCount} is counted per board rather than derived from the project's status
+     * total, because a board claims a subset now (021 R7) and the picker reads "5 of 11". Counting
+     * the claim rows is the honest number: a column claiming three statuses contributes three.
+     */
     private List<BoardSummaryView> summariesOf(Project project) {
-        return boards.findByProjectIdOrderByNameAsc(project.getId()).stream()
+        return boards.findByProjectIdOrderByPositionAscNameAsc(project.getId()).stream()
                 .map(board -> new BoardSummaryView(
                         board.getId(),
                         board.getName(),
                         columns.findByBoardIdOrderByPositionAsc(board.getId()).size(),
-                        board.getSwimlaneBy()))
+                        board.getSwimlaneBy(),
+                        claims.findByBoardId(board.getId()).size()))
                 .toList();
     }
 
     private BoardView viewOf(Board board) {
         Map<UUID, IssueStatusView> known = new LinkedHashMap<>();
         statuses.findByProjectIdOrderByPositionAsc(board.getProjectId())
-                .forEach(status -> known.put(status.getId(), new IssueStatusView(
-                        status.getId(), status.getName(), status.getKind(), status.getPosition())));
+                .forEach(status -> known.put(status.getId(), IssueStatusView.of(status)));
 
         Map<UUID, List<IssueStatusView>> byColumn = new HashMap<>();
         for (BoardColumnStatus claim : claims.findByBoardId(board.getId())) {

@@ -71,7 +71,7 @@ public class ReadinessService {
     private static final String SCOPE = """
             SELECT i.id, i.issue_key, i.title,
                    t.id, t.name, t.level, t.counts_toward_completion,
-                   s.id, s.name, s.kind, s."position",
+                   s.id, s.name, s.kind, s."position", s.blocking,
                    i.estimate_hours, i.start_date, i.target_date
               FROM issue            i
               JOIN issue_type       t ON t.id = i.type_id
@@ -438,10 +438,11 @@ public class ReadinessService {
                             UUID.fromString(row[7].toString()),
                             (String) row[8],
                             IssueStatusKind.valueOf((String) row[9]),
-                            ((Number) row[10]).intValue()),
-                    row[11] == null ? null : ((Number) row[11]).doubleValue(),
-                    toLocalDate(row[12]),
-                    toLocalDate(row[13])));
+                            ((Number) row[10]).intValue(),
+                            (Boolean) row[11]),
+                    row[12] == null ? null : ((Number) row[12]).doubleValue(),
+                    toLocalDate(row[13]),
+                    toLocalDate(row[14])));
         }
         return List.copyOf(rows);
     }

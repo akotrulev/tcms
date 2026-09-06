@@ -41,6 +41,17 @@ public class Board {
     @Column(name = "swimlane_by", nullable = false)
     private SwimlaneBy swimlaneBy;
 
+    /**
+     * Where this board sits in the Work strip, left to right (021 D-f).
+     *
+     * <p>V13's column, and it exists because {@code board} had no order of its own: the repository
+     * sorted by name, which lists Dev before PM and QA last, so the three seeded boards would have
+     * read their hand-offs right to left. Deliberately not unique — a created board takes
+     * {@code max + 1}, two created in one instant may tie, and the name breaks it.
+     */
+    @Column(name = "position", nullable = false)
+    private int position;
+
     @Version
     @Column(name = "lock_version", nullable = false)
     private long lockVersion;
@@ -49,13 +60,17 @@ public class Board {
     protected Board() {
     }
 
-    static Board create(UUID id, UUID companyId, UUID projectId, String name, SwimlaneBy swimlaneBy) {
+    static Board create(
+            UUID id, UUID companyId, UUID projectId, String name, SwimlaneBy swimlaneBy,
+            int position) {
+
         Board created = new Board();
         created.id = id;
         created.companyId = companyId;
         created.projectId = projectId;
         created.name = name;
         created.swimlaneBy = swimlaneBy;
+        created.position = position;
         return created;
     }
 
@@ -78,5 +93,9 @@ public class Board {
 
     public SwimlaneBy getSwimlaneBy() {
         return swimlaneBy;
+    }
+
+    public int getPosition() {
+        return position;
     }
 }

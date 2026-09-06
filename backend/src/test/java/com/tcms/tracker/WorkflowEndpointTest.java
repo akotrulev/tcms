@@ -98,7 +98,9 @@ class WorkflowEndpointTest extends TrackerEndpointTestBase {
         JsonNode workflow = workflow(LEAD);
 
         assertThat(names(workflow.get("statuses")))
-                .containsExactly("Backlog", "Ready", "In Progress", "In Review", "Blocked", "Done");
+                .containsExactly("New", "Refining", "Ready to develop", "In progress", "In review",
+                        "Ready for test", "In test", "Ready to deploy", "Done", "Rework",
+                        "Blocked");
         assertThat(names(workflow.get("types")))
                 .containsExactly("Epic", "Story", "Task", "Bug", "Spike", "Sub-task");
         assertThat(workflow.get("transitions")).isNotEmpty();
@@ -108,6 +110,10 @@ class WorkflowEndpointTest extends TrackerEndpointTestBase {
     void theSeededGateIsThatOnlyInReviewReachesDone() throws Exception {
         // settings-workflow.html states it in words; this is the same claim as rows. It is what
         // makes issue_transition an allow-list rather than a table nothing consults.
+        //
+        // ~~Only In Review reaches Done, the review gate.~~ → V13 moved the gate to the END of the
+        // line: Ready to deploy is the tester's last word and the drag to Done is the PO's deploy
+        // confirmation (021 D-l), which is also the figure release readiness reads.
         JsonNode workflow = workflow(LEAD);
         UUID done = idOf(workflow.get("statuses"), "Done");
 
@@ -118,7 +124,7 @@ class WorkflowEndpointTest extends TrackerEndpointTestBase {
             }
         });
 
-        assertThat(reachDone).containsExactly("In Review");
+        assertThat(reachDone).containsExactly("Ready to deploy");
     }
 
     @Test
@@ -143,25 +149,27 @@ class WorkflowEndpointTest extends TrackerEndpointTestBase {
                 put(LEAD, workflow).andReturn().getResponse().getContentAsString());
 
         assertThat(names(stored.get("statuses")))
-                .containsExactly("Ready", "In Progress", "In Review", "Blocked", "Done", "Backlog");
+                .containsExactly("Refining", "Ready to develop", "In progress", "In review",
+                        "Ready for test", "In test", "Ready to deploy", "Done", "Rework",
+                        "Blocked", "New");
         // Positions renumbered from zero with no duplicate — the state a per-status PATCH would
         // have passed through and this shape cannot express.
         List<Integer> positions = new java.util.ArrayList<>();
         stored.get("statuses").forEach(status -> positions.add(status.get("position").asInt()));
-        assertThat(positions).containsExactly(0, 1, 2, 3, 4, 5);
+        assertThat(positions).containsExactly(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
     }
 
     @Test
     void aRenamedStatusKeepsItsIdAndTheIssuesInIt() throws Exception {
         JsonNode workflow = workflow(LEAD);
-        UUID backlog = idOf(workflow.get("statuses"), "Backlog");
+        UUID first = idOf(workflow.get("statuses"), "New");
         String issueKey = story("Something in the backlog");
 
         ((ObjectNode) workflow.get("statuses").get(0)).put("name", "Icebox");
         put(LEAD, workflow);
 
         JsonNode reread = read(issueKey);
-        assertThat(reread.get("status").get("id").asText()).isEqualTo(backlog.toString());
+        assertThat(reread.get("status").get("id").asText()).isEqualTo(first.toString());
         assertThat(reread.get("status").get("name").asText()).isEqualTo("Icebox");
     }
 
@@ -176,7 +184,7 @@ class WorkflowEndpointTest extends TrackerEndpointTestBase {
         MvcResult refused = put(LEAD, workflow).andReturn();
 
         assertThat(refused.getResponse().getStatus()).isEqualTo(409);
-        assertThat(refused.getResponse().getContentAsString()).contains("in Backlog");
+        assertThat(refused.getResponse().getContentAsString()).contains("in New");
     }
 
     @Test
@@ -207,11 +215,11 @@ class WorkflowEndpointTest extends TrackerEndpointTestBase {
     void removingAStatusMovesItsIssuesInTheSameTransaction() throws Exception {
         String issueKey = story("Something in the backlog");
         JsonNode workflow = workflow(LEAD);
-        UUID backlog = idOf(workflow.get("statuses"), "Backlog");
-        UUID ready = idOf(workflow.get("statuses"), "Ready");
+        UUID first = idOf(workflow.get("statuses"), "New");
+        UUID ready = idOf(workflow.get("statuses"), "Ready to develop");
 
         MvcResult removed = mvc.perform(MockMvcRequestBuilders
-                        .delete("/api/v1/projects/" + PROJECT + "/workflow/statuses/" + backlog)
+                        .delete("/api/v1/projects/" + PROJECT + "/workflow/statuses/" + first)
                         .header("Authorization", "Bearer " + tokenFor(LEAD, ACME))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(
@@ -219,15 +227,16 @@ class WorkflowEndpointTest extends TrackerEndpointTestBase {
                 .andReturn();
 
         assertThat(removed.getResponse().getStatus()).isEqualTo(204);
-        assertThat(read(issueKey).get("status").get("name").asText()).isEqualTo("Ready");
-        assertThat(names(workflow(LEAD).get("statuses"))).doesNotContain("Backlog");
+        assertThat(read(issueKey).get("status").get("name").asText())
+                .isEqualTo("Ready to develop");
+        assertThat(names(workflow(LEAD).get("statuses"))).doesNotContain("New");
     }
 
     @Test
     void removingTheLastDoneStatusIsRefusedWhateverTheDestination() throws Exception {
         JsonNode workflow = workflow(LEAD);
         UUID done = idOf(workflow.get("statuses"), "Done");
-        UUID ready = idOf(workflow.get("statuses"), "Ready");
+        UUID ready = idOf(workflow.get("statuses"), "Ready to develop");
 
         MvcResult refused = mvc.perform(MockMvcRequestBuilders
                         .delete("/api/v1/projects/" + PROJECT + "/workflow/statuses/" + done)

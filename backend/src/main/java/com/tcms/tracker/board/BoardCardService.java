@@ -172,6 +172,7 @@ public class BoardCardService {
             UUID userId, Board board, Project project, Filter filter) {
 
         Facts facts = factsOf(userId, project);
+        BoardScope scope = scopeOf(board, project.getId());
         Map<UUID, UUID> columnOfStatus = new HashMap<>();
         claims.findByBoardId(board.getId())
                 .forEach(claim -> columnOfStatus.put(claim.getStatusId(), claim.getColumnId()));
@@ -181,13 +182,17 @@ public class BoardCardService {
             UUID statusId = facts.shownStatus(issue).id();
             UUID columnId = columnOfStatus.get(statusId);
             if (columnId == null) {
-                // Every status is claimed by exactly one column, so this is unreachable through the
-                // configuration endpoint. Skipped rather than assumed into column zero: a card in a
-                // column that does not claim its status vanishes the moment somebody drops it.
+                // A BOARD CLAIMS A SUBSET (021 R7), so this is now the ORDINARY case rather than an
+                // unreachable one: a status this board does not claim is a status this board does
+                // not show, and its cards belong to whichever board does. ~~Every status is claimed
+                // by exactly one column, so this is unreachable through the configuration
+                // endpoint.~~ → superseded. Still a `continue` and never column zero, for the
+                // unchanged reason: a card in a column that does not claim its status vanishes the
+                // moment somebody drops it.
                 continue;
             }
             if (facts.matches(issue, filter)) {
-                cards.add(facts.cardOf(issue, columnId));
+                cards.add(facts.cardOf(issue, columnId, scope));
             }
         }
 
@@ -344,6 +349,53 @@ public class BoardCardService {
     }
 
     /**
+     * Which statuses <em>this</em> board shows, and which each of the project's other boards shows.
+     *
+     * <p>Read once per board read rather than per card: three boards is three
+     * {@code board_column_status} queries, and asking per card would be one per card per board.
+     *
+     * <p>Package-private because {@link BoardMoveService} answers a move with a card too, and a
+     * card assembled there without this would carry an empty {@code elsewhere} — a row header that
+     * loses its "1 on QA board" link the moment somebody drags something on it.
+     */
+    BoardScope scopeOf(Board board, UUID projectId) {
+        Set<UUID> here = new LinkedHashSet<>();
+        claims.findByBoardId(board.getId()).forEach(claim -> here.add(claim.getStatusId()));
+
+        List<BoardReach> others = new ArrayList<>();
+        for (Board other : boards.findByProjectIdOrderByPositionAscNameAsc(projectId)) {
+            if (other.getId().equals(board.getId())) {
+                continue;
+            }
+            Set<UUID> shown = new LinkedHashSet<>();
+            claims.findByBoardId(other.getId()).forEach(claim -> shown.add(claim.getStatusId()));
+            others.add(new BoardReach(other.getId(), other.getName(), Set.copyOf(shown)));
+        }
+        return new BoardScope(Set.copyOf(here), List.copyOf(others));
+    }
+
+    /**
+     * The statuses one board shows, for the boards that are not the one being read.
+     *
+     * <p>In Work-strip position order, so a card's {@code elsewhere} entries come out in the order
+     * the strip draws its segments and the popover behind "3 on other boards" reads left to right.
+     */
+    record BoardReach(UUID boardId, String boardName, Set<UUID> statusIds) {
+    }
+
+    /**
+     * What {@code elsewhere} is computed against: this board's claimed statuses, and every other
+     * board's.
+     *
+     * <p>Both halves are needed and neither is derivable from the other, which is 021 §2.5's whole
+     * arithmetic point: a status may be claimed by two boards, so <em>shown here</em> and
+     * <em>elsewhere</em> overlap and "total minus shown" is not the count. The not-shown-here set
+     * is computed from {@link #claimedHere}, then grouped by {@link #others}.
+     */
+    record BoardScope(Set<UUID> claimedHere, List<BoardReach> others) {
+    }
+
+    /**
      * Everything a card face reads, for one project, in a handful of queries.
      *
      * <p>Package-private and keyed on the id rather than the gated {@code Project} because
@@ -497,11 +549,12 @@ public class BoardCardService {
                     .orElseGet(() -> viewOf(stored));
         }
 
-        BoardIssueCardView cardOf(Issue issue, UUID columnId) {
+        BoardIssueCardView cardOf(Issue issue, UUID columnId, BoardScope scope) {
             IssueType type = typeOf(issue);
             IssueStatusView status = shownStatus(issue);
             List<Issue> children = childrenOf(issue);
             Issue epic = epicOf(issue);
+            Issue parent = issue.getParentId() == null ? null : byId.get(issue.getParentId());
             return new BoardIssueCardView(
                     issue.getIssueKey(),
                     issue.getTitle(),
@@ -522,7 +575,90 @@ public class BoardCardService {
                     allowedTransitions(issue, type),
                     children.size(),
                     (int) children.stream().filter(this::isDone).count(),
-                    issue.isAgentEligible());
+                    issue.isAgentEligible(),
+                    parent == null ? null : parent.getIssueKey(),
+                    elsewhereOf(children, scope),
+                    issue.hasAcceptanceCriteria(),
+                    blockedFromStatusOf(issue),
+                    allStoriesDone(issue, type, status),
+                    // 021 T4's read, not this one's. The contract declares the key nullable and
+                    // says "null until served", so a consumer tells "not served" from "none
+                    // linked" by reading the null rather than by a property that is missing.
+                    null);
+        }
+
+        /**
+         * The status this issue was in when it was blocked, or null (021 D-c).
+         *
+         * <p>Read only while the issue is IN the blocking status. The column is cleared on the way
+         * out so a stale value is not a state the data can be in, but reading it unconditionally
+         * would make the card depend on that being true forever — and a card reading
+         * "Blocked · from In test" while sitting in In progress is worse than one saying nothing.
+         */
+        private IssueStatusView blockedFromStatusOf(Issue issue) {
+            IssueStatus current = statusesById.get(issue.getStatusId());
+            if (current == null || !current.isBlocking() || issue.getBlockedFromStatusId() == null) {
+                return null;
+            }
+            IssueStatus origin = statusesById.get(issue.getBlockedFromStatusId());
+            return origin == null ? null : IssueStatusView.of(origin);
+        }
+
+        /**
+         * Whether an epic's counted stories are all done while the epic itself is not (021 D-d).
+         *
+         * <p><strong>A nudge, never a transition.</strong> The card says so and the PO drags it;
+         * the server does not move an epic on its own, because "all the stories are done" and "this
+         * body of work is finished" are different claims and only a person can make the second.
+         *
+         * <p>False for anything that is not an epic, and false for an epic with no counted stories
+         * at all — a vacuous truth would put the nudge on every empty epic in the project.
+         */
+        private boolean allStoriesDone(Issue issue, IssueType type, IssueStatusView status) {
+            if (type.getLevel() != IssueLevel.EPIC || status.kind() == IssueStatusKind.DONE) {
+                return false;
+            }
+            List<CountedIssue> counted = countedChildrenOf(issue).stream()
+                    .filter(CountedIssue::countsTowardCompletion)
+                    .toList();
+            return !counted.isEmpty() && counted.stream().allMatch(CountedIssue::isDone);
+        }
+
+        /**
+         * The children this board does not show, grouped by the boards that do (021 §2.5).
+         *
+         * <p><strong>Counted as the not-shown-here set, and never as total minus shown.</strong> A
+         * status may be claimed by two boards — that is exactly what a shared hand-off column is —
+         * so "shown here" and "elsewhere" overlap, and subtracting one total from the other
+         * reports a task that is on both boards as being somewhere else. A child in a status no
+         * board claims contributes to no entry here at all, which is honest: it is on no board, and
+         * {@code getBoardCoverage} is the read that says so.
+         *
+         * <p>Direct children rather than every descendant, because the row header this feeds is a
+         * story's and the tree is three levels deep: a story's children are its tasks, which are
+         * the only things that can be cards under it.
+         */
+        private List<CardElsewhereView> elsewhereOf(List<Issue> children, BoardScope scope) {
+            if (children.isEmpty()) {
+                return List.of();
+            }
+            List<Issue> hidden = children.stream()
+                    .filter(child -> !scope.claimedHere().contains(shownStatus(child).id()))
+                    .toList();
+            if (hidden.isEmpty()) {
+                return List.of();
+            }
+            List<CardElsewhereView> reached = new ArrayList<>();
+            for (BoardReach other : scope.others()) {
+                int count = (int) hidden.stream()
+                        .filter(child -> other.statusIds().contains(shownStatus(child).id()))
+                        .count();
+                if (count > 0) {
+                    reached.add(new CardElsewhereView(
+                            other.boardId(), other.boardName(), count));
+                }
+            }
+            return List.copyOf(reached);
         }
 
         BacklogRowView backlogRowOf(Issue issue, int position) {
@@ -705,8 +841,7 @@ public class BoardCardService {
         }
 
         private static IssueStatusView viewOf(IssueStatus status) {
-            return new IssueStatusView(
-                    status.getId(), status.getName(), status.getKind(), status.getPosition());
+            return IssueStatusView.of(status);
         }
 
         private static boolean isEmpty(List<UUID> ids) {

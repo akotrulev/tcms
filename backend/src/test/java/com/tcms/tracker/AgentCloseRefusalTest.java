@@ -99,13 +99,14 @@ class AgentCloseRefusalTest extends TrackerEndpointTestBase {
     void theAssigneeIsRefused() throws Exception {
         reviewToClose(true);
         String key = assignedToDana("Rewrite the retry budget");
-        move(DANA, key, statusNamed("In Review"));
+        walkToReadyToDeploy(DANA, key);
 
         MvcResult refused = attempt(DANA, key, statusNamed("Done"));
 
         assertThat(refused.getResponse().getStatus()).isEqualTo(409);
         assertThat(refused.getResponse().getContentAsString()).contains("a second person");
-        assertThat(readAs(DANA, key).get("status").get("name").asText()).isEqualTo("In Review");
+        assertThat(readAs(DANA, key).get("status").get("name").asText())
+                .isEqualTo("Ready to deploy");
         assertThat(readAs(DANA, key).get("doneAt").isNull()).isTrue();
     }
 
@@ -116,7 +117,7 @@ class AgentCloseRefusalTest extends TrackerEndpointTestBase {
         // and the assignee's own history says nothing happened at all.
         reviewToClose(true);
         String key = assignedToDana("Rewrite the retry budget");
-        move(DANA, key, statusNamed("In Review"));
+        walkToReadyToDeploy(DANA, key);
 
         attempt(DANA, key, statusNamed("Done"));
 
@@ -129,7 +130,7 @@ class AgentCloseRefusalTest extends TrackerEndpointTestBase {
     void anAssistantIsRefusedAsItsOwner() throws Exception {
         reviewToClose(true);
         String key = assignedToDana("Rewrite the retry budget");
-        move(DANA, key, statusNamed("In Review"));
+        walkToReadyToDeploy(DANA, key);
         String secret = assistantFor(DANA);
 
         MvcResult refused = mvc.perform(MockMvcRequestBuilders
@@ -150,7 +151,7 @@ class AgentCloseRefusalTest extends TrackerEndpointTestBase {
     void aSecondPersonMayClose() throws Exception {
         reviewToClose(true);
         String key = assignedToDana("Rewrite the retry budget");
-        move(DANA, key, statusNamed("In Review"));
+        walkToReadyToDeploy(DANA, key);
 
         MvcResult closed = attempt(ADMIN, key, statusNamed("Done"));
 
@@ -167,7 +168,7 @@ class AgentCloseRefusalTest extends TrackerEndpointTestBase {
         // The one-person company path, and the reason the default is off. Same issue, same caller,
         // same move: the only difference is the project setting.
         String key = assignedToDana("Rewrite the retry budget");
-        move(DANA, key, statusNamed("In Review"));
+        walkToReadyToDeploy(DANA, key);
 
         MvcResult closed = attempt(DANA, key, statusNamed("Done"));
 
@@ -183,7 +184,7 @@ class AgentCloseRefusalTest extends TrackerEndpointTestBase {
     void anUnassignedIssueIsNotGuarded() throws Exception {
         reviewToClose(true);
         String key = created("Nobody has taken this", null);
-        move(DANA, key, statusNamed("In Review"));
+        walkToReadyToDeploy(DANA, key);
 
         assertThat(attempt(DANA, key, statusNamed("Done")).getResponse().getStatus())
                 .isEqualTo(200);
@@ -194,13 +195,14 @@ class AgentCloseRefusalTest extends TrackerEndpointTestBase {
     void theIssueProjectionIsCallerScoped() throws Exception {
         reviewToClose(true);
         String key = assignedToDana("Rewrite the retry budget");
-        move(DANA, key, statusNamed("In Review"));
+        walkToReadyToDeploy(DANA, key);
 
         List<String> forDana = allowedNames(readAs(DANA, key));
         List<String> forAdmin = allowedNames(readAs(ADMIN, key));
 
-        // Subtracted, never replaced: In Progress must survive, or the refusal is a dead end.
-        assertThat(forDana).doesNotContain("Done").contains("In Progress");
+        // Subtracted, never replaced: the other moves out of Ready to deploy must survive, or the
+        // refusal is a dead end — an assignee who cannot close and cannot do anything else either.
+        assertThat(forDana).doesNotContain("Done").contains("Rework", "Blocked");
         assertThat(forAdmin).contains("Done");
     }
 
@@ -209,9 +211,9 @@ class AgentCloseRefusalTest extends TrackerEndpointTestBase {
     void theBoardCardIsCallerScoped() throws Exception {
         reviewToClose(true);
         String key = assignedToDana("Rewrite the retry budget");
-        move(DANA, key, statusNamed("In Review"));
+        walkToReadyToDeploy(DANA, key);
 
-        assertThat(boardCardMoves(DANA, key)).doesNotContain("Done").contains("In Progress");
+        assertThat(boardCardMoves(DANA, key)).doesNotContain("Done").contains("Rework");
         assertThat(boardCardMoves(ADMIN, key)).contains("Done");
     }
 
@@ -220,7 +222,7 @@ class AgentCloseRefusalTest extends TrackerEndpointTestBase {
     void thePersonalBoardCardIsCallerScoped() throws Exception {
         reviewToClose(true);
         String key = assignedToDana("Rewrite the retry budget");
-        move(DANA, key, statusNamed("In Review"));
+        walkToReadyToDeploy(DANA, key);
 
         assertThat(personalBoardMoves(DANA, key)).doesNotContain("Done");
     }
@@ -299,6 +301,22 @@ class AgentCloseRefusalTest extends TrackerEndpointTestBase {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"statusId\":\"" + statusId + "\"}"))
                 .andReturn();
+    }
+
+    /**
+     * The seven moves from {@code New} to {@code Ready to deploy} — the whole line short of the
+     * deploy step, which is the one this class is about.
+     *
+     * <p>~~One move to In Review.~~ → V13: the seeded workflow is a LINE (021 §2.3) and the close
+     * gate moved to its end, because tested is not shipped (D-l). Ready to deploy is the only
+     * status with a {@code DONE}-kind target, so it is the only place the review-to-close guard has
+     * anything to withhold.
+     */
+    private void walkToReadyToDeploy(UUID callerId, String key) throws Exception {
+        for (String name : List.of("Refining", "Ready to develop", "In progress", "In review",
+                "Ready for test", "In test", "Ready to deploy")) {
+            move(callerId, key, statusNamed(name));
+        }
     }
 
     private void move(UUID callerId, String key, UUID statusId) throws Exception {

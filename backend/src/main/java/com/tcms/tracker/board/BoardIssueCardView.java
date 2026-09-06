@@ -32,6 +32,26 @@ import java.util.UUID;
  *                          (~~`board.html`~~ → `docs/mockups/work-board.html`, which is the file's
  *                          actual name — the citation was stale on arrival and `citedFiles.test.ts`
  *                          is what said so)
+ * @param parentKey         the story a task belongs to, the epic a story belongs to, null for an
+ *                          epic. <strong>The immediate parent</strong> and not
+ *                          {@link #epicKey}, which is the lane: 021 §2.5 makes a story with tasks
+ *                          on this board a pinned row header, and the row a card belongs under is
+ *                          its parent's, one level up, not its epic's two
+ * @param elsewhere         the descendants this board does <em>not</em> show, grouped by the boards
+ *                          that do. Empty when every descendant is shown here, which is the
+ *                          ordinary case and the case a row header draws no link for
+ * @param hasAcceptanceCriteria 021 §2.6 — the PM board's readiness signal. The array itself stays
+ *                          off the card: it is the detail page's, and a board that shipped every
+ *                          criterion of every card would ship a paragraph per card to render a dot
+ * @param blockedFromStatus set while the issue is in the project's {@code blocking} status
+ *                          (021 D-b/D-c). The card reads {@code Blocked · from In test}, so a
+ *                          blocked card sitting on somebody else's board says whose problem it was
+ * @param allStoriesDone    021 D-d, and a <strong>nudge rather than a transition</strong>: true on
+ *                          an EPIC whose every counted story is DONE while the epic itself is not.
+ *                          The server never moves an epic on its own
+ * @param linkedCases       null until 021 T4 serves it, and null for a card with no linked cases.
+ *                          The key is always present, so a consumer tells "not served" from "none
+ *                          linked" by reading the null rather than by an absent property
  */
 public record BoardIssueCardView(
         String key,
@@ -53,5 +73,11 @@ public record BoardIssueCardView(
         List<IssueStatusView> allowedTransitions,
         int subtaskTotal,
         int subtaskDone,
-        boolean agentEligible) {
+        boolean agentEligible,
+        String parentKey,
+        List<CardElsewhereView> elsewhere,
+        boolean hasAcceptanceCriteria,
+        IssueStatusView blockedFromStatus,
+        boolean allStoriesDone,
+        LinkedCasesSummaryView linkedCases) {
 }

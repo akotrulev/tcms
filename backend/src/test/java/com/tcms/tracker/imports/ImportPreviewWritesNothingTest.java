@@ -147,7 +147,7 @@ class ImportPreviewWritesNothingTest extends ImportTestBase {
     void statusesAreSuggestedAndNeverDecided() throws Exception {
         JsonNode statuses = preview(200).path("statuses");
 
-        JsonNode backlog = rowFor(statuses, "Backlog");
+        JsonNode backlog = rowFor(statuses, "New");
         assertThat(backlog.path("matched").asBoolean()).isTrue();
         assertThat(backlog.path("suggestedStatusId").isNull()).isFalse();
 

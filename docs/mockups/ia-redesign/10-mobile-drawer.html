@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The mobile drawer · TCMS IA proposal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell-v2.css">
+</head>
+<body data-shell="none" data-role="Test Engineer">
+<template id="caption">
+  <strong>Below <code>md</code>, the same three zones as accordions.</strong> The zone holding the
+  current route is open and the others are closed, so a phone shows about eight rows instead of the
+  thirty-plus list the drawer carries today with no prioritisation at all. <strong>You is always
+  first.</strong> No collapse toggle, as today. Every row is a <strong>44px</strong> touch target
+  with 8px between — the drawer is the one surface where the rail's 32px desktop pill is not enough.
+  Rendered at <strong>390px</strong> inside a phone frame; the accordions really open.
+</template>
+<div class="page">
+  <div class="phead">
+    <div><h1>Mobile drawer</h1><div class="sub">390px · Test Engineer · current route is Test cases</div></div>
+  </div>
+
+  <div class="row" style="align-items:flex-start;gap:24px">
+    <div class="phone">
+      <div class="phone-status"><span>9:41</span><span class="spacer"></span><span>▮▮▮ ⌁</span></div>
+      <div class="phone-bar">
+        <button class="btn btn-icon btn-sm" aria-label="Close navigation">✕</button>
+        <span style="font-size:13px;font-weight:500">Navigation</span>
+        <span class="spacer"></span>
+        <span class="avatar sm">DP</span>
+      </div>
+      <div class="phone-body"><div class="drawer" id="drawer"></div></div>
+    </div>
+
+    <section class="panel" style="flex:1;min-width:260px">
+      <div class="panel-head"><h2>What changes on a phone</h2></div>
+      <div class="panel-body stack" style="gap:12px">
+        <div class="bullet"><span aria-hidden="true">▸</span><div><strong>Progressive disclosure.</strong> Today the drawer is the same always-expanded 30+ item list as the desktop rail. Here two of three zones start shut.</div></div>
+        <div class="bullet"><span aria-hidden="true">▸</span><div><strong>The switcher is still the zone header</strong> — it opens the project sheet, and it is the only place a project changes.</div></div>
+        <div class="bullet"><span aria-hidden="true">▸</span><div><strong>The one folder left — <code>Administration ▸</code> — behaves identically</strong> to the desktop rail, so a person who learns one has learned both. The project zone has none: it is the same flat, usage-ordered list here as at 1440px.</div></div>
+        <div class="bullet"><span aria-hidden="true">▸</span><div><strong>No collapse toggle.</strong> 64px icons on a phone would be a second navigation to learn for no width gained.</div></div>
+        <div class="bullet"><span aria-hidden="true">▸</span><div><strong>Badges survive</strong> the narrowing — they are the reason to open the drawer at all.</div></div>
+      </div>
+      <div class="panel-foot"><span>Touch targets 44×44 with ≥8px separation; the desktop rail's 32px pill is a pointer measurement.</span></div>
+    </section>
+  </div>
+</div>
+
+<script src="assets/shell-v2.js"></script>
+<script>
+/* The drawer reuses the rail builder, then re-wraps each zone as an accordion, so the gating,
+   the folders and the badges cannot drift from the desktop rail's. */
+document.addEventListener('DOMContentLoaded', () => {
+  const N = window.TCMSNav;
+  const role = document.body.dataset.role;
+  const rail = N.buildRail({ role, active: 'cases', project: 'ACME|Acme Payments' });
+  const host = document.getElementById('drawer');
+
+  host.innerHTML = `<div class="drawer-head">
+      <span class="mark" style="width:22px;height:22px;border-radius:4px;background:var(--color-action-primary);color:var(--color-on-action);display:grid;place-items:center;font-size:11px;font-weight:700;font-family:var(--font-mono)">T</span>
+      <strong style="font-size:13px">TCMS</strong>
+      <span class="spacer"></span>
+      <span style="font-size:11.5px;color:var(--color-text-faint)">Acme Ltd</span>
+    </div>`;
+
+  const zones = rail.querySelectorAll('nav.zone');
+  zones.forEach((zone, i) => {
+    const sw = zone.querySelector('.zone-switch');
+    const lbl = zone.querySelector('.zone-label');
+    // The zone holding the current route is open; You is always first and starts closed here
+    // only because the reader is inside a project.
+    const open = !!zone.querySelector('[aria-current="page"], .folder-btn.has-active');
+    const heading = sw ? 'Project · ACME Acme Payments' : (lbl ? lbl.textContent : 'Zone');
+
+    const rows = document.createElement('div');
+    rows.className = 'acc-body';
+    Array.from(zone.children).forEach((c) => {
+      if (c === lbl) return;
+      rows.appendChild(c.cloneNode(true));
+    });
+    if (!open) rows.hidden = true;
+
+    const acc = document.createElement('div');
+    acc.className = 'acc';
+    acc.innerHTML = `<button class="acc-btn" type="button" aria-expanded="${open}">
+        <span>${N.esc(heading)}</span><span class="cv" aria-hidden="true">▸</span>
+      </button>`;
+    acc.appendChild(rows);
+    host.appendChild(acc);
+  });
+});
+</script>
+</body>
+</html>

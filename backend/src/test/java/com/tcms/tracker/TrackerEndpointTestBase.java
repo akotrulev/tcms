@@ -33,8 +33,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  *
  * <p>What is here is the part that genuinely is identical: creating a company, an active user, a
  * membership, a project grant, a project and its seeded defaults — the last through
- * {@code tcms_seed_project_defaults}, which is what gives a project its six statuses, its six issue
- * types and the moves between them. Seeding those by hand in a test would be a second definition of
+ * {@code tcms_seed_project_defaults}, which is what gives a project its eleven statuses, its six issue
+ * types, the moves between them and its three boards. Seeding those by hand in a test would be a second definition of
  * a project's workflow, and the one that drifts is whichever the migration does not.
  */
 public abstract class TrackerEndpointTestBase extends IntegrationTestBase {
@@ -213,7 +213,7 @@ public abstract class TrackerEndpointTestBase extends IntegrationTestBase {
         if (hasWorkflow(companyId, projectId)) {
             /*
               Called from @BeforeEach, so it runs once per test METHOD, and the function is
-              idempotent only against its own names: a fixture that renames "Backlog" leaves the
+              idempotent only against its own names: a fixture that renames "New" leaves the
               function unable to see that the status is there, so the next call inserts a second one
               at position 0 and the class fails on a unique constraint rather than on anything it
               is about. Asking whether the project already has a workflow is the guard the function

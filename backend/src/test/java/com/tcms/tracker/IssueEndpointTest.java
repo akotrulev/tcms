@@ -29,7 +29,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
  *       {@code project_key_sequence} rather than from {@code MAX(key)+1} — which is green in every
  *       test and collides under load.</li>
  *   <li><strong>A new issue entering a status found by NAME.</strong> The project below renames its
- *       first column, so a lookup on the word "Backlog" puts the issue in the wrong place or throws.
+ *       first column, so a lookup on the word "New" puts the issue in the wrong place or throws.
  *       Every other test in this class passes against that defect.</li>
  *   <li><strong>The depth rule read against type names.</strong> Two of this project's six types are
  *       called something with "Task" in it and they sit at different levels, so a rule matching on
@@ -101,15 +101,15 @@ class IssueEndpointTest extends TrackerEndpointTestBase {
      * Puts the first column's name back.
      *
      * <p>Not tidiness: {@code WorkflowSeedTest} asserts that <strong>every</strong> seeded project in
-     * the database has the six default statuses in order, and this class deliberately renames one of
-     * them. Leaving it renamed is green here and red there, in a class that has nothing to do with
+     * the database has the eleven default statuses in order, and this class deliberately renames one
+     * of them. Leaving it renamed is green here and red there, in a class that has nothing to do with
      * this one — §19's shape, reached through a column name instead of an id.
      */
     @AfterEach
     void restoreFirstColumn() throws SQLException {
         try (var connection = appConnection(ACME);
                 var statement = connection.prepareStatement(
-                        "UPDATE issue_status SET name = 'Backlog' "
+                        "UPDATE issue_status SET name = 'New' "
                                 + "WHERE project_id = CAST(? AS uuid) AND name = 'Icebox'")) {
             statement.setObject(1, PROJECT);
             statement.executeUpdate();
@@ -120,16 +120,16 @@ class IssueEndpointTest extends TrackerEndpointTestBase {
      * Renames the project's first status, and this is the fixture's most load-bearing line.
      *
      * <p>Story B1 says a project may rename its columns. A service that finds the opening status by
-     * the word "Backlog" is green against every default project in the suite and wrong for exactly
+     * the word "New" is green against every default project in the suite and wrong for exactly
      * the projects that used the configurability the product promises them — so this project has no
-     * status called Backlog at all, and {@link #aNewIssueEntersTheFirstStatusByPosition} is the
+     * status called New at all, and {@link #aNewIssueEntersTheFirstStatusByPosition} is the
      * assertion that can tell the two implementations apart.
      */
     private void renameFirstColumn() throws SQLException {
         try (var connection = appConnection(ACME);
                 var statement = connection.prepareStatement(
                         "UPDATE issue_status SET name = 'Icebox' "
-                                + "WHERE project_id = CAST(? AS uuid) AND name = 'Backlog'")) {
+                                + "WHERE project_id = CAST(? AS uuid) AND name = 'New'")) {
             statement.setObject(1, PROJECT);
             statement.executeUpdate();
         }
@@ -424,6 +424,70 @@ class IssueEndpointTest extends TrackerEndpointTestBase {
     // =====================================================================
     // Request helpers
     // =====================================================================
+
+    @Test
+    @DisplayName("the palette's search finds a key prefix before a title, and never another company")
+    void issueSearchRanksKeyPrefixesFirstAndStopsAtTheCompanyBoundary() throws Exception {
+        // 021 D-j. The palette's whole job is "I know what I am looking for": somebody typing a key
+        // means the issue with that key, and a title match ranked above it is the row they scroll
+        // past. Key-prefix hits first, then title hits.
+        UUID story = typeNamed("Story");
+        JsonNode first = create(LEAD, story, "Sign in with a passkey", null, null);
+        create(LEAD, story, "Mentions " + first.get("key").asText() + " in its title", null, null);
+
+        JsonNode byKey = search(LEAD, first.get("key").asText(), null);
+
+        assertThat(byKey).isNotEmpty();
+        assertThat(byKey.get(0).get("key").asText())
+                .as("the issue whose KEY matches, ahead of the one that merely names it")
+                .isEqualTo(first.get("key").asText());
+        assertThat(byKey.get(0).get("projectName").asText())
+                .as("the project is named because the search crosses projects and two of them may "
+                        + "hold a story with the same title")
+                .isEqualTo("Issue Project");
+        assertThat(byKey.get(0).get("status").get("blocking").asBoolean())
+                .as("New is not the blocking status; the flag travels on every IssueStatusRef")
+                .isFalse();
+
+        // A member of Acme searching for Umbra's project key finds nothing — the gate is
+        // readAllVisible, which is project:read, and a company boundary is not a filter that can
+        // be turned off. The two-company shape is RlsIsolationTest's, applied to a read.
+        assertThat(search(LEAD, "ISSU-", null)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("search caps at twenty when limit is omitted, and at fifty when it is not")
+    void issueSearchCapsWhatItAnswers() throws Exception {
+        // No `default:` in the contract — openapi-typescript would make the parameter required —
+        // so the cap is the server's, described in prose and asserted here.
+        UUID story = typeNamed("Story");
+        for (int index = 0; index < 22; index++) {
+            create(LEAD, story, "Findable subject " + index, null, null);
+        }
+
+        assertThat(search(LEAD, "Findable subject", null)).hasSize(20);
+        assertThat(search(LEAD, "Findable subject", 5)).hasSize(5);
+        assertThat(search(LEAD, "Findable subject", 500))
+                .as("clamped rather than refused: a palette sends what its own list can draw, and "
+                        + "a 400 on a keystroke is a refusal the caller cannot act on")
+                .hasSize(22);
+    }
+
+    private JsonNode search(UUID userId, String query, Integer limit) throws Exception {
+        var request = MockMvcRequestBuilders.get("/api/v1/issues/search")
+                .param("q", query)
+                .header("Authorization", "Bearer " + tokenFor(userId, ACME));
+        // Omitted rather than sent empty when absent: "no limit parameter" and "limit=" are
+        // different requests, and only the first is the one the server caps at twenty.
+        if (limit != null) {
+            request = request.param("limit", limit.toString());
+        }
+        MvcResult result = mvc.perform(request).andReturn();
+        assertThat(result.getResponse().getStatus())
+                .as(result.getResponse().getContentAsString())
+                .isEqualTo(200);
+        return json.readTree(result.getResponse().getContentAsString());
+    }
 
     private UUID typeNamed(String name) throws Exception {
         MvcResult result = mvc.perform(MockMvcRequestBuilders

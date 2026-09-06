@@ -101,29 +101,30 @@ class BoardMoveServiceTest extends TrackerEndpointTestBase {
         // claims three engineering states and a drop into it must mean exactly one of them.
         UUID board = coarseBoard();
         String key = issue("a story to fly");
+        // Ready to develop first, because the drop MEANS In progress and the workflow is a line —
+        // the assertion is about which status the column resolves to, not about reaching it.
+        walkTo(key, "Ready to develop");
 
         CardMoveResultView result = moved(board, key, columnId(board, "In flight"));
 
-        assertThat(result.card().status().name()).isEqualTo("In Progress");
-        assertThat(statusOf(key)).isEqualTo("In Progress");
+        assertThat(result.card().status().name()).isEqualTo("In progress");
+        assertThat(statusOf(key)).isEqualTo("In progress");
     }
 
     @Test
     @DisplayName("a card already in a status the column claims is not demoted to the default")
     void aCardAlreadyInAStatusTheColumnClaimsIsNotDemoted() throws SQLException {
-        // "In flight" claims In Progress, In Review and Blocked, and defaults to In Progress. A
-        // move that wrote the default would silently walk a card in review BACKWARDS, and read as
-        // the board undoing the drag.
+        // "In flight" claims every working status and defaults to In progress. A move that wrote
+        // the default would silently walk a card in review BACKWARDS, and read as the board undoing
+        // the drag.
         UUID board = coarseBoard();
         String key = issue("a story in review");
-        transitionTo(key, "Ready");
-        transitionTo(key, "In Progress");
-        transitionTo(key, "In Review");
+        walkTo(key, "In review");
 
         CardMoveResultView result = moved(board, key, columnId(board, "In flight"));
 
-        assertThat(statusOf(key)).isEqualTo("In Review");
-        assertThat(result.card().status().name()).isEqualTo("In Review");
+        assertThat(statusOf(key)).isEqualTo("In review");
+        assertThat(result.card().status().name()).isEqualTo("In review");
         assertThat(result.card().columnId()).isEqualTo(columnId(board, "In flight"));
     }
 
@@ -132,15 +133,17 @@ class BoardMoveServiceTest extends TrackerEndpointTestBase {
     void aMoveOverTheWipLimitSucceedsAndReportsTheBreach() throws SQLException {
         // Reported, NOT enforced (story B3). A limit that refused drops is a limit people route
         // around by not using the board, and then the board stops describing the work.
-        UUID board = boardWithWipLimit("In Progress", 1);
+        // Refining rather than In progress, because a card enters the project at New and the only
+        // move it has is the first step of the line — the limit is what this is about, not the walk.
+        UUID board = boardWithWipLimit("Refining", 1);
         String first = issue("first in flight");
         String second = issue("second in flight");
-        UUID inProgress = columnId(board, "In Progress");
+        UUID refining = columnId(board, "Refining");
 
-        moved(board, first, inProgress);
-        CardMoveResultView result = moved(board, second, inProgress);
+        moved(board, first, refining);
+        CardMoveResultView result = moved(board, second, refining);
 
-        assertThat(statusOf(second)).isEqualTo("In Progress");
+        assertThat(statusOf(second)).isEqualTo("Refining");
         assertThat(result.breach()).isNotNull();
         assertThat(result.breach().count()).isEqualTo(2);
         assertThat(result.breach().limit()).isEqualTo(1);
@@ -151,13 +154,13 @@ class BoardMoveServiceTest extends TrackerEndpointTestBase {
     void aColumnAtExactlyItsLimitIsNotInBreach() throws SQLException {
         // Off-by-one here puts a permanent warning on any team that actually works to its limit,
         // and a warning that is always on is one nobody reads.
-        UUID board = boardWithWipLimit("In Progress", 2);
+        UUID board = boardWithWipLimit("Refining", 2);
         String first = issue("first in flight");
         String second = issue("second in flight");
-        UUID inProgress = columnId(board, "In Progress");
+        UUID refining = columnId(board, "Refining");
 
-        moved(board, first, inProgress);
-        CardMoveResultView result = moved(board, second, inProgress);
+        moved(board, first, refining);
+        CardMoveResultView result = moved(board, second, refining);
 
         assertThat(result.breach()).isNull();
         assertThat(contents(board).breaches()).isEmpty();
@@ -174,9 +177,9 @@ class BoardMoveServiceTest extends TrackerEndpointTestBase {
         BoardMoveService.Outcome.NotAllowed refused =
                 notAllowed(board, key, columnId(board, "Done"));
 
-        assertThat(refused.from()).isEqualTo("Backlog");
+        assertThat(refused.from()).isEqualTo("New");
         assertThat(refused.to()).isEqualTo("Done");
-        assertThat(statusOf(key)).isEqualTo("Backlog");
+        assertThat(statusOf(key)).isEqualTo("New");
     }
 
     @Test
@@ -185,43 +188,53 @@ class BoardMoveServiceTest extends TrackerEndpointTestBase {
         // THE module's done-criterion, as a test rather than as a click-through. It holds because
         // there is one status and two mappings of it (D2) — there is no per-board state that could
         // disagree.
-        UUID fine = defaultBoard();
+        // The fine board is one column per status rather than the seeded PM board, which claims a
+        // SUBSET now (021 R7) and shows no working column at all — "the matching column on the
+        // other board" needs both boards to claim the status the card lands in.
+        UUID fine = perStatusBoard("Fine", null, 0);
         UUID coarse = coarseBoard();
         String key = issue("a story on two boards");
-        transitionTo(key, "Ready");
-        transitionTo(key, "In Progress");
+        walkTo(key, "In progress");
 
-        moved(fine, key, columnId(fine, "In Review"));
+        moved(fine, key, columnId(fine, "In review"));
 
         BoardContentsView onCoarse = contents(coarse);
         assertThat(columnOf(onCoarse, key)).isEqualTo(columnId(coarse, "In flight"));
-        assertThat(columnOf(contents(fine), key)).isEqualTo(columnId(fine, "In Review"));
+        assertThat(columnOf(contents(fine), key)).isEqualTo(columnId(fine, "In review"));
     }
 
     // =====================================================================
 
-    /** The board {@code tcms_seed_project_defaults} makes — one column per status. */
+    /** The first board {@code tcms_seed_project_defaults} makes — the PM board (021 §2.4). */
     private UUID defaultBoard() {
         return boards().get(0).id();
     }
 
-    /** Six statuses folded into three columns — the stakeholder board V5 deliberately does not seed. */
+    /**
+     * The eleven statuses folded into three columns — the stakeholder board the seed deliberately
+     * does not make, because which three is a decision about who is looking.
+     */
     private UUID coarseBoard() {
         List<IssueStatusView> statuses = statuses();
         return written(new BoardInput("Coarse", SwimlaneBy.NONE, List.of(
-                column("Not started", statuses, null, "Backlog", "Ready"),
-                column("In flight", statuses, null, "In Progress", "In Review", "Blocked"),
+                column("Not started", statuses, null, "New", "Refining", "Ready to develop"),
+                column("In flight", statuses, null, "In progress", "In review", "Ready for test",
+                        "In test", "Ready to deploy", "Rework", "Blocked"),
                 column("Done", statuses, null, "Done"))));
     }
 
-    /** The seeded one-column-per-status shape, with a limit on one of them. */
-    private UUID boardWithWipLimit(String columnName, int limit) {
+    /** One column per status — the shape V5's Team board had, built here rather than seeded. */
+    private UUID perStatusBoard(String boardName, String limitedColumn, Integer limit) {
         List<IssueStatusView> statuses = statuses();
         List<BoardColumnInput> columns = new ArrayList<>();
         statuses.forEach(status -> columns.add(new BoardColumnInput(
-                null, status.name(), status.name().equals(columnName) ? limit : null,
+                null, status.name(), status.name().equals(limitedColumn) ? limit : null,
                 List.of(status.id()), status.id())));
-        return written(new BoardInput("Limited", SwimlaneBy.NONE, columns));
+        return written(new BoardInput(boardName, SwimlaneBy.NONE, columns));
+    }
+
+    private UUID boardWithWipLimit(String columnName, int limit) {
+        return perStatusBoard("Limited", columnName, limit);
     }
 
     private static BoardColumnInput column(
@@ -287,6 +300,24 @@ class BoardMoveServiceTest extends TrackerEndpointTestBase {
                 .id();
     }
 
+    /**
+     * Walks the line from {@code New} up to and including {@code statusName}.
+     *
+     * <p>The seeded workflow is a LINE now (021 §2.3), so a fixture cannot jump: every step between
+     * where the issue is and where the test needs it has to be a legal move, and this is what makes
+     * that cost one line instead of five.
+     */
+    private void walkTo(String key, String statusName) {
+        for (String step : List.of("Refining", "Ready to develop", "In progress", "In review",
+                "Ready for test", "In test", "Ready to deploy", "Done")) {
+            transitionTo(key, step);
+            if (step.equals(statusName)) {
+                return;
+            }
+        }
+        throw new AssertionError(statusName + " is not on the seeded line");
+    }
+
     private void transitionTo(String key, String statusName) {
         UUID target = idOf(statuses(), statusName);
         GateResult<TransitionService.Outcome> gate =
@@ -337,7 +368,7 @@ class BoardMoveServiceTest extends TrackerEndpointTestBase {
                                 (SELECT id FROM issue_type
                                   WHERE project_id = CAST(? AS uuid) AND name = 'Story'),
                                 (SELECT id FROM issue_status
-                                  WHERE project_id = CAST(? AS uuid) AND name = 'Backlog'),
+                                  WHERE project_id = CAST(? AS uuid) AND name = 'New'),
                                 ?)
                         """)) {
             statement.setObject(1, UUID.randomUUID());

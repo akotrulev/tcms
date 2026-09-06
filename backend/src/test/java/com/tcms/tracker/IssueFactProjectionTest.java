@@ -128,12 +128,12 @@ class IssueFactProjectionTest extends TrackerEndpointTestBase {
         // assertion that tells the two implementations apart.
         String epic = create("Epic", "Authentication", null);
         String story = create("Story", "Passkeys", epic);
-        moveThrough(story, "In Progress");
+        moveThrough(story, "Refining", "Ready to develop", "In progress");
         refresh();
 
         assertThat(factFor(epic).get("status_kind")).isEqualTo("IN_PROGRESS");
 
-        moveThrough(story, "In Review", "Done");
+        moveThrough(story, "In review", "Ready for test", "In test", "Ready to deploy", "Done");
         refresh();
 
         assertThat(factFor(epic).get("status_kind")).isEqualTo("DONE");
@@ -155,7 +155,7 @@ class IssueFactProjectionTest extends TrackerEndpointTestBase {
         // thing that can catch them drifting apart. Nothing else compares them.
         String epic = create("Epic", "Authentication", null);
         String story = create("Story", "Passkeys", epic);
-        moveThrough(story, "In Progress");
+        moveThrough(story, "Refining", "Ready to develop", "In progress");
         refresh();
 
         assertThat(read(epic).get("status").get("kind").asText())
@@ -179,12 +179,17 @@ class IssueFactProjectionTest extends TrackerEndpointTestBase {
 
     @Test
     void doneAtSurvivesAReopen() throws Exception {
+        // THE REOPEN IS A DIRECT WRITE, and that is V13's doing rather than a shortcut: the seeded
+        // workflow is a one-way line with no move out of Done (021 §2.3 enumerates none), so a
+        // finished issue has no reopen path through the endpoint. Both closes are real transitions;
+        // only the step between them is arranged by hand.
         String story = create("Story", "Passkeys", null);
-        moveThrough(story, "In Progress", "In Review", "Done");
+        walkToDone(story);
         refresh();
         Object firstDone = factFor(story).get("done_at");
 
-        moveThrough(story, "In Progress", "In Review", "Done");
+        putBackTo(story, "Ready to deploy");
+        moveThrough(story, "Done");
         refresh();
 
         assertThat(firstDone).isNotNull();
@@ -281,6 +286,28 @@ class IssueFactProjectionTest extends TrackerEndpointTestBase {
                 .as(result.getResponse().getContentAsString())
                 .isEqualTo(201);
         return json.readTree(result.getResponse().getContentAsString()).get("key").asText();
+    }
+
+    /** The whole line, New to Done — nine statuses, eight moves (021 §2.3). */
+    private void walkToDone(String key) throws Exception {
+        moveThrough(key, "Refining", "Ready to develop", "In progress", "In review",
+                "Ready for test", "In test", "Ready to deploy", "Done");
+    }
+
+    /** A status written straight onto the row, for the one step the workflow has no move for. */
+    private void putBackTo(String key, String statusName) throws Exception {
+        try (var connection = appConnection(ACME);
+                var statement = connection.prepareStatement("""
+                        UPDATE issue SET status_id = (SELECT id FROM issue_status
+                                                       WHERE project_id = CAST(? AS uuid)
+                                                         AND name = ?)
+                         WHERE issue_key = ?
+                        """)) {
+            statement.setObject(1, PROJECT);
+            statement.setString(2, statusName);
+            statement.setString(3, key);
+            statement.executeUpdate();
+        }
     }
 
     private void moveThrough(String key, String... statusNames) throws Exception {
