@@ -258,6 +258,19 @@ export interface ServerColumn {
   wipLimit: number | null;
   statusIds: readonly string[];
   defaultStatusId: string;
+  /**
+   * True when **every** status this column claims is `DONE`-kind — the column 021 D-l collapses to a
+   * per-lane count strip.
+   *
+   * A property of the column rather than a name match: a project names its own statuses (011 D-c),
+   * so `column.name === 'Done'` is a guess about somebody else's vocabulary. `every` and not `some`
+   * is the load-bearing half — a coarse column claiming `Ready to deploy` *and* `Done` is a working
+   * column with finished work in it, and collapsing that would hide the cards a PO is about to
+   * move. A column claiming nothing is not done either, which is why the length is checked.
+   */
+  done: boolean;
+  /** True when every status this column claims is `NOT_STARTED`-kind — see {@link groomsWork}. */
+  notStarted: boolean;
 }
 
 /**
@@ -277,7 +290,31 @@ export function serverColumnsOf(columns: readonly BoardColumnConfig[]): ServerCo
     wipLimit: column.wipLimit ?? null,
     statusIds: column.statuses.map((status) => status.id),
     defaultStatusId: column.defaultStatusId,
+    done: column.statuses.length > 0 && column.statuses.every((status) => status.kind === 'DONE'),
+    notStarted:
+      column.statuses.length > 0
+      && column.statuses.every((status) => status.kind === 'NOT_STARTED'),
   }));
+}
+
+/**
+ * Whether this board is one where work is **groomed** — which is what decides whether its cards
+ * carry §2.6's readiness signals.
+ *
+ * The signals are the PM board's on `18-pm-board.html` and are absent from Dev and QA, and nothing
+ * on the contract says which board is which: a board has a name the project chose, and matching on
+ * `'PM'` would be a guess about somebody else's vocabulary — the same mistake `columnsFor` has a
+ * paragraph about. So it is read off the **shape** instead: *two or more columns whose every status
+ * is `NOT_STARTED`*.
+ *
+ * That is not a proxy for the name, it is the fact itself. A not-started column is work nobody has
+ * begun; a board with only one of them shows a queue, and a board with several is one where the
+ * stages *before* work starts are the thing being managed — which is what grooming is, and the only
+ * reason a card would need to say what it is still missing. On §2.4's seeded three it selects PM
+ * (New · Refining · Ready to develop) and neither Dev (Ready to develop alone) nor QA (none).
+ */
+export function groomsWork(columns: readonly ServerColumn[]): boolean {
+  return columns.filter((column) => column.notStarted).length > 1;
 }
 
 export type ColumnMove =
@@ -354,4 +391,34 @@ export function columnRefusalFor(card: BoardIssueCard, target: ServerColumn): st
   }
   return `${card.key} can't move to ${target.name} from ${card.status.name}. `
     + `The project's workflow decides which moves exist.`;
+}
+
+/**
+ * The project's `blocking` status as **this card** may reach it — 021 §2.7's `Block…` entry.
+ *
+ * Read off `allowedTransitions` and never off a status name: `blocking` is a flag on one status per
+ * project (D-b) and the project named that status itself, so `name === 'Blocked'` is a guess about
+ * somebody else's vocabulary — the mistake {@link columnsFor} has a paragraph about. Null means the
+ * move is not legal from here, which is also what makes the menu entry absent rather than disabled
+ * with an invented reason.
+ */
+export function blockingTargetOf(card: BoardIssueCard): IssueStatusRef | null {
+  return card.allowedTransitions.find((status) => status.blocking) ?? null;
+}
+
+/**
+ * Where `Unblock` puts a card back — the status it was in when it was blocked (D-c).
+ *
+ * `issue.blocked_from_status_id` is written on entry to a `blocking` status and cleared on exit, and
+ * `TransitionService` treats a target equal to it as legal **even though no `issue_transition` pair
+ * lists it** — ten reverse pairs would make "back to where it was" indistinguishable from "to
+ * anywhere". The server puts it into `allowedTransitions` for exactly that reason, so this still
+ * reads the legal set rather than trusting `blockedFromStatus` on its own: a card whose origin is
+ * not offered is one the caller may not move there, and offering it anyway is the render-then-reject
+ * failure.
+ */
+export function unblockTargetOf(card: BoardIssueCard): IssueStatusRef | null {
+  const origin = card.blockedFromStatus;
+  if (origin === null) return null;
+  return card.allowedTransitions.find((status) => status.id === origin.id) ?? null;
 }

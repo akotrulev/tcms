@@ -272,6 +272,7 @@ export {
   useBoardCards,
   useBoardConfig,
   useBoardConfigs,
+  useBoardCoverage,
   useBoards,
   useCreateBoard,
   useCreateLabel,

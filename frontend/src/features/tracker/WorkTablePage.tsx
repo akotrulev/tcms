@@ -1,6 +1,9 @@
 import { useMemo } from 'react';
 import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
 import {
+  useBoardCards,
+  useBoardConfig,
+  useBoards,
   useIssueTimeRollups,
   useIssues,
   useProject,
@@ -32,7 +35,7 @@ import {
   DropdownMenuTrigger,
 } from '../../components/ui';
 import { cn } from '../../lib/cn';
-import { formatHours, plural } from '../../lib/format';
+import { formatCount, formatHours, plural } from '../../lib/format';
 import { issueLevels } from '../../lib/labels';
 import { NativeSelect } from '../../components/ui/native-select';
 import { BacklogView } from '../board/BacklogView';
@@ -91,9 +94,14 @@ const TEST_ID = 'WorkTable';
  * the panel that read them. The shape is kept as a table rather than collapsed into the switcher's
  * JSX because it is what the switcher's order and labels come from, and it is where the sixth view
  * would be declared.
+ *
+ * ~~Five.~~ → **four, since 021 D-f.** `Board` is gone from this list and is not a view any more: the
+ * strip lists **the project's boards, in position order**, and then these four. A project with three
+ * boards gets three segments and a project with one gets one, because a board is a thing somebody
+ * configured rather than a fixed view of the product — and nothing here spells "PM", "Dev" or "QA",
+ * which are the names §2.4's seed happens to use.
  */
 const VIEWS = [
-  { id: 'board', label: 'Board' },
   { id: 'backlog', label: 'Backlog' },
   { id: 'table', label: 'Table' },
   { id: 'timeline', label: 'Timeline' },
@@ -212,7 +220,37 @@ export function WorkTablePage() {
     [rollups.data],
   );
 
-  const current = VIEWS.find((entry) => entry.id === view) ?? VIEWS[2];
+  /*
+    021 D-f — the strip's first segments are the project's boards. `listBoards` orders by the
+    `position` V13 added (it had none, and alphabetical would have put Dev before PM), so the order
+    here is the order the server sent and nothing re-sorts it.
+  */
+  const boards = useBoards(projectId);
+  const activeBoardId =
+    view === 'board' ? params.get('board') ?? boards.data?.[0]?.id ?? '' : '';
+
+  /*
+    §8.3's **door badge**: how many cards are sitting in the board's FIRST column — what is waiting
+    at this board's door, never a total. It is read out of the same two queries `ProjectBoardView`
+    makes under the same keys, so this is a cache hit rather than a second request, and it stays in
+    step with the board below it for free.
+
+    **The ACTIVE segment only.** 021 T1 added no contract for the inactive boards' counts, on
+    purpose, and inventing one here would mean a `GET …/cards` per board on every visit to the Table
+    view. T8 badges the rest.
+  */
+  const activeConfig = useBoardConfig(activeBoardId);
+  const activeCards = useBoardCards(activeBoardId, work.board);
+  const doorCount = useMemo(() => {
+    const first = activeConfig.data?.columns[0];
+    if (!first || !activeCards.data) return null;
+    return activeCards.data.lanes.reduce(
+      (total, lane) => total + lane.cards.filter((card) => card.columnId === first.id).length,
+      0,
+    );
+  }, [activeConfig.data, activeCards.data]);
+
+  const current = VIEWS.find((entry) => entry.id === view) ?? VIEWS[1];
 
   return (
     <div>
@@ -271,21 +309,60 @@ export function WorkTablePage() {
         with it — which is the whole of D34's "switching views never loses the filter".
       */}
       <nav aria-label="Work views" className="mb-3 flex flex-wrap gap-0.5 rounded-[8px] bg-wash-1 p-0.5">
+        {(boards.data ?? []).map((board) => {
+          const to = new URLSearchParams(params);
+          to.set('view', 'board');
+          to.set('board', board.id);
+          const on = board.id === activeBoardId;
+          return (
+            <RouterLink
+              key={board.id}
+              to={{ search: `?${to.toString()}` }}
+              aria-current={on ? 'page' : undefined}
+              data-testid={`${TEST_ID}.View.Board.${board.name}`}
+              className={cn(
+                'flex items-center gap-1.5 rounded-md px-[11px] py-1 text-[12px] font-medium no-underline',
+                'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
+                on ? 'bg-panel text-ink shadow-e1' : 'bg-transparent text-ink-3 hover:text-ink-2',
+              )}
+            >
+              {board.name}
+              {/*
+                The badge is an *awaiting you* count and never a total (§8.3), so it is drawn only
+                when there is something at the door: a `0` beside every board is five characters
+                that say nothing and train the eye to skip the place a real number will appear.
+              */}
+              {on && doorCount !== null && doorCount > 0 && (
+                <span
+                  data-testid={`${TEST_ID}.View.Board.${board.name}.Badge`}
+                  className={cn(
+                    'min-w-4 rounded-full bg-[color:var(--color-steel)] px-1 text-center',
+                    'font-mono text-[10px] font-semibold leading-[15px] text-rail',
+                  )}
+                >
+                  {formatCount(doorCount)}
+                </span>
+              )}
+            </RouterLink>
+          );
+        })}
+
         {VIEWS.map((entry) => {
           const to = new URLSearchParams(params);
           to.set('view', entry.id);
+          /* A view is not a board, so the board a reader last looked at does not travel with it. */
+          to.delete('board');
+          const on = view !== 'board' && entry.id === current.id;
           return (
             <RouterLink
               key={entry.id}
               to={{ search: `?${to.toString()}` }}
-              aria-current={entry.id === current.id ? 'page' : undefined}
+              aria-current={on ? 'page' : undefined}
               data-testid={`${TEST_ID}.View.${entry.id}`}
               className={cn(
                 'rounded-md px-[11px] py-1 text-[12px] font-medium no-underline',
                 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
-                entry.id === current.id
-                  ? 'bg-panel text-ink shadow-e1'
-                  : 'bg-transparent text-ink-3 hover:text-ink-2',
+                on ? 'bg-panel text-ink shadow-e1' : 'bg-transparent text-ink-3 hover:text-ink-2',
               )}
             >
               {entry.label}
@@ -300,7 +377,7 @@ export function WorkTablePage() {
         same URL and maps it onto `BoardFilters`, which is a different parameter set from the table's
         (D-v) rather than the same one narrowed.
       */}
-      {current.id === 'board' ? (
+      {view === 'board' ? (
         <ProjectBoardView projectId={projectId} />
       ) : current.id === 'backlog' ? (
         <BacklogView projectId={projectId} />

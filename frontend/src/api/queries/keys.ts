@@ -533,6 +533,18 @@ export const keys = {
    */
   board: (id: string) => ['boards', id] as const,
   /**
+   * The status × board matrix (021 R7) — **under {@link boards}, deliberately.**
+   *
+   * It is the one board read that is about the *set* rather than about one board, so it must go
+   * stale for the same reasons the picker's list does: a board created, deleted or re-columned
+   * changes which boards claim a status. `keys.boards(p)` is a prefix of this, so every
+   * invalidation the settings screen already makes sweeps it and nothing new has to remember to.
+   *
+   * That is the opposite arrangement from {@link boardCards}, and for the opposite reason: cards
+   * must survive a configuration edit, and coverage must not.
+   */
+  boardCoverage: (p: string) => ['projects', p, 'boards', 'coverage'] as const,
+  /**
    * One board's **cards**, keyed by the filter — and under a root of its own rather than under
    * {@link board}, which is the shape D-h's reason actually requires rather than the one its
    * sentence suggests.

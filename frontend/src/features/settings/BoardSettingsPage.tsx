@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import {
@@ -18,6 +18,7 @@ import type {
   BoardColumnInput,
   BoardConfig,
   BoardInput,
+  BoardSummary,
   IssueLabel,
   IssueStatusRef,
   ProjectWorkflow,
@@ -26,7 +27,7 @@ import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
-import { Badge, Banner } from '../../components/kit';
+import { Banner } from '../../components/kit';
 import {
   Button,
   Dialog,
@@ -39,15 +40,15 @@ import {
 } from '../../components/ui';
 import { useCan } from '../../auth/useCan';
 import { plural } from '../../lib/format';
-import { issueStatusKindTones, swimlaneByLabels } from '../../lib/labels';
+import { swimlaneByLabels } from '../../lib/labels';
 import { LABEL_COLORS, labelFill } from '../../lib/statusColors';
 import { ColumnEditor } from './ColumnEditor';
+import { CoverageMatrix } from './CoverageMatrix';
 import {
-  claimantsOf,
-  coverageHeadline,
   coverageOf,
   coverageProblem,
   draftOf,
+  unclaimedNote,
   type DraftColumn,
 } from './boardCoverage';
 
@@ -152,7 +153,7 @@ export function BoardSettingsPage() {
               <BoardConfigurations
                 projectId={projectId}
                 statuses={document.statuses}
-                boardIds={summaries.map((summary) => summary.id)}
+                summaries={summaries}
                 creating={creating}
                 onCloseCreate={() => setCreating(false)}
                 workflow={document}
@@ -178,25 +179,31 @@ export function BoardSettingsPage() {
 function BoardConfigurations({
   projectId,
   statuses,
-  boardIds,
+  summaries,
   workflow,
   creating,
   onCloseCreate,
 }: {
   projectId: string;
   statuses: readonly IssueStatusRef[];
-  boardIds: readonly string[];
+  /** The picker's list, in position order — the matrix's columns come from it. */
+  summaries: readonly BoardSummary[];
   workflow: ProjectWorkflow;
   creating: boolean;
   onCloseCreate: () => void;
 }) {
-  const configs = useBoardConfigs(boardIds);
+  const configs = useBoardConfigs(useMemo(() => summaries.map((s) => s.id), [summaries]));
 
   return (
     <>
       <DataRegion testId={`${TEST_ID}.Configs`} state={configs}>
         {(boards) => (
-          <BoardSettings projectId={projectId} statuses={statuses} boards={boards} />
+          <BoardSettings
+            projectId={projectId}
+            statuses={statuses}
+            boards={boards}
+            summaries={summaries}
+          />
         )}
       </DataRegion>
       {creating && (
@@ -210,10 +217,12 @@ function BoardSettings({
   projectId,
   statuses,
   boards,
+  summaries,
 }: {
   projectId: string;
   statuses: readonly IssueStatusRef[];
   boards: readonly BoardConfig[];
+  summaries: readonly BoardSummary[];
 }) {
   /*
     Read directly rather than through `PermissionGate`, for the reason `BacklogView` records: the
@@ -257,7 +266,15 @@ function BoardSettings({
         />
       ))}
 
-      <CoverageTable statuses={statuses} boards={boards} drafts={drafts} />
+      {/*
+        ~~`CoverageTable` — the per-board *"every status claimed exactly once"* checklist.~~ →
+        **`CoverageMatrix`, 021 R7.** The question inverted: not *"does this board claim every
+        status?"* but *"which boards show each status?"*, with the uncovered row as a **warning**
+        rather than the refusal it used to be. It reads `GET …/boards/coverage` rather than the
+        drafts, because the answer is over every board and this screen's drafts are one board's —
+        the component's own header has the argument.
+      */}
+      <CoverageMatrix projectId={projectId} boards={summaries} />
 
       <LabelsPanel projectId={projectId} canEdit={canEdit} reason={reason} />
 
@@ -305,6 +322,7 @@ function BoardPanel({
 
   const coverage = coverageOf(statuses, columns);
   const problem = coverageProblem(coverage);
+  const note = unclaimedNote(coverage);
   const unnamed = name.trim() === '' || columns.some((column) => column.name.trim() === '');
   const dirty =
     name !== board.name || JSON.stringify(columns) !== JSON.stringify(draftOf(board));
@@ -386,6 +404,17 @@ function BoardPanel({
           </Banner>
         )}
 
+        {/*
+          021 D-e: an unclaimed status is a **note**, not a refusal. It used to be `problem`'s first
+          arm and to disable Save; a board claims a subset now, so saying "refused" about the
+          ordinary state of every board §2.4 seeds would be the screen refusing its own defaults.
+        */}
+        {note && (
+          <Banner tone="neutral" data-testid={`${testId}.Coverage.Unclaimed`}>
+            <span>{note}</span>
+          </Banner>
+        )}
+
         {refused && (
           <div role="alert">
             <Banner tone="bad" data-testid={`${testId}.Refused`}>
@@ -461,103 +490,6 @@ function inputOf(name: string, board: BoardConfig, columns: readonly DraftColumn
       }),
     ),
   };
-}
-
-/**
- * The mockup's status × board grid, and the check under it.
- *
- * Read from the **drafts**, not from the server's copy, which is the whole reason it earns its
- * place: a reader who unclaims a status watches this table say so in the same beat, before any
- * request is made. A table computed from `boards` would show the invariant holding right up to the
- * moment the save failed with a 422.
- */
-function CoverageTable({
-  statuses,
-  boards,
-  drafts,
-}: {
-  statuses: readonly IssueStatusRef[];
-  boards: readonly BoardConfig[];
-  drafts: Record<string, DraftColumn[]>;
-}) {
-  const columnsOf = (board: BoardConfig) => drafts[board.id] ?? draftOf(board);
-  const failing = boards
-    .map((board) => ({ board, problem: coverageHeadline(coverageOf(statuses, columnsOf(board))) }))
-    .filter((row): row is { board: BoardConfig; problem: string } => row.problem !== null);
-
-  return (
-    <section
-      className="rounded-[10px] border border-line bg-panel"
-      data-testid={`${TEST_ID}.Coverage`}
-      aria-label="Column coverage"
-    >
-      <div className="flex flex-wrap items-center gap-2.5 border-b border-line px-3.5 py-2.5">
-        <h2 className="m-0 text-[13.5px] font-semibold text-ink">Column coverage</h2>
-      </div>
-      <div className="overflow-x-auto p-3">
-        <table className="w-full min-w-[520px] border-collapse text-[12.5px]">
-          <thead>
-            <tr>
-              <th className="border-b border-line px-2 py-1.5 text-left font-medium text-ink-3">
-                Status
-              </th>
-              {boards.map((board) => (
-                <th
-                  key={board.id}
-                  className="border-b border-line px-2 py-1.5 text-left font-medium text-ink-3"
-                >
-                  {board.name}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {statuses.map((status) => (
-              <tr key={status.id} data-testid={`${TEST_ID}.Coverage.Row.${status.name}`}>
-                <td className="border-b border-line px-2 py-1.5">
-                  <Badge tone={issueStatusKindTones[status.kind]}>{status.name}</Badge>
-                </td>
-                {boards.map((board) => {
-                  const claimants = claimantsOf(columnsOf(board), status.id);
-                  return (
-                    <td
-                      key={board.id}
-                      className="border-b border-line px-2 py-1.5 text-ink-2"
-                      data-testid={`${TEST_ID}.Coverage.Cell.${board.name}.${status.name}`}
-                    >
-                      {claimants.length === 0 ? (
-                        <span className="text-[color:var(--color-failed)]">no column</span>
-                      ) : (
-                        claimants.map((column) => column.name || 'unnamed').join(' · ')
-                      )}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="border-t border-line px-3.5 py-2.5 text-[11.5px] leading-[1.55]">
-        {failing.length === 0 ? (
-          <span className="text-[color:var(--color-success)]" data-testid={`${TEST_ID}.Coverage.Holds`}>
-            ✓ Every status is claimed by exactly one column on every board. A status claimed twice,
-            or not at all, is what this check exists to catch.
-          </span>
-        ) : (
-          <ul className="m-0 flex list-none flex-col gap-1 p-0" data-testid={`${TEST_ID}.Coverage.Problems`}>
-            {failing.map((row) => (
-              <li key={row.board.id} className="text-[color:var(--color-failed)]">
-                <strong>{row.board.name}</strong>
-                {' — '}
-                {row.problem}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </section>
-  );
 }
 
 /**

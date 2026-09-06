@@ -533,9 +533,12 @@ Deliver: the palette fans out to `/issues/search`, `/cases/search` and
 placeholder `Search issues, cases, docs`; the QA card face's `n/m passing · k blocked · Run linked
 cases` from `linkedCases` (rendered only when non-null); `/projects/:projectId/board` route and
 `BoardPage`'s composite arm removed, every link re-pointed to the Work board (D-n); door badges on
-every board segment from one `BoardSummary`-driven read per board (the cards read the segment
-already fetches; for inactive boards, `useBoardCards` with `enabled` gated on the strip being
-visible — no new contract); My work's *Awaiting you* strip: reviews assigned, cards at your door
+every board segment (T5 landed the strip in `features/tracker/WorkTablePage.tsx`, NOT in
+`BoardPage.tsx`: the board segments are `WorkTable.View.Board.<board name>` with the badge at
+`…​.Badge`, and the active board's count is a `useMemo` over `useBoardConfig(activeBoardId)` +
+`useBoardCards(activeBoardId, work.board)` — both cache hits on `ProjectBoardView`'s own keys.
+Extend it to the inactive boards with `useQueries` over the same two options objects, `enabled`
+gated on the strip being visible — no new contract); My work's *Awaiting you* strip: reviews assigned, cards at your door
 per board, your blocked cards, proposals waiting, the plain approvals link; and the close-out:
 `docs/features.md`'s board and navigation sections rewritten, `help/sections.tsx` for the new
 shell, the proposal's twelve reversals confirmed struck-through where they are argued, and a
@@ -551,6 +554,14 @@ Traps this task will hit:
   project shows no docs group and says so in the group header.
 - The features doc's "Every status is claimed by exactly one column, on every board" bullet is
   struck through with the reversal, not deleted.
+- The QA card face reads `linkedCases`, which T5 deliberately did **not** render: the key is always
+  present and was null until T4. Tell null (not served / none linked) from a zeroed summary — never
+  `?? 0` it into "nothing failed", and `0/6 run` is not `0/6 passing` (render note 22).
+- Two contract gaps T5 recorded rather than guessed at, both `be` tasks and neither this one's:
+  D-p (`BoardIssueCard` has no target release, so the card draws three readiness signals) and D-q
+  (`BoardLane` carries no epic status, so a lane bar says `epic not on this board` and cannot name
+  which). If either lands on the contract first, the screens above are where the fourth chip and the
+  named link go.
 - `GET /issues/search` answers `IssueSearchHit[]` — `key · title · typeLevel · projectId ·
   projectName · status`; the fixture is `anIssueSearchHit()` and the type alias `IssueSearchHit`
   in `frontend/src/api/types.ts` (T1). `q` is required, `limit` is optional and the server caps at
@@ -682,6 +693,41 @@ already can.
 The six-status seed has a `Blocked`. Without the flag, an existing project's blocked cards would
 never remember their origin. V13 sets `blocking = true` where `name = 'Blocked'` per company, with
 V5 §6's per-company GUC loop, asserting the count. No other existing data changes.
+
+### D-p — §2.6 ships **three** readiness signals, because the card carries no release (found building T5)
+
+§2.6 names five (acceptance criteria, estimate, epic, target release, task count). The task count is
+the earned row's `n/m`, which every sub-bar already carries. **Target release is not on
+`BoardIssueCard`** — T1 added six card fields and a release was not among them — so the fourth chip
+has nothing behind it. A `— release` would be a *claim* that the issue has no release, which the
+payload cannot know from a field it does not carry, and that is the dishonest reading the whole
+"says what is missing" idea exists to avoid. Three chips ship; the fourth needs
+`BoardIssueCard.release` on the contract, which is a `be` task, not a screen decision.
+
+The **epic's** third signal counts stories (`✓ 8 stories` from `subtaskTotal`) rather than reading
+`epicKey`, which `18-pm-board.html` also draws: an epic has no epic, so `— epic` on one would be a
+permanent, unfixable mark on every epic on the board.
+
+**Which boards show the signals is read off the board's SHAPE, never its name** —
+`cardMove.ts::groomsWork`: *two or more columns whose every status is `NOT_STARTED`*. Nothing on the
+contract says which board is "the PM board", and matching on the name would be a guess about a
+project's own vocabulary — the mistake `columnsFor` has a paragraph about. On §2.4's seeded three it
+selects PM (New · Refining · Ready to develop) and neither Dev (Ready to develop alone) nor QA
+(none), which is exactly what renders 18, 12 and 13 draw.
+
+### D-q — A lane bar cannot name the board its epic is on (found building T5)
+
+`18-pm-board.html` draws `Refining · epic on Dev board →` on the bar of a lane whose epic is in a
+status this board does not claim. **Neither half is reachable.** `BoardLane` carries a key, a label,
+its cards and a completion — no status; and an epic whose status this board does not claim is not in
+the payload at all, because `BoardCardService.assemble` skips a card whose status maps to no column
+*before* the lanes are built (that is R7 working correctly). So there is no status to draw a chip
+from and no `elsewhere` to name a board with.
+
+T5 renders the honest half: `epic not on this board →`, linking to the epic. Restoring the render's
+sentence needs `BoardLane` to carry the epic's `IssueStatusRef` and the boards claiming it — an
+additive contract change and a `be` task. Recorded rather than guessed at, because a hard-coded
+"Dev board" would be correct only on the seeded project.
 
 ### D-n — The composite board retires in T8, after its halves have homes
 
@@ -1475,15 +1521,29 @@ Settings → Boards draws the coverage matrix; Settings → Workflow has the blo
 frontend gates green.
 **Depends on:** T4 (every card field served)
 
-**Files:**
-- Modify: `features/board/BoardPage.tsx`, `ProjectBoardView.tsx`, `Swimlane.tsx`, `BoardCardFace.tsx`, `MoveToMenu.tsx`, `cardMove.ts`, `useWorkFilter.ts`
-- Create: `features/board/StoryRow.tsx`, `EpicCard.tsx`, `BlockDialog.tsx`, `ReadinessSignals.tsx`
-- Modify: `features/settings/BoardSettingsPage.tsx`, `boardCoverage.ts`, `WorkflowSettingsPage.tsx`
+**Files** (as landed; the plan's guesses are struck):
+- Modify: `features/tracker/WorkTablePage.tsx` (the strip — ~~`BoardPage.tsx`~~, which is the
+  *composite* board and owns no Work strip), `features/board/ProjectBoardView.tsx`, `Swimlane.tsx`,
+  `BoardCardFace.tsx`, `MoveToMenu.tsx`, `cardMove.ts`, `api/queries/issues.ts`
+  (`useTransitionIssue` now sweeps `boardCardsRoot`; its own comment had claimed it did).
+  ~~`useWorkFilter.ts`~~ — untouched: `CARRIED` already carries `board`, which is what the segments
+  write.
+- Create: `features/board/laneRows.ts` (+ `.test.ts`) — the band/row division, pure, and
+  `ProjectBoardView` rather than `Swimlane` calls it because the keyboard's band order is built from
+  the same division. ~~`StoryRow.tsx`~~ lives inside `Swimlane.tsx` with the cell it shares a grid
+  with; ~~`EpicCard.tsx`~~ was **not created** — the epic card is `BoardCardFace` with a border
+  emphasis, and a second card renderer is the divergence `ui-rules` §8 exists to refuse.
+  `BlockDialog.tsx`, `ReadinessSignals.tsx` as planned.
+- Modify: `features/settings/BoardSettingsPage.tsx`, `boardCoverage.ts` (+ `unclaimedNote`),
+  `ColumnEditor.tsx` (its header argued the retired rule), `WorkflowSettingsPage.tsx`
 - Create: `features/settings/CoverageMatrix.tsx`
-- Modify: `api/queries/projectBoards.ts` (+ `useBoardCoverage`, `useTransition` reuse), `api/queries/keys.ts` (+ `boardCoverage`)
-- Test: beside each; `ProjectBoardView.test.tsx` gains the band/row cases
+- Modify: `api/queries/projectBoards.ts` (+ `useBoardCoverage`), `api/queries/keys.ts`
+  (+ `boardCoverage`), `api/queries/index.ts`
+- Test: beside each; `ProjectBoardView.test.tsx` gains the band/row/Blocked/elsewhere cases,
+  `WorkTablePage.test.tsx` the strip and the door badge, `BoardSettingsPage.test.tsx`'s
+  refusal test **inverts** (unclaiming saves now), `WorkflowSettingsPage.test.tsx` gains the radio
 
-- [ ] **Step 1: Failing tests (RTL), the ones that pin the render's rules**
+- [x] **Step 1: Failing tests (RTL), the ones that pin the render's rules**
 
 ```tsx
 it('draws the column headers once, above the lanes', …)                       // 18-pm-board
@@ -1501,7 +1561,7 @@ Use `createTestQueryClient` and the fixtures' `boardIssueCard({ parentKey, typeL
 lane layout is asserted through `data-testid="Board.Lane.<key>.Band"` and
 `Board.Lane.<key>.Row.<storyKey>` — locators from the render's structure.
 
-- [ ] **Step 2: Implement the lane**
+- [x] **Step 2: Implement the lane**
 
 `Swimlane.tsx` becomes the lane container: `<LaneBar>` (epic bar: key, title, status chip or epic
 card slot, `epic on <board>` link when unclaimed, roll-up), then `<Band>` (a CSS grid with the
@@ -1529,7 +1589,7 @@ export function laneRowsOf(lane: BoardLane, claimed: ReadonlySet<string>): { ban
 `Done` strip: a column whose every claimed status is `DONE`-kind renders as `<DoneStrip count>`
 spanning the lane, expandable per lane (local state, like collapse).
 
-- [ ] **Step 3: The card menu and the dialogs**
+- [x] **Step 3: The card menu and the dialogs**
 
 `MoveToMenu` gains `Block…` (opens `BlockDialog`: one-line reason → `POST comments` then
 `transitionIssue` to the status in `allowedTransitions` with `blocking: true`) and `Unblock`
@@ -1539,14 +1599,14 @@ spanning the lane, expandable per lane (local state, like collapse).
 `✓ epic` from `epicKey`, `✓ release` from `release` — each `—` when absent), the
 `allStoriesDone` nudge line.
 
-- [ ] **Step 4: Settings**
+- [x] **Step 4: Settings**
 
 `boardCoverage.ts`: `coverageOf` keeps `claimedTwice` and `empty` as refusals; `unclaimed` is
 returned but `holds` ignores it. `CoverageMatrix` renders `useBoardCoverage(projectId)` — rows ×
 boards, `✓` where claimed, the `uncovered` list as a warn `Banner`. `WorkflowSettingsPage`: one
 radio group column `Blocking`, at most one checked, sent as `blocking` on each status.
 
-- [ ] **Step 5: Gate and commit**
+- [x] **Step 5: Gate and commit**
 
 ```bash
 ~/bin/tcms-remote sync

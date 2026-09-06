@@ -307,6 +307,16 @@ export function useTransitionIssue() {
       void client.invalidateQueries({ queryKey: keys.issueRoot });
       void client.invalidateQueries({ queryKey: keys.issuesRoot(issue.projectId) });
       void client.invalidateQueries({ queryKey: keys.workItemRoot });
+      /*
+        The **project** boards, which the paragraph above has named as the fourth thing since this
+        hook was written and which the code did not actually sweep until 021 T5 sent a transition
+        from a board. `keys.workItemRoot` is `['board']` — the *composite* board's root (D-a) — and
+        `Block…` / `Unblock` are transitions raised from a project board's own card menu, so
+        without this line the card the reader just blocked stays in the column it left until
+        something else happens to refetch.
+      */
+      void client.invalidateQueries({ queryKey: keys.boardCardsRoot });
+      void client.invalidateQueries({ queryKey: keys.backlogRoot(issue.projectId) });
     },
   });
 }

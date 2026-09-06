@@ -16,16 +16,21 @@ import { coverageOf, type DraftColumn } from './boardCoverage';
 /**
  * One board's columns and what each of them claims — `settings-boards.html`, the two board panels.
  *
- * <h2>The coverage check is the screen's point</h2>
+ * <h2>The coverage check is the screen's point — and 021 R7 took half of it away</h2>
  *
- * The mockup renders it as a table with a green footer: *"Every status is claimed by exactly one
+ * ~~The mockup renders it as a table with a green footer: "Every status is claimed by exactly one
  * column on every board. A status claimed twice, or not at all, is what this check exists to
- * catch."* So it is not decoration — it is the only place a person can watch the invariant hold,
- * and when it does not hold it has to say so **by status name, before the save is attempted**,
- * rather than letting `createBoard`/`updateBoard` answer 422 with a body the reader has to decode.
- * `ui-rules`: never render an action the backend will always reject. {@link coverageOf} is the one
- * derivation behind both halves — the banner here and the table on the page — so the two cannot
- * disagree about a board.
+ * catch."~~ → **superseded.** A board claims a **subset** now, so *not at all* is the ordinary
+ * state of every board §2.4 seeds and is no longer part of the check. What survives is *claimed
+ * twice* (a unique index) and *a column claiming nothing* (`minItems: 1` on the contract), and both
+ * still have to say so **by status name, before the save is attempted**, rather than letting
+ * `createBoard`/`updateBoard` answer 422 with a body the reader has to decode. `ui-rules`: never
+ * render an action the backend will always reject.
+ *
+ * The tray of unclaimed statuses below the columns stays exactly as it was, and it is now a
+ * *control* rather than a repair: it is how a status is put onto this board, and the sentence beside
+ * it reads "On no column" rather than naming a failure. Whether it is on **any** board is
+ * `CoverageMatrix`'s question, which is over the set and cannot be answered from one board's draft.
  *
  * <h2>The default-status control appears only on a column claiming more than one status</h2>
  *

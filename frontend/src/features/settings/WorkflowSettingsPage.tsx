@@ -29,8 +29,8 @@ interface DraftStatus {
   kind: IssueStatusKind;
   /**
    * 021 D-b's flag, carried through untouched and **not editable here yet** (021 T5 adds the
-   * control). It is on the draft because the save is a whole-document PUT: a field this screen
-   * dropped would be a field this screen silently cleared, and `blocking` is what makes `Unblock`
+   * control since 021 T5). It is on the draft because the save is a whole-document PUT: a field this
+   * screen dropped would be a field this screen silently cleared, and `blocking` is what makes `Unblock`
    * find its way back.
    */
   blocking: boolean;
@@ -151,8 +151,12 @@ function WorkflowEditor({
   }, [fingerprint]);
 
   const dirty =
-    JSON.stringify(statuses.map(({ id, name, kind }) => ({ id, name, kind })))
-      !== JSON.stringify(current.statuses.map(({ id, name, kind }) => ({ id, name, kind })))
+    // `blocking` joined the tuple with the radio that sets it (021 T5): without it, marking a
+    // different status blocking left Save disabled and the change unreachable.
+    JSON.stringify(statuses.map(({ id, name, kind, blocking }) => ({ id, name, kind, blocking })))
+      !== JSON.stringify(
+        current.statuses.map(({ id, name, kind, blocking }) => ({ id, name, kind, blocking })),
+      )
     || JSON.stringify([...moves].sort()) !== JSON.stringify([...movesOf(current)].sort());
 
   const doneCount = statuses.filter((status) => status.kind === 'DONE').length;
@@ -185,8 +189,9 @@ function WorkflowEditor({
           name: status.name.trim(),
           kind: status.kind,
           position,
-          // Sent back as it came. A whole-document PUT drops what it omits, and this screen does
-          // not yet own the flag (021 T5) — so it round-trips rather than defaults it to false.
+          // ~~Sent back as it came; this screen does not yet own the flag.~~ → **it does, 021 T5**,
+          // through the radio on each row. Still spelled explicitly, because a whole-document PUT
+          // drops what it omits and an omitted flag is a cleared one.
           blocking: status.blocking,
         })) as ProjectWorkflow['statuses'],
         types: current.types,
@@ -241,6 +246,19 @@ function WorkflowEditor({
                     rows.map((row) => (row.rowId === status.rowId ? { ...row, kind } : row)),
                   )
                 }
+                /*
+                  A radio, so choosing one **clears every other** in the same update — which is what
+                  makes the server's 422 (D-b: at most one per project) unreachable from this screen
+                  rather than a thing the reader can walk into. The 422 stays as the guard against a
+                  second tab, and it arrives in the refusal banner like any other write failure; a
+                  field error would need a field, and a radio group whose invariant cannot be
+                  violated has nothing to hang one on.
+                */
+                onBlocking={() =>
+                  setStatuses((rows) =>
+                    rows.map((row) => ({ ...row, blocking: row.rowId === status.rowId })),
+                  )
+                }
                 onMove={(by) => move(index, by)}
                 onRemove={() => {
                   if (status.id === null) {
@@ -277,8 +295,8 @@ function WorkflowEditor({
                     id: null,
                     name: '',
                     kind: 'NOT_STARTED',
-                    // A new row is never the blocking one — there is at most one per project and
-                    // this screen has no control for it yet (021 T5).
+                    // A new row is never the blocking one: it has no name yet, and the radio beside
+                    // it is how somebody says otherwise once it does.
                     blocking: false,
                     rowId: `new-${rows.length}-${Date.now()}`,
                   },
@@ -364,6 +382,7 @@ function StatusRow({
   lastDone,
   onRename,
   onKind,
+  onBlocking,
   onMove,
   onRemove,
 }: {
@@ -374,6 +393,8 @@ function StatusRow({
   lastDone: boolean;
   onRename: (name: string) => void;
   onKind: (kind: IssueStatusKind) => void;
+  /** Mark this status the project's `blocking` one, clearing whichever held it (021 D-b). */
+  onBlocking: () => void;
   onMove: (by: -1 | 1) => void;
   onRemove: () => void;
 }) {
@@ -430,6 +451,40 @@ function StatusRow({
           </option>
         ))}
       </NativeSelect>
+
+      {/*
+        The `blocking` radio — **one per project**, which is why it is a radio and not a checkbox
+        (021 D-b). The status that carries it is the one that remembers where a card came from:
+        entering it writes `blockedFromStatus` on the issue and the origin becomes a legal target on
+        the way out, which is the whole of how `Unblock` knows where to put a card back.
+
+        A `name` shared across every row is what makes the browser clear the others, and it is not
+        the control's only mechanism — the handler clears them in the draft as well, because a radio
+        group rendered from state is only as exclusive as the state behind it.
+
+        No "none" option, and that is deliberate rather than an omission: a project may have no
+        blocking status, and un-marking one is done by marking another. A project that genuinely
+        wants none has no such status to un-mark — removing the status is how that is expressed.
+      */}
+      <label
+        className="flex items-center gap-1.5 text-[11.5px] text-ink-3"
+        title={
+          'The one status per project that remembers where a card came from, so Unblock can put it '
+          + 'back without asking.'
+        }
+      >
+        <input
+          type="radio"
+          name={`${TEST_ID}-blocking`}
+          checked={status.blocking}
+          disabled={!canEdit}
+          onChange={onBlocking}
+          aria-label={`Make ${status.name || `status ${index + 1}`} the blocking status`}
+          data-testid={`${TEST_ID}.Row.Blocking`}
+          className="size-3.5 accent-[color:var(--color-failed)]"
+        />
+        blocking
+      </label>
 
       {/*
         WCAG 2.2 Dragging Movements, and the mockups' standing rule that dragging is never the only

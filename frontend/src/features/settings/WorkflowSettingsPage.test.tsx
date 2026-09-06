@@ -204,6 +204,45 @@ describe('Reordering, which must not need a pointer drag', () => {
     expect(body.transitions).toEqual([{ fromStatusId: 's4', toStatusId: 's6' }])
   })
 
+  it('marks one status blocking, clears whichever held it, and sends the flag', async () => {
+    /*
+      021 D-b/T5. **At most one per project**, which is why the control is a radio: choosing one
+      clears every other in the same update, so the server's 422 is unreachable from this screen
+      rather than a thing the reader can walk into. That 422 stays as the guard against a stale
+      second tab and surfaces in the refusal banner like any other write failure.
+
+      The flag also has to make the document **dirty** — it joined the comparison tuple with the
+      control, and without it marking a different status left Save disabled and the change
+      unreachable.
+    */
+    const blocked = SEEDED.map((each) => ({ ...each, blocking: each.id === 's5' }))
+    mockReads({ workflow: { ...WORKFLOW, statuses: blocked } })
+    const put = vi.spyOn(api, 'put').mockResolvedValue(WORKFLOW as never)
+    renderPage()
+
+    // Waited on ENABLEMENT, not on the rows: the permission read lands after the workflow does, so
+    // a test that only waited for six rows clicked a control that was still disabled and asserted
+    // against a state nothing had changed.
+    await waitFor(() =>
+      expect(screen.getAllByTestId('WorkflowSettings.Row.Blocking')[0]).toBeEnabled(),
+    )
+    const radios = screen.getAllByTestId('WorkflowSettings.Row.Blocking')
+    expect(radios[4]).toBeChecked()
+    expect(screen.getByTestId('WorkflowSettings.Save')).toBeDisabled()
+
+    await userEvent.click(radios[3])
+
+    expect(radios[3]).toBeChecked()
+    expect(radios[4]).not.toBeChecked()
+    await userEvent.click(screen.getByTestId('WorkflowSettings.Save'))
+
+    await waitFor(() => expect(put).toHaveBeenCalled())
+    const [, body] = put.mock.calls[0] as [string, ProjectWorkflow]
+    expect(body.statuses.filter((each) => each.blocking).map((each) => each.name)).toEqual([
+      'In Review',
+    ])
+  })
+
   it('offers no Save until something has changed', async () => {
     mockReads()
     renderPage()

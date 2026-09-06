@@ -1,7 +1,7 @@
 import { useDraggable } from '@dnd-kit/core';
 import { GripVertical } from 'lucide-react';
 import { Link as RouterLink } from 'react-router-dom';
-import type { BoardIssueCard } from '../../api/types';
+import type { BoardIssueCard, CardElsewhere } from '../../api/types';
 import { Identifier } from '../../components/Identifier';
 import { Badge } from '../../components/kit';
 import { cn } from '../../lib/cn';
@@ -9,6 +9,7 @@ import { labelFill } from '../../lib/statusColors';
 import { AiEligibleMarker } from '../tracker/AiEligibleMarker';
 import { TypeIcon } from '../tracker/TypeIcon';
 import { MoveToMenu } from './MoveToMenu';
+import { ReadinessSignals } from './ReadinessSignals';
 import type { ServerColumn } from './cardMove';
 
 /**
@@ -48,11 +49,37 @@ import type { ServerColumn } from './cardMove';
  * sentence carried still holds and is why the fill is a token rather than a hue picked here: a chip
  * with the wrong colour is worse than one with none, because the word is what is being scanned
  * either way, and an unrecognised token falls back to the plain chip rather than to nothing.
+ *
+ * <h2>What 021 added, and the one thing it deliberately did not</h2>
+ *
+ * Four statements, each from a field the card already carries: the `⛔ from <status>` chip
+ * (`blockedFromStatus`, so a blocked card sitting on somebody else's board says whose problem it
+ * was), the `also on <board>` chip, §2.6's readiness signals on a grooming board, and the
+ * `all stories done` nudge on an epic. ~~And a fifth.~~ **`linkedCases` is not rendered here and
+ * that is T8's**, with the QA card face it belongs to: the key is always present and is **null**
+ * until T4 serves it, so a face drawing it now would have to tell *not served* from *none linked*
+ * for a payload that is only ever the first — and `?? 0` on either would read as "nothing failed",
+ * which is the dishonest reading of the same zero the renders spend a paragraph on.
+ *
+ * **`also on` is not `elsewhere`.** `BoardIssueCard.elsewhere` is the *descendants* a row header's
+ * board does not show, which is the sub-bar's link; *this card is also drawn on that board* is a
+ * different statement with no field of its own, derived by the caller from the coverage matrix —
+ * the boards other than this one whose columns claim this card's status. Reading `elsewhere` for it
+ * would put a chip on a card saying something true about its children.
+ *
+ * **The epic card is this component, not a second one.** `12-dev-board.html` gives it a `.epiccard`
+ * emphasis and nothing else structural; a second renderer for it would be the fourth grid renderer
+ * `ui-rules` §8 exists to refuse, and every display rule below would then be implemented once or
+ * twice depending on which card you were looking at.
  */
 export function BoardCardFace({
   card,
   columns,
   onMove,
+  onBlock,
+  onUnblock,
+  alsoOn = [],
+  readiness = false,
   canMove,
   moveRefusal,
   overlay = false,
@@ -61,6 +88,15 @@ export function BoardCardFace({
   card: BoardIssueCard;
   columns: readonly ServerColumn[];
   onMove: (toColumnId: string) => void;
+  onBlock?: () => void;
+  onUnblock?: (statusId: string) => void;
+  /**
+   * The other boards that claim this card's **status**, derived by the caller from the coverage
+   * matrix. Not `card.elsewhere`, which is a statement about the card's descendants.
+   */
+  alsoOn?: readonly Pick<CardElsewhere, 'boardId' | 'boardName'>[];
+  /** Whether this board grooms work — `cardMove.ts::groomsWork`, not a board name. */
+  readiness?: boolean;
   /** The caller's `issue:edit` verdict — a permission, not a workflow rule. */
   canMove: boolean;
   moveRefusal: string | undefined;
@@ -86,6 +122,8 @@ export function BoardCardFace({
         'transition-colors duration-150 hover:border-line-strong motion-reduce:transition-none',
         isDragging && 'opacity-40',
         overlay && 'shadow-e3',
+        // `.epiccard` — the render's emphasis on the one card in a band that is the lane itself.
+        card.typeLevel === 'EPIC' && 'border-l-2 border-l-[color:var(--color-viz-2)]',
       )}
     >
       <div className="mb-1.5 flex items-center gap-1.5">
@@ -125,6 +163,8 @@ export function BoardCardFace({
             card={card}
             columns={columns}
             onMove={onMove}
+            onBlock={onBlock}
+            onUnblock={onUnblock}
             disabled={!canMove}
             disabledReason={moveRefusal}
             testId={`${testId}.Move`}
@@ -140,12 +180,41 @@ export function BoardCardFace({
         {card.title}
       </RouterLink>
 
+      {readiness && <ReadinessSignals card={card} testId={`${testId}.Readiness`} />}
+
+      {/*
+        021 D-d's nudge, and it is a **sentence, not a control**: every counted story under this epic
+        is done and the epic is not, which is a thing only the PO can decide to act on. The server
+        never moves an epic on its own — "every story is finished" and "this body of work is
+        finished" are different claims — so the card says the first and offers the second through
+        the same `Move to…` every card has.
+      */}
+      {card.allStoriesDone && (
+        <p
+          data-testid={`${testId}.AllStoriesDone`}
+          className="m-0 mb-[7px] text-[10.5px] leading-[1.4] text-[color:var(--color-passed)]"
+        >
+          Every story under this epic is done.
+        </p>
+      )}
+
       {/* Chips WRAP — the mockup, and the responsive rule: the page body never scrolls sideways, so
           a card with five labels grows downward rather than pushing the column wider. */}
       <div
         data-testid={`${testId}.Meta`}
         className="flex flex-wrap items-center gap-[7px] text-[11px] text-ink-3"
       >
+        {/*
+          `⛔ from <status>` — the origin, in words, on the face. It is what stops somebody on the
+          Dev board claiming a card a tester blocked: `Blocked` is claimed by all three boards, so
+          without this line the same card reads identically to everyone who can see it.
+        */}
+        {card.blockedFromStatus && (
+          <Badge tone="blocked" data-testid={`${testId}.BlockedFrom`}>
+            {`⛔ from ${card.blockedFromStatus.name}`}
+          </Badge>
+        )}
+
         {card.labels.map((label) => (
           <Badge
             key={label.id}
@@ -167,6 +236,12 @@ export function BoardCardFace({
             not in %
           </Badge>
         )}
+
+        {alsoOn.map((board) => (
+          <Badge key={board.boardId} tone="steel" data-testid={`${testId}.AlsoOn.${board.boardName}`}>
+            {`also on ${board.boardName}`}
+          </Badge>
+        ))}
 
         {card.subtaskTotal > 0 && (
           <Badge tone="plain" data-testid={`${testId}.Subtasks`}>

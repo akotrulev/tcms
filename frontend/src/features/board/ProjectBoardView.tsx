@@ -9,20 +9,28 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core';
 import { X } from 'lucide-react';
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useCallback, useMemo, useState, type CSSProperties } from 'react';
 import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import { useAnnounce } from '../../a11y/useAnnounce';
 import { ApiError } from '../../api/client';
 import {
   useBoardCards,
   useBoardConfig,
+  useBoardCoverage,
   useBoards,
   useLabels,
   useMoveCard,
   useProjectMembers,
+  useTransitionIssue,
   useUpdateBoard,
 } from '../../api/queries';
-import type { BoardConfig, BoardIssueCard, Priority, SwimlaneBy } from '../../api/types';
+import type {
+  BoardConfig,
+  BoardIssueCard,
+  CardElsewhere,
+  Priority,
+  SwimlaneBy,
+} from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
 import { PermissionGate } from '../../components/PermissionGate';
 import { Banner, FilterStrip } from '../../components/kit';
@@ -31,11 +39,13 @@ import { NativeSelect } from '../../components/ui/native-select';
 import { cn } from '../../lib/cn';
 import { priorityLabels, swimlaneByLabels } from '../../lib/labels';
 import { plural } from '../../lib/format';
+import { BlockDialog } from './BlockDialog';
 import { BoardCardFace } from './BoardCardFace';
 import { ColumnHeader } from './ColumnHeader';
 import { Swimlane } from './Swimlane';
 import { boardKeyboardCoordinates } from './boardKeyboard';
-import { resolveColumnMove, serverColumnsOf } from './cardMove';
+import { blockingTargetOf, groomsWork, resolveColumnMove, serverColumnsOf } from './cardMove';
+import { epicCardsByLane, laneRowsOf, type LaneShape } from './laneRows';
 import { useBoardFilterChips, useWorkFilter } from './useWorkFilter';
 
 /**
@@ -83,6 +93,31 @@ import { useBoardFilterChips, useWorkFilter } from './useWorkFilter';
  * **A collapsed lane does not survive a reload.** `board_swimlane` exists in `V5` and carries
  * exactly this per-viewer state, and **no endpoint on the contract reaches it** — so collapse is
  * component state here, and persisting it is a contract change rather than a screen decision.
+ *
+ * <h2>021 §2.5 — the lane's shape is decided here, once</h2>
+ *
+ * `laneRowsOf` divides a lane into its band and its earned rows, and this file calls it rather than
+ * `Swimlane` doing so, because **the keyboard's lane order is built from the same division**: the
+ * arrows step between the bands a card can land in, and a band is now a lane's band *or* an open
+ * sub-bar. Deriving the shape in two places is how the drop targets and the keyboard walk come to
+ * disagree about which bands exist — a board where a card cannot be dropped where the arrows just
+ * put it, with no error anywhere.
+ *
+ * The epic's own card is **re-filed** into its lane's band here too ({@link epicCardsByLane}), for
+ * the reason that function records: an epic has no epic above it, so the server groups it into the
+ * catch-all lane whatever its own status is.
+ *
+ * <h2>`also on <board>` is derived from the coverage matrix, and is not `elsewhere`</h2>
+ *
+ * A card is *also on* another board when that board's columns claim the **status this card is in**,
+ * which is what `GET …/boards/coverage` answers and what nothing else does.
+ * `BoardIssueCard.elsewhere` is the different statement — the *descendants* a row header's board
+ * does not show — and it is the sub-bar's link. Reading one for the other puts a chip on a card
+ * saying something true about its children.
+ *
+ * The read is **optional**: a failed coverage read costs the chips and nothing else, so it is not a
+ * `DataRegion` around the board. A board that will not draw because a secondary read failed is the
+ * failure `error-handling`'s scoping rule exists to prevent.
  */
 
 const TEST_ID = 'ProjectBoard';
@@ -141,9 +176,17 @@ export function ProjectBoardView({ projectId }: { projectId: string }) {
   const move = useMoveCard(boardId, projectId);
   const updateBoard = useUpdateBoard(projectId);
 
+  const coverage = useBoardCoverage(projectId);
+  const transition = useTransitionIssue();
+
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  /** Sub-bars that are shut, keyed `<laneId>#<storyKey>` — a story key is unique per lane, not board-wide. */
+  const [collapsedRows, setCollapsedRows] = useState<ReadonlySet<string>>(new Set());
+  /** Lanes whose `Done` strip the reader has opened. Collapsed is the default (D-l). */
+  const [doneOpen, setDoneOpen] = useState<ReadonlySet<string>>(new Set());
   const [dragging, setDragging] = useState<BoardIssueCard | null>(null);
   const [rejected, setRejected] = useState<string | null>(null);
+  const [blocking, setBlocking] = useState<BoardIssueCard | null>(null);
 
   /*
     `ServerColumn[]` via `serverColumnsOf` and never a hand-written map — D-x, and the one mapping in
@@ -159,14 +202,45 @@ export function ProjectBoardView({ projectId }: { projectId: string }) {
   const lanes = useMemo(() => {
     const contents = cards.data;
     if (!contents) return [];
-    return contents.lanes.map((lane) => ({
-      lane,
-      id: lane.key ?? NO_LANE,
-      cards: visibleCards(lane, contents.swimlaneBy, contents.lanes),
-    }));
+    const epics =
+      contents.swimlaneBy === 'EPIC' ? epicCardsByLane(contents.lanes) : new Map<string, BoardIssueCard>();
+    return contents.lanes.map((lane) => {
+      // Every epic that has a lane of its own comes out of whichever lane the server filed it in…
+      const own = lane.cards.filter((card) => !(card.typeLevel === 'EPIC' && epics.has(card.key)));
+      // …and back into that lane, where §2.5 draws it as a card in its own status column.
+      const mine = lane.key !== null && epics.has(lane.key)
+        ? [epics.get(lane.key) as BoardIssueCard, ...own]
+        : own;
+      return {
+        lane,
+        id: lane.key ?? NO_LANE,
+        cards: mine,
+        shape: laneRowsOf(mine, contents.swimlaneBy),
+      };
+    });
   }, [cards.data]);
 
   const open = useMemo(() => lanes.filter((entry) => !collapsed.has(entry.id)), [lanes, collapsed]);
+
+  const readiness = useMemo(() => groomsWork(columns), [columns]);
+
+  /*
+    The boards other than this one whose columns claim a given status — one lookup built once per
+    coverage answer rather than a scan per card. A status is claimed at most once per board (the
+    surviving half of B2, and a unique index), so a board appears at most once in a row's claims and
+    nothing here has to de-duplicate.
+  */
+  const claimsByStatus = useMemo(
+    () => new Map((coverage.data?.rows ?? []).map((row) => [row.status.id, row.claims])),
+    [coverage.data],
+  );
+  const alsoOn = useCallback(
+    (card: BoardIssueCard): Pick<CardElsewhere, 'boardId' | 'boardName'>[] =>
+      (claimsByStatus.get(card.status.id) ?? [])
+        .filter((claim) => claim.boardId !== boardId)
+        .map((claim) => ({ boardId: claim.boardId, boardName: claim.boardName })),
+    [claimsByStatus, boardId],
+  );
 
   /*
     The two axes the keyboard drag steps along, and both come out of the ONE flat set of cell
@@ -185,13 +259,29 @@ export function ProjectBoardView({ projectId }: { projectId: string }) {
     () => (open.length === 0 ? [] : columns.map((column) => cellId(open[0].id, column.id))),
     [columns, open],
   );
-  const laneOrder = useMemo(
-    () =>
-      open.length < 2 || columns.length === 0
-        ? []
-        : open.map((entry) => cellId(entry.id, columns[0].id)),
-    [columns, open],
-  );
+
+  /*
+    021 §2.5 turned "one band per lane" into "one band per lane, plus one per open sub-bar", and this
+    is the whole of what that costs the keyboard: the walk is over the **bands**, not the lanes. A
+    collapsed sub-bar registers no cell, so — exactly like a collapsed lane — it is not a stop.
+
+    The step column is the first one that is not `Done`: a collapsed `Done` strip is one cell for the
+    whole lane rather than one per band, so measuring the y of each band inside it would give every
+    band the same rect and the walk would stand still.
+  */
+  const stepColumn = useMemo(() => columns.find((column) => !column.done) ?? columns[0], [columns]);
+  const laneOrder = useMemo(() => {
+    if (stepColumn === undefined) return [];
+    const bands: string[] = [];
+    for (const entry of open) {
+      bands.push(cellId(entry.id, stepColumn.id));
+      for (const row of entry.shape.rows) {
+        const rowLaneId = `${entry.id}#${row.key}`;
+        if (!collapsedRows.has(rowLaneId)) bands.push(cellId(rowLaneId, stepColumn.id));
+      }
+    }
+    return bands.length < 2 ? [] : bands;
+  }, [stepColumn, open, collapsedRows]);
 
   const sensors = useSensors(
     // The 5px constraint is what keeps a click on the handle from being a zero-distance drag, and
@@ -249,6 +339,32 @@ export function ProjectBoardView({ projectId }: { projectId: string }) {
     }
   };
 
+  /**
+   * `Unblock` — a transition back to `blockedFromStatus`, with no dialog.
+   *
+   * The reason was written when the card was blocked and is already a comment on the issue, so
+   * asking for a second sentence on the way out would be asking a question nobody has an answer to.
+   * The target is read off `allowedTransitions` by `unblockTargetOf`, which is why this takes an id
+   * rather than looking one up: the menu that offers the entry is the thing that knows it is legal.
+   *
+   * Failures land in the same banner a refused move does — the card did not move, and a toast about
+   * it would be gone before the eye returns to the card.
+   */
+  const unblock = async (card: BoardIssueCard, statusId: string) => {
+    setRejected(null);
+    try {
+      await transition.mutateAsync({ key: card.key, statusId });
+      announce(`${card.key} is no longer blocked`);
+    } catch (error) {
+      const reason =
+        error instanceof ApiError
+          ? error.detail
+          : "Couldn't unblock that card. Check your connection and try again.";
+      setRejected(reason);
+      announce(`${card.key} was not unblocked. ${reason}`);
+    }
+  };
+
   /*
     ~~Six chip builders spelled here.~~ → `useBoardFilterChips`, shared with the backlog, which reads
     the same six parameters because it calls the same endpoint's filter. `level`, `epicKey` and
@@ -266,23 +382,12 @@ export function ProjectBoardView({ projectId }: { projectId: string }) {
     <div data-testid={`${TEST_ID}.View`}>
       <div className="mb-3 flex flex-wrap items-center gap-2">
         {/*
-          The board picker. A project is seeded one board and may hold several over the same statuses
-          (D2) — which is the whole of §0's multi-stakeholder ask, so the picker is one of the
-          screen's own controls rather than a setting behind a link.
+          ~~The board picker — a `NativeSelect` of every board over this project.~~ → **retired by
+          021 D-f.** The project's boards are the Work strip's own segments now, one per board in
+          position order, so a picker here would be a second control for one choice sitting a few
+          pixels below the first — and the two would disagree the moment somebody used the wrong one.
+          `?board=` is unchanged and is still what this reads; what moved is who writes it.
         */}
-        <NativeSelect
-          aria-label="Board"
-          className="w-auto"
-          value={boardId}
-          data-testid={`${TEST_ID}.Picker`}
-          onChange={(event) => setParam((next) => next.set('board', event.target.value))}
-        >
-          {(boards.data ?? []).map((board) => (
-            <option key={board.id} value={board.id}>
-              {board.name}
-            </option>
-          ))}
-        </NativeSelect>
 
         {/*
           Grouping is the **board's** `swimlaneBy`, not a view preference — B3 says the board reloads
@@ -544,19 +649,25 @@ export function ProjectBoardView({ projectId }: { projectId: string }) {
                                 lane={{ ...entry.lane, cards: entry.cards }}
                                 laneId={entry.id}
                                 swimlaneBy={contents.swimlaneBy}
+                                shape={entry.shape}
                                 columns={columns}
                                 cellId={cellId}
                                 collapsed={collapsed.has(entry.id)}
-                                onToggle={() =>
-                                  setCollapsed((held) => {
-                                    const next = new Set(held);
-                                    if (!next.delete(entry.id)) next.add(entry.id);
-                                    return next;
-                                  })
+                                onToggle={() => setCollapsed(toggled(entry.id))}
+                                collapsedRows={rowsShutIn(collapsedRows, entry.id)}
+                                onToggleRow={(storyKey) =>
+                                  setCollapsedRows(toggled(`${entry.id}#${storyKey}`))
                                 }
+                                doneOpen={doneOpen.has(entry.id)}
+                                onToggleDone={() => setDoneOpen(toggled(entry.id))}
+                                projectId={projectId}
                                 onMove={(card, toColumnId) =>
                                   void commit(card, cellId(entry.id, toColumnId))
                                 }
+                                onBlock={setBlocking}
+                                onUnblock={(card, statusId) => void unblock(card, statusId)}
+                                alsoOn={alsoOn}
+                                readiness={readiness}
                                 canMove={allowed}
                                 moveRefusal={reason}
                                 testId={`${TEST_ID}.Lane.${entry.id === NO_LANE ? 'none' : entry.id}`}
@@ -588,6 +699,8 @@ export function ProjectBoardView({ projectId }: { projectId: string }) {
                           card={dragging}
                           columns={columns}
                           onMove={() => {}}
+                          alsoOn={alsoOn(dragging)}
+                          readiness={readiness}
                           canMove={false}
                           moveRefusal={undefined}
                           overlay
@@ -595,6 +708,20 @@ export function ProjectBoardView({ projectId }: { projectId: string }) {
                         />
                       )}
                     </DragOverlay>
+
+                    {/*
+                      The blocking status is taken from the card's own `allowedTransitions`, so a
+                      card whose menu offered `Block…` always has one. The `&&` is the compiler's
+                      narrowing rather than a state this can reach: `MoveToMenu` renders no entry
+                      when the target is null, and there is no other way to open this.
+                    */}
+                    {blocking && blockingTargetOf(blocking) && (
+                      <BlockDialog
+                        card={blocking}
+                        target={blockingTargetOf(blocking) as NonNullable<ReturnType<typeof blockingTargetOf>>}
+                        onClose={() => setBlocking(null)}
+                      />
+                    )}
                   </DndContext>
                 )}
               </DataRegion>
@@ -610,33 +737,35 @@ export function ProjectBoardView({ projectId }: { projectId: string }) {
 interface OpenLane {
   id: string;
   cards: readonly BoardIssueCard[];
+  shape: LaneShape;
 }
 
 /**
- * Which of a lane's cards this board draws.
- *
- * **D-r's open question, answered: an epic's own card is suppressed from the catch-all lane when its
- * lane header is already on screen.** An epic reaches the wire as a card — `allowedTransitions` being
- * *"empty for an Epic"* has no meaning otherwise — and under `swimlaneBy=EPIC` it has no epic above
- * it, so the server files it in the "No epic" lane. Drawing it there as well as drawing it as a
- * band's own header states the same work twice in one view, and the second statement carries a
- * derived status beside a roll-up measuring its children: two facts about one epic, a glance apart,
- * which is the family of defect D8 exists over.
- *
- * **The condition is presence of the lane, not the axis alone**, and that is the part worth reading:
- * an epic with no stories has no lane of its own, so suppressing it unconditionally would delete it
- * from the board entirely. A board that silently omits a kind of work is worse than one showing an
- * unmovable card — which is the contract's own argument for putting the epic on the wire at all.
+ * Flip one member of a `Set` held in state — collapse, sub-bar collapse and the `Done` strip are
+ * three of the same thing, and three hand-written copies of it is three chances to write `add`
+ * where `delete` belongs.
  */
-function visibleCards(
-  lane: { key: string | null; cards: readonly BoardIssueCard[] },
-  swimlaneBy: SwimlaneBy,
-  lanes: readonly { key: string | null }[],
-): BoardIssueCard[] {
-  if (swimlaneBy !== 'EPIC' || lane.key !== null) return [...lane.cards];
-  return lane.cards.filter(
-    (card) => card.typeLevel !== 'EPIC' || !lanes.some((other) => other.key === card.key),
-  );
+function toggled(id: string) {
+  return (held: ReadonlySet<string>): ReadonlySet<string> => {
+    const next = new Set(held);
+    if (!next.delete(id)) next.add(id);
+    return next;
+  };
+}
+
+/**
+ * The shut sub-bars of one lane, as story keys.
+ *
+ * The state is keyed `<laneId>#<storyKey>` because a story key is unique within a lane and not
+ * across the board — the same story can head a row in two label lanes — and `Swimlane` asks about
+ * its own rows by key. A new `Set` per lane per render is cheap beside the alternative, which is
+ * passing every lane the whole board's collapse state and letting each one parse it.
+ */
+function rowsShutIn(shut: ReadonlySet<string>, laneId: string): ReadonlySet<string> {
+  const prefix = `${laneId}#`;
+  const mine = new Set<string>();
+  for (const id of shut) if (id.startsWith(prefix)) mine.add(id.slice(prefix.length));
+  return mine;
 }
 
 /** Cards drawn in one column across the expanded lanes, or every drawn card when `columnId` is null. */

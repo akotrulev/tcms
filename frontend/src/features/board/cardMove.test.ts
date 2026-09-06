@@ -228,6 +228,8 @@ const IN_FLIGHT: ServerColumn = {
   wipLimit: 3,
   statusIds: [PROGRESS.id, IN_REVIEW.id, BLOCKED.id],
   defaultStatusId: PROGRESS.id,
+  done: false,
+  notStarted: false,
 }
 
 const DONE_COLUMN: ServerColumn = {
@@ -237,6 +239,8 @@ const DONE_COLUMN: ServerColumn = {
   wipLimit: null,
   statusIds: [DONE.id],
   defaultStatusId: DONE.id,
+  done: true,
+  notStarted: false,
 }
 
 const READY_COLUMN: ServerColumn = {
@@ -246,6 +250,8 @@ const READY_COLUMN: ServerColumn = {
   wipLimit: null,
   statusIds: [READY.id],
   defaultStatusId: READY.id,
+  done: false,
+  notStarted: true,
 }
 
 const BOARD = [READY_COLUMN, IN_FLIGHT, DONE_COLUMN]

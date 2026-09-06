@@ -5,9 +5,16 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../../components/ui';
-import { columnRefusalFor, resolveColumnMove, type ServerColumn } from './cardMove';
+import {
+  blockingTargetOf,
+  columnRefusalFor,
+  resolveColumnMove,
+  unblockTargetOf,
+  type ServerColumn,
+} from './cardMove';
 
 /**
  * The `⋮ Move to…` every card carries.
@@ -33,6 +40,17 @@ import { columnRefusalFor, resolveColumnMove, type ServerColumn } from './cardMo
  * nothing to press — there is no gesture, keyboard path or pointer path that could succeed, which is
  * what "no affordance" has to mean to be honest rather than merely quiet.
  *
+ * ## `Block…` and `Unblock` are transitions, and they are read off the card
+ *
+ * 021 §2.7 puts both in this menu, above the columns and separated from them, because neither is a
+ * *column* choice: the project's `blocking` status may be claimed by a column on this board (all
+ * three seeded boards claim it) or by none, and `Unblock` names a status rather than a place. Both
+ * targets come from `allowedTransitions` — {@link blockingTargetOf} and {@link unblockTargetOf} —
+ * so an entry is **absent** when the move is not legal from here rather than disabled with a reason
+ * invented for it. That is the one place this menu departs from disable-don't-hide, and the reason
+ * is that there is nothing to say: "you cannot block a blocked card" is not a capability anybody is
+ * being denied.
+ *
  * The sentence comes from `columnRefusalFor` rather than being written here, because a second copy
  * of it is a second copy to drift: its epic branch answers before reading the target at all — the
  * function's own header says so, and it is why the argument below is any column rather than a
@@ -42,6 +60,8 @@ export function MoveToMenu({
   card,
   columns,
   onMove,
+  onBlock,
+  onUnblock,
   disabled = false,
   disabledReason,
   testId,
@@ -49,11 +69,18 @@ export function MoveToMenu({
   card: BoardIssueCard;
   columns: readonly ServerColumn[];
   onMove: (toColumnId: string) => void;
+  /** Opens the reason dialog. Absent on a caller that never blocks — the drag overlay's copy. */
+  onBlock?: () => void;
+  /** Moves the card back to `blockedFromStatus`, with no dialog: the reason is already written. */
+  onUnblock?: (statusId: string) => void;
   /** The caller's own refusal — a missing `issue:edit`, not a workflow rule. */
   disabled?: boolean;
   disabledReason?: string;
   testId: string;
 }) {
+  const blockTarget = blockingTargetOf(card);
+  const unblockTarget = unblockTargetOf(card);
+
   if (card.allowedTransitions.length === 0) {
     return (
       <p data-testid={`${testId}.Immobile`} className="m-0 text-[10.5px] leading-[1.45] text-ink-4">
@@ -78,6 +105,21 @@ export function MoveToMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
+        {unblockTarget && onUnblock && (
+          <DropdownMenuItem
+            data-testid={`${testId}.Unblock`}
+            onSelect={() => onUnblock(unblockTarget.id)}
+          >
+            {`Unblock → ${unblockTarget.name}`}
+          </DropdownMenuItem>
+        )}
+        {blockTarget && onBlock && (
+          <DropdownMenuItem data-testid={`${testId}.Block`} onSelect={onBlock}>
+            Block&hellip;
+          </DropdownMenuItem>
+        )}
+        {((unblockTarget && onUnblock) || (blockTarget && onBlock)) && <DropdownMenuSeparator />}
+
         {columns.map((column) => {
           const move = resolveColumnMove(card, column.id, columns);
           return (

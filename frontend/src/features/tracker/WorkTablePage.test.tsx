@@ -3,12 +3,16 @@ import userEvent from '@testing-library/user-event'
 import { Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
+import type { BoardColumnConfig, BoardIssueCard, BoardSummary } from '../../api/types'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
 import { TestProviders } from '../../test/TestProviders'
 import { drivingAFailedRead } from '../../test/renderFailures'
 import {
   aBoardConfig,
+  aBoardCoverage,
+  aBoardIssueCard,
+  aBoardLane,
   aBoardSummary,
   aProject,
   aProjectWorkflow,
@@ -71,9 +75,21 @@ function renderPage(route = '/projects/p1/work') {
   )
 }
 
+/**
+ * The board the double serves, so a test about the **strip** can name several without a second
+ * copy of every other arm — which is what the first draft of the door-badge test did, and it drifted
+ * from this one before it was even run.
+ */
+interface BoardDouble {
+  summaries?: BoardSummary[]
+  columns?: BoardColumnConfig[]
+  cards?: BoardIssueCard[]
+}
+
 function mockReads(
   issues = [anIssueSummary({ key: 'ACME-118', title: 'Guest checkout' })],
   time: { settings?: unknown; rollups?: unknown; failRollups?: boolean } = {},
+  board: BoardDouble = {},
 ) {
   const paths: string[] = []
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
@@ -104,7 +120,10 @@ function mockReads(
       `/boards/{id}` and `/boards/{id}/cards` are one segment apart and both anchored: the harness
       names that pair as exactly the prefix collision to avoid.
     */
-    if (/^\/projects\/[^/]+\/boards$/.test(path)) return [aBoardSummary({ id: 'b1' })]
+    if (/^\/projects\/[^/]+\/boards\/coverage$/.test(path)) return aBoardCoverage()
+    if (/^\/projects\/[^/]+\/boards$/.test(path)) {
+      return board.summaries ?? [aBoardSummary({ id: 'b1', name: 'Team board' })]
+    }
     if (/^\/projects\/[^/]+\/labels$/.test(path)) return []
     // The backlog view's own read (012 T8). Anchored for the same reason as the pair above.
     if (/^\/projects\/[^/]+\/backlog/.test(path)) return []
@@ -115,8 +134,14 @@ function mockReads(
     */
     if (/^\/projects\/[^/]+\/roadmap$/.test(path)) return aRoadmap()
     if (/^\/projects\/[^/]+\/releases$/.test(path)) return []
-    if (/^\/boards\/[^/]+$/.test(path)) return aBoardConfig({ id: 'b1' })
-    if (/^\/boards\/[^/]+\/cards/.test(path)) return boardContents()
+    if (/^\/boards\/[^/]+$/.test(path)) {
+      return aBoardConfig(board.columns ? { id: 'b1', columns: board.columns } : { id: 'b1' })
+    }
+    if (/^\/boards\/[^/]+\/cards/.test(path)) {
+      return board.cards
+        ? boardContents({ lanes: [aBoardLane({ cards: board.cards })] })
+        : boardContents()
+    }
     if (/^\/projects\/[^/]+$/.test(path)) return aProject({ id: 'p1', name: 'Acme Storefront' })
     if (path.startsWith('/issues')) return issues
     throw new Error(`unmocked read: ${path}`)
@@ -293,6 +318,61 @@ describe('The view switcher (D34)', () => {
     expect(await screen.findByTestId('ProjectBoard.View')).toBeInTheDocument()
     expect(screen.queryByTestId('WorkTable.NotYet.board')).toBeNull()
     expect(screen.queryByTestId('WorkTable.Table')).toBeNull()
+  })
+
+  it('lists the project’s boards as segments, in position order, and no fixed “Board” tab', async () => {
+    /*
+      021 D-f. The strip is **the project's boards** and then the four fixed views: a project with
+      three boards gets three segments, and nothing here spells `PM`, `Dev` or `QA` — those are the
+      names §2.4's seed happens to use. `?view=board` with no `board` means the first, which is what
+      makes `boards.data[0]` and the board below agree without either naming the other.
+
+      The order asserted is the SERVER's: `listBoards` orders by the `position` V13 added, and
+      alphabetical — which is what it did before — would have put Dev before PM.
+    */
+    mockReads(undefined, {}, {
+      summaries: [
+        aBoardSummary({ id: 'b1', name: 'PM board' }),
+        aBoardSummary({ id: 'b2', name: 'Dev board' }),
+      ],
+    })
+    renderPage('/projects/p1/work?view=board')
+
+    await screen.findByTestId('WorkTable.View.Board.PM board')
+    const strip = screen.getByRole('navigation', { name: 'Work views' })
+    expect(
+      within(strip).getAllByRole('link').map((link) => link.textContent),
+    ).toEqual(['PM board', 'Dev board', 'Backlog', 'Table', 'Timeline', 'Calendar'])
+    expect(screen.getByTestId('WorkTable.View.Board.PM board')).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+  })
+
+  it('badges the active board with what is waiting in its FIRST column, never a total', async () => {
+    /*
+      §8.3's door badge. The `4` on screen is not the board's card count — the second column holds
+      one as well, and a segment reading `5` would be a number nobody can act on. The ACTIVE segment
+      only: 021 T1 added no contract for the inactive boards' counts, deliberately, and T8 badges
+      the rest.
+    */
+    mockReads(undefined, {}, {
+      summaries: [aBoardSummary({ id: 'b1', name: 'Dev board' })],
+      columns: [
+        { id: 'c1', name: 'Ready', position: 0, wipLimit: null, statuses: [READY], defaultStatusId: READY.id },
+        { id: 'c2', name: 'Doing', position: 1, wipLimit: null, statuses: [REVIEW], defaultStatusId: REVIEW.id },
+      ],
+      cards: [
+        aBoardIssueCard({ key: 'A-1', columnId: 'c1', status: READY }),
+        aBoardIssueCard({ key: 'A-2', columnId: 'c1', status: READY }),
+        aBoardIssueCard({ key: 'A-3', columnId: 'c2', status: REVIEW }),
+      ],
+    })
+    renderPage('/projects/p1/work?view=board')
+
+    expect(
+      await screen.findByTestId('WorkTable.View.Board.Dev board.Badge'),
+    ).toHaveTextContent('2')
   })
 })
 

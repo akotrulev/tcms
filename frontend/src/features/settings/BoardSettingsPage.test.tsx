@@ -8,7 +8,9 @@ import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
 import {
+  aBoardClaim,
   aBoardConfig,
+  aBoardCoverage,
   aBoardSummary,
   aProject,
   aProjectWorkflow,
@@ -110,6 +112,33 @@ function mockReads(
       return boards.map((board) =>
         aBoardSummary({ id: board.id, name: board.name, columnCount: board.columns.length }),
       )
+    }
+    /*
+      The matrix's own read (021 R7), derived here from the same boards the panels are drawn from so
+      the fixture cannot say one thing and the panels another. Anchored `/coverage$` and declared
+      before nothing in particular — `/boards$` above ends at the segment, so the two cannot collide.
+    */
+    if (/^\/projects\/[^/]+\/boards\/coverage$/.test(path)) {
+      const rows = statuses.map((status) => ({
+        status,
+        claims: boards.flatMap((board) =>
+          board.columns
+            .filter((column) => column.statuses.some((each) => each.id === status.id))
+            .map((column) =>
+              aBoardClaim({
+                boardId: board.id,
+                boardName: board.name,
+                columnId: column.id,
+                columnName: column.name,
+              }),
+            ),
+        ),
+      }))
+      return aBoardCoverage({
+        projectId: PROJECT,
+        rows,
+        uncovered: rows.filter((row) => row.claims.length === 0).map((row) => row.status),
+      })
     }
     if (/^\/projects\/[^/]+\/labels$/.test(path)) {
       return [anIssueLabel({ id: 'lab-1', name: 'checkout', color: 'label-3' })]
@@ -233,35 +262,64 @@ describe('the coverage check', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('shows the check failing, by status name, before the save is attempted', async () => {
+  it('draws the coverage matrix and lets a status leave a board without refusing the save', async () => {
+    /*
+      **021 R7, and the reversal is the whole test.** Unclaiming a status used to be a refusal — the
+      board's Save went disabled and the API answered 422 — which is what forced every board to show
+      the whole lifecycle. A board claims a subset now, so the same gesture is an ordinary edit that
+      saves, and the fact that the status is not on this board is a NOTE on the panel rather than a
+      failure.
+    */
     mockReads([stakeholderBoard()])
     const user = userEvent.setup()
-    const put = vi.spyOn(api, 'patch')
     renderPage()
 
     await screen.findByTestId('BoardSettings.Board.Stakeholder board')
     const board = panel('Stakeholder board')
 
-    // The green footer first: the invariant is holding, and the table is where that is visible.
-    expect(screen.getByTestId('BoardSettings.Coverage.Holds')).toBeInTheDocument()
+    // Every status is on at least one board, which is what the matrix reports and the old table
+    // could not: its question was per board, and this one is over the set.
+    expect(await screen.findByTestId('BoardSettings.Coverage.Holds')).toBeInTheDocument()
+    expect(screen.queryByTestId('BoardSettings.Coverage.Uncovered')).not.toBeInTheDocument()
 
     await user.click(
       within(board).getByRole('button', { name: 'Remove Blocked from In flight' }),
     )
 
-    // The full sentence is the board panel's, once. The coverage footer carries the clause and the
-    // board's name instead — two registers, one derivation, and never the same words twice.
-    expect(screen.getByText(/No column claims: Blocked/)).toBeInTheDocument()
     expect(
-      within(screen.getByTestId('BoardSettings.Coverage.Problems')).getByText(/on no column/),
+      within(screen.getByTestId('BoardSettings.Board.Stakeholder board.Coverage.Unclaimed'))
+        .getByText(/Not on this board: Blocked/),
     ).toBeInTheDocument()
-    expect(within(board).getByRole('button', { name: 'Save Stakeholder board' })).toBeDisabled()
+    // The refusal the old rule raised is gone, and this is the assertion that would fail if it
+    // came back: the save is a save.
+    expect(within(board).getByRole('button', { name: 'Save Stakeholder board' })).toBeEnabled()
+    expect(
+      screen.queryByTestId('BoardSettings.Board.Stakeholder board.Coverage.Failing'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('warns when a status is on no board at all, naming what a card there loses', async () => {
+    /*
+      The failure the old rule actually protected against, reported where boards are configured. The
+      mock derives the matrix from the boards it serves, so a project whose only board has no column
+      for `Blocked` produces the warning without the fixture asserting it directly.
+    */
+    const stripped = stakeholderBoard()
+    stripped.columns = stripped.columns.map((column) => ({
+      ...column,
+      statuses: column.statuses.filter((status) => status.id !== BLOCKED.id),
+    }))
+    mockReads([stripped])
+    renderPage()
+
+    const warning = await screen.findByTestId('BoardSettings.Coverage.Uncovered')
+    expect(warning).toHaveTextContent(/1 status on no board: Blocked/)
+    expect(warning).toHaveTextContent(/still reachable from the Table view and from search/)
     expect(screen.queryByTestId('BoardSettings.Coverage.Holds')).not.toBeInTheDocument()
-    // The cell says so too, which is the half a banner cannot: WHICH board is missing it.
+    // And the row says which board is missing it — the half a banner cannot.
     expect(
       screen.getByTestId('BoardSettings.Coverage.Cell.Stakeholder board.Blocked'),
-    ).toHaveTextContent('no column')
-    expect(put).not.toHaveBeenCalled()
+    ).toHaveTextContent('—')
   })
 
   it('saves the whole column list once the check holds again', async () => {

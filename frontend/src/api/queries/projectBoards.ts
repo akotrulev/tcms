@@ -36,6 +36,7 @@ import type {
   BacklogRow,
   BoardConfig,
   BoardContents,
+  BoardCoverage,
   BoardFilters,
   BoardInput,
   BoardSummary,
@@ -148,6 +149,31 @@ export function useBoardCards(
         timeoutMs: TIMEOUTS.interactive,
       }),
     enabled: boardId !== '',
+  });
+}
+
+/**
+ * Which boards show each status — the status × board matrix (021 R7).
+ *
+ * A **read that warns**, replacing a rule that refused (D-e). The old invariant made every board
+ * claim every status, which is what forced one board to show the whole lifecycle; what it protected
+ * — a card in a status no board shows — is now `BoardCoverage.uncovered`, reported on the settings
+ * screen instead of refused at a save.
+ *
+ * Two readers, and the second is the reason this is not a settings-only read: the board draws an
+ * `also on <board>` chip on a card whose **status** is claimed by another board, and this matrix is
+ * the only place that fact exists. (`BoardIssueCard.elsewhere` is a different statement — the
+ * *descendants* a row header's board does not show.)
+ */
+export function useBoardCoverage(projectId: string): UseQueryResult<BoardCoverage> {
+  return useQuery({
+    queryKey: keys.boardCoverage(projectId),
+    queryFn: ({ signal }) =>
+      api.get<BoardCoverage>(`/projects/${projectId}/boards/coverage`, {
+        signal,
+        timeoutMs: TIMEOUTS.interactive,
+      }),
+    enabled: projectId !== '',
   });
 }
 

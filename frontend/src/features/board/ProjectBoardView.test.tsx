@@ -8,12 +8,17 @@ import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
 import { TestProviders } from '../../test/TestProviders'
 import {
+  aBoardClaim,
   aBoardConfig,
+  aBoardCoverage,
   aBoardIssueCard,
   aBoardLane,
   aBoardSummary,
+  aCardElsewhere,
   aCardMoveResult,
   aCompletion,
+  anIssue,
+  anIssueComment,
   anIssueLabel,
   boardContents,
 } from '../../test/fixtures'
@@ -84,6 +89,7 @@ function renderView(contents: BoardContents, columns = COLUMNS, route = '/projec
     // paths are one segment apart and this is exactly the collision the harness warns about.
     if (/^\/boards\/[^/]+$/.test(path)) return aBoardConfig({ id: 'b1', columns })
     if (/^\/boards\/[^/]+\/cards/.test(path)) return contents
+    if (/^\/projects\/[^/]+\/boards\/coverage$/.test(path)) return aBoardCoverage()
     if (/^\/projects\/[^/]+\/boards$/.test(path)) {
       return [aBoardSummary({ id: 'b1', name: 'Team board', swimlaneBy: contents.swimlaneBy })]
     }
@@ -606,7 +612,7 @@ describe('the board’s own controls', () => {
 })
 
 describe('the three reads fail separately', () => {
-  it('keeps the picker and the filter strip when the cards read fails', async () => {
+  it('keeps the grouping control and the filter strip when the cards read fails', async () => {
     /*
       `DataRegion`'s rule, and the reason there are three of them here rather than one: a failed cards
       read must not unmount the controls the reader needs in order to change the query and retry.
@@ -619,6 +625,7 @@ describe('the three reads fail separately', () => {
       if (path.startsWith('/me/permissions')) return heldPermissions(['issue:read'])
       if (/^\/boards\/[^/]+$/.test(path)) return aBoardConfig({ id: 'b1', columns: COLUMNS })
       if (/^\/boards\/[^/]+\/cards/.test(path)) throw new Error('cards are down')
+      if (/^\/projects\/[^/]+\/boards\/coverage$/.test(path)) return aBoardCoverage()
       if (/^\/projects\/[^/]+\/boards$/.test(path)) return [aBoardSummary({ id: 'b1' })]
       if (/^\/projects\/[^/]+\/labels$/.test(path)) return []
       if (/^\/projects\/[^/]+\/members$/.test(path)) return []
@@ -634,7 +641,451 @@ describe('the three reads fail separately', () => {
     )
 
     expect(await screen.findByTestId('ProjectBoard.Content.Error')).toBeInTheDocument()
-    expect(screen.getByTestId('ProjectBoard.Picker')).toBeInTheDocument()
+    /*
+      ~~The board picker.~~ → **retired by 021 D-f** — the project's boards are the Work strip's
+      segments now. The `Group by` control is the one that took its place above the region, and the
+      property under test is unchanged: a failed cards read empties the board without unmounting the
+      controls the reader needs in order to change the query and retry.
+    */
+    expect(screen.getByTestId('ProjectBoard.GroupBy')).toBeInTheDocument()
     expect(screen.getByTestId('ProjectBoard.Filters')).toBeInTheDocument()
+  })
+})
+
+/**
+ * 021 §2.5–§2.8 — the shape a static render cannot show, and the rules that can be *wrong*.
+ *
+ * The grouping itself is `laneRows.test.ts`'s; what is asserted here is that the board draws what
+ * that division decided, in one grid, with the headers once — and the three card behaviours §2.7
+ * and §2.8 add.
+ */
+
+const BLOCKED: IssueStatusRef = {
+  id: 'st-blocked',
+  name: 'Blocked',
+  kind: 'IN_PROGRESS',
+  position: 4,
+  blocking: true,
+}
+
+/** §2.4's shape in miniature: a grooming board (two not-started columns) with a claimed `Done`. */
+const PM_COLUMNS = [
+  column('col-backlog', 'Backlog', 0, [BACKLOG]),
+  column('col-ready', 'Ready', 1, [READY]),
+  column('col-done', 'Done', 2, [DONE]),
+  column('col-blocked', 'Blocked', 3, [BLOCKED]),
+]
+
+/** One epic, one card-story, and one story whose task is a card here. */
+function epicLane() {
+  return boardContents({
+    swimlaneBy: 'EPIC',
+    lanes: [
+      aBoardLane({
+        key: 'PRJ-100',
+        label: 'Checkout redesign',
+        cards: [
+          aBoardIssueCard({ key: 'PRJ-150', title: 'Guest order lookup', columnId: 'col-backlog', status: BACKLOG }),
+          aBoardIssueCard({
+            key: 'PRJ-118',
+            title: 'Guest checkout',
+            columnId: 'col-ready',
+            status: READY,
+            subtaskDone: 0,
+            subtaskTotal: 4,
+          }),
+          aBoardIssueCard({
+            key: 'PRJ-119',
+            title: 'Guest form fields',
+            typeLevel: 'TASK',
+            columnId: 'col-ready',
+            status: READY,
+            parentKey: 'PRJ-118',
+          }),
+        ],
+      }),
+      aBoardLane({
+        key: null,
+        label: 'No epic',
+        cards: [
+          aBoardIssueCard({
+            key: 'PRJ-100',
+            title: 'Checkout redesign',
+            typeLevel: 'EPIC',
+            columnId: 'col-ready',
+            status: READY,
+            parentKey: null,
+            allStoriesDone: true,
+            subtaskTotal: 8,
+          }),
+        ],
+      }),
+    ],
+  })
+}
+
+describe('an epic lane (021 §2.5)', () => {
+  it('draws the column headers once, above the lanes', async () => {
+    renderView(epicLane(), PM_COLUMNS)
+
+    // Two lanes on screen, and still one header per column — render note 18: repeating them would
+    // repeat one project-wide WIP breach per lane.
+    expect(await screen.findAllByTestId('ProjectBoard.Column.Ready')).toHaveLength(1)
+    expect(screen.getAllByRole('region', { name: /lane/i })).toHaveLength(2)
+  })
+
+  it('puts the epic card in its own lane’s band, in its own status column', async () => {
+    /*
+      R10, and it is a re-file the client makes: an epic has no epic above it, so the server groups
+      it into the catch-all lane whatever its status is. Drawing it there as well as drawing its
+      lane header states the same work twice in one view.
+    */
+    renderView(epicLane(), PM_COLUMNS)
+
+    expect(
+      await screen.findByTestId('ProjectBoard.Lane.PRJ-100.Cell.Ready.Card.PRJ-100'),
+    ).toBeInTheDocument()
+    expect(screen.queryByTestId('ProjectBoard.Lane.none.Cell.Ready.Card.PRJ-100')).toBeNull()
+  })
+
+  it('gives a story a sub-bar row only when its tasks are cards here, and never a card-story', async () => {
+    renderView(epicLane(), PM_COLUMNS)
+
+    const row = await screen.findByTestId('ProjectBoard.Lane.PRJ-100.Row.PRJ-118')
+    // `done/total` is the story's own figure, not a count of what is on screen: a board claims a
+    // subset, so three of these four tasks are legitimately on another board.
+    expect(within(row).getByTestId('ProjectBoard.Lane.PRJ-100.Row.PRJ-118.Tasks')).toHaveTextContent(
+      '0/4 tasks',
+    )
+    expect(
+      screen.getByTestId('ProjectBoard.Lane.PRJ-100.Row.PRJ-118.Cell.Ready.Card.PRJ-119'),
+    ).toBeInTheDocument()
+
+    // The story heads a row, so it is NOT also a card in the band…
+    expect(screen.queryByTestId('ProjectBoard.Lane.PRJ-100.Cell.Ready.Card.PRJ-118')).toBeNull()
+    // …and the card-story with no tasks here is a card and gets no row at all.
+    expect(
+      screen.getByTestId('ProjectBoard.Lane.PRJ-100.Cell.Backlog.Card.PRJ-150'),
+    ).toBeInTheDocument()
+    expect(screen.queryByTestId('ProjectBoard.Lane.PRJ-100.Row.PRJ-150')).toBeNull()
+  })
+
+  it('registers no drop target under a collapsed sub-bar', async () => {
+    // The existing collapsed-lane rule, now with a second thing it applies to: stepping into a band
+    // a card cannot land in is a dead end the reader has to learn.
+    const user = userEvent.setup()
+    renderView(epicLane(), PM_COLUMNS)
+
+    await screen.findByTestId('ProjectBoard.Lane.PRJ-100.Row.PRJ-118')
+    await user.click(screen.getByRole('button', { name: 'Collapse PRJ-118' }))
+
+    expect(screen.queryByTestId('ProjectBoard.Lane.PRJ-100.Row.PRJ-118.Cell.Ready')).toBeNull()
+    // The sub-bar itself stays — a collapsed row is a row you can open.
+    expect(screen.getByTestId('ProjectBoard.Lane.PRJ-100.Row.PRJ-118')).toBeInTheDocument()
+  })
+
+  it('says the epic is not on this board when the board does not claim its status', async () => {
+    /*
+      `18-pm-board.html` reads `Refining · epic on Dev board →`. The board cannot name the board:
+      `BoardLane` carries no status, and an epic whose status this board does not claim is not in the
+      payload at all — `BoardCardService` skips it before the lanes are built. So the honest sentence
+      names the epic, and the gap is recorded in the plan rather than papered over with a guess.
+    */
+    const contents = epicLane()
+    renderView(
+      boardContents({ swimlaneBy: 'EPIC', lanes: [contents.lanes[0]] }),
+      PM_COLUMNS,
+    )
+
+    expect(await screen.findByTestId('ProjectBoard.Lane.PRJ-100.EpicElsewhere')).toHaveTextContent(
+      'epic not on this board',
+    )
+  })
+})
+
+describe('a claimed Done column (021 D-l)', () => {
+  it('collapses to a per-lane count strip that is still a drop target, and expands', async () => {
+    const user = userEvent.setup()
+    renderView(
+      boardContents({
+        swimlaneBy: 'EPIC',
+        lanes: [
+          aBoardLane({
+            key: 'PRJ-100',
+            label: 'Checkout redesign',
+            cards: [
+              aBoardIssueCard({ key: 'PRJ-9', columnId: 'col-done', status: DONE }),
+              aBoardIssueCard({ key: 'PRJ-8', columnId: 'col-done', status: DONE }),
+            ],
+          }),
+        ],
+      }),
+      PM_COLUMNS,
+    )
+
+    const strip = await screen.findByTestId('ProjectBoard.Lane.PRJ-100.Done.Done')
+    expect(within(strip).getByTestId('ProjectBoard.Lane.PRJ-100.Done.Done.Count')).toHaveTextContent('2')
+    // Collapsed means the count is hidden, not the gesture: the PO's drag into Done is the deploy
+    // confirmation, and a column nobody can drop into would remove it.
+    expect(strip).toHaveAttribute('data-testid')
+    expect(screen.queryByTestId('ProjectBoard.Lane.PRJ-100.Cell.Done.Card.PRJ-9')).toBeNull()
+
+    await user.click(
+      within(strip).getByRole('button', {
+        name: 'Expand the Done column of the Checkout redesign lane',
+      }),
+    )
+
+    expect(
+      screen.getByTestId('ProjectBoard.Lane.PRJ-100.Cell.Done.Card.PRJ-9'),
+    ).toBeInTheDocument()
+  })
+})
+
+describe('Blocked (021 §2.7)', () => {
+  const blockedCard = () =>
+    boardContents({
+      lanes: [
+        aBoardLane({
+          cards: [
+            aBoardIssueCard({
+              key: 'PRJ-152',
+              title: 'Payment intent for guests',
+              columnId: 'col-blocked',
+              status: BLOCKED,
+              blockedFromStatus: READY,
+              allowedTransitions: [READY],
+            }),
+          ],
+        }),
+      ],
+    })
+
+  it('reads ⛔ from the status it came from, so nobody claims a card that is not theirs', async () => {
+    renderView(blockedCard(), PM_COLUMNS)
+
+    expect(
+      await screen.findByTestId('ProjectBoard.Lane.none.Cell.Blocked.Card.PRJ-152.BlockedFrom'),
+    ).toHaveTextContent('⛔ from Ready')
+  })
+
+  it('offers Unblock and moves the card to blockedFromStatus', async () => {
+    const user = userEvent.setup()
+    // A real `Issue`: the harness compares every body a double serves against the contract, and a
+    // `{ projectId }` stub is twelve required properties short.
+    const post = vi.spyOn(api, 'post').mockResolvedValue(anIssue({ key: 'PRJ-152' }) as never)
+    renderView(blockedCard(), PM_COLUMNS)
+
+    await user.click(await screen.findByRole('button', { name: 'Move PRJ-152' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Unblock → Ready' }))
+
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith(
+        '/issues/PRJ-152/transitions',
+        { statusId: READY.id },
+        expect.anything(),
+      ),
+    )
+  })
+
+  it('blocks by posting the reason as a comment FIRST, then transitioning', async () => {
+    /*
+      The order is the rule, not an implementation detail: a card that lands in `Blocked` with no
+      reason attached is the state the dialog exists to prevent, and there is no blocked-reason
+      column on the contract for it to land in instead.
+    */
+    const user = userEvent.setup()
+    const post = vi
+      .spyOn(api, 'post')
+      .mockImplementation((async (path: string) =>
+        path.endsWith('/comments')
+          ? anIssueComment({ body: 'Waiting on the provider' })
+          : anIssue({ key: 'PRJ-150' })) as never)
+    renderView(
+      boardContents({
+        lanes: [
+          aBoardLane({
+            cards: [
+              aBoardIssueCard({
+                key: 'PRJ-150',
+                title: 'Guest order lookup',
+                columnId: 'col-ready',
+                status: READY,
+                allowedTransitions: [BLOCKED],
+              }),
+            ],
+          }),
+        ],
+      }),
+      PM_COLUMNS,
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Move PRJ-150' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Block…' }))
+    await user.type(screen.getByTestId('Board.Block.Reason'), 'Waiting on the provider')
+    await user.click(screen.getByTestId('Board.Block.Confirm'))
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2))
+    expect(post.mock.calls[0][0]).toBe('/issues/PRJ-150/comments')
+    expect(post.mock.calls[0][1]).toEqual({ body: 'Waiting on the provider' })
+    expect(post.mock.calls[1][0]).toBe('/issues/PRJ-150/transitions')
+    expect(post.mock.calls[1][1]).toEqual({ statusId: BLOCKED.id })
+  })
+})
+
+describe('what a card says about the other boards (021 §2.5–§2.6)', () => {
+  it('chips a board that also claims this card’s status, from the coverage matrix', async () => {
+    /*
+      `also on <board>` is NOT `elsewhere` — that is the descendants a row header's board does not
+      show. This is *this card is also drawn there*, which has no field of its own and is derived
+      from `GET …/boards/coverage`. The card's own board is filtered out, which is the half a test
+      that only counted chips would miss.
+    */
+    vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
+      if (path.startsWith('/me/permissions')) return heldPermissions(['issue:read', 'issue:edit'])
+      if (/^\/boards\/[^/]+$/.test(path)) return aBoardConfig({ id: 'b1', columns: PM_COLUMNS })
+      if (/^\/boards\/[^/]+\/cards/.test(path)) {
+        return boardContents({
+          lanes: [
+            aBoardLane({
+              cards: [aBoardIssueCard({ key: 'PRJ-1', columnId: 'col-ready', status: READY })],
+            }),
+          ],
+        })
+      }
+      if (/^\/projects\/[^/]+\/boards\/coverage$/.test(path)) {
+        return aBoardCoverage({
+          rows: [
+            {
+              status: READY,
+              claims: [
+                aBoardClaim({ boardId: 'b1', boardName: 'Dev board', columnName: 'Ready' }),
+                aBoardClaim({ boardId: 'b2', boardName: 'QA board', columnName: 'Ready for test' }),
+              ],
+            },
+          ],
+        })
+      }
+      if (/^\/projects\/[^/]+\/boards$/.test(path)) return [aBoardSummary({ id: 'b1' })]
+      if (/^\/projects\/[^/]+\/labels$/.test(path)) return []
+      if (/^\/projects\/[^/]+\/members$/.test(path)) return []
+      throw new Error(`unmocked read: ${path}`)
+    }) as never)
+
+    render(
+      <TestProviders client={createTestQueryClient()} route="/projects/p1/work?view=board">
+        <Routes>
+          <Route path="/projects/:projectId/work" element={<ProjectBoardView projectId="p1" />} />
+        </Routes>
+      </TestProviders>,
+    )
+
+    const card = await screen.findByTestId('ProjectBoard.Lane.none.Cell.Ready.Card.PRJ-1')
+    expect(
+      within(card).getByTestId('ProjectBoard.Lane.none.Cell.Ready.Card.PRJ-1.AlsoOn.QA board'),
+    ).toHaveTextContent('also on QA board')
+    expect(
+      within(card).queryByTestId('ProjectBoard.Lane.none.Cell.Ready.Card.PRJ-1.AlsoOn.Dev board'),
+    ).toBeNull()
+  })
+
+  it('names each board in a popover when a story’s not-shown set spans more than one', async () => {
+    const user = userEvent.setup()
+    renderView(
+      boardContents({
+        swimlaneBy: 'EPIC',
+        lanes: [
+          aBoardLane({
+            key: 'PRJ-100',
+            label: 'Checkout redesign',
+            cards: [
+              aBoardIssueCard({
+                key: 'PRJ-118',
+                columnId: 'col-ready',
+                status: READY,
+                elsewhere: [
+                  aCardElsewhere({ boardId: 'b2', boardName: 'QA board', count: 1 }),
+                  aCardElsewhere({ boardId: 'b3', boardName: 'PM board', count: 2 }),
+                ],
+              }),
+              aBoardIssueCard({
+                key: 'PRJ-119',
+                typeLevel: 'TASK',
+                parentKey: 'PRJ-118',
+                columnId: 'col-ready',
+                status: READY,
+              }),
+            ],
+          }),
+        ],
+      }),
+      PM_COLUMNS,
+    )
+
+    const link = await screen.findByTestId('ProjectBoard.Lane.PRJ-100.Row.PRJ-118.Elsewhere')
+    // The TOTAL, and never total-minus-shown: a status may sit on two boards, so "shown here" and
+    // "elsewhere" legitimately overlap and the subtraction would double-count.
+    expect(link).toHaveTextContent('3 on other boards')
+
+    await user.click(link)
+    const list = await screen.findByTestId('ProjectBoard.Lane.PRJ-100.Row.PRJ-118.Elsewhere.List')
+    expect(within(list).getByText('1 on QA board')).toBeInTheDocument()
+    expect(within(list).getByText('2 on PM board')).toBeInTheDocument()
+  })
+
+  it('carries the readiness signals on a grooming board, and the epic’s nudge', async () => {
+    /*
+      §2.6. `readiness` is read off the board's SHAPE — two or more all-`NOT_STARTED` columns — and
+      never off its name: a board is called whatever the project called it. `PM_COLUMNS` has
+      `Backlog` and `Ready`, which is what selects it here and what leaves the four-column Dev
+      fixture at the top of this file without signals.
+
+      Three signals, not §2.6's four: `BoardIssueCard` carries no target release, so a `— release`
+      chip would be a claim about a field the payload does not have.
+    */
+    renderView(epicLane(), PM_COLUMNS)
+
+    const epicCard = await screen.findByTestId('ProjectBoard.Lane.PRJ-100.Cell.Ready.Card.PRJ-100')
+    const signals = within(epicCard).getByTestId(
+      'ProjectBoard.Lane.PRJ-100.Cell.Ready.Card.PRJ-100.Readiness',
+    )
+    expect(within(signals).getByText('AC')).toBeInTheDocument()
+    expect(within(signals).getByText('estimate')).toBeInTheDocument()
+    // An epic's third signal counts stories: it has no epic, and `— epic` on one would be a
+    // permanent unfixable mark on every epic on the board.
+    expect(within(signals).getByText('8 stories')).toBeInTheDocument()
+    expect(within(signals).queryByText('release')).toBeNull()
+
+    expect(
+      within(epicCard).getByTestId('ProjectBoard.Lane.PRJ-100.Cell.Ready.Card.PRJ-100.AllStoriesDone'),
+    ).toHaveTextContent('Every story under this epic is done.')
+  })
+
+  it('draws no readiness signals on a board that does not groom', async () => {
+    /*
+      One not-started column is a **queue**, not a set of grooming stages — `12-dev-board.html`
+      draws no signals for that reason, and §2.4's Dev board is exactly this shape (`Ready to
+      develop` alone). The rule is the board's shape and never its name; this is the assertion that
+      would fail if somebody replaced it with a match on `'PM'`.
+    */
+    renderView(
+      boardContents({
+        lanes: [
+          aBoardLane({
+            cards: [aBoardIssueCard({ key: 'PRJ-1', columnId: 'col-ready', status: READY })],
+          }),
+        ],
+      }),
+      [
+        column('col-ready', 'Ready', 0, [READY]),
+        column('col-prog', 'In Progress', 1, [PROGRESS]),
+        column('col-done', 'Done', 2, [DONE]),
+      ],
+    )
+
+    const card = await screen.findByTestId('ProjectBoard.Lane.none.Cell.Ready.Card.PRJ-1')
+    expect(
+      within(card).queryByTestId('ProjectBoard.Lane.none.Cell.Ready.Card.PRJ-1.Readiness'),
+    ).toBeNull()
   })
 })
