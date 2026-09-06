@@ -11277,6 +11277,10 @@ export interface paths {
          *
          *     **Removing a status that issues hold is refused here with a 409** naming the count. The
          *     removal that names where they go is `DELETE .../workflow/statuses/{statusId}`.
+         *
+         *     **At most one status may be `blocking`** (021 D-b) — a second is a **422** naming both.
+         *     Entering that status records `blockedFromStatus` on the issue, so two of them would make
+         *     that record ambiguous.
          */
         put: operations["putProjectWorkflow"];
         post?: never;
@@ -26170,6 +26174,15 @@ export interface operations {
             404: components["responses"]["NotFound"];
             /** @description A removed status still holds issues. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Two statuses are marked `blocking`, and the body names both (021 D-b). */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

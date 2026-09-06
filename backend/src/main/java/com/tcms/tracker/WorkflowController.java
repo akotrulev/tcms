@@ -102,6 +102,16 @@ public class WorkflowController {
                         .body(Problem.conflict("Keep one status that means done",
                                 "Every completion figure in the product counts the issues in a "
                                         + "done status, so a project needs at least one."));
+                // 021 D-b, and a 422 rather than a 400: the document is well-formed and every
+                // field in it is valid on its own — it is the SET that cannot be stored, which is
+                // the same shape the board endpoints already answer with 422.
+                case WorkflowService.Outcome.TwoBlockingStatuses both -> ResponseEntity
+                        .unprocessableEntity()
+                        .body(Problem.unprocessable("Only one status can be the blocked one",
+                                String.join(" and ", both.names()) + " are both marked as the "
+                                        + "status work waits in. Entering it records where the "
+                                        + "card came from, and two of them would make that "
+                                        + "record ambiguous — pick one."));
                 case WorkflowService.Outcome.Replaced replaced ->
                         ResponseEntity.ok(replaced.view());
                 case WorkflowService.Outcome.Removed ignored -> ResponseEntity.noContent().build();

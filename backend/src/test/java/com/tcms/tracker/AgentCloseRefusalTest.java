@@ -191,6 +191,29 @@ class AgentCloseRefusalTest extends TrackerEndpointTestBase {
     }
 
     @Test
+    @DisplayName("an epic is guarded like anything else now that a drag can close one (021 R10)")
+    void anEpicIsGuardedToo() throws Exception {
+        // The gate used to be unreachable on an epic for a reason that has nothing to do with the
+        // gate: TransitionService refused every epic move before it got here (D31). R10 removed
+        // that refusal, so this is the first release in which a PO who wrote the epic can also
+        // ship it in one drag — which is exactly what "review to close" exists to make a second
+        // person's decision. Extended here rather than in a class of its own, because it is the
+        // same rule and a separate class is how two spellings of it start.
+        reviewToClose(true);
+        String key = createdOfType("Epic", "Authentication", DANA);
+        walkToReadyToDeploy(DANA, key);
+
+        MvcResult refused = attempt(DANA, key, statusNamed("Done"));
+
+        assertThat(refused.getResponse().getStatus()).isEqualTo(409);
+        assertThat(refused.getResponse().getContentAsString()).contains("a second person");
+        assertThat(allowedNames(readAs(DANA, key)))
+                .as("and withheld from the epic's own list, so the drag never starts")
+                .doesNotContain("Done").contains("Rework", "Blocked");
+        assertThat(allowedNames(readAs(ADMIN, key))).contains("Done");
+    }
+
+    @Test
     @DisplayName("GET /issues/{key} drops Done for the assignee and keeps the other moves")
     void theIssueProjectionIsCallerScoped() throws Exception {
         reviewToClose(true);
@@ -269,10 +292,15 @@ class AgentCloseRefusalTest extends TrackerEndpointTestBase {
     }
 
     private String created(String title, UUID assigneeId) throws Exception {
+        return createdOfType("Task", title, assigneeId);
+    }
+
+    private String createdOfType(String typeName, String title, UUID assigneeId) throws Exception {
         MvcResult result = mvc.perform(MockMvcRequestBuilders.post("/api/v1/issues")
                         .header("Authorization", "Bearer " + tokenFor(ADMIN, ACME))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"projectId\":\"" + ATLAS + "\",\"typeId\":\"" + typeNamed("Task")
+                        .content("{\"projectId\":\"" + ATLAS + "\",\"typeId\":\""
+                                + typeNamed(typeName)
                                 + "\",\"title\":\"" + title + "\",\"assigneeId\":"
                                 + (assigneeId == null ? "null" : "\"" + assigneeId + "\"") + "}"))
                 .andReturn();

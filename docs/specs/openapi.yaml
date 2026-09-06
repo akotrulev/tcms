@@ -9910,6 +9910,10 @@ paths:
 
         **Removing a status that issues hold is refused here with a 409** naming the count. The
         removal that names where they go is `DELETE .../workflow/statuses/{statusId}`.
+
+        **At most one status may be `blocking`** (021 D-b) — a second is a **422** naming both.
+        Entering that status records `blockedFromStatus` on the issue, so two of them would make
+        that record ambiguous.
       requestBody:
         required: true
         content:
@@ -9927,6 +9931,15 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
           description: A removed status still holds issues.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422':
+          # Inline rather than a components/responses entry, for the same reason the board
+          # endpoints give: this contract has no UnprocessableEntity component, and inventing one
+          # for a second module would leave two spellings of the same status.
+          description: |
+            Two statuses are marked `blocking`, and the body names both (021 D-b).
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }

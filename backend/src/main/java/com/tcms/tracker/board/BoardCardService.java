@@ -65,12 +65,15 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <h2>An Epic is a card here and a row in nothing</h2>
  *
- * <p>On the board an epic is a card whose {@code status} is the <strong>derived</strong> one (D31)
- * and whose {@code allowedTransitions} is empty — the contract says so, and the alternative is a
- * board that quietly does not show a kind of work. In the <em>backlog</em> it is neither: D31
- * derives an epic's status from its stories, so it has nothing to be ranked against, and a list
- * carrying both an epic and the stories under it double-counts the same work in the one view whose
- * whole job is "what is next".
+ * <p>~~On the board an epic is a card whose {@code status} is the <strong>derived</strong> one
+ * (D31) and whose {@code allowedTransitions} is empty~~ → superseded (021 R10): an epic's status
+ * is stored and it moves like a story, so its card carries the stored status and the workflow's
+ * moves. What the card adds is {@code allStoriesDone} — the nudge that the work underneath is
+ * finished, which the PO acts on with a drag and the server never acts on by itself.
+ *
+ * <p>In the <em>backlog</em> an epic is still neither a row nor a card: it has nothing to be
+ * ranked against, and a list carrying both an epic and the stories under it double-counts the same
+ * work in the one view whose whole job is "what is next".
  */
 @Service
 public class BoardCardService {
@@ -525,12 +528,12 @@ public class BoardCardService {
         }
 
         /**
-         * The status a screen shows — <strong>derived for an Epic</strong> (D31), stored for
-         * everything else.
+         * The status a screen shows — <strong>the stored one, at every level</strong>.
          *
-         * <p>An epic's stored {@code status_id} is not editable and means nothing; the derived kind
-         * is spelled with the project's own first status at that kind, because a hardcoded "Done"
-         * would be the word-lookup story B1 exists to remove.
+         * <p>~~Derived for an Epic (D31): its stored {@code status_id} is not editable and means
+         * nothing.~~ → superseded (021 R10 / D-d). It means something now: an epic has a lifecycle
+         * of its own and the PO moves it along the same workflow, so there is one rule here rather
+         * than two and a board and a detail page cannot spell an epic's status differently.
          */
         IssueStatusView shownStatus(Issue issue) {
             IssueStatus stored = statusesById.get(issue.getStatusId());
@@ -538,15 +541,7 @@ public class BoardCardService {
                 throw new IllegalStateException("issue " + issue.getIssueKey()
                         + " points at a status that is not in its project");
             }
-            if (typeOf(issue).getLevel() != IssueLevel.EPIC) {
-                return viewOf(stored);
-            }
-            IssueStatusKind derived = EpicStatus.of(countedChildrenOf(issue));
-            return statusesById.values().stream()
-                    .filter(status -> status.getKind() == derived)
-                    .min(Comparator.comparingInt(IssueStatus::getPosition))
-                    .map(Facts::viewOf)
-                    .orElseGet(() -> viewOf(stored));
+            return viewOf(stored);
         }
 
         BoardIssueCardView cardOf(Issue issue, UUID columnId, BoardScope scope) {
@@ -572,7 +567,7 @@ public class BoardCardService {
                     issue.getEstimateHours(),
                     epic == null ? null : epic.getIssueKey(),
                     labelsOf(issue),
-                    allowedTransitions(issue, type),
+                    allowedTransitions(issue),
                     children.size(),
                     (int) children.stream().filter(this::isDone).count(),
                     issue.isAgentEligible(),
@@ -596,12 +591,23 @@ public class BoardCardService {
          * "Blocked · from In test" while sitting in In progress is worse than one saying nothing.
          */
         private IssueStatusView blockedFromStatusOf(Issue issue) {
+            IssueStatus origin = blockedOriginOf(issue);
+            return origin == null ? null : IssueStatusView.of(origin);
+        }
+
+        /**
+         * The same origin {@link #blockedFromStatusOf} shows, as the row rather than the view.
+         *
+         * <p>One method feeding both the chip and {@code allowedTransitions}, deliberately: the
+         * card reads "Blocked · from In test" and offers "In test", and two spellings of the
+         * lookup is how a card comes to name one status and offer another.
+         */
+        private IssueStatus blockedOriginOf(Issue issue) {
             IssueStatus current = statusesById.get(issue.getStatusId());
             if (current == null || !current.isBlocking() || issue.getBlockedFromStatusId() == null) {
                 return null;
             }
-            IssueStatus origin = statusesById.get(issue.getBlockedFromStatusId());
-            return origin == null ? null : IssueStatusView.of(origin);
+            return statusesById.get(issue.getBlockedFromStatusId());
         }
 
         /**
@@ -613,15 +619,19 @@ public class BoardCardService {
          *
          * <p>False for anything that is not an epic, and false for an epic with no counted stories
          * at all — a vacuous truth would put the nudge on every empty epic in the project.
+         *
+         * <p>The {@code status} it reads is the epic's own STORED one since 021 R10, and that is
+         * what makes the expression mean what §11 wants rather than what it used to. It used to
+         * compare the derived kind against the stories the kind was derived FROM, so "all done and
+         * not itself done" was arithmetically unreachable and the flag could only ever be false;
+         * now the two sides are independent — the stories say the work is finished, the epic says
+         * the PO has not shipped it — which is precisely the gap the nudge exists to point at.
          */
         private boolean allStoriesDone(Issue issue, IssueType type, IssueStatusView status) {
             if (type.getLevel() != IssueLevel.EPIC || status.kind() == IssueStatusKind.DONE) {
                 return false;
             }
-            List<CountedIssue> counted = countedChildrenOf(issue).stream()
-                    .filter(CountedIssue::countsTowardCompletion)
-                    .toList();
-            return !counted.isEmpty() && counted.stream().allMatch(CountedIssue::isDone);
+            return EpicStatus.allStoriesDone(countedChildrenOf(issue));
         }
 
         /**
@@ -806,24 +816,36 @@ public class BoardCardService {
         }
 
         /**
-         * The statuses this issue may legally move to — <strong>empty for an Epic</strong>, which is
-         * D31 rather than an omission, and the same answer {@code GET /issues/&#123;key&#125;} gives.
+         * The statuses this issue may legally move to — the same answer
+         * {@code GET /issues/&#123;key&#125;} gives, and ~~empty for an Epic (D31)~~ → superseded
+         * (021 R10): an epic's status is stored and it moves like a story, so {@code type} is no
+         * longer read here.
          *
          * <p>§12.4: the legal set must be known client-side before the drag starts, so a forbidden
-         * drop is refused at the drag with the reason rather than accepted and reverted.
+         * drop is refused at the drag with the reason rather than accepted and reverted. That is
+         * also why the remembered origin is added below — {@code TransitionService} accepts it
+         * with no {@code issue_transition} row behind it (021 D-c), and a legal target this list
+         * withheld would be §12.4 the wrong way round: the client refusing at the drag a move the
+         * server allows.
          */
-        private List<IssueStatusView> allowedTransitions(Issue issue, IssueType type) {
-            if (type.getLevel() == IssueLevel.EPIC) {
-                return List.of();
-            }
+        private List<IssueStatusView> allowedTransitions(Issue issue) {
             boolean withholdDone = IssueService.closeGuardBinds(policy, issue, userId);
-            return transitions.findByFromStatusId(issue.getStatusId()).stream()
+            Map<UUID, IssueStatus> offered = new LinkedHashMap<>();
+            transitions.findByFromStatusId(issue.getStatusId()).stream()
                     .map(move -> statusesById.get(move.getToStatusId()))
                     .filter(Objects::nonNull)
                     // D33, subtracted from the workflow set rather than replacing it — the same
                     // narrowing GET /issues/{key} applies, so a card and its detail page cannot
                     // offer different moves to one caller.
                     .filter(status -> !withholdDone || status.getKind() != IssueStatusKind.DONE)
+                    .forEach(status -> offered.put(status.getId(), status));
+
+            IssueStatus origin = blockedOriginOf(issue);
+            if (origin != null && (!withholdDone || origin.getKind() != IssueStatusKind.DONE)) {
+                offered.put(origin.getId(), origin);
+            }
+
+            return offered.values().stream()
                     .sorted(Comparator.comparingInt(IssueStatus::getPosition))
                     .map(Facts::viewOf)
                     .toList();

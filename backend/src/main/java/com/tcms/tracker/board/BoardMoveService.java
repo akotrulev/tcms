@@ -80,8 +80,8 @@ public class BoardMoveService {
         record NotAllowed(String from, String to) implements Outcome {
         }
 
-        /** D31 — an epic's status is derived from its stories and is not editable. */
-        record DerivedStatus() implements Outcome {
+        /** 021 §2.3 — a {@code blocking} column, dragged onto from a {@code DONE} status. */
+        record BlockingFromDone(String from) implements Outcome {
         }
 
         /**
@@ -144,7 +144,8 @@ public class BoardMoveService {
         return switch (outcome) {
             case TransitionService.Outcome.NotAllowed refused ->
                     new Outcome.NotAllowed(refused.from(), refused.to());
-            case TransitionService.Outcome.DerivedStatus ignored -> new Outcome.DerivedStatus();
+            case TransitionService.Outcome.BlockingFromDone refused ->
+                    new Outcome.BlockingFromDone(refused.from());
             // The column's default is one of the statuses it claims, and every claimed status is one
             // of the project's — BoardConfigService refuses a board where either is false. Reaching
             // here means a row was written past that gate, which is a defect rather than an answer.

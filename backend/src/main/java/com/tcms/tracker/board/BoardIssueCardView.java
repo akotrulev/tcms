@@ -15,16 +15,20 @@ import java.util.UUID;
  * a synthetic id. Every card here is an issue with a real key, so the fields that exist only to
  * describe a derived card would be constant and misleading.
  *
- * @param status            for an Epic this is the <strong>derived</strong> status (D31), the same
- *                          value {@code GET /issues/&#123;key&#125;} shows — an epic reading "In
- *                          Progress" on the board while its detail page says it is done is the
- *                          disagreement D31 exists to make unrepresentable
+ * @param status            the issue's stored status at every level — ~~derived for an Epic
+ *                          (D31)~~ → superseded (021 R10). The same value
+ *                          {@code GET /issues/&#123;key&#125;} shows, which is the part that has
+ *                          not changed: a board and a detail page must not spell one issue's
+ *                          status two ways
  * @param rank              a decimal as a string, for {@link RankResultView#rank()}'s reason
  * @param allowedTransitions §12.4, verbatim and load-bearing: the legal set must be known
  *                          client-side <em>before the drag starts</em>, so a forbidden drop is
  *                          refused at the drag with the reason rather than accepted and reverted.
- *                          Empty for an Epic (D31), and <strong>caller-scoped</strong> under
- *                          D33's review-to-close gate: {@code DONE}-kind targets are absent for a
+ *                          ~~Empty for an Epic (D31)~~ → superseded (021 R10): an epic moves like
+ *                          a story. From the {@code blocking} status the remembered origin is in
+ *                          the set with no {@code issue_transition} row behind it (D-c), because a
+ *                          legal target withheld here is §12.4 the wrong way round. And
+ *                          <strong>caller-scoped</strong> under D33's review-to-close gate: {@code DONE}-kind targets are absent for a
  *                          caller who is this issue's assignee on a project that requires review
  *                          to close, so the drag is refused before it starts rather than by the
  *                          endpoint afterwards

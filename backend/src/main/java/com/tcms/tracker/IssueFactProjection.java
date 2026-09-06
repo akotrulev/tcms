@@ -46,14 +46,21 @@ import org.springframework.transaction.annotation.Transactional;
  * arrives late writes the current truth rather than a stale one. Nothing is read from the event, so
  * there is nothing in it that can drift from the issue.
  *
- * <h2>An epic's {@code status_kind} is DERIVED here, exactly as it is on the wire</h2>
+ * <h2>An epic's {@code status_kind} is its OWN, exactly as it is on the wire</h2>
  *
- * <p>D31 puts an epic's status in {@link EpicStatus} and the endpoints refuse to let anybody set it.
- * If this projection copied the stored {@code status_id} instead, a report and the epic's own screen
- * would answer differently about the same epic — which is the disagreement D31 exists to make
- * unrepresentable, reappearing one table over. The {@code CASE} below is
- * {@link EpicStatus#of}'s four arms in SQL, and {@code IssueFactProjectionTest} asserts the two
- * agree rather than trusting this paragraph.
+ * <p>~~Derived here from the epic's stories (D31), because the endpoints refused to let anybody set
+ * an epic's status and a copied {@code status_id} would make a report and the epic's own screen
+ * answer differently about the same epic.~~ → superseded (021 R10). The endpoints let the PO set it
+ * now, so the stored column IS the answer both give, and the four-armed {@code CASE} that used to
+ * live here — the third spelling of a rule that had two too many — is gone with it. The reason for
+ * the paragraph has not changed: the projection must say what the wire says, and what the wire says
+ * changed. {@code IssueFactProjectionTest} still asserts the two agree rather than trusting this.
+ *
+ * <p><strong>Nothing downstream changes meaning by accident.</strong> {@code reporting} and
+ * {@code work} band this column into burn-up, cycle time and flow, and an epic's kind is still one
+ * of the same three — it is now the kind of the status the epic is sitting in rather than a roll-up
+ * of the statuses under it. Stories and tasks, which is what those figures are computed over,
+ * were never touched by the {@code CASE} at all.
  */
 @Service
 public class IssueFactProjection {
@@ -73,56 +80,27 @@ public class IssueFactProjection {
                     status_name, status_kind, epic_id, parent_id, assignee_id, estimate_hours,
                     release_id, created_at, status_entered_at, done_at, release_assigned_at,
                     deleted_at)
-            SELECT f.id, f.company_id, f.project_id, f.issue_key, f.title,
-                   f.type_name, f.type_level, f.counts_toward_completion,
-                   COALESCE(ds.name, f.status_name), f.derived_kind,
-                   f.epic_id, f.parent_id, f.assignee_id, f.estimate_hours,
-                   f.release_id, f.created_at, f.status_entered_at, f.done_at,
-                   CASE WHEN f.release_id IS NOT NULL THEN now() END,
-                   f.deleted_at
-              FROM (
-                    SELECT i.id, i.company_id, i.project_id, i.issue_key, i.title,
-                           t.name AS type_name, t.level AS type_level,
-                           t.counts_toward_completion,
-                           s.name AS status_name,
-                           CASE WHEN t.level <> 'EPIC'            THEN s.kind
-                                WHEN COALESCE(kids.counted, 0) = 0 THEN 'NOT_STARTED'
-                                WHEN kids.done = kids.counted      THEN 'DONE'
-                                WHEN kids.fresh = kids.counted     THEN 'NOT_STARTED'
-                                ELSE 'IN_PROGRESS'
-                           END AS derived_kind,
-                           CASE WHEN pt.level = 'EPIC' THEN p.id
-                                WHEN gt.level = 'EPIC' THEN g.id
-                           END AS epic_id,
-                           i.parent_id, i.assignee_id, i.estimate_hours, i.release_id,
-                           i.created_at, i.status_entered_at, i.done_at, i.deleted_at
-                      FROM issue            i
-                      JOIN issue_type       t  ON t.id  = i.type_id
-                      JOIN issue_status     s  ON s.id  = i.status_id
-                      LEFT JOIN issue       p  ON p.id  = i.parent_id
-                      LEFT JOIN issue_type  pt ON pt.id = p.type_id
-                      LEFT JOIN issue       g  ON g.id  = p.parent_id
-                      LEFT JOIN issue_type  gt ON gt.id = g.type_id
-                      LEFT JOIN LATERAL (
-                               SELECT count(*)                                          AS counted,
-                                      count(*) FILTER (WHERE cs.kind = 'DONE')          AS done,
-                                      count(*) FILTER (WHERE cs.kind = 'NOT_STARTED')   AS fresh
-                                 FROM issue        c
-                                 JOIN issue_type   ct ON ct.id = c.type_id
-                                 JOIN issue_status cs ON cs.id = c.status_id
-                                WHERE c.parent_id = i.id
-                                  AND c.deleted_at IS NULL
-                                  AND ct.counts_toward_completion
-                           ) kids ON t.level = 'EPIC'
-                   ) f
-              LEFT JOIN LATERAL (
-                       SELECT ps.name
-                         FROM issue_status ps
-                        WHERE ps.project_id = f.project_id
-                          AND ps.kind = f.derived_kind
-                        ORDER BY ps."position"
-                        LIMIT 1
-                   ) ds ON f.type_level = 'EPIC'
+            SELECT i.id, i.company_id, i.project_id, i.issue_key, i.title,
+                   t.name, t.level, t.counts_toward_completion,
+                   -- 021 R10: the status the issue is IN, at every level. An epic used to get a
+                   -- CASE over its children here and a lateral join to spell the derived kind
+                   -- with one of this project's own status names; both are gone, because the
+                   -- epic's own row is now the answer the wire gives.
+                   s.name, s.kind,
+                   CASE WHEN pt.level = 'EPIC' THEN p.id
+                        WHEN gt.level = 'EPIC' THEN g.id
+                   END,
+                   i.parent_id, i.assignee_id, i.estimate_hours, i.release_id,
+                   i.created_at, i.status_entered_at, i.done_at,
+                   CASE WHEN i.release_id IS NOT NULL THEN now() END,
+                   i.deleted_at
+              FROM issue            i
+              JOIN issue_type       t  ON t.id  = i.type_id
+              JOIN issue_status     s  ON s.id  = i.status_id
+              LEFT JOIN issue       p  ON p.id  = i.parent_id
+              LEFT JOIN issue_type  pt ON pt.id = p.type_id
+              LEFT JOIN issue       g  ON g.id  = p.parent_id
+              LEFT JOIN issue_type  gt ON gt.id = g.type_id
                 ON CONFLICT (issue_id) DO UPDATE
                SET issue_key                = EXCLUDED.issue_key,
                    title                    = EXCLUDED.title,

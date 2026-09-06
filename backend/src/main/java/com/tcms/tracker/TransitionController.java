@@ -64,14 +64,15 @@ public class TransitionController {
                                 "This project's workflow does not allow an issue to go from "
                                         + refused.from() + " to " + refused.to() + ". Someone who "
                                         + "can edit the workflow can add that step."));
-                // D31, and the sentence says where the status DOES come from — an epic that read
-                // "In Progress" while its stories were all done is the disagreement this refusal
-                // exists to make unrepresentable.
-                case TransitionService.Outcome.DerivedStatus ignored -> ResponseEntity
+                // 021 §2.3, and the sentence deliberately does NOT offer to edit the workflow:
+                // adding the pair would not make this legal, because the refusal is about the
+                // issue being finished rather than about the project's rules.
+                case TransitionService.Outcome.BlockingFromDone refused -> ResponseEntity
                         .status(HttpStatus.CONFLICT)
-                        .body(Problem.conflict("An Epic's status is not set by hand",
-                                "It follows its stories: not started until one of them starts, "
-                                        + "and done when the last one is done."));
+                        .body(Problem.conflict("Finished work cannot be blocked",
+                                "This issue is in " + refused.from() + ", which is a done status, "
+                                        + "and Blocked is where work waits. Move it back into the "
+                                        + "flow first if it needs more work."));
                 // D33. A 409 like the other two refusals and not a 403: the caller HOLDS
                 // issue:edit — the move is refused by the project's policy about who may close
                 // their own work, which is a state conflict rather than a missing permission.

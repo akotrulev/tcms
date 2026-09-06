@@ -148,4 +148,23 @@ public interface IssueRepository extends JpaRepository<Issue, UUID> {
     @Transactional
     @Query("UPDATE Issue i SET i.statusId = :to WHERE i.statusId = :from AND i.deletedAt IS NULL")
     int reassignStatus(@Param("from") UUID from, @Param("to") UUID to);
+
+    /**
+     * Points a blocked issue's remembered origin at the status its neighbours were moved to
+     * (021 D-c).
+     *
+     * <p>{@code issue.blocked_from_status_id} is {@code ON DELETE SET NULL}, so nothing breaks
+     * without this — a blocked card whose origin was removed would simply lose its way back and
+     * fall through to the ordinary workflow moves. This makes it <em>follow</em> instead: the
+     * removal already asks where the issues IN that status go, and an issue blocked FROM it is
+     * work that was in that column a moment ago and is coming back to it. Answering the same
+     * question two different ways for two issues one drag apart is the surprise this closes.
+     *
+     * <p>Run BEFORE the status row is deleted, so the value written is a status that still exists
+     * — after the delete the column is already null and there is nothing left to rewrite.
+     */
+    @Modifying
+    @Transactional
+    @Query("UPDATE Issue i SET i.blockedFromStatusId = :to WHERE i.blockedFromStatusId = :from")
+    int reassignBlockedOrigin(@Param("from") UUID from, @Param("to") UUID to);
 }

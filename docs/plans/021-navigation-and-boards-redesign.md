@@ -374,6 +374,12 @@ Traps this task will hit:
   from per-board cards reads.
 - `tierClaims.test.ts`: no comment may claim a role lacks a key it holds. `board:configure` is
   Test Lead's and Project Manager's.
+- **The `blocking` radio has a server behind it since T3, and a refusal to render.** `PUT
+  .../workflow` now WRITES `IssueStatusRef.blocking` (it was read-only on the wire before) and
+  answers a document marking two statuses with a **422** naming both — declared on the operation
+  in `openapi.yaml` and in both generated copies. A radio makes two impossible client-side, so
+  the 422 is the guard against a stale tab, not the ordinary path: surface it through
+  `describeError` like any other write failure rather than as a field error.
 - Empty cells: the render's rule is blank at rest, outline only under `is-dragging` — dnd-kit's
   `isOver` is that class.
 - T1's fixtures follow **this tree's `aXxx` naming**, not the plan snippet's: `aBoardCoverage()`,
@@ -1305,7 +1311,7 @@ T3's prompt.
 - Modify: `tracker/TransitionService.java:138-200`, `IssueService.java:600-760`, `WorkflowService.java`, `EpicStatus.java`, `IssueView.java`, `IssueStatusView.java`, `board/BoardCardService.java`, `board/BoardIssueCardView.java`, `IssueFactProjection.java`
 - Test: `tracker/TransitionEndpointTest.java`, `IssueEndpointTest.java:209`, `EpicStatusTest.java`, `WorkflowEndpointTest.java`, `IssueFactProjectionTest.java`, `board/BoardCardServiceTest.java`
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 `TransitionEndpointTest`:
 
@@ -1329,7 +1335,7 @@ void blockedFromDoneRefused() { /* 409 */ }
 "an epic's fact row carries its own stored kind". `BoardCardServiceTest`: "an epic whose counted
 stories are all done reads allStoriesDone while it is not itself done".
 
-- [ ] **Step 2: Implement**
+- [x] **Step 2: Implement**
 
 `TransitionService.apply`: remove the `EPIC → Outcome.DerivedStatus()` early return. After the
 unknown-target check:
@@ -1351,13 +1357,38 @@ status is blocking. `EpicStatus` keeps `of(counted)` for the completion; add
 them. `removeStatus`: `UPDATE issue SET blocked_from_status_id = :target WHERE blocked_from_status_id = :removed`.
 `IssueFactProjection`: the epic's kind is `issue.status.kind`.
 
-- [ ] **Step 3: Gate and commit**
+- [x] **Step 3: Gate and commit** — `./gradlew build` green on shanks in 11m26s.
 
 ```bash
 ~/bin/tcms-remote sync && ~/bin/tcms-remote backend 'ulimit -n 65535; ./gradlew build'
 git add backend/src/main/java/com/tcms/tracker backend/src/test/java/com/tcms/tracker
 git commit -m "feat(tracker): epics move like stories; Blocked remembers where it came from"
 ```
+
+**Three things landed differently from the shape above.**
+
+1. **The PUT had to WRITE `blocking`, not merely count it.** `applyReplace` ignored the field
+   entirely, so "count `blocking` > 1 → 422" would have guarded a value no caller could set and
+   the count would have been permanently zero. `IssueStatus.create`/`redefine` now carry the flag,
+   and every flag is cleared and flushed BEFORE any is set — `uq_issue_status_one_blocking` is a
+   plain partial index rather than a deferred constraint, so a document moving the flag from a
+   later status to an earlier one would otherwise flush the arriving `true` against the departing
+   one and answer a legal document with a 500.
+2. **`putProjectWorkflow` declared no 422**, although `IssueStatusRef.blocking`'s own description
+   already promised one. Added to the operation and both generated copies regenerated (+13 lines
+   each, purely additive — no client code reads that body). One contract edit inside a `be` task,
+   taken rather than left, because the alternative is a contract that contradicts itself.
+3. **`BoardCardService.allowedTransitions` was missing the remembered origin.** T2 added it to
+   `IssueService` only, so the card named `Blocked · from In progress` and offered no way back —
+   §12.4 the wrong way round, a drag the client refuses and the server accepts. Both now read one
+   `blockedOriginOf`, so the chip and the offer cannot disagree.
+
+**And one thing deliberately NOT done.** `work`'s composite `/board` still gives an epic an empty
+`allowedTransitions` — it is now the only surface that does. Left alone: the contract's `BoardCard`
+still declares it, and D-n retires the whole screen in T8, so changing it is a contract edit for a
+screen being deleted. Recorded in `work/BoardService`'s javadoc and in `BoardCompositionTest` so it
+reads as a decision. The cost while it lives is a stale client-side refusal, never a wrong write —
+`POST /issues/{key}/transitions` is the only writer and it accepts the move.
 
 ---
 

@@ -10,10 +10,14 @@ import java.util.UUID;
 /**
  * One issue, with its children, watchers and legal moves — the contract's {@code Issue}.
  *
- * <p><strong>{@code allowedTransitions} is empty for an Epic</strong>, and that is the shape D31
- * asks for rather than an omission: an epic's status is derived from its stories and is not
- * editable, so there is no legal move out of it for anybody. The screen renders the moves disabled
- * rather than hidden ({@code task.html}), which is why the empty list has to be on the wire at all.
+ * <p>~~{@code allowedTransitions} is empty for an Epic (D31)~~ → superseded (021 R10): an epic's
+ * status is stored, it moves along the same workflow, and its list is the workflow's like any
+ * other issue's. The screen renders the moves disabled rather than hidden ({@code task.html}),
+ * which is why the list has to be on the wire at all rather than inferred from a permission.
+ *
+ * <p>From the project's {@code blocking} status the list also carries {@code blockedFromStatus} —
+ * a legal target with no {@code issue_transition} row behind it (021 D-c), added rather than
+ * replacing the workflow's set.
  *
  * <p>{@code allowedTransitions} is also <strong>caller-scoped</strong> under D33's review-to-close
  * gate: when a project requires review to close issues and the caller is this issue's assignee,

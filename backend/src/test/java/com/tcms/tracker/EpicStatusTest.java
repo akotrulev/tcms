@@ -7,60 +7,57 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * D31 — an epic's status, derived from its stories and not editable.
+ * ~~D31 — an epic's status, derived from its stories and not editable.~~ → superseded (021 R10).
  *
- * <p>The implementation is five lines; the value is in the last two cases.
+ * <p>The status moved onto the epic's own row and the derivation went with it, so what is left
+ * here is the <strong>nudge</strong>: every counted story is done and the epic is not. The
+ * implementation is four lines and the value is in the last two cases, which are the same two the
+ * derivation had — an empty epic and an epic of nothing but spikes must not read as finished.
+ *
+ * <p>These are the cases that decide whether a card says "ready to close" to a PO, and getting
+ * either wrong is silent: a brand-new epic wearing the nudge is not an error anywhere, it is just
+ * advice nobody should act on.
  */
-@DisplayName("EpicStatus — derived, vacuously-true-proof, and consistent with the percentage")
+@DisplayName("EpicStatus — the nudge, vacuously-true-proof, and consistent with the percentage")
 class EpicStatusTest {
 
     @Test
-    void noStoryStartedReadsNotStarted() {
-        assertThat(EpicStatus.of(List.of(notStarted(), notStarted())))
-                .isEqualTo(IssueStatusKind.NOT_STARTED);
+    void everyCountedStoryDoneIsTheNudge() {
+        // Story H5's last criterion, as 021 D-d re-reads it: "given every story in an epic is
+        // done" no longer closes the epic — it tells the PO that it could be closed, and the PO
+        // drags it. §11: the product automates no transition.
+        assertThat(EpicStatus.allStoriesDone(List.of(done(), done()))).isTrue();
     }
 
     @Test
-    void everyCountedStoryTerminalReadsDone() {
-        // Story H5's last criterion: "given every story in an epic is done, its status
-        // reads Done WITHOUT ANYONE EDITING IT". project-overview.html says the same
-        // from the other end — "closed itself when the last story closed".
-        assertThat(EpicStatus.of(List.of(done(), done()))).isEqualTo(IssueStatusKind.DONE);
+    void oneUnfinishedStoryIsNotTheNudge() {
+        assertThat(EpicStatus.allStoriesDone(List.of(done(), notStarted()))).isFalse();
+        assertThat(EpicStatus.allStoriesDone(List.of(done(), inProgress()))).isFalse();
     }
 
     @Test
-    void anythingElseReadsInProgress() {
-        assertThat(EpicStatus.of(List.of(done(), notStarted())))
-                .isEqualTo(IssueStatusKind.IN_PROGRESS);
-        assertThat(EpicStatus.of(List.of(inProgress()))).isEqualTo(IssueStatusKind.IN_PROGRESS);
+    void anEmptyEpicIsNotNudgedRatherThanVacuouslyFinished() {
+        // The vacuous-truth trap: "every counted story is done" is TRUE of an empty epic, so a
+        // naive allMatch puts "ready to close" on every epic the moment it is created — which is
+        // the one case a reader would notice immediately on the screen and no test would.
+        assertThat(EpicStatus.allStoriesDone(List.of())).isFalse();
     }
 
     @Test
-    void anEmptyEpicIsNotStartedRatherThanDone() {
-        // The vacuous-truth trap: "every counted story is terminal" is TRUE of an empty
-        // epic, so a naive allMatch reads a brand-new epic as Done. It is the one case
-        // D31 does not spell out, and the one a reader would notice immediately on the
-        // screen.
-        assertThat(EpicStatus.of(List.of())).isEqualTo(IssueStatusKind.NOT_STARTED);
+    void spikesDoNotDecideTheNudge() {
+        // Consistent with the percentage beside it. An epic whose only unfinished work is a spike
+        // shows 100%, so a card that showed 100% and withheld the nudge would be two answers to
+        // one question — which is the disagreement the shared CountedIssue list exists to prevent.
+        assertThat(EpicStatus.allStoriesDone(List.of(done(), spikeNotStarted()))).isTrue();
     }
 
     @Test
-    void spikesDoNotDecideAnEpicsStatus() {
-        // Consistent with the percentage beside it. An epic whose only unfinished work
-        // is a spike shows 100% — so it must not also show "In Progress", which is
-        // precisely the disagreement D31 exists to make unrepresentable.
-        assertThat(EpicStatus.of(List.of(done(), spikeNotStarted())))
-                .isEqualTo(IssueStatusKind.DONE);
-    }
-
-    @Test
-    void anEpicOfNothingButSpikesIsNotStarted() {
-        // The two rules above meet here: excluding spikes leaves an empty list, and an
-        // empty epic is NOT_STARTED rather than Done. Without this case, "spikes are
-        // excluded" and "empty is not started" can each be right while their
-        // conjunction reads a brand-new epic full of research as finished.
-        assertThat(EpicStatus.of(List.of(spikeNotStarted(), spikeNotStarted())))
-                .isEqualTo(IssueStatusKind.NOT_STARTED);
+    void anEpicOfNothingButSpikesIsNotNudged() {
+        // The two rules above meet here: excluding spikes leaves an empty list, and an empty epic
+        // is not nudged. Without this case, "spikes are excluded" and "empty is not nudged" can
+        // each be right while their conjunction tells a PO to close an epic full of open research.
+        assertThat(EpicStatus.allStoriesDone(List.of(spikeNotStarted(), spikeNotStarted())))
+                .isFalse();
     }
 
     // =====================================================================

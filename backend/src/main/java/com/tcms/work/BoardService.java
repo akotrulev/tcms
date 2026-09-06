@@ -763,10 +763,17 @@ public class BoardService {
      * anything — and what makes a board that offers a move the endpoint would then refuse
      * impossible rather than merely unlikely.
      *
-     * <p><strong>Empty for an Epic</strong> (D31): an epic's status is derived from its stories and
-     * is not editable, so there is no legal move out of it for anybody. {@code IssueView} answers
-     * the same empty list and {@code TransitionService} refuses the move, so the three are one
-     * decision expressed three times rather than three rules that could drift.
+     * <p><strong>Empty for an Epic</strong> — and since 021 R10 this is the last surface where
+     * that is true, so it is a deliberate leftover rather than the rule it used to be. An epic's
+     * status is stored now and {@code POST /issues/&#123;key&#125;/transitions} accepts the move;
+     * this board keeps the empty list because it retires in 021 T8 (D-n) and the contract's
+     * {@code BoardCard} still declares it. The cost meanwhile is a drag refused client-side on a
+     * screen the project boards replaced, never a write that disagrees with the tracker.
+     *
+     * <p>~~(D31): an epic's status is derived from its stories and is not editable, so there is no
+     * legal move out of it for anybody. {@code IssueView} answers the same empty list and
+     * {@code TransitionService} refuses the move, so the three are one decision expressed three
+     * times rather than three rules that could drift.~~ → two of the three inverted by R10.
      */
     private BoardCardView cardFor(
             BoardFacts.AssignedIssue issue,

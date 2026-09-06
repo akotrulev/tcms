@@ -91,6 +91,18 @@ public class WorkflowService {
         record StatusInUse(String name, long count) implements Outcome {
         }
 
+        /**
+         * 021 D-b — the document marks two statuses {@code blocking}, and names them.
+         *
+         * <p>Refused here rather than left to {@code uq_issue_status_one_blocking}, which would
+         * answer the same document with a constraint violation and a 500. The index stays because
+         * it is the backstop; this is the sentence a person can act on.
+         *
+         * @param names both, in the submitted order, so the message says which two
+         */
+        record TwoBlockingStatuses(List<String> names) implements Outcome {
+        }
+
         /** Removing this would leave the project with no {@code DONE}-kind status at all. */
         record LastDoneStatus() implements Outcome {
         }
@@ -150,6 +162,17 @@ public class WorkflowService {
         if (!errors.isEmpty()) {
             return new Outcome.Invalid(errors);
         }
+        // 021 D-b. "Which status is the blocking one" is read to decide what to write into
+        // issue.blocked_from_status_id, so two of them would make that write pick one at random —
+        // which is why the database holds the rule too. Counted here so the answer is a sentence
+        // naming both rather than a unique-index violation.
+        List<String> blocking = submitted.statuses().stream()
+                .filter(IssueStatusView::blocking)
+                .map(status -> status.name().strip())
+                .toList();
+        if (blocking.size() > 1) {
+            return new Outcome.TwoBlockingStatuses(blocking);
+        }
 
         Map<UUID, IssueStatus> stored = new LinkedHashMap<>();
         statuses.findByProjectIdOrderByPositionAsc(project.getId())
@@ -174,6 +197,16 @@ public class WorkflowService {
         }
 
         UUID companyId = CompanyContext.require();
+        // EVERY flag off, and flushed, BEFORE any of them is set. uq_issue_status_one_blocking is a
+        // plain partial unique index rather than a deferred constraint, so a document that moves
+        // `blocking` from a later status to an earlier one would otherwise flush the arriving true
+        // while the departing one is still true — a 500 for a document that is perfectly legal.
+        stored.values().stream().filter(IssueStatus::isBlocking).forEach(status -> {
+            status.clearBlocking();
+            statuses.save(status);
+        });
+        statuses.flush();
+
         List<IssueStatus> live = new ArrayList<>();
         // The arriving status, and the one it was placed after — null when it was placed first.
         // The NEIGHBOUR is what decides which boards claim it (021 §2.2), so it has to be captured
@@ -186,11 +219,12 @@ public class WorkflowService {
             if (existing == null) {
                 IssueStatus created = statuses.save(IssueStatus.create(
                         UUID.randomUUID(), companyId, project.getId(),
-                        status.name().strip(), status.kind(), position));
+                        status.name().strip(), status.kind(), position, status.blocking()));
                 live.add(created);
                 arrived.put(created, position == 0 ? null : live.get(position - 1));
             } else {
-                existing.redefine(status.name().strip(), status.kind(), position);
+                existing.redefine(
+                        status.name().strip(), status.kind(), position, status.blocking());
                 live.add(statuses.save(existing));
             }
             position++;
@@ -317,6 +351,12 @@ public class WorkflowService {
         // The move and the removal in one transaction, so there is no window in which an issue
         // points at a status that is gone.
         int moved = issues.reassignStatus(statusId, destination.get().getId());
+        // And the blocked cards that REMEMBER it follow the ones that are IN it (021 D-c). The
+        // column is ON DELETE SET NULL, so nothing breaks without this — a blocked issue would
+        // simply lose its way back. It follows instead, because the caller has already answered
+        // "where does this column's work go" and an issue blocked FROM it was in that column a
+        // drag ago. Before the delete: afterwards the value is already null.
+        issues.reassignBlockedOrigin(statusId, destination.get().getId());
         transitions.deleteAll(transitions.findByProjectId(project.getId()).stream()
                 .filter(move -> move.getFromStatusId().equals(statusId)
                         || move.getToStatusId().equals(statusId))

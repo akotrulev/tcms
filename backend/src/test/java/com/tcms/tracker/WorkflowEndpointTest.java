@@ -233,6 +233,71 @@ class WorkflowEndpointTest extends TrackerEndpointTestBase {
     }
 
     @Test
+    @DisplayName("a second blocking status is a 422 naming both")
+    void twoBlockingStatusesAreRefusedNamingBoth() throws Exception {
+        // 021 D-b. "Which status is the blocking one" is read to decide what to write into
+        // issue.blocked_from_status_id, so two of them make that write pick one at random.
+        // uq_issue_status_one_blocking would refuse this too — with a constraint violation and a
+        // 500, which tells the person who ticked the box nothing they can act on.
+        JsonNode workflow = workflow(LEAD);
+        ((ObjectNode) statusNode(workflow, "Rework")).put("blocking", true);
+
+        MvcResult refused = put(LEAD, workflow).andReturn();
+
+        assertThat(refused.getResponse().getStatus()).isEqualTo(422);
+        assertThat(refused.getResponse().getContentAsString())
+                .as("both, so the person knows which two to choose between")
+                .contains("Rework").contains("Blocked");
+        assertThat(blockingNames(workflow(LEAD)))
+                .as("and nothing was stored — the whole document is refused, not half applied")
+                .containsExactly("Blocked");
+    }
+
+    @Test
+    @DisplayName("the blocking flag moves to another status when the document says so")
+    void theBlockingFlagFollowsTheDocument() throws Exception {
+        // The other side of the 422: one is legal, and it has to be WRITABLE or the refusal above
+        // is guarding a field nobody can set. The move is from a LATER status to an EARLIER one on
+        // purpose — uq_issue_status_one_blocking is a plain partial index rather than a deferred
+        // constraint, so a service that flushed the arriving true before the departing false would
+        // answer a perfectly legal document with a 500.
+        JsonNode workflow = workflow(LEAD);
+        ((ObjectNode) statusNode(workflow, "Blocked")).put("blocking", false);
+        ((ObjectNode) statusNode(workflow, "Rework")).put("blocking", true);
+
+        JsonNode stored = json.readTree(
+                put(LEAD, workflow).andReturn().getResponse().getContentAsString());
+
+        assertThat(blockingNames(stored)).containsExactly("Rework");
+    }
+
+    @Test
+    @DisplayName("removing a status takes the blocked cards that REMEMBER it with the ones in it")
+    void removingAStatusRewritesTheRememberedOrigins() throws Exception {
+        // 021 D-c. blocked_from_status_id is ON DELETE SET NULL, so nothing breaks without this —
+        // the card simply loses its way back and Unblock falls through to the ordinary moves. The
+        // caller has already answered "where does this column's work go", though, and an issue
+        // blocked FROM it was in that column one drag ago: answering the same question two
+        // different ways for two issues one drag apart is the surprise this closes.
+        String issueKey = story("Waiting on the vendor");
+        moveThrough(issueKey, "Refining", "Ready to develop", "In progress", "Blocked");
+        assertThat(read(issueKey).get("blockedFromStatus").get("name").asText())
+                .isEqualTo("In progress");
+
+        JsonNode workflow = workflow(LEAD);
+        remove(idOf(workflow.get("statuses"), "In progress"),
+                idOf(workflow.get("statuses"), "Ready to develop"));
+
+        JsonNode blocked = read(issueKey);
+        assertThat(blocked.get("status").get("name").asText()).isEqualTo("Blocked");
+        assertThat(blocked.get("blockedFromStatus").get("name").asText())
+                .isEqualTo("Ready to develop");
+        assertThat(names(blocked.get("allowedTransitions")))
+                .as("and the way out follows it, because the origin IS the way out")
+                .contains("Ready to develop");
+    }
+
+    @Test
     void removingTheLastDoneStatusIsRefusedWhateverTheDestination() throws Exception {
         JsonNode workflow = workflow(LEAD);
         UUID done = idOf(workflow.get("statuses"), "Done");
@@ -325,6 +390,56 @@ class WorkflowEndpointTest extends TrackerEndpointTestBase {
         return json.readTree(mvc.perform(MockMvcRequestBuilders.get("/api/v1/issues/" + key)
                         .header("Authorization", "Bearer " + tokenFor(LEAD, ACME)))
                 .andReturn().getResponse().getContentAsString());
+    }
+
+    private void moveThrough(String key, String... statusNames) throws Exception {
+        JsonNode workflow = workflow(LEAD);
+        for (String statusName : statusNames) {
+            MvcResult result = mvc.perform(MockMvcRequestBuilders
+                            .post("/api/v1/issues/" + key + "/transitions")
+                            .header("Authorization", "Bearer " + tokenFor(LEAD, ACME))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(json.writeValueAsString(Map.of(
+                                    "statusId",
+                                    idOf(workflow.get("statuses"), statusName).toString()))))
+                    .andReturn();
+            assertThat(result.getResponse().getStatus())
+                    .as("move %s to %s: %s", key, statusName,
+                            result.getResponse().getContentAsString())
+                    .isEqualTo(200);
+        }
+    }
+
+    private void remove(UUID statusId, UUID destinationId) throws Exception {
+        MvcResult result = mvc.perform(MockMvcRequestBuilders
+                        .delete("/api/v1/projects/" + PROJECT + "/workflow/statuses/" + statusId)
+                        .header("Authorization", "Bearer " + tokenFor(LEAD, ACME))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(
+                                Map.of("reassignToStatusId", destinationId.toString()))))
+                .andReturn();
+        assertThat(result.getResponse().getStatus())
+                .as(result.getResponse().getContentAsString())
+                .isEqualTo(204);
+    }
+
+    private static JsonNode statusNode(JsonNode workflow, String name) {
+        for (JsonNode status : workflow.get("statuses")) {
+            if (status.get("name").asText().equals(name)) {
+                return status;
+            }
+        }
+        throw new AssertionError("no status called " + name);
+    }
+
+    private static List<String> blockingNames(JsonNode workflow) {
+        List<String> names = new java.util.ArrayList<>();
+        workflow.get("statuses").forEach(status -> {
+            if (status.get("blocking").asBoolean()) {
+                names.add(status.get("name").asText());
+            }
+        });
+        return names;
     }
 
     private static List<String> names(JsonNode rows) {

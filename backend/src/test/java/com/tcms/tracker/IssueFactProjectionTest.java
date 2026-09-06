@@ -36,9 +36,11 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
  *       and the two disagree <em>silently</em> — nothing breaks, nothing reddens, and a report is
  *       just wrong. {@link #nothingOutsideTrackerWritesIssueFact} is a computed check for exactly
  *       that reason: a schema-wide invariant needs a script, not a careful reading.</li>
- *   <li><strong>An epic's {@code status_kind} copied rather than derived.</strong> The obvious
- *       implementation copies {@code issue_status.kind}, and then a report and the epic's own screen
- *       answer differently about the same epic — D31's disagreement, one table over.</li>
+ *   <li><strong>An epic's {@code status_kind} disagreeing with the wire.</strong> ~~The obvious
+ *       implementation copies {@code issue_status.kind} rather than deriving it (D31).~~ →
+ *       inverted by 021 R10: copying the epic's own row IS the answer now, and the failure to
+ *       catch is a projection still rolling the children up — a report and the epic's own screen
+ *       answering differently about the same epic, which is the defect either way round.</li>
  *   <li><strong>{@code done_at} rewritten by a reopen.</strong> Every lead time computed from the
  *       column silently lengthens, and nothing fails.</li>
  *   <li><strong>A deleted issue removed from the projection</strong> rather than mirrored, which
@@ -46,7 +48,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
  * </ol>
  */
 @AutoConfigureMockMvc
-@DisplayName("issue_fact — one writer, a derived epic status, and a done_at that survives a reopen")
+@DisplayName("issue_fact — one writer, an epic's own status kind, and a done_at that survives a reopen")
 class IssueFactProjectionTest extends TrackerEndpointTestBase {
 
     private static final UUID ACME = UUID.fromString("2c000000-0000-4000-8000-000000000001");
@@ -122,28 +124,40 @@ class IssueFactProjectionTest extends TrackerEndpointTestBase {
     }
 
     @Test
-    void anEpicsStatusKindIsDerivedFromItsStoriesAndNotCopied() throws Exception {
-        // The epic sits in the project's FIRST status for its whole life — nothing ever moves it —
-        // so a projection that copied status_id would read NOT_STARTED here for ever. This is the
-        // assertion that tells the two implementations apart.
+    @DisplayName("an epic's status kind is its OWN, not a roll-up of its stories (021 R10)")
+    void anEpicsStatusKindIsItsOwn() throws Exception {
+        // The inversion. This used to prove the opposite — that the epic sits in the project's
+        // first status for its whole life, so a copied status_id would read NOT_STARTED for ever.
+        // Now that is the correct answer and the roll-up is the defect: the epic below has a story
+        // in flight underneath it and has not been groomed, and it reads New because that is where
+        // the PO left it.
         String epic = create("Epic", "Authentication", null);
         String story = create("Story", "Passkeys", epic);
         moveThrough(story, "Refining", "Ready to develop", "In progress");
         refresh();
 
-        assertThat(factFor(epic).get("status_kind")).isEqualTo("IN_PROGRESS");
+        assertThat(factFor(epic).get("status_kind")).isEqualTo("NOT_STARTED");
+        assertThat(factFor(epic).get("status_name")).isEqualTo("New");
 
-        moveThrough(story, "In review", "Ready for test", "In test", "Ready to deploy", "Done");
+        // And it follows the epic's own drag rather than its stories'. The story is untouched by
+        // this walk, so a projection still rolling the children up would not move at all.
+        moveThrough(epic, "Refining", "Ready to develop", "In progress");
         refresh();
 
-        assertThat(factFor(epic).get("status_kind")).isEqualTo("DONE");
-        // And the name is one of THIS project's own, never a hardcoded word (story B1).
-        assertThat(factFor(epic).get("status_name")).isEqualTo("Done");
+        assertThat(factFor(epic).get("status_kind")).isEqualTo("IN_PROGRESS");
+        assertThat(factFor(epic).get("status_name")).isEqualTo("In progress");
     }
 
     @Test
-    void anEmptyEpicIsNotStartedRatherThanVacuouslyDone() throws Exception {
-        String epic = create("Epic", "Nothing under it yet", null);
+    void everyStoryDoneDoesNotCloseTheEpicByItself() throws Exception {
+        // 021 §11: the product automates no transition. "All the stories are done" is a NUDGE on
+        // the card and a person drags the epic; a projection that closed it here would be the
+        // server making a claim only the PO can make, and it would do it in the table every
+        // report reads.
+        String epic = create("Epic", "Authentication", null);
+        String story = create("Story", "Passkeys", epic);
+        moveThrough(story, "Refining", "Ready to develop", "In progress", "In review",
+                "Ready for test", "In test", "Ready to deploy", "Done");
         refresh();
 
         assertThat(factFor(epic).get("status_kind")).isEqualTo("NOT_STARTED");
@@ -151,15 +165,18 @@ class IssueFactProjectionTest extends TrackerEndpointTestBase {
 
     @Test
     void theProjectionAndTheEndpointAgreeAboutAnEpic() throws Exception {
-        // Two spellings of D31 — EpicStatus.of in Java and a CASE in SQL — and this is the only
-        // thing that can catch them drifting apart. Nothing else compares them.
+        // The paragraph that survived R10 intact: the projection must say what the wire says, and
+        // this is the only thing that can catch the two drifting apart. Nothing else compares them.
         String epic = create("Epic", "Authentication", null);
         String story = create("Story", "Passkeys", epic);
         moveThrough(story, "Refining", "Ready to develop", "In progress");
+        moveThrough(epic, "Refining");
         refresh();
 
         assertThat(read(epic).get("status").get("kind").asText())
                 .isEqualTo(factFor(epic).get("status_kind"));
+        assertThat(read(epic).get("status").get("name").asText())
+                .isEqualTo(factFor(epic).get("status_name"));
     }
 
     @Test

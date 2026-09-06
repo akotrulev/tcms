@@ -52,7 +52,8 @@ public class IssueStatus {
      * a meaning by all of them to express a distinction none of them cares about.
      *
      * <p>At most one per project, held by {@code uq_issue_status_one_blocking}. Written by the
-     * seed and by V13's back-fill; the workflow editor cannot yet move it, which is 021 T3's.
+     * seed, by V13's back-fill and — since 021 T3 — by the workflow editor, which refuses a
+     * document naming two with a 422 rather than letting the index refuse it with a 500.
      */
     @Column(name = "blocking", nullable = false)
     private boolean blocking;
@@ -62,7 +63,8 @@ public class IssueStatus {
     }
 
     static IssueStatus create(
-            UUID id, UUID companyId, UUID projectId, String name, IssueStatusKind kind, int position) {
+            UUID id, UUID companyId, UUID projectId, String name, IssueStatusKind kind, int position,
+            boolean blocking) {
 
         IssueStatus created = new IssueStatus();
         created.id = id;
@@ -71,13 +73,29 @@ public class IssueStatus {
         created.name = name;
         created.kind = kind.name();
         created.position = position;
+        created.blocking = blocking;
         return created;
     }
 
-    void redefine(String name, IssueStatusKind kind, int position) {
+    void redefine(String name, IssueStatusKind kind, int position, boolean blocking) {
         this.name = name;
         this.kind = kind.name();
         this.position = position;
+        this.blocking = blocking;
+    }
+
+    /**
+     * Clears the flag ahead of a document that moves it, and nothing else.
+     *
+     * <p>Separate from {@link #redefine} because of the ORDER the index cares about:
+     * {@code uq_issue_status_one_blocking} is a plain partial unique index, not a deferred
+     * constraint, so moving {@code blocking} from a later status to an earlier one inside one PUT
+     * would flush the arriving {@code true} while the departing one is still {@code true} and be
+     * refused by the database. {@code WorkflowService} clears every status first, flushes, and
+     * only then applies the submitted flags.
+     */
+    void clearBlocking() {
+        this.blocking = false;
     }
 
     public UUID getId() {

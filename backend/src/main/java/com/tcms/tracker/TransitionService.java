@@ -126,6 +126,20 @@ public class TransitionService {
         }
 
         /**
+         * 021 §2.3 — the target is the project's {@code blocking} status and the issue is done.
+         *
+         * <p>Its own outcome rather than a {@link NotAllowed}, because the two need different
+         * sentences: {@code NotAllowed} ends "someone who can edit the workflow can add that
+         * step", and here that advice is false — a project that <em>did</em> add the pair would
+         * still be refused, and should be, since a card that is Done, blocked, and remembering
+         * Done as the way back is a state no screen can read.
+         *
+         * @param from the done status the issue is sitting in, named so the refusal says which
+         */
+        record BlockingFromDone(String from) implements Outcome {
+        }
+
+        /**
          * D33 — the caller is the assignee and this project requires a second person to close.
          *
          * @param detail the sentence the client shows, naming the move that IS open instead. A
@@ -199,6 +213,15 @@ public class TransitionService {
                                 + "\"Require review to close issues\" is on for this project. Move "
                                 + "it to In Review instead, and ask somebody to close it.");
             }
+        }
+
+        // Blocked is where work WAITS, and finished work is not waiting for anything. Checked
+        // here rather than left to the seed's omission, because `blocking` is a flag the workflow
+        // editor moves and the seed is only the shape a NEW project starts in — a project that
+        // listed Done → Blocked by hand would otherwise get a card that is done, blocked, and
+        // remembering Done as the place Unblock returns it to.
+        if (target.get().isBlocking() && current.getKind() == IssueStatusKind.DONE) {
+            return new Outcome.BlockingFromDone(current.getName());
         }
 
         // THE REMEMBERED ORIGIN IS LEGAL WITHOUT A ROW (021 D-c). Blocked is entered from every

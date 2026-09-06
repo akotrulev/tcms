@@ -94,11 +94,12 @@ public class BoardCardController {
                                 "This project's workflow does not allow an issue to go from "
                                         + refused.from() + " to " + refused.to() + ". Someone who "
                                         + "can edit the workflow can add that step."));
-                case BoardMoveService.Outcome.DerivedStatus ignored -> ResponseEntity
+                case BoardMoveService.Outcome.BlockingFromDone refused -> ResponseEntity
                         .status(HttpStatus.CONFLICT)
-                        .body(Problem.conflict("An Epic's status is not set by hand",
-                                "It follows its stories: not started until one of them starts, "
-                                        + "and done when the last one is done."));
+                        .body(Problem.conflict("Finished work cannot be blocked",
+                                "This issue is in " + refused.from() + ", which is a done status, "
+                                        + "and Blocked is where work waits. Move it back into the "
+                                        + "flow first if it needs more work."));
                 case BoardMoveService.Outcome.CloseRefused refused -> ResponseEntity
                         .status(HttpStatus.CONFLICT)
                         .body(Problem.conflict("This one needs a second person",

@@ -18,7 +18,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
 /**
- * {@code POST /issues/{key}/transitions} — the move, and the two refusals.
+ * {@code POST /issues/{key}/transitions} — the move, and the refusals.
  *
  * <h2>The failures this class exists to catch</h2>
  *
@@ -28,8 +28,14 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
  *       LINE — each status reaches the next one, plus Rework and Blocked — so most pairs have no
  *       row, and a service that accepts a pair it has no row for is green on every legal move in
  *       the product and wrong on every gate the workflow exists to express.</li>
- *   <li><strong>An epic whose status somebody set by hand.</strong> D31 derives it; a manual one is
- *       the "In Progress, 100%" disagreement the derivation exists to make unrepresentable.</li>
+ *   <li><strong>An epic that cannot be moved.</strong> ~~D31 derives an epic's status, so a manual
+ *       one is the "In Progress, 100%" disagreement the derivation exists to make
+ *       unrepresentable.~~ → inverted by 021 R10: an epic has a lifecycle of its own and the PO
+ *       drags it along the same line, so the failure this class now watches for is the opposite —
+ *       an epic silently refused, or offered a set of moves a story is not.</li>
+ *   <li><strong>Finished work being blocked.</strong> The seeded pairs never list Done → Blocked,
+ *       so a service that leant on the seed alone would look correct here and accept the move the
+ *       day somebody marks a different status {@code blocking}.</li>
  *   <li><strong>{@code done_at} cleared by a reopen.</strong> Nothing fails when it is: the row is
  *       still valid, the screen still renders, and every lead time computed from it silently
  *       lengthens. Only an assertion that reopens and re-closes can see it.</li>
@@ -38,7 +44,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
  * </ol>
  */
 @AutoConfigureMockMvc
-@DisplayName("Issue transitions — an allow-list, an epic's refusal, and done_at that survives a reopen")
+@DisplayName("Issue transitions — an allow-list, an epic that moves, and done_at that survives a reopen")
 class TransitionEndpointTest extends TrackerEndpointTestBase {
 
     private static final UUID ACME = UUID.fromString("1e000000-0000-4000-8000-000000000001");
@@ -115,14 +121,57 @@ class TransitionEndpointTest extends TrackerEndpointTestBase {
     }
 
     @Test
-    void anEpicRefusesEveryMoveBecauseItsStatusIsDerived() throws Exception {
+    @DisplayName("an epic moves along the workflow like a story (021 R10)")
+    void anEpicMovesLikeAStory() throws Exception {
+        // The inversion of this class's second failure. D31 refused every move on an epic because
+        // an epic had no lifecycle of its own; it has one now — written, refined, made ready,
+        // shipped — and the PO is the person who moves it. What stayed derived is the COMPLETION,
+        // which is a percentage and was never this endpoint's.
         JsonNode epic = epic("Authentication");
+        String key = epic.get("key").asText();
 
-        MvcResult refused =
-                attempt(LEAD, epic.get("key").asText(), statusNamed("Refining")).andReturn();
+        JsonNode moved = move(LEAD, key, statusNamed("Refining"));
+
+        assertThat(moved.get("status").get("name").asText()).isEqualTo("Refining");
+        assertThat(allowedNames(moved))
+                .as("the workflow's set, exactly as a story in Refining gets")
+                .contains("Ready to develop", "Blocked");
+    }
+
+    @Test
+    @DisplayName("an epic is refused the same pairs a story is — it is not a special case either way")
+    void anEpicIsBoundByTheSameAllowList() throws Exception {
+        // The other half of R10. "An epic moves" must not read as "an epic moves anywhere": the
+        // widening is that the EPIC branch is gone, not that the allow-list is.
+        String key = epic("Authentication").get("key").asText();
+
+        MvcResult refused = attempt(LEAD, key, statusNamed("Done")).andReturn();
 
         assertThat(refused.getResponse().getStatus()).isEqualTo(409);
-        assertThat(refused.getResponse().getContentAsString()).contains("It follows its stories");
+        assertThat(refused.getResponse().getContentAsString()).contains("from New to Done");
+    }
+
+    @Test
+    @DisplayName("Blocked from a done status is refused — finished work is not waiting for anything")
+    void blockingFromDoneIsRefused() throws Exception {
+        // The seeded pairs list Blocked from every NON-done status, so this arm cannot be proved by
+        // the seed: a service that only ever consulted issue_transition would be green here and
+        // wrong the day somebody marks a different status `blocking` in Settings. The pair is
+        // written by hand for exactly that reason — the refusal has to be the service's own.
+        String key = story("Passkeys").get("key").asText();
+        walkToReadyToDeploy(key);
+        move(LEAD, key, statusNamed("Done"));
+        allowMove("Done", "Blocked");
+
+        MvcResult refused = attempt(LEAD, key, statusNamed("Blocked")).andReturn();
+
+        assertThat(refused.getResponse().getStatus()).isEqualTo(409);
+        assertThat(refused.getResponse().getContentAsString())
+                .as("and the sentence does NOT offer to edit the workflow, because the pair is "
+                        + "already there and adding it is what just happened")
+                .contains("Finished work cannot be blocked");
+        assertThat(read(key).get("status").get("name").asText()).isEqualTo("Done");
+        assertThat(read(key).get("blockedFromStatus").isNull()).isTrue();
     }
 
     @Test
@@ -291,6 +340,30 @@ class TransitionEndpointTest extends TrackerEndpointTestBase {
         for (String name : List.of("Refining", "Ready to develop", "In progress", "In review",
                 "Ready for test", "In test", "Ready to deploy")) {
             move(LEAD, key, statusNamed(name));
+        }
+    }
+
+    /**
+     * A pair written straight into {@code issue_transition}, for a move the seed does not list.
+     *
+     * <p>Only one test wants it, and it wants the pair to EXIST so the refusal it then asserts is
+     * demonstrably the service's own rather than the allow-list's.
+     */
+    private void allowMove(String from, String to) throws Exception {
+        try (var connection = appConnection(ACME);
+                var statement = connection.prepareStatement("""
+                        INSERT INTO issue_transition (
+                                company_id, project_id, from_status_id, to_status_id)
+                        SELECT f.company_id, f.project_id, f.id, t.id
+                          FROM issue_status f, issue_status t
+                         WHERE f.project_id = CAST(? AS uuid) AND f.name = ?
+                           AND t.project_id = CAST(? AS uuid) AND t.name = ?
+                        """)) {
+            statement.setObject(1, PROJECT);
+            statement.setString(2, from);
+            statement.setObject(3, PROJECT);
+            statement.setString(4, to);
+            assertThat(statement.executeUpdate()).isEqualTo(1);
         }
     }
 

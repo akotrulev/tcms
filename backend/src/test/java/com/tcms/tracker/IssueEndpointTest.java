@@ -199,15 +199,22 @@ class IssueEndpointTest extends TrackerEndpointTestBase {
     }
 
     @Test
-    void anEpicOffersNoTransitionsAtAll() throws Exception {
-        // D31 from the read side, and it has to agree with TransitionEndpointTest's 409: the empty
-        // list and the refusal are one decision, so a screen that renders the menu from this cannot
-        // offer a move the endpoint would then refuse.
+    @DisplayName("an epic offers the same transitions a story does (021 R10)")
+    void anEpicOffersTheSameTransitionsAStoryDoes() throws Exception {
+        // ~~D31 from the read side: the empty list and TransitionService's 409 are one decision.~~
+        // → inverted by 021 R10. They are STILL one decision, and it is now the opposite one: an
+        // epic's status is stored, it moves along the workflow, and a screen rendering the menu
+        // from this list must not hide a move the endpoint would accept.
         JsonNode epic = create(LEAD, typeNamed("Epic"), "Authentication", null, null);
         JsonNode story = create(LEAD, typeNamed("Story"), "Passkeys", null, null);
 
-        assertThat(get(LEAD, epic.get("key").asText()).get("allowedTransitions")).isEmpty();
-        assertThat(get(LEAD, story.get("key").asText()).get("allowedTransitions")).isNotEmpty();
+        List<String> epicMoves = allowedNames(get(LEAD, epic.get("key").asText()));
+
+        assertThat(epicMoves).isNotEmpty();
+        // Both are in the project's first status, so the sets must be equal rather than merely
+        // both non-empty — "an epic moves" and "an epic moves like a story" are different claims.
+        assertThat(epicMoves)
+                .isEqualTo(allowedNames(get(LEAD, story.get("key").asText())));
     }
 
     @Test
@@ -611,5 +618,11 @@ class IssueEndpointTest extends TrackerEndpointTestBase {
         List<String> titles = new java.util.ArrayList<>();
         list.forEach(issue -> titles.add(issue.get("title").asText()));
         return titles;
+    }
+
+    private static List<String> allowedNames(JsonNode issue) {
+        List<String> names = new java.util.ArrayList<>();
+        issue.get("allowedTransitions").forEach(status -> names.add(status.get("name").asText()));
+        return names;
     }
 }

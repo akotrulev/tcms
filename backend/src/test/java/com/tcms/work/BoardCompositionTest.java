@@ -200,10 +200,16 @@ class BoardCompositionTest extends IntegrationTestBase {
     }
 
     @Test
-    void anEpicOffersNoMovesOnTheBoardEither() throws Exception {
-        // D31 from the board's side. The empty list, IssueView's empty list and TransitionService's
-        // 409 are one decision expressed three times, so a board that offered the workflow here
-        // would render buttons the endpoint then refuses.
+    void anEpicOffersNoMovesOnTheCompositeBoardEither() throws Exception {
+        // ~~D31 from the board's side: the empty list, IssueView's empty list and
+        // TransitionService's 409 are one decision expressed three times.~~ → 021 R10 changed two
+        // of the three, and this is now the ONE surface where an epic offers no move. Left alone
+        // deliberately rather than overlooked: the composite /board retires in T8 (021 D-n), its
+        // issue half is the Dev board, and the contract's BoardCard still says "empty for an Epic"
+        // — so changing it here would be a contract edit for a screen that is being deleted. The
+        // cost while it lives is a stale refusal at the drag on a screen the project boards have
+        // already replaced, never a wrong write: POST /issues/{key}/transitions is the only writer
+        // and it accepts the move.
         String key = givenIssue(DANA, STOREFRONT, "Epic", "Checkout hardening", DANA);
 
         assertThat(cardFor(myWork(DANA), key).get("allowedTransitions")).isEmpty();

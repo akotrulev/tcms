@@ -194,19 +194,65 @@ class BoardCardServiceTest extends TrackerEndpointTestBase {
     }
 
     @Test
-    @DisplayName("an Epic's card shows its derived status and offers no move")
-    void anEpicCardIsDerivedAndUnmovable() throws SQLException {
-        // D31. An epic reading "In progress" on the board while its detail page says it is done is
-        // the disagreement D31 exists to make unrepresentable, so both read the same derived value.
+    @DisplayName("an Epic's card shows its STORED status and offers the workflow's moves (021 R10)")
+    void anEpicCardIsStoredAndMovable() throws SQLException {
+        // ~~D31: an epic reads its derived status and offers no move.~~ → inverted by 021 R10. The
+        // sentence that survives is the one about agreement — an epic reading one thing on the
+        // board and another on its detail page is the disagreement, whichever value is right — and
+        // there is now ONE value, so the two cannot differ at all.
         String epic = epic("Payments");
         String only = story("the only story", epic, null, Priority.MEDIUM);
         moveToDone(only);
+        moveTo(epic, "Ready to develop");
 
         BoardIssueCardView card = cardFor(defaultBoard(), epic);
 
         assertThat(card.typeLevel()).isEqualTo(IssueLevel.EPIC);
-        assertThat(card.status().name()).isEqualTo("Done");
-        assertThat(card.allowedTransitions()).isEmpty();
+        assertThat(card.status().name())
+                .as("where the PO left it, not where its stories are")
+                .isEqualTo("Ready to develop");
+        assertThat(card.allowedTransitions())
+                .as("the workflow's set, like any other card's — the PO drags it to ship it")
+                .isNotEmpty();
+    }
+
+    @Test
+    @DisplayName("an epic whose stories are all done is NUDGED, never moved (021 D-d)")
+    void anEpicWhoseStoriesAreAllDoneIsNudged() throws SQLException {
+        // §11: the product automates no transition. "All the stories are done" and "this body of
+        // work is finished" are different claims and only a person can make the second, so the
+        // flag is advice on the card and the epic stays where the PO left it.
+        //
+        // The flag only became EXPRESSIBLE with R10. It used to compare the epic's derived status
+        // against the very stories the status was derived FROM, so "all done and not itself done"
+        // was arithmetically unreachable and the value could only ever be false.
+        String epic = epic("Payments");
+        String only = story("the only story", epic, null, Priority.MEDIUM);
+        moveToDone(only);
+        moveTo(epic, "Ready to develop");
+
+        BoardIssueCardView card = cardFor(defaultBoard(), epic);
+
+        assertThat(card.allStoriesDone()).isTrue();
+        assertThat(card.status().name()).isEqualTo("Ready to develop");
+    }
+
+    @Test
+    @DisplayName("an epic that has been shipped is not nudged to ship again")
+    void aDoneEpicIsNotNudged() throws SQLException {
+        String epic = epic("Payments");
+        moveToDone(story("the only story", epic, null, Priority.MEDIUM));
+        moveToDone(epic);
+
+        assertThat(cardFor(defaultBoard(), epic).allStoriesDone()).isFalse();
+    }
+
+    @Test
+    @DisplayName("an epic with no stories at all is not nudged")
+    void anEmptyEpicIsNotNudged() throws SQLException {
+        // The vacuous truth, from the board's side: allMatch is true of an empty list, so a naive
+        // read puts "ready to close" on every epic the moment somebody creates one.
+        assertThat(cardFor(defaultBoard(), epic("Payments")).allStoriesDone()).isFalse();
     }
 
     @Test

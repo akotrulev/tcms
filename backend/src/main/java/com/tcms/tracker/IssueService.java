@@ -636,9 +636,11 @@ public class IssueService {
         boolean isEpic = type.getLevel() == IssueLevel.EPIC;
 
         /*
-          D8 and D31, from ONE list, which is the whole reason CountedIssue is shared. An epic
-          reading "In Progress" beside a completion of 100% is the disagreement D31 exists to make
-          unrepresentable, and two lists is how it would come back.
+          D8. ~~And D31, from ONE list~~ → superseded (021 R10): the status left this list and the
+          PERCENTAGE stayed, which is the half D31 was always right about. An epic now has a
+          lifecycle of its own — written, refined, made ready, shipped — and the PO moves it, so
+          the status below is the STORED one at every level. "Every story is done" is a nudge on
+          the card (BoardCardService.allStoriesDone), never a transition the server makes.
         */
         List<CountedIssue> counted = children.stream()
                 .map(child -> new CountedIssue(
@@ -646,9 +648,7 @@ public class IssueService {
                         statusesById.get(child.getStatusId()).getKind(),
                         child.getEstimateHours()))
                 .toList();
-        IssueStatusView statusView = isEpic
-                ? derivedStatus(EpicStatus.of(counted), statusesById, status)
-                : IssueStatusView.of(status);
+        IssueStatusView statusView = IssueStatusView.of(status);
         CompletionView completion = isEpic ? Completion.of(counted).view() : null;
         Issue parent = issue.getParentId() == null
                 ? null : issues.findById(issue.getParentId()).orElse(null);
@@ -695,46 +695,23 @@ public class IssueService {
                                 releaseRefsOf(children), issue, epic, today))
                         .toList(),
                 watchers.watchersOf(issue.getId()),
-                allowedTransitions(userId, issue, type, statusesById),
+                allowedTransitions(userId, issue, statusesById),
                 issue.getCreatedAt(),
                 issue.getUpdatedAt(),
                 issue.getDoneAt());
     }
 
     /**
-     * The project status that spells a derived kind — the first one at that kind, by position.
-     *
-     * <p>An epic's status is a {@link IssueStatusKind}, not a row: D31 derives it and nobody sets
-     * it, so there is no {@code status_id} that means it. The screen still has to render a NAME, and
-     * it must be one of this project's own — a hardcoded "Done" would be the word-lookup story B1
-     * exists to remove. The stored status is the fallback for a project whose workflow has no status
-     * at that kind at all, which the DONE-status rule makes impossible to reach for {@code DONE} and
-     * which is otherwise an honest "we cannot spell this".
-     */
-    private static IssueStatusView derivedStatus(
-            IssueStatusKind derived, Map<UUID, IssueStatus> statusesById, IssueStatus stored) {
-
-        return statusesById.values().stream()
-                .filter(status -> status.getKind() == derived)
-                .min(Comparator.comparingInt(IssueStatus::getPosition))
-                .map(IssueStatusView::of)
-                .orElseGet(() -> IssueStatusView.of(stored));
-    }
-
-    /**
      * The statuses this issue may legally move to, from where it stands.
      *
-     * <p><strong>Empty for an Epic</strong>, and that is D31 rather than an omission: an epic's
-     * status is derived from its stories and is not editable, so there is no legal move out of it
-     * for anybody. {@link TransitionService} refuses the move for the same reason, so the empty list
-     * and the 409 are one decision expressed twice rather than two rules that could drift.
+     * <p>~~<strong>Empty for an Epic</strong> (D31)~~ → superseded (021 R10): an epic's status is
+     * stored and it moves like a story, so the set below is the workflow's at every level and
+     * {@code type} is no longer read here at all. {@link TransitionService} accepts the same set,
+     * so the list and the 409 stay one decision expressed twice rather than two rules that drift.
      */
     private List<IssueStatusView> allowedTransitions(
-            UUID userId, Issue issue, IssueType type, Map<UUID, IssueStatus> statusesById) {
+            UUID userId, Issue issue, Map<UUID, IssueStatus> statusesById) {
 
-        if (type.getLevel() == IssueLevel.EPIC) {
-            return List.of();
-        }
         boolean withholdDone =
                 closeGuardBinds(settings.effective(issue.getProjectId()), issue, userId);
         Map<UUID, IssueStatus> offered = new LinkedHashMap<>();
