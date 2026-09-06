@@ -255,7 +255,17 @@ class ContractEnumTest {
             // serialized body in InvoiceLifecycleTest.
             Map.entry("InvoiceStatus", List.of("com.tcms.billing.InvoiceStatus")),
             Map.entry("RateCardScope", List.of("com.tcms.billing.RateCardScope")),
-            Map.entry("BudgetBasis", List.of("com.tcms.billing.BudgetBasis")));
+            Map.entry("BudgetBasis", List.of("com.tcms.billing.BudgetBasis")),
+            // 020 (M9). ONE member, and that is the decision rather than an unfinished enum
+            // (plan 020 D-c): this product records no moment at which work started —
+            // `issue_transition` is the workflow allow-list, not a history — so `STARTED` is what
+            // this gains the day a status-history table exists, and an enum member nothing can
+            // produce would be a promise in the schema rather than a fact about the data.
+            //
+            // Nested and package-private, so it is named as a string here for
+            // `ReportCapabilities`' reason and not because the pairing is in doubt.
+            Map.entry("CycleTimeMeasuredFrom",
+                    List.of("com.tcms.reporting.analytics.AnalyticsViews$MeasuredFrom")));
 
     /**
      * The contract enums with no server type at all, and what checks each instead.

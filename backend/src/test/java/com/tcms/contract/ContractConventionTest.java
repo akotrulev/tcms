@@ -1129,7 +1129,31 @@ class ContractConventionTest {
             Map.entry("ReportDefinition", List.of("com.tcms.reporting.ReportDefinitionView")),
             // Package-private inside a package-private controller, so it is doubly unnameable.
             Map.entry("ReportDefinitionInput",
-                    List.of("com.tcms.reporting.ReportDefinitionController$SaveRequest")));
+                    List.of("com.tcms.reporting.ReportDefinitionController$SaveRequest")),
+            // 020 (M9). Seven, and they are doubly unnameable for `ReportDefinitionInput`'s reason
+            // twice over: package-private, like every view in `reporting`, and nested inside a
+            // package-private holder. They are nested deliberately — the three delivery reports are
+            // one wire vocabulary read together, and seven top-level records in a package of seven
+            // classes would say they were seven independent things.
+            //
+            // The name match proposes none of them: a nested record's simple name is
+            // `AnalyticsViews$BurnUpReport`, and a pairing is looked for among top-level records.
+            // So all seven are written in by hand, which is what the rule wants — the pairing is a
+            // human's call and this is the human making it.
+            Map.entry("ReportSufficiency",
+                    List.of("com.tcms.reporting.analytics.AnalyticsViews$Sufficiency")),
+            Map.entry("BurnUpPoint",
+                    List.of("com.tcms.reporting.analytics.AnalyticsViews$BurnUpPoint")),
+            Map.entry("BurnUpReport",
+                    List.of("com.tcms.reporting.analytics.AnalyticsViews$BurnUpReport")),
+            Map.entry("CycleTimeBand",
+                    List.of("com.tcms.reporting.analytics.AnalyticsViews$CycleTimeBand")),
+            Map.entry("CycleTimeReport",
+                    List.of("com.tcms.reporting.analytics.AnalyticsViews$CycleTimeReport")),
+            Map.entry("CumulativeFlowPoint",
+                    List.of("com.tcms.reporting.analytics.AnalyticsViews$CumulativeFlowPoint")),
+            Map.entry("CumulativeFlowReport",
+                    List.of("com.tcms.reporting.analytics.AnalyticsViews$CumulativeFlowReport")));
 
     /**
      * Object schemas whose record pairing is asserted somewhere else, and where.

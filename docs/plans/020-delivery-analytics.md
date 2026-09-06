@@ -230,11 +230,27 @@ Traps this task will hit:
 - **Do not throw from inside the gate's `Function`** — an exception there unwinds the read-only
   transaction the gate opened. An unknown release id returns null from the computation and the
   controller collapses it to a 404, the way `ReportReadService`'s Optional-returning reads do.
-- **`NoVelocityAnywhereTest` greps `backend/src/main`, `frontend/src`, `packages/*/src` and
-  `docs/specs/openapi.yaml` for `velocity`, case-insensitive, and fails on a hit that is not inside a
-  comment or description saying the product has none.** Write it here rather than in T3: the module's
-  fourth done-criterion is a property of the whole tree, and a frontend session is not where a
-  backend gate belongs.
+- **`NoVelocityAnywhereTest` covers `backend/src/main` and `docs/specs/openapi.yaml` ONLY** — both
+  already declared inputs of the `:test` task. Do not widen it to `frontend/src` or `packages/`:
+  `build.gradle.kts`' own paragraph argues against declaring the SPA's source tree, and an
+  undeclared corpus makes the rule green by cache. The other half is a frontend test in T3 (D-h).
+  Strip Java comments and OpenAPI `description:` blocks before matching, or the sentences explaining
+  the absence become the thing that fails.
+- **Two contract registries will reject the seven new schemas, and each is one entry.**
+  `ContractConventionTest` pairs every object schema with the record that serves it — the records are
+  nested and package-private, so they go in `PACKAGE_PRIVATE_OWNERS` as
+  `com.tcms.reporting.analytics.AnalyticsViews$BurnUpReport` strings rather than class literals — and
+  `ContractEnumTest.OWNERS` needs `CycleTimeMeasuredFrom`. Seven pairings and one enum; without them
+  the failure names the schemas and not the fix.
+- **A native query's timestamp arrives as `java.sql.Timestamp` through JDBC and as `Instant` through
+  Hibernate 6's own mapping**, and which one depends on how the result is materialised. Read it with
+  an `instanceof` on both, never a cast — a cast that assumes either throws `ClassCastException` for
+  the other, at runtime, on a request.
+- **A text block whose last line ends in `AND ` fails the build.** `-Werror` promotes javac's
+  `[text-blocks] trailing white space will be removed` to an error, so a shared predicate is
+  concatenated after the block closes rather than interpolated into it.
+- **JDBC cannot bind an `Instant` and cannot infer a type for a null `UUID`.** In the fixture, pass
+  `instant.atOffset(ZoneOffset.UTC)` and bind a nullable id as text inside its `CAST(? AS uuid)`.
 - Java compiles with `-Werror`. Every suppressed lint needs a recorded reason.
 
 Tests: three unit tests per service minimum, JUnit 5 + AssertJ, and the three named in this plan's
@@ -329,6 +345,11 @@ Traps this task will hit:
   stale citation in `frontend/`.
 - **Export**: the mockup's header control writes a CSV of exactly the JSON already fetched, client
   side (D-m). It does not call `POST …/reports/generate` and does not create a report job.
+- **You own the frontend half of the no-velocity rule** (D-h). T2 landed `NoVelocityAnywhereTest`
+  over `backend/src/main` and `openapi.yaml`; write `frontend/src/app/noVelocity.test.ts` over
+  `frontend/src` and `packages/*/src`, comments stripped first. Without it the module's fourth
+  done-criterion is asserted over half the tree — and the half it would not cover is the half that
+  draws charts.
 
 Close-out, and it is part of this task rather than a session of its own:
 - `docs/features.md` — the analytics section, written for a reader deciding what the product does.
@@ -539,11 +560,30 @@ this team plans. The mockup states it on the screen itself, in the cycle-time pa
 sentence ships verbatim.
 
 The module's fourth done-criterion is *"no velocity chart exists anywhere"* — a property of the whole
-tree, which no screen can assert about itself. `NoVelocityAnywhereTest` greps `backend/src/main`,
-`frontend/src`, `packages/*/src` and `docs/specs/openapi.yaml`, case-insensitive, and fails on a hit
-that is not inside a comment or an OpenAPI `description` saying the product has none. It lands in
-**T2**, with the other architecture tests, rather than in the frontend session: a backend gate does
-not belong in a screen's commit.
+tree, which no screen can assert about itself. So it is asserted, case-insensitively, over source
+with comments and OpenAPI `description:` blocks stripped first, so the sentences that *explain* the
+absence are not what fails.
+
+**It is two files, and that is T2's finding rather than this plan's original shape.** The plan first
+said one backend test scanning `backend/src/main`, `frontend/src`, `packages/*/src` and
+`openapi.yaml`. That cannot be built: `backend/build.gradle.kts` declares its out-of-source test
+inputs explicitly, and its own paragraph argues against adding `frontend/src` —
+
+> A single FILE for the SPA and not its directory … `frontend/src` is another stack's whole source
+> tree and declaring it would re-run every backend test on every unrelated component edit
+
+— while a corpus that is *not* declared is worse than one that is wide: the rule then goes green by
+cache the moment nothing else in the backend changed. So it splits along the seam everything else in
+this repo splits on:
+
+| File | Corpus | Why it can watch it cheaply |
+|---|---|---|
+| `backend/…/architecture/NoVelocityAnywhereTest.java` (T2) | `backend/src/main`, `docs/specs/openapi.yaml` | both already declared inputs of the backend `:test` task |
+| `frontend/src/app/noVelocity.test.ts` (T3) | `frontend/src`, `packages/*/src` | the job that already owns both trees — `citedFiles.test.ts` reads across them in the same direction |
+
+Two files, one rule, each declared where its corpus is cheap to watch. If a cadence is ever
+introduced, **delete both in the commit that introduces it** rather than carving an exception into
+either.
 
 ### D-i — Estimate accuracy is composed on the client, and `reporting` never reads `issue_time_rollup`
 
@@ -1176,6 +1216,8 @@ with a reason rather than a flat series; `ReportingReadsAndNeverWritesTest` and
 - Create: `backend/src/test/java/com/tcms/reporting/analytics/{BurnUpServiceTest,CycleTimeServiceTest,FlowServiceTest,AnalyticsIsolationTest}.java`
 - Create: `backend/src/test/java/com/tcms/architecture/{ReportingReadsAndNeverWritesTest,NoVelocityAnywhereTest}.java`
 - Modify: `backend/src/main/java/com/tcms/reporting/package-info.java` (one paragraph — what this package may not read)
+- Modify: `backend/src/test/java/com/tcms/contract/ContractConventionTest.java` (seven pairings), `…/ContractEnumTest.java` (one enum owner)
+- Create: `backend/src/test/java/com/tcms/reporting/analytics/AnalyticsFacts.java` (the `DeliveryFacts` fake the three unit tests drive)
 
 - [ ] **Step 1: The wire records**
 
@@ -1970,6 +2012,7 @@ and plan 009's status table are closed.
 **Files:**
 - Create: `frontend/src/features/analytics/{AnalyticsPage,BurnUpFigure,CycleTimeFigure,FlowFigure,EstimateAccuracyPanel}.tsx`, `…/exportCsv.ts`
 - Create: `frontend/src/features/analytics/{AnalyticsPage,BurnUpFigure,FlowFigure}.test.tsx`
+- Create: `frontend/src/app/noVelocity.test.ts` (the frontend half of D-h)
 - Create: `frontend/src/api/queries/analytics.ts`
 - Modify: `frontend/src/api/queries/{keys,index}.ts`, `frontend/src/lib/{devFaults,labels}.ts`, `frontend/src/app/{router,AppShell}.tsx`
 - Modify: `docs/features.md`, `docs/plans/009-project-management-expansion-modules.md`
@@ -2175,6 +2218,12 @@ Use `createTestQueryClient` — **never build your own `QueryClient` in a test**
 caches. A render that trips an error boundary FAILS unless the test calls
 `renderingIntoAnErrorBoundary()` and says why; likewise `drivingAFailedRead()`.
 
+`frontend/src/app/noVelocity.test.ts` is the other half of D-h: read every `.ts`/`.tsx` under
+`frontend/src` and `../packages/*/src`, strip `/* */` and `//` comments, and assert no
+case-insensitive `velocity` survives. Assert the corpus is non-empty first — an empty walk and a
+clean tree look identical from the rule itself, which is how a source-text check passes silently the
+day a layout moves.
+
 - [ ] **Step 11: Gate, on shanks**
 
 ```bash
@@ -2233,7 +2282,8 @@ git commit -m "docs(plan): M9 done — the last module, and what is built but un
 - [ ] The release burn-up distinguishes scope added after the release was created
 - [ ] Cycle time is shown per issue type, and the screen says it is measured from creation
 - [ ] The cumulative flow reads from `issue_fact`'s status timestamps, with the fourth band named
-- [ ] No velocity chart exists anywhere in the app
+- [ ] No velocity chart exists anywhere in the app, asserted by `noVelocity.test.ts` over
+      `frontend/src` and `packages/*/src` — D-h's other half
 - [ ] build, lint and tests green on shanks
 
 ---
@@ -2251,8 +2301,9 @@ not do the work:
 3. **The cumulative flow reads from `issue_fact`'s status timestamps** — `created_at`,
    `status_entered_at`, `done_at` and `status_kind`, with the unknowable classified into its own
    fourth band rather than guessed (D-d).
-4. **No velocity chart exists anywhere** — asserted over the whole tree by `NoVelocityAnywhereTest`,
-   not promised in a comment (D-h).
+4. **No velocity chart exists anywhere** — asserted over the whole tree by two tests rather than
+   promised in a comment: `NoVelocityAnywhereTest` over the backend and the contract, and
+   `noVelocity.test.ts` over the SPA and the shared packages (D-h).
 
 Plus the module tax plan 009 charges every module: both generated clients regenerated in the contract
 commit, factories in both fixture copies, the CLI and MCP verbs with the surface doc, the fault arm

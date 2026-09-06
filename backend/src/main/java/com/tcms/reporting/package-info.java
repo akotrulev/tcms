@@ -100,6 +100,21 @@
  * which would have made a screen's module depend on which storage strategy it happened to use.
  * <strong>The cost is that nothing checks the two sides still agree about a column</strong>, and it
  * is closed by {@code RollupAgreementTest} rather than by this paragraph.
+ *
+ * <h2>{@code analytics} below is a second kind of answer, and it is not a report job</h2>
+ *
+ * <p>{@link com.tcms.reporting.analytics} (020, module M9) serves the delivery burn-up, cycle time
+ * and cumulative flow. Everything above this paragraph is a report <em>document</em> — asynchronous
+ * by contract, polled, downloaded, stored as an artifact — and nothing in that package is registered
+ * in {@link com.tcms.reporting.ReportComputations}. It answers synchronously because the screen
+ * above it has a release picker, and plan 020 D-b records the argument on both sides, including
+ * {@link com.tcms.reporting.ReportModel}'s warning about a second code path, which is what a
+ * registered adapter over the same numbers would have created.
+ *
+ * <p>That package reads {@code tracker}'s {@code issue_fact} and two columns of {@code release}
+ * through one class, {@code analytics.DeliveryFacts}, and writes neither.
+ * {@code ReportingReadsAndNeverWritesTest} asserts both over this module's source text, because the
+ * crossing is SQL and ArchUnit cannot see it.
  */
 @org.springframework.modulith.ApplicationModule(
         allowedDependencies = {"api", "tenancy", "project", "identity", "storage"})
