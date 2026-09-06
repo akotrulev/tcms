@@ -1396,12 +1396,13 @@ const issueComment: Command = {
  *
  * Which board is `boardOf`'s answer, shared with the read verbs rather than re-derived: a second
  * copy of *which board did they mean* is a second answer, and the sentence a person reads when
- * they have two boards has to be the same one from both verbs.
+ * they have two boards has to be the same one from both verbs. Since 021 D-i the answer can come
+ * from `--column` alone — three boards are seeded, so the column is usually the only thing typed.
  */
 const boardMove: Command = {
   name: 'board move',
   summary: 'Move a card to a column, and report a WIP breach it caused',
-  usage: 'tcms board move ACME-124 --column "In flight" [--board "Team board"]',
+  usage: 'tcms board move ACME-124 --column "In test" [--board "QA board"]',
   options: { column: { type: 'string' }, board: { type: 'string' } },
   // `issue:edit`, and there is no `board:move`: dragging a card changes the issue's status and a
   // second key for the same act would be one somebody could hold without being able to use it.
@@ -1409,7 +1410,10 @@ const boardMove: Command = {
   run: async (context) => {
     const { client, out, json, options, request } = context;
     const key = requireArg(context, 'issue');
-    const chosen = await boardOf(context, first(options['board']));
+    // The column is passed as well as the board: with three boards seeded per project (021 D-i)
+    // a moveless `--board` would refuse every time, and a column name unique across the boards
+    // names the board it is on.
+    const chosen = await boardOf(context, first(options['board']), first(options['column']));
 
     const config = await client.GET('/boards/{boardId}', {
       params: { path: { boardId: chosen.id } },

@@ -927,6 +927,11 @@ const listProposals: ToolDefinition = {
  * are Project Manager and up, and `move-card` costs `issue:edit`, so a single board tool would be
  * listed to a caller who 403s on most of it.
  *
+ * **Several boards per project, and each shows a subset.** ~~Every project is seeded exactly one
+ * board~~ → superseded (021 R7/D-i): PM, Dev and QA are seeded, a board claims a SUBSET of the
+ * project's statuses, and a card is therefore absent from a board rather than missing. The tool
+ * lists them when `board` is omitted, which is why that is the first call.
+ *
  * **Columns and lanes come back with their cards inside them**, not flattened with a `columnId` to
  * join on: the caller is reading a board, and a join it has to perform itself is a turn spent
  * rebuilding a shape the endpoint already had. `rank` is passed through as the string it is on the
@@ -936,7 +941,9 @@ const readBoard: ToolDefinition = {
   name: 'tcms_read_board',
   title: 'Read a board, the backlog, or the project\'s labels',
   description:
-    'What the team is working on, and in what order. Omit everything to list the boards; name a '
+    'What the team is working on, and in what order. A project has SEVERAL boards — PM, Dev and QA '
+    + 'are seeded, and they show different slices of one workflow, so a status is on some of them '
+    + 'and not others. Omit everything to list the boards; name a '
     + '`board` for its columns with their cards inside them; ask for `backlog` for every story and '
     + 'task that is not done, in the order the team will pick them up; ask for `labels` for the '
     + 'names tcms_write_issue takes. A board is a LENS over the project\'s issues — it owns '
@@ -953,7 +960,10 @@ const readBoard: ToolDefinition = {
     properties: {
       board: {
         type: 'string',
-        description: 'The board to open, by NAME — omit to list the boards this project has.',
+        description:
+          'The board to open, by NAME — one of the project\'s several (PM, Dev and QA are the '
+          + 'seeded names). Omit to list the boards this project has, which is the call to make '
+          + 'first: a card is only on the boards whose columns claim its status.',
       },
       backlog: {
         type: 'boolean',

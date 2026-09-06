@@ -459,7 +459,9 @@ export function issueType(overrides: Partial<Schemas['IssueTypeRef']> = {}): Sch
 export function issueStatus(
   overrides: Partial<Schemas['IssueStatusRef']> = {},
 ): Schemas['IssueStatusRef'] {
-  return { id: 'is-1', name: 'To Do', kind: 'NOT_STARTED', position: 0, ...overrides };
+  // `blocking` false by default: at most one status per project carries it (021 D-b), so false
+  // is the answer for ten of the eleven seeded statuses and a test about Blocked passes true.
+  return { id: 'is-1', name: 'To Do', kind: 'NOT_STARTED', position: 0, blocking: false, ...overrides };
 }
 
 export function issueSummary(
@@ -491,6 +493,8 @@ export function issue(overrides: Partial<Schemas['Issue']> = {}): Schemas['Issue
     allowedTransitions: [],
     createdAt: NOW,
     agentEligible: false,
+    // Null unless the issue is sitting in the project's `blocking` status (021 D-c).
+    blockedFromStatus: null,
     ...overrides,
   };
 }
@@ -553,7 +557,11 @@ export function label(overrides: Partial<Schemas['Label']> = {}): Schemas['Label
 export function boardSummary(
   overrides: Partial<Schemas['BoardSummary']> = {},
 ): Schemas['BoardSummary'] {
-  return { id: 'bd-1', name: 'Team board', columnCount: 3, swimlaneBy: 'NONE', ...overrides };
+  // `statusCount` agrees with `board()`'s four claimed statuses over three columns — a board
+  // claims a SUBSET since 021 R7, so the two numbers are allowed to differ and here they do.
+  return {
+    id: 'bd-1', name: 'Team board', columnCount: 3, swimlaneBy: 'NONE', statusCount: 4, ...overrides,
+  };
 }
 
 export function boardColumn(
@@ -626,6 +634,14 @@ export function boardIssueCard(
     agentEligible: false,
     subtaskTotal: 0,
     subtaskDone: 0,
+    parentKey: null,
+    blockedFromStatus: null,
+    elsewhere: [],
+    // Null, not a zeroed summary: the key is always present so a consumer can tell "not served"
+    // (021 T4 has not landed) from "none linked", and a zeroed summary would claim the second.
+    linkedCases: null,
+    allStoriesDone: false,
+    hasAcceptanceCriteria: false,
     ...overrides,
   };
 }
@@ -644,6 +660,45 @@ export function boardContents(
   overrides: Partial<Schemas['BoardContents']> = {},
 ): Schemas['BoardContents'] {
   return { boardId: 'bd-1', swimlaneBy: 'NONE', lanes: [boardLane()], breaches: [], ...overrides };
+}
+
+/**
+ * The status × board matrix (021 R7) — one row per status, naming the boards that claim it.
+ *
+ * One covered row and nothing uncovered, which is a freshly seeded project: `uncovered` is the
+ * warning the read exists to raise, so a default that carried one would make every test that never
+ * mentions coverage assert against a broken project.
+ */
+export function boardCoverage(
+  overrides: Partial<Schemas['BoardCoverage']> = {},
+): Schemas['BoardCoverage'] {
+  const status = issueStatus();
+  return {
+    projectId: IDS.project,
+    rows: [
+      {
+        status,
+        claims: [{ boardId: 'bd-1', boardName: 'Team board', columnId: 'bc-1', columnName: status.name }],
+      },
+    ],
+    uncovered: [],
+    ...overrides,
+  };
+}
+
+/** A palette row (021 D-j) — enough to draw it and to navigate, and nothing more. */
+export function issueSearchHit(
+  overrides: Partial<Schemas['IssueSearchHit']> = {},
+): Schemas['IssueSearchHit'] {
+  return {
+    key: 'ACME-118',
+    title: 'Guest checkout',
+    typeLevel: 'STORY',
+    projectId: IDS.project,
+    projectName: 'Acme Payments',
+    status: issueStatus(),
+    ...overrides,
+  };
 }
 
 export function wipBreach(overrides: Partial<Schemas['WipBreach']> = {}): Schemas['WipBreach'] {

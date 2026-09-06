@@ -250,7 +250,7 @@ describe('The delivery half', () => {
         anIssueSummary({ key: 'ACME-2' }),
         anIssueSummary({
           key: 'ACME-3',
-          status: { id: 's6', name: 'Done', kind: 'DONE', position: 5 },
+          status: { id: 's6', name: 'Done', kind: 'DONE', position: 5, blocking: false },
         }),
       ],
     })

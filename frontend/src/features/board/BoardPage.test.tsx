@@ -32,10 +32,10 @@ import { drivingAFailedWrite } from '../../test/renderFailures'
  *    move and then snaps back on the next refetch is the failure the pre-check exists to prevent.
  */
 
-const READY: IssueStatusRef = { id: 's-ready', name: 'Ready', kind: 'NOT_STARTED', position: 0 }
-const PROGRESS: IssueStatusRef = { id: 's-prog', name: 'In Progress', kind: 'IN_PROGRESS', position: 1 }
-const REVIEW: IssueStatusRef = { id: 's-rev', name: 'In Review', kind: 'IN_PROGRESS', position: 2 }
-const DONE: IssueStatusRef = { id: 's-done', name: 'Done', kind: 'DONE', position: 3 }
+const READY: IssueStatusRef = { id: 's-ready', name: 'Ready', kind: 'NOT_STARTED', position: 0, blocking: false }
+const PROGRESS: IssueStatusRef = { id: 's-prog', name: 'In Progress', kind: 'IN_PROGRESS', position: 1, blocking: false }
+const REVIEW: IssueStatusRef = { id: 's-rev', name: 'In Review', kind: 'IN_PROGRESS', position: 2, blocking: false }
+const DONE: IssueStatusRef = { id: 's-done', name: 'Done', kind: 'DONE', position: 3, blocking: false }
 
 /**
  * A card, defaults plus overrides — and **no `as BoardCard`**, which is §79's repair applied here.

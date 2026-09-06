@@ -21,6 +21,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   board,
+  boardColumn,
+  boardIssueCard,
   boardSummary,
   cardMoveResult,
   casePage,
@@ -1204,6 +1206,87 @@ describe('the board verbs', () => {
     )).toBe(EXIT.usage);
     expect(out.stderr).toContain('It has: To Do, In flight, Done');
     expect(stub.sent.some((request) => request.path.endsWith('/move'))).toBe(false);
+  });
+
+  /*
+    021 D-i. Three boards are seeded per project now — PM, Dev and QA — so the moveless spelling
+    `board move KEY --column NAME`, which §6 has always shown, would refuse on EVERY project
+    rather than on the unusual one. The column rescues it: a status is claimed by at most one
+    column per board (021 R7), so a column name found on exactly one board names that board.
+  */
+  const THREE_BOARDS = {
+    'GET /boards': {
+      status: 200,
+      body: [
+        boardSummary({ id: 'bd-1', name: 'Dev board', statusCount: 2 }),
+        boardSummary({ id: 'bd-2', name: 'QA board', statusCount: 2 }),
+      ],
+    },
+    'GET /boards/bd-1': {
+      status: 200,
+      body: board({
+        id: 'bd-1',
+        name: 'Dev board',
+        columns: [
+          boardColumn({ id: 'bc-1', name: 'In progress', position: 0 }),
+          boardColumn({ id: 'bc-9', name: 'Blocked', position: 1 }),
+        ],
+      }),
+    },
+    'GET /boards/bd-2': {
+      status: 200,
+      body: board({
+        id: 'bd-2',
+        name: 'QA board',
+        columns: [
+          boardColumn({ id: 'bc-4', name: 'In test', position: 0 }),
+          boardColumn({ id: 'bc-8', name: 'Blocked', position: 1 }),
+        ],
+      }),
+    },
+  };
+
+  it('finds the one board whose column is named, when no --board is given', async () => {
+    const out = recorder();
+    const stub = api({
+      ...scaffolding(),
+      ...THREE_BOARDS,
+      'POST /cards/ACME-124/move': { status: 200, body: cardMoveResult({ card: boardIssueCard({ columnId: 'bc-4' }) }) },
+    });
+
+    expect(await mainWith(
+      ['board', 'move', 'ACME-124', '--column', 'In test'], out, stub.fetch,
+    )).toBe(EXIT.ok);
+
+    // The QA board's column, reached without the caller naming the board — and the id proves
+    // which board was chosen, because `In test` exists on exactly one of the two.
+    expect(JSON.parse(stub.write('/move').body ?? '{}')).toEqual({ toColumnId: 'bc-4' });
+    expect(stub.sent.some((request) => request.path.endsWith('/boards/bd-2/cards/ACME-124/move')))
+      .toBe(true);
+  });
+
+  it('refuses when two boards share the column name, naming both', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), ...THREE_BOARDS });
+
+    // `Blocked` is on every board by design (021 §2.4), so it is precisely the name that cannot
+    // name a board. Silently taking the first would move the card correctly and describe it
+    // wrongly, which is the failure that reads as success.
+    expect(await mainWith(
+      ['board', 'move', 'ACME-124', '--column', 'Blocked'], out, stub.fetch,
+    )).toBe(EXIT.usage);
+    expect(out.stderr).toContain("2 boards have a column 'Blocked': Dev board, QA board");
+    expect(stub.sent.some((request) => request.path.endsWith('/move'))).toBe(false);
+  });
+
+  it('falls back to the board list when no board has the column at all', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), ...THREE_BOARDS });
+
+    expect(await mainWith(
+      ['board', 'move', 'ACME-124', '--column', 'Nowhere'], out, stub.fetch,
+    )).toBe(EXIT.usage);
+    expect(out.stderr).toContain('name one with --board: Dev board, QA board');
   });
 
   it('refuses --after with --before without sending a request', async () => {

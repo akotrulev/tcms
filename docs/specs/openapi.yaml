@@ -8748,6 +8748,29 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
 
+  /issues/search:
+    get:
+      tags: [tracker]
+      summary: Issues by key prefix or title, across the caller's projects
+      operationId: searchIssues
+      description: |
+        `issue:read`. 021 D-j — the palette's issue group. Key-prefix matches first (`ACME-1`
+        finds ACME-1, ACME-10 …), then title, case-insensitive, over every project the caller may
+        read. At most `limit` rows; the server caps at 20 when omitted (no `default:` here —
+        openapi-typescript would make the parameter required).
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50 } }
+      responses:
+        '200':
+          description: Best first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/IssueSearchHit' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /issues/{key}/transitions:
     parameters:
       - { name: key, in: path, required: true, schema: { type: string } }
@@ -8763,8 +8786,10 @@ paths:
         and the card does not move (story H5). The board refuses the drop and says why rather
         than snapping back in silence.
 
-        **An Epic is refused with a 409 whatever the target**: D31 derives an epic's status from
-        its stories and it is not editable. The message says so.
+        ~~**An Epic is refused with a 409 whatever the target**: D31 derives an epic's status from
+        its stories and it is not editable.~~ → superseded (021 R10). An epic moves like any issue.
+        Entering the `blocking` status records the origin; from it, the origin is a legal target
+        without a `transitions` row (D-c). A `blocking` target from a DONE status is refused (409).
       requestBody:
         required: true
         content:
@@ -8781,7 +8806,9 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
-          description: The workflow forbids this move, or the issue is an Epic.
+          description: |
+            The workflow forbids this move~~, or the issue is an Epic~~ → superseded (021 R10) —
+            including a `blocking` target from a DONE status.
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -9963,11 +9990,13 @@ paths:
       summary: Create a board
       operationId: createBoard
       description: |
-        `board:configure`. **Every status the project has must be claimed by exactly one column**
+        `board:configure`. ~~**Every status the project has must be claimed by exactly one column**
         (story B2) — the request is refused with 422 when a status is claimed twice or left
-        unclaimed, naming which. Postgres has no cross-table CHECK, so this is a unique index on
-        `board_column_status (board_id, status_id)` for the "twice" half plus this rule for the
-        "not at all" half.
+        unclaimed, naming which.~~ → superseded (021 R7): a status is claimed **at most once** per
+        board (422 when claimed twice, or when a column claims nothing); a status left unclaimed is
+        simply not shown on this board, and `getBoardCoverage` reports it. Postgres has no
+        cross-table CHECK, so the "twice" half is a unique index on
+        `board_column_status (board_id, status_id)` and the empty-column half is this rule.
       requestBody:
         required: true
         content:
@@ -9986,7 +10015,10 @@ paths:
           # Written inline rather than as a components/responses entry, because this contract has
           # no UnprocessableEntity component and inventing one for a single module would leave two
           # spellings of the same status.
-          description: A status is claimed twice, or left unclaimed, and the body names which.
+          description: |
+            ~~A status is claimed twice, or left unclaimed, and the body names which.~~ →
+            superseded (021 R7): a status is claimed twice, or a column claims nothing — and the
+            body names which. An unclaimed status is no longer a refusal.
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -10020,8 +10052,10 @@ paths:
       description: |
         `board:configure`. The `columns` array is a **replacement**, not a patch: a column with an
         `id` is kept and updated, one without is created, and one whose id is absent from the array
-        is deleted. Position is the array index. Same 422 as create — every status claimed exactly
-        once, and issues in a deleted column are **not** touched, because a column never owned them.
+        is deleted. Position is the array index. Same 422 as create — ~~every status claimed exactly
+        once~~ → superseded (021 R7): every status claimed **at most once**, and no empty column.
+        Issues in a deleted column are **not** touched, because a column never owned them, and a
+        status this board stops claiming is simply a status this board stops showing.
       requestBody:
         required: true
         content:
@@ -10037,7 +10071,10 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '422':
-          description: A status is claimed twice, or left unclaimed, and the body names which.
+          description: |
+            ~~A status is claimed twice, or left unclaimed, and the body names which.~~ →
+            superseded (021 R7): a status is claimed twice, or a column claims nothing — and the
+            body names which.
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -10091,6 +10128,29 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /projects/{projectId}/boards/coverage:
+    parameters:
+      - { name: projectId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [tracker]
+      summary: Which boards show each status
+      operationId: getBoardCoverage
+      description: |
+        `board:read`. 021 R7 — ~~every status must be claimed by exactly one column of every
+        board~~ → superseded: a board claims a subset, and this read is what replaced the rule.
+        One row per status in workflow order, each naming the boards (and the column on each)
+        that claim it. `uncovered` lists statuses no board claims — a card there is on no board,
+        which is the failure the old rule refused and this read reports instead. Empty for a
+        freshly seeded project.
+      responses:
+        '200':
+          description: The status × board matrix
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BoardCoverage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /boards/{boardId}/cards/{key}/move:
     parameters:
       - { name: boardId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -10130,7 +10190,9 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
-          description: The workflow forbids this move, or the issue is an Epic.
+          description: |
+            The workflow forbids this move~~, or the issue is an Epic~~ → superseded (021 R10): an
+            epic has a stored status and moves like any other card.
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -19096,12 +19158,24 @@ components:
 
     IssueStatusRef:
       type: object
-      required: [id, name, kind, position]
+      required: [id, name, kind, position, blocking]
       properties:
         id: { type: string, format: uuid }
         name: { type: string, example: In Review }
         kind: { $ref: '#/components/schemas/IssueStatusKind' }
         position: { type: integer, description: Order in the project's workflow, from 0. }
+        blocking:
+          type: boolean
+          description: |
+            021 D-b. The one status per project that remembers where a card came from: entering
+            it records `blockedFromStatus` on the issue, and that origin is a legal target on the
+            way out even when no `transitions` pair lists it (D-c). At most one status per project
+            may carry `true`; `putProjectWorkflow` refuses a second with 422.
+
+            **A flag, not a fourth `IssueStatusKind`** — blocked work is in flight and not done, so
+            it is `IN_PROGRESS` by every percentage, burn-up band and flow band that reads a kind,
+            and a fourth member would touch all of them to express a distinction none of them cares
+            about.
 
     IssueCompletion:
       type: object
@@ -19158,7 +19232,7 @@ components:
       type: object
       required:
         [key, title, type, status, projectId, projectKey, watchers, children,
-         allowedTransitions, createdAt, seq, agentEligible]
+         allowedTransitions, createdAt, seq, agentEligible, blockedFromStatus]
       properties:
         key: { type: string, example: ACME-118 }
         seq:
@@ -19184,6 +19258,14 @@ components:
               position: { type: integer }
         type: { $ref: '#/components/schemas/IssueTypeRef' }
         status: { $ref: '#/components/schemas/IssueStatusRef' }
+        blockedFromStatus:
+          allOf: [{ $ref: '#/components/schemas/IssueStatusRef' }]
+          nullable: true
+          description: |
+            Set while the issue is in the project's `blocking` status (D-b/D-c) — the status it
+            was in when it was blocked, written on entry and cleared on exit. Null everywhere else.
+            It is a legal transition target from the blocking status even when no `transitions`
+            pair lists it, which is what makes `Unblock` one click and no decision.
         statusEnteredAt: { type: string, format: date-time }
         projectId: { type: string, format: uuid }
         projectKey: { type: string }
@@ -19227,8 +19309,11 @@ components:
           type: array
           description: |
             Statuses this issue may legally move to, from where it stands. **Disabled, not
-            hidden** on the screen (`task.html`) — a caller can see the move exists. Empty for
-            an Epic: D31 derives an epic's status from its stories and it is not editable.
+            hidden** on the screen (`task.html`) — a caller can see the move exists. ~~Empty for
+            an Epic: D31 derives an epic's status from its stories and it is not editable.~~ →
+            superseded (021 R10): an epic's status is stored and it moves like a story. From a
+            `blocking` status the origin (`blockedFromStatus`) is included even when no
+            `transitions` pair lists it.
 
             **Caller-scoped under the review-to-close gate:** when `reviewEnabledIssue` is on,
             `authorMayApproveOwnWork` is off and the caller is this issue's assignee, `DONE`-kind
@@ -19251,6 +19336,21 @@ components:
             The pull request an assistant (or a person) opened for this task, reported back through
             `PATCH`. This product never opens the PR — the local agent does, with the developer's
             own git, and reports the URL (D25).
+
+    IssueSearchHit:
+      type: object
+      required: [key, title, typeLevel, projectId, projectName, status]
+      description: |
+        021 D-j. A palette row — enough to draw it and to navigate, and nothing more. The project
+        is named because the search crosses projects and two of them may hold a story with the
+        same title.
+      properties:
+        key: { type: string }
+        title: { type: string }
+        typeLevel: { $ref: '#/components/schemas/IssueLevel' }
+        projectId: { type: string, format: uuid }
+        projectName: { type: string }
+        status: { $ref: '#/components/schemas/IssueStatusRef' }
 
     IssueInput:
       type: object
@@ -19443,7 +19543,7 @@ components:
     # ------------------------------------------------- tracker.board (M2) ---
     BoardSummary:
       type: object
-      required: [id, name, columnCount, swimlaneBy]
+      required: [id, name, columnCount, swimlaneBy, statusCount]
       description: |
         A row in the board picker. `columnCount` rather than the columns themselves — the picker
         renders "4 columns" and nothing else, and shipping the layout here would make switching
@@ -19453,6 +19553,11 @@ components:
         name: { type: string }
         columnCount: { type: integer }
         swimlaneBy: { $ref: '#/components/schemas/SwimlaneBy' }
+        statusCount:
+          type: integer
+          description: |
+            How many of the project's statuses this board claims — the picker reads "5 of 11".
+            A board claims a SUBSET since 021 R7; see `getBoardCoverage`.
 
     SwimlaneBy:
       type: string
@@ -19586,11 +19691,73 @@ components:
         limit: { type: integer }
         count: { type: integer }
 
+    BoardCoverage:
+      type: object
+      required: [projectId, rows, uncovered]
+      properties:
+        projectId: { type: string, format: uuid }
+        rows:
+          type: array
+          items: { $ref: '#/components/schemas/BoardCoverageRow' }
+        uncovered:
+          type: array
+          description: |
+            The statuses no board claims, in workflow order. A card in one of these is on no
+            board at all — 021 R7 traded the rule that refused this for a read that reports it.
+          items: { $ref: '#/components/schemas/IssueStatusRef' }
+
+    BoardCoverageRow:
+      type: object
+      required: [status, claims]
+      properties:
+        status: { $ref: '#/components/schemas/IssueStatusRef' }
+        claims:
+          type: array
+          description: In board position order. Empty when the status is uncovered.
+          items: { $ref: '#/components/schemas/BoardClaim' }
+
+    BoardClaim:
+      type: object
+      required: [boardId, boardName, columnId, columnName]
+      properties:
+        boardId: { type: string, format: uuid }
+        boardName: { type: string }
+        columnId: { type: string, format: uuid }
+        columnName: { type: string }
+
+    CardElsewhere:
+      type: object
+      required: [boardId, boardName, count]
+      description: |
+        021 §2.5. For a row header: the descendants this board does NOT show, grouped by the
+        board that does. Because a status may be on two boards, "shown here" and "elsewhere"
+        can overlap; this counts the not-shown-here set, never total minus shown.
+      properties:
+        boardId: { type: string, format: uuid }
+        boardName: { type: string }
+        count: { type: integer }
+
+    LinkedCasesSummary:
+      type: object
+      required: [total, passing, failing, blocked, notRun]
+      description: |
+        021 D-k. The roll-up of `listIssueTestCases` for this card — the same `case_health`
+        rows, so a card and the story's own panel cannot disagree. An epic rolls up its stories;
+        a task carries its parent story's.
+      properties:
+        total: { type: integer }
+        passing: { type: integer }
+        failing: { type: integer }
+        blocked: { type: integer }
+        notRun: { type: integer }
+
     BoardIssueCard:
       type: object
       required:
         [key, title, typeName, typeLevel, iconCode, countsTowardCompletion, columnId, status,
-         rank, labels, allowedTransitions, subtaskTotal, subtaskDone, agentEligible]
+         rank, labels, allowedTransitions, subtaskTotal, subtaskDone, agentEligible,
+         parentKey, blockedFromStatus, elsewhere, linkedCases, allStoriesDone,
+         hasAcceptanceCriteria]
       description: |
         **Not `BoardCard`.** That schema is `work`'s composite card and carries four `kind`s, a
         `derived` flag and a synthetic id. Every card here is an issue with a real key, so the
@@ -19623,7 +19790,9 @@ components:
           description: |
             §12.4, verbatim and load-bearing: the legal set must be known **client-side before the
             drag starts**, so a forbidden drop is refused at the drag with the reason rather than
-            accepted and reverted. Empty for an Epic (D31).
+            accepted and reverted. ~~Empty for an Epic (D31)~~ → superseded (021 R10): an epic's
+            status is stored and it moves like a story. From a `blocking` status the origin is
+            included even when no `transitions` pair lists it.
 
             **Caller-scoped under the review-to-close gate:** when `reviewEnabledIssue` is on,
             `authorMayApproveOwnWork` is off and the caller is this issue's assignee, `DONE`-kind
@@ -19633,6 +19802,40 @@ components:
         subtaskTotal: { type: integer }
         subtaskDone: { type: integer, description: 'The card face reads "3/5 sub-tasks".' }
         agentEligible: { type: boolean }
+        parentKey:
+          type: string
+          nullable: true
+          description: The story a task belongs to; the epic a story belongs to; null for an epic.
+        blockedFromStatus:
+          allOf: [{ $ref: '#/components/schemas/IssueStatusRef' }]
+          nullable: true
+          description: |
+            Set while the issue is in the project's `blocking` status (D-b/D-c). The card reads
+            `Blocked · from In test`, so a blocked card sitting on somebody else's board says
+            whose problem it was.
+        elsewhere:
+          type: array
+          description: |
+            021 §2.5. Empty when every descendant this card has is shown here — which is the
+            ordinary case, and the case a row header draws no link for.
+          items: { $ref: '#/components/schemas/CardElsewhere' }
+        linkedCases:
+          allOf: [{ $ref: '#/components/schemas/LinkedCasesSummary' }]
+          nullable: true
+          description: |
+            Null until served (021 T4) and null for a card with no linked cases. **The key is
+            always present**, so a consumer tells "not served" from "none linked" by reading the
+            null rather than by a property that is missing.
+        allStoriesDone:
+          type: boolean
+          description: |
+            021 D-d. True on an EPIC whose every counted story is DONE while the epic itself is
+            not — the card says so. A nudge to the PO; the server never moves an epic on its own.
+        hasAcceptanceCriteria:
+          type: boolean
+          description: |
+            021 §2.6 — the PM board's readiness signal. True when `acceptanceCriteria` is
+            non-empty; the array itself stays off the card (it is the detail's).
 
     CardMoveInput:
       type: object

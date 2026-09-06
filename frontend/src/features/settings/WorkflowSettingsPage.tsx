@@ -27,6 +27,13 @@ interface DraftStatus {
   id: string | null;
   name: string;
   kind: IssueStatusKind;
+  /**
+   * 021 D-b's flag, carried through untouched and **not editable here yet** (021 T5 adds the
+   * control). It is on the draft because the save is a whole-document PUT: a field this screen
+   * dropped would be a field this screen silently cleared, and `blocking` is what makes `Unblock`
+   * find its way back.
+   */
+  blocking: boolean;
   /** Stable within the session, so React's key survives a reorder of an unsaved row. */
   rowId: string;
 }
@@ -178,6 +185,9 @@ function WorkflowEditor({
           name: status.name.trim(),
           kind: status.kind,
           position,
+          // Sent back as it came. A whole-document PUT drops what it omits, and this screen does
+          // not yet own the flag (021 T5) — so it round-trips rather than defaults it to false.
+          blocking: status.blocking,
         })) as ProjectWorkflow['statuses'],
         types: current.types,
         transitions: [...moves].map((pair) => {
@@ -243,6 +253,7 @@ function WorkflowEditor({
                     name: status.name,
                     kind: status.kind,
                     position: index,
+                    blocking: status.blocking,
                   });
                 }}
               />
@@ -262,7 +273,15 @@ function WorkflowEditor({
               onClick={() =>
                 setStatuses((rows) => [
                   ...rows,
-                  { id: null, name: '', kind: 'NOT_STARTED', rowId: `new-${rows.length}-${Date.now()}` },
+                  {
+                    id: null,
+                    name: '',
+                    kind: 'NOT_STARTED',
+                    // A new row is never the blocking one — there is at most one per project and
+                    // this screen has no control for it yet (021 T5).
+                    blocking: false,
+                    rowId: `new-${rows.length}-${Date.now()}`,
+                  },
                 ])
               }
             >
@@ -712,6 +731,7 @@ function draftOf(statuses: readonly IssueStatusRef[]): DraftStatus[] {
     id: status.id,
     name: status.name,
     kind: status.kind,
+    blocking: status.blocking,
     rowId: status.id,
   }));
 }

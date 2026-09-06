@@ -26,9 +26,9 @@ import {
  * screen, with nothing failing.
  */
 
-const READY: IssueStatusRef = { id: 's-ready', name: 'Ready', kind: 'NOT_STARTED', position: 0 }
-const PROGRESS: IssueStatusRef = { id: 's-prog', name: 'In Progress', kind: 'IN_PROGRESS', position: 1 }
-const DONE: IssueStatusRef = { id: 's-done', name: 'Done', kind: 'DONE', position: 2 }
+const READY: IssueStatusRef = { id: 's-ready', name: 'Ready', kind: 'NOT_STARTED', position: 0, blocking: false }
+const PROGRESS: IssueStatusRef = { id: 's-prog', name: 'In Progress', kind: 'IN_PROGRESS', position: 1, blocking: false }
+const DONE: IssueStatusRef = { id: 's-done', name: 'Done', kind: 'DONE', position: 2, blocking: false }
 
 function card(partial: Partial<BoardCard> = {}): BoardCard {
   return {
@@ -217,8 +217,8 @@ describe('immobileReason — a card that can go nowhere says which kind of nowhe
  * ids; a project board's columns are rows with real ids and may claim **several** statuses each.
  */
 
-const IN_REVIEW: IssueStatusRef = { id: 's-review', name: 'In Review', kind: 'IN_PROGRESS', position: 2 }
-const BLOCKED: IssueStatusRef = { id: 's-blocked', name: 'Blocked', kind: 'IN_PROGRESS', position: 3 }
+const IN_REVIEW: IssueStatusRef = { id: 's-review', name: 'In Review', kind: 'IN_PROGRESS', position: 2, blocking: false }
+const BLOCKED: IssueStatusRef = { id: 's-blocked', name: 'Blocked', kind: 'IN_PROGRESS', position: 3, blocking: false }
 
 /** The stakeholder board's coarse column: three statuses, defaulting to the first. */
 const IN_FLIGHT: ServerColumn = {
@@ -266,6 +266,14 @@ function issueCard(partial: Partial<BoardIssueCard> = {}): BoardIssueCard {
     allowedTransitions: [PROGRESS, DONE],
     subtaskTotal: 0,
     subtaskDone: 0,
+    parentKey: null,
+    blockedFromStatus: null,
+    elsewhere: [],
+    // Null, not a zeroed summary: 021 T4 serves this and until then the key says "not served",
+    // which is a different fact from "no cases linked" and must not read as one.
+    linkedCases: null,
+    allStoriesDone: false,
+    hasAcceptanceCriteria: false,
     ...partial,
   }
 }

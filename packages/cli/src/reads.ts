@@ -940,18 +940,26 @@ const issueContext: Command = {
 /* -------------------------------------------------------------------- board ---- */
 
 /**
- * The board a `board` command acts on, named or defaulted.
+ * The board a `board` command acts on — named, resolved from the column, or defaulted.
  *
  * §6's table spells `board move ACME-124 --column "In flight"` with no board in it, and that is
- * right for the common case: every project is seeded one board, and naming it would be a word
- * with one possible value. It is not right for a project that has grown a second, so `--board`
- * disambiguates and the refusal lists what the project has. Defaulting silently to the first of
- * several would move a card on a board the caller was not looking at.
+ * right for the common case: ~~every project is seeded one board, and naming it would be a word
+ * with one possible value~~ → **superseded (021 D-i): every project is seeded THREE** — PM, Dev
+ * and QA — so the moveless spelling would refuse on every project rather than on the unusual one.
+ *
+ * The column is what rescues it, and it rescues it honestly rather than by picking a default. A
+ * move is a status change, the column names the status, and a status is claimed by at most one
+ * column per board (021 R7) — so a column name that exists on exactly one board *names* that
+ * board. Two boards sharing the name (`Ready to develop` is on PM and Dev, `Blocked` on all
+ * three) is refused with both, because defaulting silently to the first would move a card on a
+ * board the caller was not looking at: the move would still be right and the caller's account of
+ * it wrong, which is the failure that reads as correct behaviour.
  */
-export async function boardOf(context: CommandContext, requested: string | undefined): Promise<{
-  id: string;
-  name: string;
-}> {
+export async function boardOf(
+  context: CommandContext,
+  requested: string | undefined,
+  column?: string,
+): Promise<{ id: string; name: string }> {
   const boards = await context.client.GET('/projects/{projectId}/boards', {
     params: { path: { projectId: await projectOf(context) } },
     tcms: context.request,
@@ -970,13 +978,36 @@ export async function boardOf(context: CommandContext, requested: string | undef
   }
 
   const only = boards[0];
-  if (!only || boards.length > 1) {
-    throw new UsageError(
-      `This project has ${String(boards.length)} boards — name one with --board: `
-        + `${boards.map((row) => row.name).join(', ')}.`,
-    );
+  if (only && boards.length === 1) return only;
+
+  if (column !== undefined) {
+    // One config read per board, and only on this path: a project with one board never reaches
+    // here, and a caller who named `--board` never reaches here either.
+    const configs = await Promise.all(boards.map((row) => context.client.GET('/boards/{boardId}', {
+      params: { path: { boardId: row.id } },
+      tcms: context.request,
+    })));
+    const owning = boards.filter((_, index) => configs[index]?.columns.some(
+      (candidate) => candidate.name.toLowerCase() === column.toLowerCase(),
+    ));
+
+    const one = owning[0];
+    if (one && owning.length === 1) return one;
+    if (owning.length > 1) {
+      throw new UsageError(
+        `${String(owning.length)} boards have a column '${column}': `
+          + `${owning.map((row) => row.name).join(', ')} — name one with --board.`,
+      );
+    }
+    // None claims it. Fall through to the board list rather than inventing a second refusal —
+    // the caller's next question is which boards there are, and `board move` names the columns
+    // of the board once one is chosen.
   }
-  return only;
+
+  throw new UsageError(
+    `This project has ${String(boards.length)} boards — name one with --board: `
+      + `${boards.map((row) => row.name).join(', ')}.`,
+  );
 }
 
 /** The card filter §12.2 defines — OR within a category, AND across them — as query parameters. */

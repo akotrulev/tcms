@@ -38,10 +38,10 @@ import { ProjectBoardView } from './ProjectBoardView'
  *    screen does not also appear as a card in it (D-r, answered by this task).
  */
 
-const BACKLOG: IssueStatusRef = { id: 'st-backlog', name: 'Backlog', kind: 'NOT_STARTED', position: 0 }
-const READY: IssueStatusRef = { id: 'st-ready', name: 'Ready', kind: 'NOT_STARTED', position: 1 }
-const PROGRESS: IssueStatusRef = { id: 'st-prog', name: 'In Progress', kind: 'IN_PROGRESS', position: 2 }
-const DONE: IssueStatusRef = { id: 'st-done', name: 'Done', kind: 'DONE', position: 3 }
+const BACKLOG: IssueStatusRef = { id: 'st-backlog', name: 'Backlog', kind: 'NOT_STARTED', position: 0, blocking: false }
+const READY: IssueStatusRef = { id: 'st-ready', name: 'Ready', kind: 'NOT_STARTED', position: 1, blocking: false }
+const PROGRESS: IssueStatusRef = { id: 'st-prog', name: 'In Progress', kind: 'IN_PROGRESS', position: 2, blocking: false }
+const DONE: IssueStatusRef = { id: 'st-done', name: 'Done', kind: 'DONE', position: 3, blocking: false }
 
 /**
  * A configured column — `board_column`'s shape, which is **not** `cardMove.ts`'s `BoardColumn`.

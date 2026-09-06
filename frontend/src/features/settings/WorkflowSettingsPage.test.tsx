@@ -40,7 +40,7 @@ const status = (
   name: string,
   kind: IssueStatusRef['kind'],
   position: number,
-): IssueStatusRef => ({ id, name, kind, position })
+): IssueStatusRef => ({ id, name, kind, position, blocking: false })
 
 /** The six `tcms_seed_project_defaults` actually creates (`V3`), in its order. */
 const SEEDED: IssueStatusRef[] = [

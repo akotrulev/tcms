@@ -10370,6 +10370,29 @@ export interface paths {
         patch: operations["updateIssue"];
         trace?: never;
     };
+    "/issues/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Issues by key prefix or title, across the caller's projects
+         * @description `issue:read`. 021 D-j — the palette's issue group. Key-prefix matches first (`ACME-1`
+         *     finds ACME-1, ACME-10 …), then title, case-insensitive, over every project the caller may
+         *     read. At most `limit` rows; the server caps at 20 when omitted (no `default:` here —
+         *     openapi-typescript would make the parameter required).
+         */
+        get: operations["searchIssues"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/issues/{key}/transitions": {
         parameters: {
             query?: never;
@@ -10390,8 +10413,10 @@ export interface paths {
          *     and the card does not move (story H5). The board refuses the drop and says why rather
          *     than snapping back in silence.
          *
-         *     **An Epic is refused with a 409 whatever the target**: D31 derives an epic's status from
-         *     its stories and it is not editable. The message says so.
+         *     ~~**An Epic is refused with a 409 whatever the target**: D31 derives an epic's status from
+         *     its stories and it is not editable.~~ → superseded (021 R10). An epic moves like any issue.
+         *     Entering the `blocking` status records the origin; from it, the origin is a legal target
+         *     without a `transitions` row (D-c). A `blocking` target from a DONE status is refused (409).
          */
         post: operations["transitionIssue"];
         delete?: never;
@@ -11309,11 +11334,13 @@ export interface paths {
         put?: never;
         /**
          * Create a board
-         * @description `board:configure`. **Every status the project has must be claimed by exactly one column**
+         * @description `board:configure`. ~~**Every status the project has must be claimed by exactly one column**
          *     (story B2) — the request is refused with 422 when a status is claimed twice or left
-         *     unclaimed, naming which. Postgres has no cross-table CHECK, so this is a unique index on
-         *     `board_column_status (board_id, status_id)` for the "twice" half plus this rule for the
-         *     "not at all" half.
+         *     unclaimed, naming which.~~ → superseded (021 R7): a status is claimed **at most once** per
+         *     board (422 when claimed twice, or when a column claims nothing); a status left unclaimed is
+         *     simply not shown on this board, and `getBoardCoverage` reports it. Postgres has no
+         *     cross-table CHECK, so the "twice" half is a unique index on
+         *     `board_column_status (board_id, status_id)` and the empty-column half is this rule.
          */
         post: operations["createBoard"];
         delete?: never;
@@ -11356,8 +11383,10 @@ export interface paths {
          * Rename a board, or redefine its columns
          * @description `board:configure`. The `columns` array is a **replacement**, not a patch: a column with an
          *     `id` is kept and updated, one without is created, and one whose id is absent from the array
-         *     is deleted. Position is the array index. Same 422 as create — every status claimed exactly
-         *     once, and issues in a deleted column are **not** touched, because a column never owned them.
+         *     is deleted. Position is the array index. Same 422 as create — ~~every status claimed exactly
+         *     once~~ → superseded (021 R7): every status claimed **at most once**, and no empty column.
+         *     Issues in a deleted column are **not** touched, because a column never owned them, and a
+         *     status this board stops claiming is simply a status this board stops showing.
          */
         patch: operations["updateBoard"];
         trace?: never;
@@ -11379,6 +11408,33 @@ export interface paths {
          *     `labelId=a&labelId=b&assigneeId=c` is *(a or b) and c*.
          */
         get: operations["getBoardCards"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/boards/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Which boards show each status
+         * @description `board:read`. 021 R7 — ~~every status must be claimed by exactly one column of every
+         *     board~~ → superseded: a board claims a subset, and this read is what replaced the rule.
+         *     One row per status in workflow order, each naming the boards (and the column on each)
+         *     that claim it. `uncovered` lists statuses no board claims — a card there is on no board,
+         *     which is the failure the old rule refused and this read reports instead. Empty for a
+         *     freshly seeded project.
+         */
+        get: operations["getBoardCoverage"];
         put?: never;
         post?: never;
         delete?: never;
@@ -18097,6 +18153,18 @@ export interface components {
             kind: components["schemas"]["IssueStatusKind"];
             /** @description Order in the project's workflow */
             position: number;
+            /**
+             * @description 021 D-b. The one status per project that remembers where a card came from: entering
+             *     it records `blockedFromStatus` on the issue, and that origin is a legal target on the
+             *     way out even when no `transitions` pair lists it (D-c). At most one status per project
+             *     may carry `true`; `putProjectWorkflow` refuses a second with 422.
+             *
+             *     **A flag, not a fourth `IssueStatusKind`** — blocked work is in flight and not done, so
+             *     it is `IN_PROGRESS` by every percentage, burn-up band and flow band that reads a kind,
+             *     and a fourth member would touch all of them to express a distinction none of them cares
+             *     about.
+             */
+            blocking: boolean;
         };
         /**
          * @description D8, and **the basis is on the wire — never inferred by the client.** An unestimated epic
@@ -18174,6 +18242,13 @@ export interface components {
             }[];
             type: components["schemas"]["IssueTypeRef"];
             status: components["schemas"]["IssueStatusRef"];
+            /**
+             * @description Set while the issue is in the project's `blocking` status (D-b/D-c) — the status it
+             *     was in when it was blocked, written on entry and cleared on exit. Null everywhere else.
+             *     It is a legal transition target from the blocking status even when no `transitions`
+             *     pair lists it, which is what makes `Unblock` one click and no decision.
+             */
+            blockedFromStatus: components["schemas"]["IssueStatusRef"] | null;
             /** Format: date-time */
             statusEnteredAt?: string;
             /** Format: uuid */
@@ -18220,8 +18295,11 @@ export interface components {
             watchers: components["schemas"]["UserRef"][];
             /**
              * @description Statuses this issue may legally move to, from where it stands. **Disabled, not
-             *     hidden** on the screen (`task.html`) — a caller can see the move exists. Empty for
-             *     an Epic: D31 derives an epic's status from its stories and it is not editable.
+             *     hidden** on the screen (`task.html`) — a caller can see the move exists. ~~Empty for
+             *     an Epic: D31 derives an epic's status from its stories and it is not editable.~~ →
+             *     superseded (021 R10): an epic's status is stored and it moves like a story. From a
+             *     `blocking` status the origin (`blockedFromStatus`) is included even when no
+             *     `transitions` pair lists it.
              *
              *     **Caller-scoped under the review-to-close gate:** when `reviewEnabledIssue` is on,
              *     `authorMayApproveOwnWork` is off and the caller is this issue's assignee, `DONE`-kind
@@ -18247,6 +18325,20 @@ export interface components {
              *     own git, and reports the URL (D25).
              */
             prUrl?: string | null;
+        };
+        /**
+         * @description 021 D-j. A palette row — enough to draw it and to navigate, and nothing more. The project
+         *     is named because the search crosses projects and two of them may hold a story with the
+         *     same title.
+         */
+        IssueSearchHit: {
+            key: string;
+            title: string;
+            typeLevel: components["schemas"]["IssueLevel"];
+            /** Format: uuid */
+            projectId: string;
+            projectName: string;
+            status: components["schemas"]["IssueStatusRef"];
         };
         /**
          * @description **No `status` field**, for ~~`WorkItemInput`~~'s reason and `TestPlan.create`'s: a create
@@ -18435,6 +18527,11 @@ export interface components {
             name: string;
             columnCount: number;
             swimlaneBy: components["schemas"]["SwimlaneBy"];
+            /**
+             * @description How many of the project's statuses this board claims — the picker reads "5 of 11".
+             *     A board claims a SUBSET since 021 R7; see `getBoardCoverage`.
+             */
+            statusCount: number;
         };
         /**
          * @description Story B3's grouping axis. ~~`RELEASE` is **absent until M3** — a member whose data does not
@@ -18535,6 +18632,52 @@ export interface components {
             limit: number;
             count: number;
         };
+        BoardCoverage: {
+            /** Format: uuid */
+            projectId: string;
+            rows: components["schemas"]["BoardCoverageRow"][];
+            /**
+             * @description The statuses no board claims, in workflow order. A card in one of these is on no
+             *     board at all — 021 R7 traded the rule that refused this for a read that reports it.
+             */
+            uncovered: components["schemas"]["IssueStatusRef"][];
+        };
+        BoardCoverageRow: {
+            status: components["schemas"]["IssueStatusRef"];
+            /** @description In board position order. Empty when the status is uncovered. */
+            claims: components["schemas"]["BoardClaim"][];
+        };
+        BoardClaim: {
+            /** Format: uuid */
+            boardId: string;
+            boardName: string;
+            /** Format: uuid */
+            columnId: string;
+            columnName: string;
+        };
+        /**
+         * @description 021 §2.5. For a row header: the descendants this board does NOT show, grouped by the
+         *     board that does. Because a status may be on two boards, "shown here" and "elsewhere"
+         *     can overlap; this counts the not-shown-here set, never total minus shown.
+         */
+        CardElsewhere: {
+            /** Format: uuid */
+            boardId: string;
+            boardName: string;
+            count: number;
+        };
+        /**
+         * @description 021 D-k. The roll-up of `listIssueTestCases` for this card — the same `case_health`
+         *     rows, so a card and the story's own panel cannot disagree. An epic rolls up its stories;
+         *     a task carries its parent story's.
+         */
+        LinkedCasesSummary: {
+            total: number;
+            passing: number;
+            failing: number;
+            blocked: number;
+            notRun: number;
+        };
         /**
          * @description **Not `BoardCard`.** That schema is `work`'s composite card and carries four `kind`s, a
          *     `derived` flag and a synthetic id. Every card here is an issue with a real key, so the
@@ -18566,7 +18709,9 @@ export interface components {
             /**
              * @description §12.4, verbatim and load-bearing: the legal set must be known **client-side before the
              *     drag starts**, so a forbidden drop is refused at the drag with the reason rather than
-             *     accepted and reverted. Empty for an Epic (D31).
+             *     accepted and reverted. ~~Empty for an Epic (D31)~~ → superseded (021 R10): an epic's
+             *     status is stored and it moves like a story. From a `blocking` status the origin is
+             *     included even when no `transitions` pair lists it.
              *
              *     **Caller-scoped under the review-to-close gate:** when `reviewEnabledIssue` is on,
              *     `authorMayApproveOwnWork` is off and the caller is this issue's assignee, `DONE`-kind
@@ -18578,6 +18723,35 @@ export interface components {
             /** @description The card face reads "3/5 sub-tasks". */
             subtaskDone: number;
             agentEligible: boolean;
+            /** @description The story a task belongs to; the epic a story belongs to; null for an epic. */
+            parentKey: string | null;
+            /**
+             * @description Set while the issue is in the project's `blocking` status (D-b/D-c). The card reads
+             *     `Blocked · from In test`, so a blocked card sitting on somebody else's board says
+             *     whose problem it was.
+             */
+            blockedFromStatus: components["schemas"]["IssueStatusRef"] | null;
+            /**
+             * @description 021 §2.5. Empty when every descendant this card has is shown here — which is the
+             *     ordinary case, and the case a row header draws no link for.
+             */
+            elsewhere: components["schemas"]["CardElsewhere"][];
+            /**
+             * @description Null until served (021 T4) and null for a card with no linked cases. **The key is
+             *     always present**, so a consumer tells "not served" from "none linked" by reading the
+             *     null rather than by a property that is missing.
+             */
+            linkedCases: components["schemas"]["LinkedCasesSummary"] | null;
+            /**
+             * @description 021 D-d. True on an EPIC whose every counted story is DONE while the epic itself is
+             *     not — the card says so. A nudge to the PO; the server never moves an epic on its own.
+             */
+            allStoriesDone: boolean;
+            /**
+             * @description 021 §2.6 — the PM board's readiness signal. True when `acceptanceCriteria` is
+             *     non-empty; the array itself stays off the card (it is the detail's).
+             */
+            hasAcceptanceCriteria: boolean;
         };
         CardMoveInput: {
             /** Format: uuid */
@@ -24703,6 +24877,30 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    searchIssues: {
+        parameters: {
+            query: {
+                q: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Best first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueSearchHit"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
     transitionIssue: {
         parameters: {
             query?: never;
@@ -24731,7 +24929,10 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description The workflow forbids this move, or the issue is an Epic. */
+            /**
+             * @description The workflow forbids this move~~, or the issue is an Epic~~ → superseded (021 R10) —
+             *     including a `blocking` target from a DONE status.
+             */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -26067,7 +26268,11 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description A status is claimed twice, or left unclaimed, and the body names which. */
+            /**
+             * @description ~~A status is claimed twice, or left unclaimed, and the body names which.~~ →
+             *     superseded (021 R7): a status is claimed twice, or a column claims nothing — and the
+             *     body names which. An unclaimed status is no longer a refusal.
+             */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -26161,7 +26366,11 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description A status is claimed twice, or left unclaimed, and the body names which. */
+            /**
+             * @description ~~A status is claimed twice, or left unclaimed, and the body names which.~~ →
+             *     superseded (021 R7): a status is claimed twice, or a column claims nothing — and the
+             *     body names which.
+             */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -26204,6 +26413,30 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    getBoardCoverage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The status × board matrix */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BoardCoverage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     moveBoardCard: {
         parameters: {
             query?: never;
@@ -26235,7 +26468,10 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description The workflow forbids this move, or the issue is an Epic. */
+            /**
+             * @description The workflow forbids this move~~, or the issue is an Epic~~ → superseded (021 R10): an
+             *     epic has a stored status and moves like any other card.
+             */
             409: {
                 headers: {
                     [name: string]: unknown;

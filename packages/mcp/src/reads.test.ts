@@ -413,8 +413,11 @@ describe('tcms_read_board', () => {
 
     const answer = await run(stub, 'tcms_read_board', {});
 
+    // The summary passes through whole, `statusCount` included: since 021 R7 a board claims a
+    // SUBSET of the project's statuses, so "5 of 11" is the number that tells a model a card can
+    // be absent from this board without being gone.
     expect(answer['items']).toEqual([
-      { id: 'bd-1', name: 'Team board', columnCount: 3, swimlaneBy: 'NONE' },
+      { id: 'bd-1', name: 'Team board', columnCount: 3, statusCount: 4, swimlaneBy: 'NONE' },
     ]);
     expect(stub.sent.some((request) => request.path.endsWith('/cards'))).toBe(false);
   });

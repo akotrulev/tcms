@@ -487,6 +487,19 @@ default, so the tool never fans out unasked and §3.1's ceiling is untouched.
 | `page` · `size` | integer | list — §4.6's window |
 | `comments` | boolean | detail — also reads `GET …/comments` |
 | `docLinks` | boolean | detail — also reads `GET …/doc-links` |
+| `q` | string | list — **`GET /issues/search`**, across every project the caller can read; refused beside `issue` |
+
+**`q` is the one branch that leaves the project** (021 D-j). Every other field here narrows within
+`session.projectId()`; `q` reaches `GET /issues/search`, which matches a key prefix first and then a
+title, case-insensitively, over each project the caller may read — the situation it exists for is
+being handed a key and not knowing whose project it is, which is `/cases/search`'s argument one noun
+over. There is no `/search` aggregate over the three corpora and there will not be one: an aggregate
+would import three non-foundation modules, which ArchUnit refuses, so a caller wanting all three
+calls `tcms_read_issue {q}`, `tcms_search_cases` and the doc search and groups them itself.
+
+**Neither `q` nor `tcms issue search` is spelled yet** — 021 T1 landed the contract and `GET
+/issues/search` is served by nothing until 021 T4, where both are built against a real answer rather
+than against a 404.
 
 **`allowedTransitions` comes back as NAMES**, and so do `type` and `status`. That is the read half of
 the same decision the write half makes: the tool hands back exactly the token `move` takes, so an
@@ -575,6 +588,21 @@ merge and do.
 columns is a screen with a status-claim rule the server enforces in a 422 naming which status was
 claimed twice; an agent composing that array blind would spend its turns on the refusal. The board a
 project has is what these verbs read, and §2's budget is better spent elsewhere.
+
+**Three boards per project, not one — 021 T1.** ~~Every project is seeded exactly one board~~ →
+superseded: **PM, Dev and QA** are seeded over one eleven-status workflow, and 021 R7 reversed the
+half of story B2 that made every board claim every status. A board now claims a **subset**, so:
+
+- A status a board does not claim is a status **that board does not show**. A card missing from a
+  board is not a card missing — `tcms_read_board`'s description says so in those words, because a
+  model that read an absence as a deletion would go looking for work that never left.
+- `BoardSummary` carries `statusCount` beside `columnCount` — "5 of 11" — and the two are allowed
+  to differ in both directions: a column may claim several statuses, and a board may claim a subset.
+- `GET /projects/{projectId}/boards/coverage` (`getBoardCoverage`) is the status × board matrix and
+  is **on neither surface**, for the reason the three board-configuration verbs are not: it is the
+  settings screen's read, and its only action is to edit a board's columns, which no agent does.
+- Shared columns are the hand-offs — the same status claimed by two boards, last on one and first
+  on the next — so a `move-card` on one board *is* the arrival on the other, with nothing to notify.
 
 **That screen landed in 012 T9** — `/projects/{projectId}/settings/boards`,
 `frontend/src/features/settings/BoardSettingsPage.tsx` — and it settles the sentence above rather
@@ -668,10 +696,13 @@ description says so in those words.
 #### `move-card` needs a board, and the tool takes one — decided by the implementation (012 T5)
 
 `POST /boards/{boardId}/cards/{key}/move` has a board in its path and neither §3.5's table above nor
-§6's spells one, because every project is seeded exactly one and naming it would be an argument with
-a single possible value. It is not a single value once a project grows a second board, so the arm
-takes an optional `board` **name** and refuses with the list when it is omitted and there is more
-than one. Defaulting silently to the first would move a card on a board nobody was looking at — and
+§6's spells one, because ~~every project is seeded exactly one and naming it would be an argument
+with a single possible value~~ → superseded (021 D-i): **three are seeded**, so the moveless
+spelling would refuse on every project rather than on the unusual one. The arm takes an optional
+`board` **name** and refuses with the list when it is omitted and there is more than one — and the
+CLI now resolves it from the **column** first, which the MCP arm does not, because `move-card` is
+composed from a board the model has already read.
+Defaulting silently to the first would move a card on a board nobody was looking at — and
 because a board is a lens, the *move* would still be right and the caller's account of it wrong,
 which is the failure that reads as correct behaviour. `tcms board move --board` is the same
 decision, and `boardIn` / `boardOf` are the one place each surface answers it.
@@ -1330,6 +1361,22 @@ Three things there are decisions rather than spellings:
   it. `issue create` gains `--agent-eligible` for free, rendered from the catalogue by
   `optionSpecFor` — the flag exists because the field does, which is what that renderer is for.
 
+**The ninth issue command** (021 T1 contract, 021 T4 implementation), and it is the first CLI read
+that is not scoped to one project:
+
+| Command | Kind | Permission | Reaches |
+|---|---|---|---|
+| `tcms issue search "guest checkout" [--limit N]` | read | `issue:read` | `GET /issues/search` |
+
+- **`tcms issue search`, not `tcms issues search`.** The plan spelled it plural; every noun on this
+  surface is singular (`issue list`, `case`, `release`) and `findCommand` matches the noun literally,
+  so the plural would be a tenth noun holding one verb. The row is the plan's, the spelling is §6's.
+- **Company-scoped, and bounded by the caller's own project grants**, `/cases/search`'s rule exactly:
+  two colleagues searching one word legitimately get different results, and a project you hold no
+  grant on contributes no hit.
+- **Not built in 021 T1.** The endpoint answers a real 404 until 021 T4; the row is here because the
+  contract is, and a command written against a 404 is one whose gate proves only that it compiles.
+
 **The eight board commands** (012 T5; §3.5 carries the typed inputs and the reasons). `board` is the
 third noun the CLI gains, and unlike `work-item` it arrives delivered rather than promised:
 
@@ -1337,7 +1384,7 @@ third noun the CLI gains, and unlike `work-item` it arrives delivered rather tha
 |---|---|---|---|
 | `tcms board list` | read | `board:read` | `GET /projects/{projectId}/boards` |
 | `tcms board show "Team board"` | read | `board:read` | `GET /boards/{boardId}` + `…/cards` |
-| `tcms board move ACME-124 --column "In flight"` | `state` | `issue:edit` | `POST /boards/{boardId}/cards/{key}/move` |
+| `tcms board move ACME-124 --column "In test" [--board "QA board"]` | `state` | `issue:edit` | `POST /boards/{boardId}/cards/{key}/move` |
 | `tcms backlog [--label L] [--assignee A] [--epic K] [--level L] [--unparented]` | read | `board:read` | `GET /projects/{projectId}/backlog` |
 | `tcms rank ACME-124 --after ACME-99` · `--before ACME-98` | `state` | `board:rank` | `PUT /issues/{key}/rank` |
 | `tcms label list` | read | `board:read` | `GET /projects/{projectId}/labels` |
@@ -1357,9 +1404,19 @@ Three things about that table are decisions rather than spellings:
 - **There is no `tcms board create`/`edit`/`delete`.** Defining columns is a screen with a
   status-claim rule (§3.5); the CLI reads the boards a project has and moves cards on them.
 - **`--board NAME` is an eighth flag, not a ninth command** (012 T5). `board show` names its board
-  as a positional and `board move` does not, because the move's board is almost always the only one
-  the project has — so it is optional, and omitting it on a project with two is refused with the
-  list rather than defaulted. See §3.5 for the argument, which is the same on both surfaces.
+  as a positional and `board move` does not, because ~~the move's board is almost always the only one
+  the project has~~ → superseded (021 D-i): **three boards are seeded** — PM, Dev and QA — so
+  "almost always the only one" became "never the only one" and the moveless spelling above would
+  refuse on every project.
+- **`board move` resolves the board from `--column` when `--board` is absent** (021 D-i). A move is
+  a status change, the column names the status, and a status is claimed by at most one column per
+  board (021 R7) — so a column name found on exactly **one** board *names* that board. Found on
+  several (`Ready to develop` is on PM and Dev, `Blocked` on all three) it is a usage error naming
+  every one of them; found on none, the refusal is the board list, which is the caller's next
+  question anyway. Silently taking the first would move the card correctly and describe it wrongly,
+  which is the failure that reads as success. `boardOf` is the one place the CLI answers this and
+  `boardIn` the MCP's — the MCP arm takes the board name only, because a model composing
+  `move-card` has already read the board.
 - **A WIP breach prints and the command still exits 0.** `board move` writes the breach to *stderr*
   and returns `ok`: the card is where it was asked to go, and a non-zero exit would make a limit
   something a CI step fails on — story B3's "a limit people route around" in its automation

@@ -131,6 +131,8 @@ export type SuiteInput = S['SuiteInput'];
 export type TestCase = S['TestCase'];
 export type TestCaseSummary = S['TestCaseSummary'];
 export type CaseSearchHit = S['CaseSearchHit'];
+/** A palette row for an issue — the search crosses projects, so the project is named on it (D-j). */
+export type IssueSearchHit = S['IssueSearchHit'];
 /**
  * A case's flake evidence and quarantine decision (§121). `TestCase['flake']` is this **or null**,
  * and the null is a third state — see `lib/flake.ts`, which is the only thing that should read the
@@ -760,11 +762,31 @@ export type BoardLane = S['BoardLane'];
  * A card on a project board — every one of them an issue with a real key.
  *
  * **Not {@link BoardCard}**, which is the composite board's card and carries four `kind`s, a
- * `derived` flag and a synthetic id. An Epic reaches this shape with its **derived** status and an
- * **empty** `allowedTransitions` (D-r), so a move affordance for one is absent rather than
- * disabled-and-empty.
+ * `derived` flag and a synthetic id. ~~An Epic reaches this shape with its **derived** status and
+ * an **empty** `allowedTransitions` (D-r), so a move affordance for one is absent rather than
+ * disabled-and-empty.~~ → superseded (021 R10): an epic's status is stored and it moves like a
+ * story, so its `allowedTransitions` is non-empty and the affordance is the same one every card has.
  */
 export type BoardIssueCard = S['BoardIssueCard'];
+/**
+ * The status × board matrix (021 R7) — one row per status, naming every board that shows it.
+ *
+ * It replaced a **rule**, not a report: a board used to have to claim every status, which is what
+ * forced one board to show the whole lifecycle. `uncovered` is the failure the rule refused and
+ * this read reports — a status no board shows, so a card in it is on no board at all.
+ */
+export type BoardCoverage = S['BoardCoverage'];
+export type BoardCoverageRow = S['BoardCoverageRow'];
+export type BoardClaim = S['BoardClaim'];
+/**
+ * The descendants a row header's board does **not** show, grouped by the board that does.
+ *
+ * A count of the not-shown-here set, never total minus shown: a status may sit on two boards, so
+ * "shown here" and "elsewhere" legitimately overlap and the subtraction would double-count.
+ */
+export type CardElsewhere = S['CardElsewhere'];
+/** A card's linked-case roll-up — the same `case_health` rows the story's own panel reads (D-k). */
+export type LinkedCasesSummary = S['LinkedCasesSummary'];
 /**
  * A column over its limit **right now**, counted over the whole project.
  *

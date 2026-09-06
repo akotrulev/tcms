@@ -105,9 +105,12 @@ import type {
   TestPlanSummary,
   TestRun,
   BoardCard,
+  BoardClaim,
+  BoardCoverage,
   Issue,
   IssueComment,
   IssueDocLink,
+  IssueSearchHit,
   IssueStatusRef,
   IssueSummary,
   IssueTypeRef,
@@ -118,6 +121,7 @@ import type {
   BoardIssueCard,
   BoardLane,
   BoardSummary,
+  CardElsewhere,
   CardMoveResult,
   IssueCompletion,
   IssueLabel,
@@ -537,14 +541,18 @@ export function planStatistics(overrides: Partial<PlanStatistics> = {}): PlanSta
 }
 
 /**
- * A status ref — id, name, kind and position, which is what a *transition target* carries.
+ * A status ref — id, name, kind, position and `blocking`, which is what a *transition target*
+ * carries.
+ *
+ * `blocking` is false by default: at most one status per project is the one that remembers where a
+ * card came from (021 D-b), so false is the answer for every status but that one.
  *
  * The name is the project's own, so the default is a plausible one rather than a code: there is
  * no enum behind it any more (011 D-c) and a fixture spelling `TODO` would be a project nobody
  * has.
  */
 export function aStatusRef(overrides: Partial<IssueStatusRef> = {}): IssueStatusRef {
-  return { id: 's1', name: 'Backlog', kind: 'NOT_STARTED', position: 0, ...overrides }
+  return { id: 's1', name: 'Backlog', kind: 'NOT_STARTED', position: 0, blocking: false, ...overrides }
 }
 
 export function anIssueType(overrides: Partial<IssueTypeRef> = {}): IssueTypeRef {
@@ -577,9 +585,10 @@ export function aBoardCard(overrides: Partial<BoardCard> = {}): BoardCard {
 /**
  * A card on a **project** board — the 012 M2 shape, which is not {@link aBoardCard}'s.
  *
- * `allowedTransitions` is empty by default for `aBoardCard`'s reason, and here it carries a second
- * one: an Epic reaches this shape with an empty set whatever the target (D-r), so the inert value is
- * also the one the contract's own comment singles out.
+ * `allowedTransitions` is empty by default for `aBoardCard`'s reason. ~~And here it carries a
+ * second one: an Epic reaches this shape with an empty set whatever the target (D-r).~~ →
+ * superseded (021 R10): an epic's status is stored and it moves like a story, so an empty set is
+ * now only the inert default and no longer a claim about epics.
  */
 export function aBoardIssueCard(overrides: Partial<BoardIssueCard> = {}): BoardIssueCard {
   return {
@@ -597,6 +606,14 @@ export function aBoardIssueCard(overrides: Partial<BoardIssueCard> = {}): BoardI
     agentEligible: false,
     subtaskTotal: 0,
     subtaskDone: 0,
+    parentKey: null,
+    blockedFromStatus: null,
+    elsewhere: [],
+    // Null, not a zeroed summary: the key is always present so a reader can tell "not served"
+    // (021 T4 has not landed) from "none linked", and a zeroed summary would claim the second.
+    linkedCases: null,
+    allStoriesDone: false,
+    hasAcceptanceCriteria: false,
     ...overrides,
   }
 }
@@ -632,7 +649,50 @@ export function boardContents(overrides: Partial<BoardContents> = {}): BoardCont
 }
 
 export function aBoardSummary(overrides: Partial<BoardSummary> = {}): BoardSummary {
-  return { id: 'b1', name: 'Team board', columnCount: 4, swimlaneBy: 'NONE', ...overrides }
+  // `statusCount` is allowed to differ from `columnCount` in both directions: a column may claim
+  // several statuses, and since 021 R7 a board may claim only a subset of the project's.
+  return {
+    id: 'b1', name: 'Team board', columnCount: 4, swimlaneBy: 'NONE', statusCount: 4, ...overrides,
+  }
+}
+
+/**
+ * The status × board matrix (021 R7) — which boards show each status.
+ *
+ * One covered row and **nothing uncovered**, which is what a freshly seeded project answers:
+ * `uncovered` is the warning this read exists to raise, so a default carrying one would make every
+ * test that never mentions coverage inherit a broken project.
+ */
+export function aBoardCoverage(overrides: Partial<BoardCoverage> = {}): BoardCoverage {
+  const status = aStatusRef()
+  return {
+    projectId: 'p1',
+    rows: [{ status, claims: [aBoardClaim({ columnName: status.name })] }],
+    uncovered: [],
+    ...overrides,
+  }
+}
+
+export function aBoardClaim(overrides: Partial<BoardClaim> = {}): BoardClaim {
+  return { boardId: 'b1', boardName: 'Team board', columnId: 'col-1', columnName: 'Backlog', ...overrides }
+}
+
+/** The descendants a board does not show, and the board that does (021 §2.5). */
+export function aCardElsewhere(overrides: Partial<CardElsewhere> = {}): CardElsewhere {
+  return { boardId: 'b2', boardName: 'QA board', count: 1, ...overrides }
+}
+
+/** A palette row for an issue — the project is named because the search crosses projects (D-j). */
+export function anIssueSearchHit(overrides: Partial<IssueSearchHit> = {}): IssueSearchHit {
+  return {
+    key: 'PRJ-1',
+    title: 'An issue',
+    typeLevel: 'STORY',
+    projectId: 'p1',
+    projectName: 'A project',
+    status: aStatusRef(),
+    ...overrides,
+  }
 }
 
 export function aBoardConfig(overrides: Partial<BoardConfig> = {}): BoardConfig {
@@ -879,6 +939,8 @@ export function anIssue(overrides: Partial<Issue> = {}): Issue {
     allowedTransitions: [],
     createdAt: AT,
     agentEligible: false,
+    // Null unless the issue is sitting in the project's `blocking` status (021 D-c).
+    blockedFromStatus: null,
     ...overrides,
   }
 }
