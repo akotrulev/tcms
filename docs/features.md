@@ -315,6 +315,42 @@ And around them:
   than offering a choice that will fail
 - Reports carry freshness information so you know how current the data is
 
+## Delivery analytics
+
+Four figures on one screen, answering whether a project is converging on its next release. They are
+**not** report jobs: there is nothing to generate, poll for or download — the release picker changes
+the answer immediately, which is the whole reason they are a screen rather than a document.
+
+- **Release burn-up** — done against total scope over time, and the one thing most burn-ups leave
+  out: **scope added after the release was created is distinguishable**. The total-scope line steps
+  where the work arrived, and a count beside it says how much. That number cannot be reconstructed
+  after the fact, which is why the product records it at the moment an issue is first pointed at a
+  release.
+- **Cycle time** — how long issues take to finish, **per issue type**, as a median and a p90 with
+  the population on the row. It is measured from when an issue was **created**, and the screen says
+  so: this product does not record a moment at which work started, and a figure labelled otherwise
+  would be a number whose label describes a different number.
+- **Flow** — issues per status band, weekly, as four small charts. Three are the statuses. The
+  fourth is *issues that existed then whose status on that date is recorded nowhere*, drawn as a
+  hatch rather than a colour, because it is the absence of a record and not a fourth state. It is
+  empty at today's edge and grows going back.
+- **Estimate accuracy** — estimate against **approved** hours per epic, with the drift. An
+  unapproved timesheet is not evidence, and an epic nobody estimated shows no drift rather than 0%.
+
+Two things this screen deliberately does not do:
+
+- **There is no velocity chart, and there will not be one.** This product plans by release and has
+  no sprint, so there is nothing to measure a velocity over — a chart implying otherwise would
+  report a number nobody planned against.
+- **Utilisation is not here.** It is a staffing figure — approved hours against allocated capacity —
+  and it lives on the Staffing screen with its denominator printed beside it. One number, one place.
+
+**When there is not enough data, each figure says so in a sentence** and draws nothing. A new
+project, a release nothing targets yet, a window with two completions, a project whose history
+predates what the product records — all of those get an explanation rather than an empty axis or a
+flat line at zero, which would read as *nothing has happened* where the truth is *there is not
+enough here to say*.
+
 ## Issues
 
 ~~**Work Items** — create and track work items, tasks and action items attached to test activity;
@@ -828,7 +864,11 @@ SAML as pending work) were removed outright as wrong.*
 - Parameterized cases / data-driven execution — Scenario Outline `Examples` and structured-case DataSets
 - Step phrase library — catalogue of Gherkin step phrases with autocomplete and near-duplicate detection
 - Undefined-step detection — compare authored Gherkin against the automation repo's step-definition inventory
-- Milestones & release readiness — gate view per milestone
+- ~~Milestones & release readiness — gate view per milestone~~ → **built (013 M3 and 020 M9).**
+  Releases replaced milestones as the product's only planning cadence, release readiness answers
+  *"can we ship 2.4?"* across both the delivery and the test halves, and Delivery analytics above
+  is the trend view this line was reaching for. Struck through rather than deleted so a reader who
+  finds *milestone* in the schema knows where the idea went.
 - SCIM provisioning — push-based user/group sync from IdP
 - Generic outbound webhooks — webhook events for custom automation beyond notifications
 - Public versioned REST API — first-class, versioned, documented API layer

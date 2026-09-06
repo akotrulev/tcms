@@ -72,7 +72,7 @@ would mean eight edits to three documents that a test pins byte-for-byte. It is 
 | **M6** | Time | ~~`V8`~~ → ~~`V10`~~ → ~~`V11`~~ → `V9` | log hours, submit a period, and have a PM approve it | M1 | done 2026-09-04 @ `3471358c` — plan 016 |
 | **M7** | Staffing | ~~`V9` (unchanged)~~ → **`V10` — taken 2026-09-04** | allocate people, see capacity, and find who is free | ~~M6~~ → **M0** (review R11) | done 2026-09-04 @ `44f8d39a` — plan [017-staffing.md](017-staffing.md) |
 | **M8** | Billing | ~~`V10`~~ → ~~`V11`~~ → ~~whatever `ls` says on the day~~ → **`V12` — taken 2026-09-05** | price approved time and issue an invoice | M6 · Mc — **both `done`** | done 2026-09-06 @ `c58384b5` — plan [019-billing.md](019-billing.md) |
-| **M9** | Delivery analytics | none | read burn-up, cycle time and flow | M3 | in progress — plan [020-delivery-analytics.md](020-delivery-analytics.md) |
+| **M9** | Delivery analytics | **none — and none was taken** | read burn-up, cycle time and flow | M3 | done 2026-09-06 @ `ed299a79` — plan [020-delivery-analytics.md](020-delivery-analytics.md) |
 | **Mc** | Clients | ~~`V8`~~ → ~~`V9`~~ → ~~whatever `ls` says on the day~~ → **`V11` — taken 2026-09-05** | record a client and attach projects to it | M0 | done 2026-09-05 @ `c7e504ff` — plan [018-clients.md](018-clients.md) |
 
 **The `V` column was re-derived on 2026-08-30** from the confirmed landing order in
@@ -1028,6 +1028,64 @@ created, and cycle time per issue type.
 **fe** — ports `reports.html`.
 **Excludes velocity.** D6 removed the sprint it would measure; there is nothing to compute it over
 and a chart implying otherwise would be a lie about how the team plans.
+
+### M9 closed — 2026-09-06 @ `ed299a79`, plan [020-delivery-analytics.md](020-delivery-analytics.md)
+
+**The last module of the expansion, and it took no migration.** The condition this document set —
+*"'None' holds only because M1 put `created_at` / `status_entered_at` / `done_at` /
+`release_assigned_at` on `issue_fact` and M3 put `created_at` on `release`"* — was checked against
+the migration files before the plan was written, not assumed: all four are in `V3` (lines 338-341)
+and `release.created_at` is in `V6` (line 84), and `V3` seeds a `Done` status with `kind = 'DONE'`.
+The next free version is `V13` and M9 leaves it free. **The reservation was right for once**, and it
+is the only row in this table's `V` column that never needed correcting.
+
+**Three tasks, three commits:** `a8a04ff8` the contract and both clients, `ae3e45d7` the reporting
+package, `ed299a79` the screen. Gates on shanks: backend `BUILD SUCCESSFUL`, 4029 tests; packages
+build + lint + 560 tests; frontend build + lint + 2956 of 2958 — the two failures are
+`CaseGrid.test.tsx`'s selection pair and are **pre-existing**, verified by stashing every file of
+the frontend task and re-running them at `ae3e45d7`. (`FlakeScoreTest`, red since 2026-08-30, now
+passes: its 90-day window has moved back over the fixture.)
+
+**Four decisions the mockup and this document did not predict**, each recorded in 020's own
+Decisions section with the measurement or the failure behind it:
+
+- **Cycle time is measured from *created*, not *started*** (020 D-c). This product records no moment
+  at which work began — `issue_transition` is the workflow allow-list, not a history — so
+  `status_entered_at` on a completed issue is when it entered *Done*, and the subtraction the
+  execution breakdown's `t45` predicted yields approximately zero for every issue. `measuredFrom` is
+  on the wire and on the screen, with one enum member.
+- **The cumulative flow has a fourth band** (020 D-d) — issues that existed on a past date whose
+  status *on that date* is recorded nowhere. Folding it into "not started" would draw a guess as
+  data, systematically wrong the further back the window reaches.
+- **The flow is faceted rather than stacked** (020 D-k). The three-hue stack `reports.html` draws
+  could not be built: running the tokens it needs through the `dataviz` validator against this app's
+  surfaces reproduced the exact measurement `Figure.tsx` records — three steps of one hue reach at
+  best ΔE 9.2 inside the contrast band, and three distinct hues fail CVD separation outright.
+- **The rail entry is `Analytics`, not `Reports`** (020 D-l). The mockup's `data-projnav` slot is
+  occupied by the shipped execution-reports screen, which nothing in this document asked M9 to
+  remove.
+
+**Built and unverified.** The gates prove it compiles and that its assertions hold; **nobody has
+opened this screen.** The backend was not answering on `localhost:8080` at close-out and this app
+has no mock API lane, so the click-through step of the module's own plan did not happen. What that
+leaves unconfirmed, listed rather than glossed:
+
+- **Every one of the four panels, in both colour schemes.** Each figure's fills and strokes are
+  `var(--…)` and `tokenSystem.test.ts` covers the token system, but nothing in this repo renders an
+  SVG and looks at it — that check is the SVG-shaped hole in it, and `vizTokens.ts` says so.
+- **The two fault arms.** `tcmsFaults.analytics('sparse')` and `('all-late')` are unit-tested
+  through the page's own doubles but have never been typed into a browser console.
+- **The Export menu.** The CSV builders are pure and the download path is three lines of DOM; no
+  file has actually been saved from a running app.
+- **The estimate-accuracy panel against real epics.** Its N+1 shape (one rollup request per epic) has
+  only been exercised against an empty epic list.
+- **The rail entry's position and the screen's layout at narrow widths.** The grid is
+  `lg:grid-cols-2` and has not been looked at below that breakpoint.
+
+**Nothing downstream to rewrite.** No module's *Depends on* names M9 — it is the last of the ten —
+so step 4 of the hand-off protocol is satisfied by saying so rather than by an edit. Review row R15
+was closed by M8 and stays closed; M9 is its final piece of evidence, having read the directory,
+found `V1`–`V12`, and needed none.
 
 ---
 
@@ -2118,7 +2176,7 @@ Then:
    taken. No module depends on M8.
 ````
 
-### M9 — Delivery analytics
+### ~~M9 — Delivery analytics~~ → **done. Do not run this prompt.**
 
 ````text
 You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
