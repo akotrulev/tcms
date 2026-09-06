@@ -7,6 +7,8 @@ import { RegisterArtifactDialog } from './ArtifactDialogs';
 import { ArtifactTable } from './ArtifactTable';
 import { DataRegion } from '../../components/DataRegion';
 import { PageHeader } from '../../components/PageHeader';
+import { TabStrip } from '../../components/TabStrip';
+import { TABS } from '../../app/nav';
 import { Button } from '../../components/ui';
 
 /**
@@ -25,8 +27,8 @@ export function ArtifactsPage() {
   const project = useProject(projectId);
   const plans = usePlans(projectId);
   const artifacts = useArtifacts(projectId, planId ? 'PLAN' : 'PROJECT', planId || undefined);
-  // For the register dialog's documentation picker. Cheap and already cached whenever the reader
-  // has visited Documentation; the register is where a doc page gets promoted to a project asset.
+  // For the register dialog's page picker. Cheap and already cached whenever the reader has
+  // visited Documents; the register is where a doc page gets promoted to a project asset.
   const pages = useDocPages(projectId);
 
   return (
@@ -37,6 +39,7 @@ export function ArtifactsPage() {
         documentTitle={project.data ? `Artifacts · ${project.data.name}` : 'Artifacts'}
         crumbs={[
           { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
+          { label: 'Documents', to: `/projects/${projectId}/docs` },
           { label: 'Artifacts' },
         ]}
         subtitle="Strategy, environment, test data and sign-off documents. Plan artifacts sit alongside the project's, which they inherit."
@@ -81,6 +84,12 @@ export function ArtifactsPage() {
           </div>
         }
       />
+
+      {/*
+        Pages · Artifacts (021 §1). The register was a rail row under `Project`; it is a document
+        the project keeps, so it belongs beside the pages rather than beside the settings screens.
+      */}
+      <TabStrip tabs={TABS.docs} projectId={projectId} label="Document views" testId="Docs.Tabs" />
 
       {registering && (
         <RegisterArtifactDialog

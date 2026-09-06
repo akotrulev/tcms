@@ -12,6 +12,7 @@ import type { IssueStatusKind, IssueStatusRef, ProjectWorkflow } from '../../api
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader } from '../../components/PageHeader';
+import { SettingsSubnav } from './SettingsSubnav';
 import { PermissionGate } from '../../components/PermissionGate';
 import { Badge, Banner } from '../../components/kit';
 import { Button, Input } from '../../components/ui';
@@ -90,10 +91,13 @@ export function WorkflowSettingsPage() {
         documentTitle={project.data ? `Workflow · ${project.data.name}` : 'Workflow'}
         crumbs={[
           { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
+          { label: 'Settings', to: `/projects/${projectId}/settings` },
           { label: 'Workflow' },
         ]}
         subtitle="The statuses an issue in this project can be in, the order they read in, and which of them mean done."
       />
+
+      <SettingsSubnav projectId={projectId} />
 
       <div className="mb-4 max-w-[960px]" data-testid={`${TEST_ID}.CompletionNote`}>
         <Banner tone="neutral">

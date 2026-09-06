@@ -13,6 +13,7 @@ import type { BudgetBurn, IssueTypeRef, Project, ProjectSettings } from '../../a
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader } from '../../components/PageHeader';
+import { SettingsSubnav } from './SettingsSubnav';
 import { PermissionGate } from '../../components/PermissionGate';
 import { Badge, Banner } from '../../components/kit';
 import { SettingRow } from '../../components/kit/SettingRow';
@@ -90,10 +91,13 @@ export function GeneralSettingsPage() {
         documentTitle={project.data ? `Settings · ${project.data.name}` : 'Project settings'}
         crumbs={[
           { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
+          { label: 'Settings', to: `/projects/${projectId}/settings` },
           { label: 'General' },
         ]}
         subtitle="What this project is called, what prefixes its issues, and the kinds of issue it holds."
       />
+
+      <SettingsSubnav projectId={projectId} />
 
       <div className="grid max-w-[1180px] gap-3.5 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="flex flex-col gap-3.5">

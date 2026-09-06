@@ -13,6 +13,7 @@ import type { ProjectRepository, ProjectRepositoryInput } from '../../api/types'
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
+import { SettingsSubnav } from './SettingsSubnav';
 import { Badge, Banner } from '../../components/kit';
 import { Field } from '../../components/kit/Field';
 import {
@@ -69,13 +70,21 @@ export function RepositoriesSettingsPage() {
 
   return (
     <div>
+      {/*
+        ~~`Repositories`~~ → **`Code repositories`** (021 §8.1). The bare word is the one this
+        product uses for the *test* repository — the suites and cases — so a settings row called
+        `Repositories` named the one thing on the screen it was not about. The route is unchanged.
+      */}
       <PageHeader
         testId={`${TEST_ID}.Header`}
-        title="Repositories"
-        documentTitle={project.data ? `Repositories · ${project.data.name}` : 'Project repositories'}
+        title="Code repositories"
+        documentTitle={
+          project.data ? `Code repositories · ${project.data.name}` : 'Code repositories'
+        }
         crumbs={[
           { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Repositories' },
+          { label: 'Settings', to: `/projects/${projectId}/settings` },
+          { label: 'Code repositories' },
         ]}
         subtitle="Where this project's code lives, and how it is built. Reference information — nothing here is cloned, fetched or run."
         actions={
@@ -86,6 +95,8 @@ export function RepositoriesSettingsPage() {
           : undefined
         }
       />
+
+      <SettingsSubnav projectId={projectId} />
 
       <Banner tone="neutral" className="mb-4" data-testid={`${TEST_ID}.Note`}>
         <span>
@@ -115,7 +126,7 @@ export function RepositoriesSettingsPage() {
         >
           {(rows) => (
             <Panel
-              title="Repositories"
+              title="Code repositories"
               testId={`${TEST_ID}.List`}
               actions={<span className="text-[11.5px] text-ink-4">{rows.length}</span>}
             >

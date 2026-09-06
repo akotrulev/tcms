@@ -75,7 +75,7 @@ export function ReportViewPage() {
         documentTitle={project.data ? `${title} · ${project.data.name}` : title}
         crumbs={[
           { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Reports', to: `/projects/${projectId}/reports` },
+          { label: 'Test reports', to: `/projects/${projectId}/reports` },
           { label: title },
         ]}
         subtitle="What you see here is the model the exported file was rendered from — the same numbers, the same header."

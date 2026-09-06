@@ -9,23 +9,24 @@ import { heldPermissions } from '../test/permissions'
 import { createTestQueryClient } from '../test/queryClient'
 import { TestProviders } from '../test/TestProviders'
 import { AppShell } from './AppShell'
+import { NAV } from './nav'
 import { TopStripSlot } from './topStripSlot'
 
 /**
- * The shell's navigation affordances — the first test file it has ever had, added with the two
- * things it was missing.
+ * The shell's navigation affordances.
  *
  * The failures this file exists to catch:
  *
  * 1. **`/` is reachable from inside a project.** The picker is where sign-in lands and where a
- *    project the caller cannot see falls back to, and until now nothing in the app linked to it —
- *    reachable only by editing the address bar. A regression here is invisible in every other test
- *    in the suite, because every other test renders a page rather than the shell around it.
+ *    project the caller cannot see falls back to, and until it had a rail entry it was reachable
+ *    only by editing the address bar. A regression here is invisible in every other test in the
+ *    suite, because every other test renders a page rather than the shell around it.
  * 2. **The current-location marker is on the right item.** `/` is a prefix of every path in the
  *    app, so this is where a nav item that claims to be current on twenty screens at once would
- *    show up. **Stated honestly: this one does not catch a dropped `end`** — `NavLink` special-cases
- *    a root link and refuses the prefix match on its own, so removing `end: true` from
- *    `ALL_PROJECTS` leaves this green. It pins the behaviour, not the attribute that expresses it.
+ *    show up. **Stated honestly: this one does not catch a dropped `end`** — `NavLink`
+ *    special-cases a root link and refuses the prefix match on its own, so removing `end: true`
+ *    from the `Projects` entry leaves this green. It pins the behaviour, not the attribute that
+ *    expresses it.
  * 3. **The collapsed rail keeps its accessible names.** Collapsing removes the label text from the
  *    DOM. An icon-only link with no `aria-label` is announced as its href, and the tooltip does not
  *    stand in for one — it never reaches a reader that is not hovering. This is the defect that is
@@ -35,6 +36,10 @@ import { TopStripSlot } from './topStripSlot'
  * 5. **The drawer has no collapse toggle.** The small-screen variant is already a deliberate
  *    reveal; a toggle there would offer to take the labels away from the users with the least room
  *    to guess at icons.
+ * 6. **The rail is what `nav.ts` says it is** (021 D-h). The order of the project zone is the
+ *    decision R8 made — Work first, Overview seventh — and an order asserted by transcribing the
+ *    labels into this file would be a second copy that agrees with the first until somebody edits
+ *    one. The test below reads the model and asserts the *rendering* matches it.
  */
 
 const OLB = '11111111-1111-4111-8111-111111111111'
@@ -56,7 +61,7 @@ function renderShell(route: string, permissions: PermissionKey[] = []) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path === '/projects') return PROJECTS
     // The rail reads permissions since §242, to decide whether the two audit entries exist at all
-    // — and, since 005 C2, the three credential entries as well.
+    // — and, since 005 C2, the credential entries as well.
     // Answered with the real shape rather than by the `[]` fallback below, which is an array where
     // the contract declares an object — the contract double catches it, and the failure reads as a
     // navigation defect rather than as a missing arm.
@@ -75,16 +80,22 @@ function renderShell(route: string, permissions: PermissionKey[] = []) {
 const rail = () => within(screen.getByTestId('Nav.Rail'))
 
 /**
- * Waits for the *project* group, not for the switcher.
+ * Waits for the *project* zone, not for the switcher.
  *
- * The switcher and the two ungrouped items render before `/projects` answers, so waiting on one of
- * those returns while `groups` is still empty and every project-scoped assertion below fails on a
- * rail that was merely early rather than wrong.
+ * The switcher and the You zone render before `/projects` answers, so waiting on one of those
+ * returns while the project zone is still absent and every project-scoped assertion below fails on
+ * a rail that was merely early rather than wrong.
  */
 const railReady = () => waitFor(() => expect(rail().getByTestId('Nav.Link.Testcases')).toBeInTheDocument())
 
 /** `aria-current` sits on the box inside the anchor, alongside the icon — not on the anchor. */
 const currentMarkerIn = (link: HTMLElement) => link.querySelector('[aria-current="page"]')
+
+/** The labels of one zone's rows, in the order `nav.ts` declares them. */
+const labelsOf = (id: 'you' | 'project' | 'company') =>
+  NAV.find((zone) => zone.id === id)!.entries.flatMap((entry) =>
+    'items' in entry ? [] : [entry.label],
+  )
 
 describe('AppShell navigation', () => {
   it('links to the project picker from inside a project, by nav item and by wordmark', async () => {
@@ -94,21 +105,84 @@ describe('AppShell navigation', () => {
 
     // Asserted as an href rather than by clicking: the point is that this is a real anchor a user
     // can middle-click and copy, which an onClick handler would satisfy neither of.
-    expect(rail().getByTestId('Nav.Link.Allprojects')).toHaveAttribute('href', '/')
+    expect(rail().getByTestId('Nav.Link.Projects')).toHaveAttribute('href', '/')
     expect(rail().getByTestId('Nav.Wordmark')).toHaveAttribute('href', '/')
   })
 
-  it('marks All projects current on the picker and NOT on a project route', async () => {
+  it('marks Projects current on the picker and NOT on a project route', async () => {
     const { unmount } = renderShell(`/projects/${OLB}/cases`)
     await railReady()
 
-    expect(currentMarkerIn(rail().getByTestId('Nav.Link.Allprojects'))).toBeNull()
+    expect(currentMarkerIn(rail().getByTestId('Nav.Link.Projects'))).toBeNull()
 
     unmount()
 
     renderShell('/')
     await railReady()
-    expect(currentMarkerIn(rail().getByTestId('Nav.Link.Allprojects'))).not.toBeNull()
+    expect(currentMarkerIn(rail().getByTestId('Nav.Link.Projects'))).not.toBeNull()
+  })
+
+  /**
+   * The three zones, and the order inside the project zone (021 §1, R8).
+   *
+   * Read off `NAV` rather than retyped, so this cannot become a second list that disagrees with
+   * the first. What it actually pins is that the rail RENDERS the model in the model's order —
+   * every row present, none invented, `Work` first and `Overview` seventh — which is the whole of
+   * the usage-order decision and is otherwise only visible by eye.
+   */
+  it('renders the three zones, and the project zone in nav.ts order', async () => {
+    renderShell(`/projects/${OLB}/cases`)
+    await railReady()
+
+    expect(rail().getByTestId('Nav.Zone.you')).toBeInTheDocument()
+    expect(rail().getByTestId('Nav.Zone.project')).toBeInTheDocument()
+    expect(rail().getByTestId('Nav.Zone.company')).toBeInTheDocument()
+
+    const rendered = within(rail().getByTestId('Nav.Zone.project'))
+      .getAllByRole('link')
+      .map((link) => link.textContent)
+    expect(rendered).toEqual(labelsOf('project'))
+
+    // The decision, said out loud: the board is where the day starts, and the dashboard is read
+    // rather than worked.
+    expect(rendered[0]).toBe('Work')
+    expect(rendered[6]).toBe('Overview')
+  })
+
+  it('carries the renamed rows and none of the words they replaced', async () => {
+    renderShell(`/projects/${OLB}/cases`)
+    await railReady()
+
+    // §8.1's twelve renames, at the six places the rail is the thing that shows them.
+    expect(rail().getByRole('link', { name: 'Projects' })).toBeInTheDocument()
+    expect(rail().getByRole('link', { name: 'Documents' })).toBeInTheDocument()
+    expect(rail().getByRole('link', { name: 'Test reports' })).toBeInTheDocument()
+    expect(rail().getByRole('link', { name: 'Team' })).toBeInTheDocument()
+    expect(rail().getByRole('link', { name: 'Capacity' })).toBeInTheDocument()
+
+    // The duplicate labels the brief found: one word, two scopes, two screens. Both are gone.
+    expect(rail().queryByRole('link', { name: 'All projects' })).toBeNull()
+    expect(rail().queryByRole('link', { name: 'Documentation' })).toBeNull()
+    expect(rail().queryAllByRole('link', { name: 'Staffing' })).toEqual([])
+    expect(rail().queryAllByRole('link', { name: 'Audit trail' })).toEqual([])
+  })
+
+  /**
+   * §5: eleven rail siblings became one row leading to a landing page. The rows are named here
+   * rather than read from `SETTINGS_SECTIONS` on purpose — the claim is that they are NOT in the
+   * rail any more, and a list read from the model would pass on an empty model.
+   */
+  it('spends one row on Settings, not eleven', async () => {
+    renderShell(`/projects/${OLB}/cases`, ['issue:import', 'integration:manage', 'project:audit'])
+    await railReady()
+
+    expect(rail().getByTestId('Nav.Link.Settings')).toHaveAttribute(
+      'href',
+      `/projects/${OLB}/settings`,
+    )
+    for (const gone of ['General', 'Workflow', 'Boards', 'Classification', 'Imports', 'Notifications', 'Issue tracker', 'Access & roles']) {
+      expect(rail().queryByRole('link', { name: gone })).toBeNull()
+    }
   })
 
   it('collapses to icons, keeping every link an accessible name', async () => {
@@ -131,16 +205,31 @@ describe('AppShell navigation', () => {
     // ...so every link must carry it as an accessible name instead. Queried by role+name, which is
     // what a screen reader does — a testid lookup would pass on a link announced as its href.
     expect(rail().getByRole('link', { name: 'Test cases' })).toBeInTheDocument()
-    expect(rail().getByRole('link', { name: 'All projects' })).toBeInTheDocument()
+    expect(rail().getByRole('link', { name: 'Projects' })).toBeInTheDocument()
     expect(rail().getByRole('link', { name: 'My work' })).toBeInTheDocument()
+  })
 
-    /*
-      The switcher is no longer in the rail at either width — it moved to the header, where it does
-      not collapse, so the question a 64px rail could not answer is not asked any more. Asserted
-      from both ends so this cannot pass on a switcher that simply failed to render.
-    */
-    expect(rail().queryByTestId('Nav.ProjectSwitcher')).toBeNull()
-    expect(screen.getByTestId('Nav.ProjectSwitcher')).toBeInTheDocument()
+  /**
+   * The collapse is a **label swap and nothing else** (§1's collapsed-state requirement, and the
+   * property the withdrawn subject folders could not give). Every row that is in the expanded rail
+   * is in the collapsed one, in the same order — nothing moves depth, nothing disappears.
+   */
+  it('shows the same rows in the same order at 64px', async () => {
+    const user = userEvent.setup()
+    renderShell(`/projects/${OLB}/cases`)
+    await railReady()
+
+    const expanded = within(rail().getByTestId('Nav.Zone.project'))
+      .getAllByRole('link')
+      .map((link) => link.getAttribute('href'))
+
+    await user.click(rail().getByTestId('Nav.CollapseToggle'))
+
+    const collapsed = within(rail().getByTestId('Nav.Zone.project'))
+      .getAllByRole('link')
+      .map((link) => link.getAttribute('href'))
+
+    expect(collapsed).toEqual(expanded)
   })
 
   it('remembers the collapsed rail across a reload', async () => {
@@ -168,88 +257,116 @@ describe('AppShell navigation', () => {
     const drawer = within(await screen.findByTestId('Nav.Drawer'))
     // The drawer really did render the rest of the rail — otherwise the absence below proves
     // nothing about the toggle.
-    expect(drawer.getByTestId('Nav.Link.Allprojects')).toHaveAttribute('href', '/')
+    expect(drawer.getByTestId('Nav.Link.Projects')).toHaveAttribute('href', '/')
     expect(drawer.queryByTestId('Nav.CollapseToggle')).not.toBeInTheDocument()
   })
 })
 
 /**
- * The credential entries (005 C2, decided).
+ * The project switcher, back in the rail as the Project zone's header (021 R1).
  *
- * Five comments in `AppShell.tsx` argue that hiding a rail entry tells a lie about the **product**
- * — "this instance has no CI credentials" — which is worse than telling the truth about the
- * reader's access, and those comments are still right for `Review` and `Access & roles`. They are
- * outweighed for exactly the three entries here, because those pages have **no read-only view at
- * all**: the reads themselves cost the key, so what a caller without it gets is a whole screen
- * whose only content is a refusal.
- *
- * So this file pins the rule in both directions, which is the part a one-sided test would miss.
+ * ~~"puts the project switcher in the header"~~ — that test asserted the 2026-08-29 placement and
+ * **inverts here**, which is the honest shape for a reversal: the old assertion is not deleted and
+ * quietly replaced, it is the same two-ended claim pointed the other way. Both ends are asserted
+ * so this cannot pass on a switcher that simply failed to render.
  */
-describe('AppShell — the credential entries (005 C2)', () => {
-  it('lists them for a caller who can open the pages they lead to', async () => {
-    renderShell(`/projects/${OLB}/cases`, ['integration:manage', 'token:issue', 'company:idp'])
+describe('AppShell — the project switcher (021 R1)', () => {
+  it('is the Project zone header in the rail, and is not in the page header', async () => {
+    renderShell(`/projects/${OLB}/cases`)
     await railReady()
 
-    // `find`, not `get`, for the two PROJECT-scoped entries. The company gate answers immediately
-    // — `/me/permissions` with no projectId — while the project one cannot even be REQUESTED until
-    // `/projects` has said which project is active, so it is still pending when the rail's groups
-    // first render and `can()` fails closed while pending. The two company entries below are `get`
-    // deliberately: they have no second round trip to wait for, and turning them into `find` would
-    // hide the day one of them acquires one.
-    expect(await rail().findByRole('link', { name: 'Notifications' })).toBeInTheDocument()
-    expect(await rail().findByRole('link', { name: 'Issue tracker' })).toBeInTheDocument()
-    expect(rail().getByRole('link', { name: 'API tokens' })).toBeInTheDocument()
-    expect(rail().getByRole('link', { name: 'Single sign-on' })).toBeInTheDocument()
-  })
-
-  it('un-lists them for a caller who cannot', async () => {
-    renderShell(`/projects/${OLB}/cases`, ['case:read'])
-    await railReady()
-
-    expect(rail().queryByRole('link', { name: 'Notifications' })).not.toBeInTheDocument()
-    expect(rail().queryByRole('link', { name: 'Issue tracker' })).not.toBeInTheDocument()
-    expect(rail().queryByRole('link', { name: 'API tokens' })).not.toBeInTheDocument()
-    expect(rail().queryByRole('link', { name: 'Single sign-on' })).not.toBeInTheDocument()
-  })
-
-  it('lists Imports for a holder of issue:import and un-lists it for everybody else', async () => {
     /*
-      014 D-e. The same rule as the four above and a different key: every operation in the import
-      family costs `issue:import` — the report names the source site, the account that connected to
-      it and the person who ran the migration — so there is no read-only view to fall back on and
-      the entry would lead to a screen whose whole content is a refusal.
-
-      `find` for the same reason the two project-scoped entries above use it: the project gate
-      cannot be requested until `/projects` has named the active project.
+      `AppShell` is mounted here without the app's route table, so nothing matches
+      `/projects/:projectId` and `useActiveProject` falls back to the first project the caller can
+      see — which is the fallback's own behaviour, and what the switcher must say when it fires.
     */
-    const withKey = renderShell(`/projects/${OLB}/cases`, ['case:read', 'issue:import'])
-    await railReady()
-    expect(await rail().findByRole('link', { name: 'Imports' })).toBeInTheDocument()
-    withKey.unmount()
-
-    renderShell(`/projects/${OLB}/cases`, ['case:read'])
-    await railReady()
-    expect(rail().queryByRole('link', { name: 'Imports' })).not.toBeInTheDocument()
+    const switcher = rail().getByTestId('Nav.ProjectSwitcher')
+    expect(switcher).toHaveTextContent('Online Banking')
+    expect(switcher.closest('header')).toBeNull()
+    expect(within(rail().getByTestId('Nav.Zone.project')).getByTestId('Nav.ProjectSwitcher')).toBe(
+      switcher,
+    )
   })
 
-  it('keeps listing the entries whose pages ARE readable without the write key', async () => {
-    // The rule is whether the page can be READ, not whether it can be written. Both of these
-    // render read-only for a caller without `project:settings` / `project:members`, so both stay.
-    renderShell(`/projects/${OLB}/cases`, ['case:read'])
+  it('becomes the project key chip when the rail collapses, still opening the same control', async () => {
+    const user = userEvent.setup()
+    renderShell(`/projects/${OLB}/cases`)
     await railReady()
 
-    expect(rail().getByRole('link', { name: 'Review' })).toBeInTheDocument()
-    expect(rail().getByRole('link', { name: 'Access & roles' })).toBeInTheDocument()
+    await user.click(rail().getByTestId('Nav.CollapseToggle'))
+
+    const chip = rail().getByTestId('Nav.ProjectSwitcher')
+    // The key, not the name: at 64px there is no room for one and the key is what the rest of the
+    // product identifies a project by.
+    expect(chip).toHaveTextContent('OLB')
+    expect(chip).not.toHaveTextContent('Online Banking')
+    // Still the switcher — the name says which project AND that it can be changed.
+    expect(chip).toHaveAccessibleName('Project: Online Banking. Switch project')
   })
 })
 
 /**
- * The Billing entry (019 D-o) — **the fifth gated entry**, and the one this file exists to pin.
+ * The credential entries (005 C2, decided) — **now the Administration folder and two settings
+ * sections**, and the rule is unchanged.
+ *
+ * Five comments used to argue in `AppShell.tsx` that hiding a rail entry tells a lie about the
+ * **product** — "this instance has no CI credentials" — which is worse than telling the truth about
+ * the reader's access. They live in `nav.ts` now, still right for `Review policy` and
+ * `Access & roles`, and still outweighed for exactly these entries: those pages have **no
+ * read-only view at all**, so what a caller without the key gets is a whole screen whose only
+ * content is a refusal.
+ *
+ * So this pins the rule in both directions, which is the part a one-sided test would miss.
+ */
+describe('AppShell — the gated entries (005 C2, 021 §1)', () => {
+  it('lists the Administration folder and its children for a caller who holds their keys', async () => {
+    renderShell(`/projects/${OLB}/cases`, ['token:issue', 'company:idp', 'audit:view'])
+    await railReady()
+
+    await expandAdministration()
+
+    expect(rail().getByRole('link', { name: 'API tokens' })).toBeInTheDocument()
+    expect(rail().getByRole('link', { name: 'Single sign-on' })).toBeInTheDocument()
+    expect(rail().getByRole('link', { name: 'Company audit' })).toBeInTheDocument()
+  })
+
+  it('draws no Administration folder at all for a caller holding none of its three keys', async () => {
+    renderShell(`/projects/${OLB}/cases`, ['case:read'])
+    await railReady()
+
+    // A folder whose every child is hidden is itself hidden — a folder that opens onto nothing
+    // advertises exactly the screens the permissions exist to withhold.
+    expect(rail().queryByTestId('Nav.Folder.Administration')).toBeNull()
+    expect(rail().queryByRole('link', { name: 'API tokens' })).toBeNull()
+    expect(rail().queryByRole('link', { name: 'Single sign-on' })).toBeNull()
+    expect(rail().queryByRole('link', { name: 'Company audit' })).toBeNull()
+  })
+
+  it('draws the folder for a caller holding ONE of the three, with only that child in it', async () => {
+    renderShell(`/projects/${OLB}/cases`, ['token:issue'])
+    await railReady()
+
+    await expandAdministration()
+
+    expect(rail().getByRole('link', { name: 'API tokens' })).toBeInTheDocument()
+    expect(rail().queryByRole('link', { name: 'Single sign-on' })).toBeNull()
+    expect(rail().queryByRole('link', { name: 'Company audit' })).toBeNull()
+  })
+
+  async function expandAdministration() {
+    const user = userEvent.setup()
+    const folder = rail().getByTestId('Nav.Folder.Administration')
+    if (folder.getAttribute('aria-expanded') === 'false') await user.click(folder)
+  }
+})
+
+/**
+ * The Billing entry (019 D-o) — the gated Company row, moved out of the ungrouped block and
+ * otherwise unchanged.
  *
  * `billing.html` says it in a callout on the screen itself: *"Switch the top bar to Test Engineer
  * or Account Manager and this entry disappears from the sidebar entirely — not greyed out, not
- * empty. It is not their screen."* Plan 009's execution breakdown names exactly this test as M8's
- * acceptance criterion.
+ * empty. It is not their screen."*
  *
  * Both directions, because a one-sided test cannot tell an absent entry from a rail that failed to
  * render at all — and the Account Manager arm is the sharper of the two negatives: that role holds
@@ -262,8 +379,11 @@ describe('AppShell — the Billing entry (019 D-o)', () => {
     await railReady()
 
     // `get`, not `find`: the company gate answers on the first `/me/permissions` and has no second
-    // round trip to wait for — the two credential tests above make the same distinction.
+    // round trip to wait for.
     expect(rail().getByRole('link', { name: 'Billing' })).toHaveAttribute('href', '/billing')
+    // It is in the Company zone now, not floating above the project frame.
+    expect(within(rail().getByTestId('Nav.Zone.company')).getByRole('link', { name: 'Billing' }))
+      .toBeInTheDocument()
   })
 
   it.each([
@@ -273,10 +393,9 @@ describe('AppShell — the Billing entry (019 D-o)', () => {
     renderShell(`/projects/${OLB}/cases`, permissions)
     await railReady()
 
-    // The rail really did render the rest of the ungrouped block — otherwise the absence below
-    // proves nothing about the entry.
-    expect(rail().getByRole('link', { name: 'My work' })).toBeInTheDocument()
-    expect(rail().getByRole('link', { name: 'Timesheets' })).toBeInTheDocument()
+    // The rail really did render the rest of the Company zone — otherwise the absence below proves
+    // nothing about the entry.
+    expect(rail().getByRole('link', { name: 'Org chart' })).toBeInTheDocument()
     // ABSENT, not disabled. `queryByRole` over the whole rail, so a disabled-looking entry
     // rendered as a non-link would still have to be missing by name.
     expect(rail().queryByRole('link', { name: 'Billing' })).toBeNull()
@@ -295,7 +414,7 @@ describe('AppShell — the Billing entry (019 D-o)', () => {
     await user.click(screen.getByTestId('Nav.HamburgerButton'))
 
     const drawer = within(await screen.findByTestId('Nav.Drawer'))
-    expect(drawer.getByRole('link', { name: 'Timesheets' })).toBeInTheDocument()
+    expect(drawer.getByRole('link', { name: 'Org chart' })).toBeInTheDocument()
     expect(drawer.queryByRole('link', { name: 'Billing' })).toBeNull()
   })
 })
@@ -353,15 +472,18 @@ describe('the rail collapses on the document routes (design language §4)', () =
 })
 
 /**
- * The two controls the header gained on 2026-08-29, and the one the rail moved.
+ * The header, after R1 emptied its left-hand side.
  *
- * What each test here is actually protecting:
+ * What each test here is protecting:
  *
- * 1. **The switcher is in the header and nowhere else.** Moving a control usually leaves the old
- *    one behind, and two switchers that disagree is worse than either placement.
+ * 1. **The company slot exists.** It is the outermost frame — instance → company → project →
+ *    screen — and it is reserved rather than filled: no endpoint in the contract names the
+ *    caller's company, so this side shows nothing rather than hard-coding the mockup's "Acme Ltd"
+ *    onto every company on the instance. The element is the reservation, and the test is what says
+ *    the reservation is deliberate.
  * 2. **The search is a field, not a link.** The regression that matters is somebody restoring the
- *    rail entry: a link satisfies "you can reach search" while giving back the empty-input
- *    round trip the field exists to remove. So this asserts the *submission*, not the presence.
+ *    rail entry: a link satisfies "you can reach search" while giving back the empty-input round
+ *    trip the field exists to remove. So this asserts the *submission*, not the presence.
  * 3. **The query is carried in the URL.** A field that navigates to a bare `/search` looks
  *    identical on screen and loses everything the reader typed.
  * 4. **The collapse toggle is in the rail's header row**, not its foot — the placement is the
@@ -390,20 +512,19 @@ describe('AppShell header controls', () => {
     )
   }
 
-  it('puts the project switcher in the header, naming the resolved project', async () => {
+  it('reserves the company slot in the header, and puts nothing in it yet', async () => {
     renderShell(`/projects/${OLB}/cases`)
     await railReady()
 
+    const slot = screen.getByTestId('TopBar.CompanySlot')
+    expect(slot.closest('header')).not.toBeNull()
     /*
-      `AppShell` is mounted here without the app's route table, so nothing matches
-      `/projects/:projectId` and `useActiveProject` falls back to the first project the caller can
-      see — which is the fallback's own behaviour, and what the picker must say when it fires.
+      **Empty on purpose, and this is the assertion that keeps it honest.** `GET /me` answers a
+      `CurrentUser` with no company on it, and no other operation in `openapi.yaml` names one — so
+      there is nothing truthful to render. When the field lands, this test changes to assert the
+      name; until then it pins that nobody filled the slot with a constant.
     */
-    const switcher = screen.getByTestId('Nav.ProjectSwitcher')
-    expect(switcher).toHaveTextContent('Online Banking')
-    // The header, not the rail — and the rail keeps no copy of it.
-    expect(switcher.closest('header')).not.toBeNull()
-    expect(rail().queryByTestId('Nav.ProjectSwitcher')).toBeNull()
+    expect(slot).toBeEmptyDOMElement()
   })
 
   it('searches cases from the header field, carrying the query into the URL', async () => {
@@ -442,6 +563,72 @@ describe('AppShell header controls', () => {
     const toggle = rail().getByTestId('Nav.CollapseToggle')
     const wordmark = rail().getByTestId('Nav.Wordmark')
     expect(toggle.parentElement).toBe(wordmark.parentElement)
+  })
+})
+
+/**
+ * The user menu after 021 R11 — the two rows that moved, and the one that was renamed.
+ *
+ * The rule this pins is the one that decided the move: **the rail is a place in the product scoped
+ * by the project switcher or by the company; the user menu is the person's own things.** A
+ * timesheet is one person's fortnight, so it fails the first test and passes the second. Asserted
+ * from both ends, because a menu entry added without removing the rail row is the ordinary way a
+ * move half-lands.
+ */
+describe('AppShell — the user menu (021 R11, §4)', () => {
+  async function openMenu() {
+    const user = userEvent.setup()
+    await user.click(screen.getByTestId('TopBar.UserMenuButton'))
+    return user
+  }
+
+  it('carries Timesheets and Timesheet approvals, and the rail carries neither', async () => {
+    renderShell(`/projects/${OLB}/cases`)
+    await railReady()
+
+    expect(rail().queryByTestId('Nav.Link.Timesheets')).toBeNull()
+    expect(rail().queryByRole('link', { name: 'Timesheets' })).toBeNull()
+
+    await openMenu()
+
+    expect(await screen.findByTestId('TopBar.TimesheetsLink')).toHaveAttribute(
+      'href',
+      '/timesheets',
+    )
+    expect(screen.getByTestId('TopBar.TimesheetApprovalsLink')).toHaveAttribute(
+      'href',
+      '/timesheets/approvals',
+    )
+  })
+
+  /**
+   * Approvals is listed for **everybody** and carries **no count**, and both are the standing
+   * decisions rather than an omission: the page explains its own refusal (§31), and the count
+   * would come from a read that 403s for anyone without `time:approve` — a PROJECT-scope grant, so
+   * there is no company-wide question this shell could ask first. §8.3's badge table says `none`
+   * on that row, alone among its seven.
+   */
+  it('lists approvals for a caller who can approve nothing, with no count beside it', async () => {
+    renderShell(`/projects/${OLB}/cases`, ['case:read'])
+    await railReady()
+    await openMenu()
+
+    const link = await screen.findByTestId('TopBar.TimesheetApprovalsLink')
+    expect(link).toHaveTextContent('Timesheet approvals')
+    expect(link.textContent).toBe('Timesheet approvals')
+  })
+
+  it('names the help entry User guide, in the menu and in the footer', async () => {
+    renderShell(`/projects/${OLB}/cases`)
+    await railReady()
+
+    expect(screen.getByTestId('AppFooter.HelpLink')).toHaveTextContent('User guide')
+
+    await openMenu()
+
+    const help = await screen.findByTestId('TopBar.HelpLink')
+    expect(help).toHaveTextContent('User guide')
+    expect(help).toHaveAttribute('href', '/help')
   })
 })
 

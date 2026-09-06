@@ -13,6 +13,8 @@ import {
   TableRow,
 } from '../../components/kit';
 import { PageHeader } from '../../components/PageHeader';
+import { TabStrip } from '../../components/TabStrip';
+import { TABS } from '../../app/nav';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui';
 import { formatCount, formatDateTime } from '../../lib/format';
 import { proposalStatusLabels } from '../../lib/labels';
@@ -70,18 +72,25 @@ export function ProposalsPage() {
 
   return (
     <div>
+      {/*
+        ~~`Generated cases`~~ → **`Proposals`** (021 §8.1, R4). §138 gave the queue its own rail
+        heading — `Authoring` — so a reader could not mistake it for the repository; the tab label
+        and this page's own subtitle make the same denial for free, and the heading cost a whole
+        rail row to say it. The **route** and this file's name are unchanged.
+      */}
       <PageHeader
         testId="Proposals.Header"
-        title="Generated cases"
-        documentTitle={
-          project.data ? `Generated cases · ${project.data.name}` : 'Generated cases'
-        }
+        title="Proposals"
+        documentTitle={project.data ? `Proposals · ${project.data.name}` : 'Proposals'}
         crumbs={[
           { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Generated cases' },
+          { label: 'Test cases', to: `/projects/${projectId}/cases` },
+          { label: 'Proposals' },
         ]}
         subtitle="Cases an agent has proposed. Nothing here is in the repository yet — accepting one creates it exactly as writing it by hand would, with you as its author."
       />
+
+      <TabStrip tabs={TABS.cases} projectId={projectId} label="Test case views" testId="Cases.Tabs" />
 
       <section data-testid="Proposals.Panel">
         <Tabs

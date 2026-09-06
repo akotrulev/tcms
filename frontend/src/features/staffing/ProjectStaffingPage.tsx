@@ -88,13 +88,19 @@ export function ProjectStaffingPage() {
 
   return (
     <div>
+      {/*
+        ~~`Staffing`~~ → **`Team`** (021 §8.1). The rail carried that one word twice, at two scopes,
+        for two different screens — this one and `/staffing`, the company view — which is the
+        duplicate-label defect the brief found. This half is *who is on this project*; the company
+        half is `Capacity`. Neither route moves.
+      */}
       <PageHeader
         testId={`${TEST_ID}.Header`}
-        title="Staffing"
-        documentTitle={project.data ? `Staffing · ${project.data.name}` : 'Staffing'}
+        title="Team"
+        documentTitle={project.data ? `Team · ${project.data.name}` : 'Team'}
         crumbs={[
           { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Staffing' },
+          { label: 'Team' },
         ]}
         subtitle={
           window ?

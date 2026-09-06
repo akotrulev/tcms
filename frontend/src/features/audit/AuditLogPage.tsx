@@ -8,6 +8,7 @@ import { useCan, useCanInCompany } from '../../auth/useCan';
 import { DataRegion, GridSkeleton } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader } from '../../components/PageHeader';
+import { SettingsSubnav } from '../settings/SettingsSubnav';
 import { Timeline, TimelineEvent } from '../../components/kit';
 import { Field } from '../../components/kit/Field';
 import { Button, Input } from '../../components/ui';
@@ -88,22 +89,30 @@ export function AuditLogPage() {
     `${formatCount(trail.data?.total ?? 0)} audit ${(trail.data?.total ?? 0) === 1 ? 'event' : 'events'} match the current filters`,
   );
 
-  const title = scope === 'project' ? 'Project audit trail' : 'Company audit trail';
+  /*
+    ~~`Project audit trail` / `Company audit trail`.~~ → **`Project audit` / `Company audit`**
+    (021 §8.1). The rail carried the bare words `Audit trail` twice, at two scopes, exactly as
+    `Staffing` did; the shorter forms are what the rail and the settings subnav now say, and a
+    heading that disagrees with the row you clicked is the signposting failure the renames exist
+    to end. Neither route moves.
+  */
+  const title = scope === 'project' ? 'Project audit' : 'Company audit';
 
   return (
     <div>
       <PageHeader
         testId="Audit.Header"
         title={title}
-        documentTitle="Audit trail"
+        documentTitle={scope === 'project' ? 'Project audit' : 'Company audit'}
         crumbs={
           scope === 'project'
             ? [
                 { label: 'Projects', to: '/projects' },
                 { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-                { label: 'Audit' },
+                { label: 'Settings', to: `/projects/${projectId}/settings` },
+                { label: 'Project audit' },
               ]
-            : [{ label: 'Administration' }, { label: 'Audit' }]
+            : [{ label: 'Administration' }, { label: 'Company audit' }]
         }
         subtitle={
           scope === 'project'
@@ -111,6 +120,14 @@ export function AuditLogPage() {
             : 'Every recorded act in this company, newest first — this project’s and every other’s.'
         }
       />
+
+      {/*
+        The project trail is one of the eleven settings sections (021 §5); the COMPANY trail is a
+        rail row under `Administration` and belongs to no project, so it gets no subnav. One
+        component, two scopes, and this is the one place the two now render differently above the
+        fold.
+      */}
+      {scope === 'project' && <SettingsSubnav projectId={projectId ?? ''} />}
 
       {!allowed ? (
         <section data-testid="Audit.Denied">

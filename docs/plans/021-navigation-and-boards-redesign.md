@@ -475,8 +475,17 @@ docs/specs/2026-09-06-navigation-ia-redesign-proposal.md §3, §4, §7, §8.2 ·
 frontend/src/components/PageHeader.tsx · `grep -rln "crumbs=" frontend/src/features` (the 44) ·
 app/router.tsx · app/HeaderActions.tsx, app/topStripSlot.tsx · features/cases/CaseDetailPage.tsx
 (five header actions), CaseEditorPage.tsx, history/CaseHistoryPage.tsx, runs/ExecutionPage.tsx,
-proposals/ProposalPage.tsx · app/AppShell.tsx `HeaderCaseSearch` (1144) · lib/permissions.ts ·
-docs/specs/2026-07-30-tcms-roles-permissions-naming.md §A3 (for the access page's "held by").
+proposals/ProposalPage.tsx · app/AppShell.tsx `HeaderCaseSearch` · lib/permissions.ts ·
+docs/specs/2026-07-30-tcms-roles-permissions-naming.md §A3 (for the access page's "held by") ·
+**app/nav.ts IN FULL** — T6 landed it and the palette's places index is generated from it. Its
+shape, which differs from this plan's original §T6 sketch: `icon` is a `LucideIcon` COMPONENT (not
+a JSX element, so the file is `.ts` and imports no markup); `to` is `(projectId: string) => string`
+on `NavItem`, `SettingsSection` and `TabEntry` alike, so the index must call it with the active
+project; `gate` is `{ key, scope }`, not a bare key; folders are told from items by the exported
+`isFolder(entry)` type guard. The places index is therefore
+`NAV.flatMap(zone => zone.entries.flatMap(e => isFolder(e) ? e.items : [e]))` plus
+`SETTINGS_SECTIONS` plus `Object.values(TABS).flat()` plus the user menu's five rows, each filtered
+by the same gate `AppShell` applies (`useCan` / `useCanInCompany` by `gate.scope`).
 
 Deliver: `handle: { crumbs }` on every `<Route>` in router.tsx (a function of params + the
 project query, so the project crumb names the project), a `ShellBreadcrumbs` in the header
@@ -494,6 +503,13 @@ every disabled control that names a reason.
 Traps this task will hit:
 - The palette is NOT the page: `/search` stays, `CaseSearchPage` stays; `TopBar.CaseSearch` →
   `TopBar.Search`. The `role="search"` landmark moves onto the palette trigger's form.
+- **`TopBar.CompanySlot` exists and is deliberately EMPTY.** T6 reserved the element and put
+  nothing in it, because no operation in `openapi.yaml` names the caller's company — `GET /me`
+  answers a `CurrentUser` that is a `UserRef` plus `isSystemAdmin`, `hasPassword` and `teams`.
+  Filling it is a contract change and therefore a backend task, not this one. Do not hard-code
+  "Acme Ltd", and do not delete the slot to tidy the header: `AppShell.test.tsx` asserts it is
+  present and empty, and that assertion is what says the reservation was deliberate. The
+  breadcrumbs go to its right.
 - `useMatches()` needs the data router. Check `createBrowserRouter` vs `<Routes>` in router.tsx
   — the file uses `<Routes>`; converting to `createBrowserRouter` is a router-wide change that is
   NOT this task. Instead put `crumbs` in a `routeMeta.ts` map keyed by path pattern and resolve
@@ -1630,63 +1646,38 @@ Settings landing and subnav; the company slot; `AppShell.test.tsx` rewritten; al
 - Create: `app/nav.ts`, `components/TabStrip.tsx`, `features/settings/SettingsLandingPage.tsx`, `SettingsSubnav.tsx`, `features/cases/SuiteListPage.tsx`
 - Modify: `app/AppShell.tsx`, `app/AppShell.test.tsx`, `app/router.tsx`, `features/help/sections.tsx`, the eight settings pages, `CaseListPage`, `RunListPage`, the docs/artifacts/proposals/schedules/ingestions pages
 
-- [ ] **Step 1: `nav.ts` — the data, transcribed from `shell-v2.js`'s `NAV`**
+- [x] **Step 1: `nav.ts` — the data, transcribed from `shell-v2.js`'s `NAV`**
+
+Three shapes differ from this plan's first sketch, and `nav.ts`'s own header argues each:
+
+1. **`icon` is a `LucideIcon` component, not a JSX element** — the sketch wrote
+   `<UserCheck className="size-4"/>`, which would make the file `.tsx` and put a rendering
+   decision (the size class) in the model. The rail supplies it.
+2. **`gate` carries its scope** (`{ key, scope: 'project' | 'company' }`) — `AppShell` reads two
+   different endpoints for a verdict, and a bare key cannot say which one answers it.
+3. **`to` is `(projectId: string) => string`**, so a row that ignores its argument is visibly a
+   row outside the project frame.
+
+And one decision was taken against §1: **the Project zone has no `needs: 'project:read'`.** It is
+drawn when a project resolves, which is the same answer for the roles §1 cares about — Finance and
+Account Manager get nothing from `GET /projects`, so no project resolves — arrived at without a
+round trip. Asking the permission would hide all eleven rows on first paint and reveal them a
+request later, because `can()` fails closed while pending and the project gate cannot even be
+requested until `/projects` has named the active project.
 
 ```ts
-export type Gate = keyof typeof permissionLabels;      // a permission key, or absent
-export interface NavItem { label: string; to: (p?: string) => string; icon: ReactNode; gate?: Gate; end?: boolean }
-export interface NavFolder { label: string; icon: ReactNode; items: NavItem[] }
-export interface Zone { id: 'you' | 'project' | 'company'; label: string; entries: (NavItem | NavFolder)[] }
+export interface NavGate { key: PermissionKey; scope: 'project' | 'company' }
+export interface NavItem { label: string; to: (p: string) => string; icon: LucideIcon; gate?: NavGate; end?: boolean }
+export interface NavFolder { label: string; icon: LucideIcon; items: NavItem[] }
+export type NavEntry = NavItem | NavFolder
+export function isFolder(entry: NavEntry): entry is NavFolder
+export interface NavZone { id: 'you' | 'project' | 'company'; label: string; switcher?: boolean; needs?: NavGate; entries: NavEntry[] }
 
-export const NAV: Zone[] = [
-  { id: 'you', label: 'You', entries: [
-    { label: 'My work', to: () => '/my-work', icon: <UserCheck className="size-4" />, end: true },
-    { label: 'Projects', to: () => '/', icon: <LayoutGrid className="size-4" />, end: true },
-  ]},
-  { id: 'project', label: 'Project', entries: [
-    { label: 'Work',         to: (p) => `/projects/${p}/work`,      icon: <Kanban className="size-4" /> },
-    { label: 'Test cases',   to: (p) => `/projects/${p}/cases`,     icon: <Folder className="size-4" /> },
-    { label: 'Test plans',   to: (p) => `/projects/${p}/plans`,     icon: <ClipboardList className="size-4" /> },
-    { label: 'Test runs',    to: (p) => `/projects/${p}/runs`,      icon: <ListChecks className="size-4" /> },
-    { label: 'Releases',     to: (p) => `/projects/${p}/releases`,  icon: <Rocket className="size-4" /> },
-    { label: 'Documents',    to: (p) => `/projects/${p}/docs`,      icon: <FileText className="size-4" /> },
-    { label: 'Overview',     to: (p) => `/projects/${p}`,           icon: <LayoutDashboard className="size-4" />, end: true },
-    { label: 'Analytics',    to: (p) => `/projects/${p}/analytics`, icon: <TrendingUp className="size-4" /> },
-    { label: 'Test reports', to: (p) => `/projects/${p}/reports`,   icon: <ChartColumn className="size-4" /> },
-    { label: 'Team',         to: (p) => `/projects/${p}/staffing`,  icon: <Users2 className="size-4" /> },
-    { label: 'Settings',     to: (p) => `/projects/${p}/settings`,  icon: <Settings className="size-4" /> },
-  ]},
-  { id: 'company', label: 'Company', entries: [
-    { label: 'Org chart',    to: () => '/org-chart',   icon: <Network className="size-4" /> },
-    { label: 'Directory',    to: () => '/directory',   icon: <UserRoundSearch className="size-4" /> },
-    { label: 'Capacity',     to: () => '/staffing',    icon: <Users2 className="size-4" /> },
-    { label: 'Teams & roles',to: () => '/admin/teams', icon: <Users className="size-4" /> },
-    { label: 'Clients',      to: () => '/clients',     icon: <Building2 className="size-4" />, gate: 'client:read' },
-    { label: 'Billing',      to: () => '/billing',     icon: <Receipt className="size-4" />,   gate: 'billing:read' },
-    { label: 'Administration', icon: <Shield className="size-4" />, items: [
-      { label: 'API tokens',     to: () => '/admin/tokens', icon: <Key className="size-4" />,   gate: 'token:issue' },
-      { label: 'Single sign-on', to: () => '/admin/sso',    icon: <LogIn className="size-4" />, gate: 'company:idp' },
-      { label: 'Company audit',  to: () => '/admin/audit',  icon: <ScrollText className="size-4" />, gate: 'audit:view' },
-    ]},
-  ]},
-];
-
-/** The Settings landing's sections — the same gates the rail applied to these entries. */
-export const SETTINGS_SECTIONS = [
-  { label: 'General', to: 'settings/general' }, { label: 'Workflow', to: 'settings/workflow' },
-  { label: 'Boards', to: 'settings/boards' }, { label: 'Code repositories', to: 'settings/repositories' },
-  { label: 'Classification', to: 'settings/classification' }, { label: 'Review policy', to: 'settings/review' },
-  { label: 'Imports', to: 'imports', gate: 'issue:import' },
-  { label: 'Notifications', to: 'settings/notifications', gate: 'integration:manage' },
-  { label: 'Issue tracker', to: 'settings/trackers', gate: 'integration:manage' },
-  { label: 'Access & roles', to: 'access' }, { label: 'Project audit', to: 'audit', gate: 'project:audit' },
-] as const;
-
-export const TABS = {
-  cases: [{ label: 'Cases', to: 'cases' }, { label: 'Suites', to: 'suites' }, { label: 'Proposals', to: 'generated-cases' }],
-  runs:  [{ label: 'Runs', to: 'runs' }, { label: 'Schedules', to: 'run-schedules' }, { label: 'CI results', to: 'ingestions' }],
-  docs:  [{ label: 'Pages', to: 'docs' }, { label: 'Artifacts', to: 'artifacts' }],
-} as const;
+export const NAV: NavZone[]                          // you (2) · project (11, switcher) · company (6 + Administration ▸ 3)
+export interface SettingsSection { label: string; to: (p: string) => string; icon: LucideIcon; gate?: NavGate }
+export const SETTINGS_SECTIONS: readonly SettingsSection[]   // 11, gates all PROJECT scope
+export interface TabEntry { label: string; to: (p: string) => string; end?: boolean }
+export const TABS: Record<'cases' | 'runs' | 'docs', readonly TabEntry[]>
 ```
 
 - [ ] **Step 2: Failing tests — rewrite `AppShell.test.tsx` against `NAV`**
@@ -1854,6 +1845,22 @@ to this plan:
   expand; Block… on a touch device; the palette's `/` guard in contenteditable; the settings
   landing's live facts against a project with zero imports; the three-board CLI resolver against
   a real project]
+
+**From T6 (the shell), stated because the gates cannot see any of it:**
+
+- **The company slot is reserved and empty, and it will stay empty until the contract names a
+  company.** §3 asks for the company name as static text; nothing on the wire carries it. The
+  element, its locator and its place in the header are real; the text is not. This is the one
+  item of T6's deliverable that did not land, and it needs one field on `GET /me` from the backend
+  side before any frontend task can finish it.
+- Nothing in T6 has been seen in a browser: the collapsed rail's `Administration` flyout, the key
+  chip opening the switcher at 64px, the settings landing at eleven cards on a wide screen and at
+  one column on a phone, the three tab strips wrapping, and the mobile drawer — which renders the
+  three zones as the same flat lists the desktop rail does, **not** as §1's zone accordions. That
+  divergence is deliberate for now (the drawer shares `RailContent`, and splitting it is a second
+  component to keep in step) and is the smallest thing on this list.
+- The user menu is §4 minus two rows: `Your access` and `Keyboard shortcuts` are T7's, and a menu
+  entry pointing at a route that does not exist is worse than an absent one.
 ```
 
 - [ ] **Step 4: Gate and commit**

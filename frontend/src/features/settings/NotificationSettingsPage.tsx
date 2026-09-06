@@ -11,6 +11,7 @@ import { useCan } from '../../auth/useCan';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader } from '../../components/PageHeader';
+import { SettingsSubnav } from './SettingsSubnav';
 import { PermissionGate } from '../../components/PermissionGate';
 import {
   Badge,
@@ -126,6 +127,7 @@ export function NotificationSettingsPage() {
         documentTitle={project.data ? `Notifications · ${project.data.name}` : 'Notifications'}
         crumbs={[
           { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
+          { label: 'Settings', to: `/projects/${projectId}/settings` },
           { label: 'Notifications' },
         ]}
         subtitle="Where this project sends word that a run finished or a task landed on somebody. Each channel posts to one place and chooses what it is told about."
@@ -152,6 +154,8 @@ export function NotificationSettingsPage() {
           </PermissionGate>
         }
       />
+
+      <SettingsSubnav projectId={projectId} />
 
       {/* Conditionally mounted, like every other write dialog in this area, so each one opens with a
           fresh draft rather than the last row's (§54). */}

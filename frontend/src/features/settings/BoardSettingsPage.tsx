@@ -26,6 +26,7 @@ import type {
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader } from '../../components/PageHeader';
+import { SettingsSubnav } from './SettingsSubnav';
 import { PermissionGate } from '../../components/PermissionGate';
 import { Banner } from '../../components/kit';
 import {
@@ -110,6 +111,7 @@ export function BoardSettingsPage() {
         documentTitle={project.data ? `Boards · ${project.data.name}` : 'Boards'}
         crumbs={[
           { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
+          { label: 'Settings', to: `/projects/${projectId}/settings` },
           { label: 'Boards' },
         ]}
         subtitle="Every board over this project, the statuses each column claims, and the check that says the claims add up."
@@ -129,6 +131,8 @@ export function BoardSettingsPage() {
           </PermissionGate>
         }
       />
+
+      <SettingsSubnav projectId={projectId} />
 
       <div className="mb-4 max-w-[960px]" data-testid={`${TEST_ID}.Note`}>
         <Banner tone="neutral">

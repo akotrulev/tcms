@@ -9,6 +9,7 @@ import {
 import type { EditAfterApproval, ProjectSettings, ReviewImpact } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
 import { PageHeader } from '../../components/PageHeader';
+import { SettingsSubnav } from './SettingsSubnav';
 import { PermissionGate } from '../../components/PermissionGate';
 import { Banner } from '../../components/kit';
 import { SettingGroup, SettingRow } from '../../components/kit/SettingRow';
@@ -71,16 +72,24 @@ export function ReviewSettingsPage() {
 
   return (
     <div>
+      {/*
+        ~~`Review`~~ → **`Review policy`** (021 §8.1). The page's own subtitle already said it: what
+        is configured here is not a review, it is the rule that decides whether reviews happen at
+        all and what approval requires.
+      */}
       <PageHeader
         testId="ReviewSettings.Header"
-        title="Review"
-        documentTitle={project.data ? `Review · ${project.data.name}` : 'Review'}
+        title="Review policy"
+        documentTitle={project.data ? `Review policy · ${project.data.name}` : 'Review policy'}
         crumbs={[
           { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Review' },
+          { label: 'Settings', to: `/projects/${projectId}/settings` },
+          { label: 'Review policy' },
         ]}
         subtitle="Whether cases, suites and plans go through review before they count as authoritative — and what approval requires when they do. Review is off by default."
       />
+
+      <SettingsSubnav projectId={projectId} />
 
       <DataRegion
         testId="ReviewSettings.Region"

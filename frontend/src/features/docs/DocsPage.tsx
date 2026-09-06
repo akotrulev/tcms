@@ -31,6 +31,8 @@ import { Identifier } from '../../components/Identifier';
 import { Badge, Banner, DocumentSurface, ResultBar } from '../../components/kit';
 import { LinkRelationshipControl } from '../../components/LinkRelationshipControl';
 import { PermissionGate } from '../../components/PermissionGate';
+import { TabStrip } from '../../components/TabStrip';
+import { TABS } from '../../app/nav';
 import { UnlinkDialog } from '../../components/UnlinkDialog';
 import { Button } from '../../components/ui';
 import { cn } from '../../lib/cn';
@@ -177,9 +179,13 @@ export function DocsPage() {
 
   return (
     <div>
-      <title>
-        {project.data ? `Documentation · ${project.data.name} · TCMS` : 'Documentation · TCMS'}
-      </title>
+      {/*
+        ~~`Documentation`~~ → **`Documents`** (021 §8.1). The old label collided with the user
+        menu's `Help & documentation`, so one shell named two destinations the same word and a
+        reader had to guess which one held the CLI instructions. Both ends move: this is
+        `Documents`, and the help entry is `User guide`.
+      */}
+      <title>{project.data ? `Documents · ${project.data.name} · TCMS` : 'Documents · TCMS'}</title>
 
       <header className="mb-3 flex flex-wrap items-start gap-3 border-b border-line pb-3">
         <div className="min-w-0 flex-1">
@@ -191,7 +197,7 @@ export function DocsPage() {
               {project.data?.name ?? 'Project'}
             </RouterLink>
             <span className="px-1.5 text-ink-4">/</span>
-            <b className="font-medium text-ink-2">Documentation</b>
+            <b className="font-medium text-ink-2">Documents</b>
             {openPage && (
               <>
                 <span className="px-1.5 text-ink-4">/</span>
@@ -199,9 +205,7 @@ export function DocsPage() {
               </>
             )}
           </nav>
-          <h1 className="m-0 text-[19px] font-semibold tracking-[-.018em] text-ink">
-            Documentation
-          </h1>
+          <h1 className="m-0 text-[19px] font-semibold tracking-[-.018em] text-ink">Documents</h1>
           <p className="m-0 mt-1 max-w-[74ch] text-[13px] text-ink-3">
             Specifications live here. Cases link to individual blocks, and each block shows what
             verifies it.
@@ -223,6 +227,13 @@ export function DocsPage() {
           )}
         </PermissionGate>
       </header>
+
+      {/*
+        Pages · Artifacts (021 §1). The artifact register was its own rail row under `Project`; it
+        is a document the project keeps, so it is a view of this screen rather than a sibling of
+        the settings screens.
+      */}
+      <TabStrip tabs={TABS.docs} projectId={projectId} label="Document views" testId="Docs.Tabs" />
 
       {/*
         The carried case, named. It is a banner rather than a highlighted control somewhere in the

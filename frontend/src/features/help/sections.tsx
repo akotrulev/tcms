@@ -96,7 +96,7 @@ export const helpSections: HelpSection[] = [
             {
               term: 'My work',
               detail:
-                'In the rail, above the project groups, so it is not scoped by the switcher: every issue, execution and review assigned to you, across every project you can see.',
+                'First in the rail\u2019s You zone, above the project frame, so it is not scoped by the switcher: every issue, execution and review assigned to you, across every project you can see.',
             },
           ]}
         />
@@ -138,7 +138,7 @@ export const helpSections: HelpSection[] = [
                   Costs <Code>project:members</Code> on that project — held by Test Lead, Project
                   Manager, Company Admin and Instance Admin. A Test Lead can staff their own project
                   without being able to staff anybody else&apos;s. Do it from{' '}
-                  <strong>Project → Access &amp; roles</strong>.
+                  <strong>Settings → Access &amp; roles</strong> in that project.
                 </>
               ),
             },
@@ -270,8 +270,9 @@ export const helpSections: HelpSection[] = [
         </Note>
         <P>
           <strong>Access &amp; roles</strong> is the per-project view of the access model: what this
-          project granted, and what it inherits from the company. <strong>Audit trail</strong>{' '}
-          appears in the rail only if you hold <Code>project:audit</Code>.
+          project granted, and what it inherits from the company; it is a section of{' '}
+          <strong>Settings</strong>. <strong>Project audit</strong> is a section of Settings too, and
+          appears there only if you hold <Code>project:audit</Code>.
         </P>
       </>
     ),
@@ -340,11 +341,11 @@ export const helpSections: HelpSection[] = [
           suites — many at once. You can also clone a case, or delete one.
         </P>
 
-        <H>Generated cases</H>
+        <H>Proposals</H>
         <P>
           An AI agent can file a <em>proposed</em> test case for a person to review. Proposals live
-          under <strong>Authoring → Generated cases</strong> and are accepted into the repository or
-          rejected there.
+          under the <strong>Proposals</strong> tab of <strong>Test cases</strong> and are accepted
+          into the repository or rejected there.
         </P>
         <Note>
           Nothing an agent writes lands unreviewed. This is structural rather than a policy setting:
@@ -519,7 +520,8 @@ export const helpSections: HelpSection[] = [
   -H "Authorization: Bearer $TCMS_TOKEN" \\
   -F "file=@build/test-results/junit.xml"`}</Terminal>
         <P>
-          Issue the token from <strong>Company → API tokens</strong>. A CI credential is normally
+          Issue the token from <strong>Company → Administration → API tokens</strong>. A CI
+          credential is normally
           given the <strong>Automation Service</strong> role, which can create runs, submit results
           and attach evidence and can do very little else.
         </P>
@@ -532,8 +534,8 @@ export const helpSections: HelpSection[] = [
           ]}
         />
         <P>
-          Find it all under <strong>Execution → CI ingestion</strong>. If your results did not show
-          up, that is the screen that says why.
+          Find it all under the <strong>CI results</strong> tab of <strong>Test runs</strong>. If
+          your results did not show up, that is the screen that says why.
         </P>
       </>
     ),
@@ -545,7 +547,7 @@ export const helpSections: HelpSection[] = [
     summary: 'Where requirements live, what the artifact register is for, and the three reports.',
     body: (
       <>
-        <H>Documentation</H>
+        <H>Documents</H>
         <Note>
           <strong>This is where requirements live.</strong> There is no separate requirement or
           acceptance-criterion record in this product — a requirement <em>is</em> a block on a
@@ -621,7 +623,8 @@ export const helpSections: HelpSection[] = [
 
         <H>API tokens</H>
         <P>
-          Issue a token for CI or for an AI agent from <strong>Company → API tokens</strong>. Costs{' '}
+          Issue a token for CI or for an AI agent from{' '}
+          <strong>Company → Administration → API tokens</strong>. Costs{' '}
           <Code>token:issue</Code>, which Company Admins hold.
         </P>
         <List
@@ -640,7 +643,7 @@ export const helpSections: HelpSection[] = [
 
         <H>Notifications</H>
         <P>
-          Channels are configured per project under <strong>Project → Notifications</strong>: email
+          Channels are configured per project under <strong>Settings → Notifications</strong>: email
           or webhook. You are notified when work is assigned to you and when a run completes, and
           every delivery attempt is recorded, so a channel that stopped working is visible rather
           than silent.

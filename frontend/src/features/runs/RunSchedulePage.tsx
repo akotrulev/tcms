@@ -22,6 +22,8 @@ import {
   TableRow,
 } from '../../components/kit';
 import { PageHeader } from '../../components/PageHeader';
+import { TabStrip } from '../../components/TabStrip';
+import { TABS } from '../../app/nav';
 import { PermissionGate } from '../../components/PermissionGate';
 import {
   Button,
@@ -124,7 +126,7 @@ export function RunSchedulePage() {
         }
         crumbs={[
           { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Runs', to: `/projects/${projectId}/runs` },
+          { label: 'Test runs', to: `/projects/${projectId}/runs` },
           { label: 'Schedules' },
         ]}
         subtitle="A standing request for a run — what to ask for, and when. The runs a schedule creates are ordinary runs; nobody is recorded as having created them, because nobody did. Each schedule fires with the grants of the person it is listed against, checked at the moment it fires."
@@ -145,6 +147,8 @@ export function RunSchedulePage() {
           </PermissionGate>
         }
       />
+
+      <TabStrip tabs={TABS.runs} projectId={projectId} label="Test run views" testId="Runs.Tabs" />
 
       <section data-testid="RunSchedules.Panel">
         <label className="mb-3 flex w-fit items-center gap-2 text-[13px] text-ink-3">

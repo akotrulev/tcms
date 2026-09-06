@@ -6,6 +6,7 @@ import { ApiError } from '../../api/client';
 import type { ClassificationDimension, ClassificationValue, PermissionKey } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
 import { PageHeader } from '../../components/PageHeader';
+import { SettingsSubnav } from './SettingsSubnav';
 import { PermissionGate } from '../../components/PermissionGate';
 import { Badge, Banner } from '../../components/kit';
 import {
@@ -82,10 +83,13 @@ export function ClassificationSettingsPage() {
         }
         crumbs={[
           { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
+          { label: 'Settings', to: `/projects/${projectId}/settings` },
           { label: 'Classification' },
         ]}
         subtitle="The axes a test case is classified on. Feature belongs to this project; Test Type, Test Level and Execution Phase are shared by every project in the company."
       />
+
+      <SettingsSubnav projectId={projectId} />
 
       <DataRegion
         testId="Classification.Dimensions"

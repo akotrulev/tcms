@@ -83,7 +83,7 @@ export function IngestionJobPage() {
         documentTitle={posted ? `Ingestion · ${posted}` : 'Ingestion'}
         crumbs={[
           { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'CI ingestion', to: `/projects/${projectId}/ingestions` },
+          { label: 'CI results', to: `/projects/${projectId}/ingestions` },
           { label: 'Report' },
         ]}
         subtitle="What this report matched, and the tests it could not place. Binding a test name here makes every later build find it."

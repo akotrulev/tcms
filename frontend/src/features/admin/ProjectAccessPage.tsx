@@ -4,6 +4,7 @@ import { useProject, useProjectMembers, useRoleAssignments, useRoles, useTeams }
 import type { RoleAssignment } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
 import { PageHeader } from '../../components/PageHeader';
+import { SettingsSubnav } from '../settings/SettingsSubnav';
 import { PermissionGate } from '../../components/PermissionGate';
 import { Banner } from '../../components/kit';
 import { Button } from '../../components/ui';
@@ -121,6 +122,7 @@ export function ProjectAccessPage() {
         }
         crumbs={[
           { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
+          { label: 'Settings', to: `/projects/${projectId}/settings` },
           { label: 'Access & roles' },
         ]}
         subtitle="Who holds which role on this project, what it inherits from the company, and what each role can do here."
@@ -146,6 +148,13 @@ export function ProjectAccessPage() {
           </PermissionGate>
         }
       />
+
+      {/*
+        One of the eleven settings sections (021 §5), and one of the three whose route is not under
+        `/settings/` — no route moved. The subnav is what keeps it reachable from its siblings now
+        that the rail carries one `Settings` row instead of eleven.
+      */}
+      <SettingsSubnav projectId={projectId} />
 
       {/* Conditionally mounted, like every other create dialog in this app: a form mounted behind
           `open={false}` keeps one component instance — and therefore one set of field state and

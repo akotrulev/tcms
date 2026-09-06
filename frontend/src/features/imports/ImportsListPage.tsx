@@ -4,6 +4,7 @@ import { useImportRuns, useProject } from '../../api/queries';
 import { DataRegion, EmptyState } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader, Panel } from '../../components/PageHeader';
+import { SettingsSubnav } from '../settings/SettingsSubnav';
 import { PermissionGate } from '../../components/PermissionGate';
 import {
   Badge,
@@ -80,11 +81,20 @@ export function ImportsListPage() {
         documentTitle={project.data ? `Imports · ${project.data.name}` : 'Imports'}
         crumbs={[
           { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
+          { label: 'Settings', to: `/projects/${projectId}/settings` },
           { label: 'Imports' },
         ]}
         subtitle="Bring a Jira or Azure DevOps project in, keeping its issue keys."
         actions={startButton(undefined)}
       />
+
+      {/*
+        `Imports` is one of the eleven settings sections (021 §5) even though its route is not under
+        `/settings/` — no route moved, and three of the eleven predate the prefix. The subnav is
+        what makes that grouping visible from here, and without it this page is a dead end: the
+        rail row that used to lead back to its siblings is gone.
+      */}
+      <SettingsSubnav projectId={projectId} />
 
       <div className="max-w-[1180px]">
         <Panel

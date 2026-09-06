@@ -79,11 +79,16 @@ export function StaffingPage() {
 
   return (
     <div>
+      {/*
+        ~~`Staffing`~~ → **`Capacity`** (021 §8.1), the other half of the duplicate-label repair.
+        The project screen is `Team` — who is on it — and this is the company question: who is
+        free next month, across every project a person is on. The route stays `/staffing`.
+      */}
       <PageHeader
         testId={`${TEST_ID}.Header`}
-        title="Staffing"
-        documentTitle="Company staffing"
-        crumbs={[{ label: 'Company' }, { label: 'Staffing' }]}
+        title="Capacity"
+        documentTitle="Company capacity"
+        crumbs={[{ label: 'Company' }, { label: 'Capacity' }]}
         subtitle={
           window ?
             `Company view · ${formatDate(window.from)} – ${formatDate(window.to)}`

@@ -19,6 +19,7 @@ import { useCan } from '../../auth/useCan';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader } from '../../components/PageHeader';
+import { SettingsSubnav } from './SettingsSubnav';
 import { PermissionGate } from '../../components/PermissionGate';
 import {
   Badge,
@@ -118,6 +119,7 @@ export function TrackerSettingsPage() {
         documentTitle={project.data ? `Issue tracker · ${project.data.name}` : 'Issue tracker'}
         crumbs={[
           { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
+          { label: 'Settings', to: `/projects/${projectId}/settings` },
           { label: 'Issue tracker' },
         ]}
         subtitle="Which tracker this project links and files into. Each person connects their own account — nothing here holds a credential."
@@ -137,6 +139,8 @@ export function TrackerSettingsPage() {
           </PermissionGate>
         }
       />
+
+      <SettingsSubnav projectId={projectId} />
 
       {adding && <BindingDialog projectId={projectId} onClose={() => setAdding(false)} />}
       {deleting && (

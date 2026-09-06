@@ -16,6 +16,8 @@ import {
   type BadgeTone,
 } from '../../components/kit';
 import { PageHeader } from '../../components/PageHeader';
+import { TabStrip } from '../../components/TabStrip';
+import { TABS } from '../../app/nav';
 import { PermissionGate } from '../../components/PermissionGate';
 import { Button } from '../../components/ui';
 import { RunCreateDialog } from './RunCreateDialog';
@@ -76,6 +78,14 @@ export function RunListPage() {
           </PermissionGate>
         }
       />
+
+      {/*
+        Runs · Schedules · CI results (021 §1). `Schedules` was an ORPHAN — a shipped feature with
+        no rail entry and no inbound link from any screen, reachable only by typing the URL — and
+        `CI results` was a rail row of its own. Both are views of "what has run here", so they are
+        tabs on the screen they extend rather than two more rows in a rail.
+      */}
+      <TabStrip tabs={TABS.runs} projectId={projectId} label="Test run views" testId="Runs.Tabs" />
 
       {creating && (
         <RunCreateDialog

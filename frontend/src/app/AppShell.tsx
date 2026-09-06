@@ -1,53 +1,26 @@
 import { useColorScheme } from './useColorScheme';
 import {
-  Bell,
   Bot,
   Bug,
-  Building2,
-  ChartColumn,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  CloudUpload,
-  ClipboardList,
-  FileText,
-  Folder,
-  FolderGit2,
-  GitBranch,
   HelpCircle,
-  History,
-  Import,
-  Kanban,
-  Key,
-  LayoutDashboard,
-  LayoutGrid,
-  ListChecks,
-  LogIn,
   LogOut,
   Menu as MenuIcon,
-  MessageSquareText,
   Moon,
-  Network,
-  Package,
-  Receipt,
-  Rocket,
   Search,
-  Settings,
   Shield,
-  Sparkles,
   Sun,
-  Tag,
   Timer,
-  TrendingUp,
-  UserRoundSearch,
-  Users2,
-  UserCheck,
-  Users,
+  Stamp,
 } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import {
   Link as RouterLink,
   NavLink,
   Outlet,
+  useLocation,
   useMatch,
   useNavigate,
   useParams,
@@ -63,6 +36,15 @@ import { safeStorage } from '../lib/safeStorage';
 import { TopStripProvider, TopStripTarget } from './topStripSlot';
 import { cn } from '../lib/cn';
 import {
+  NAV,
+  isFolder,
+  type NavEntry,
+  type NavFolder,
+  type NavGate,
+  type NavItem,
+  type NavZone,
+} from './nav';
+import {
   Button,
   Dialog,
   DialogContent,
@@ -70,6 +52,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
   Input,
   Select,
@@ -141,578 +125,65 @@ const COLLAPSED_RAIL_ROUTES = [
   '/projects/:projectId/runs/:runId/executions/:executionId',
 ] as const;
 
-interface NavItem {
-  label: string;
-  to: string;
-  icon: ReactNode;
-  /** Marks the item active for descendant routes too, not just an exact match. */
-  end?: boolean;
+// ------------------------------------------------------------------- the model ----
+
+/**
+ * ~~`projectNav()` — four subject folders inside the project frame, and four ungrouped items
+ * above them, each built here as a literal.~~ → **superseded (021 D-h): the rail is data, in
+ * `app/nav.ts`.**
+ *
+ * Six hundred lines of this file were a nav model interleaved with the arguments for it, and the
+ * arguments are the half worth keeping — they are in `nav.ts` now, beside the entries they are
+ * about, struck through where 021 reversed them. What is left here is the *rendering*: which gate
+ * answers a row, how a zone is drawn at two widths, and what the one surviving folder does when
+ * the labels are gone.
+ *
+ * The gate behaviour is carried over **unchanged**, which is the part that had to not drift:
+ *
+ *   - a row with no gate is listed for everybody (§31, disable-don't-hide);
+ *   - a gated row is ABSENT rather than disabled — the nine recorded exceptions, each argued in
+ *     `nav.ts` at the entry that carries it;
+ *   - the verdict comes from `can()`, which fails **closed while pending** (the item appears once
+ *     the answer arrives, where a wrongly-shown one would flash a link that then vanishes) and
+ *     **open when `/me/permissions` itself failed** (an entry wrongly shown leads to a page that
+ *     refuses; an entry wrongly hidden takes an administrator's own screens away with nothing on
+ *     screen to say why).
+ */
+function useNavGates(activeProjectId: string | undefined): (gate: NavGate | undefined) => boolean {
+  /*
+    The rail's only permission reads, and both are warm: every screen behind this rail already
+    fetches `/me/permissions`, so asking again costs no round trip on navigation.
+
+    Two hooks rather than one with a scope argument, because the two read different endpoints'
+    answers — a COMPANY-scope question asked of a project (or the reverse) is answered confidently
+    and wrongly. `NavGate.scope` is what stops a row asking the wrong one.
+  */
+  const projectGate = useCan(activeProjectId);
+  const companyGate = useCanInCompany();
+
+  return (gate) => {
+    if (!gate) return true;
+    return gate.scope === 'company' ? companyGate.can(gate.key) : projectGate.can(gate.key);
+  };
 }
 
 /**
- * The one rail item that is **not** about the project in the switcher (§83).
+ * An entry survives its own gate; **a folder whose every child is hidden is itself hidden.**
  *
- * It is rendered *above* the switcher rather than in a group below it, and the placement is the
- * whole argument: everything under the switcher is scoped by it, and §6l's My Work board spans
- * every project the caller can see. Listing it below would tell the reader that switching projects
- * changes it — the same misstatement the `Teams & roles` comment records for the Company group, one
- * level further out, and this one cannot be fixed by a heading because there is no project frame to
- * put a heading inside.
- *
- * It is also the only rail item that renders when **no project is resolved yet** — the rest of the
- * rail is empty until `useProjects` answers, and a personal board is exactly what a member holding
- * no project grants at all has.
+ * The second half is what keeps `Administration` honest. All three of its children are gated, so
+ * for most callers there is nothing behind it — and a folder that opens onto nothing is worse than
+ * an absent one, because it advertises the existence of exactly the screens the permissions exist
+ * to withhold.
  */
-const MY_WORK: NavItem = {
-  label: 'My work',
-  to: '/my-work',
-  icon: <UserCheck className="size-4" />,
-  end: true,
-};
-
-/**
- * The project picker (`/`), and the second rail item outside the project frame.
- *
- * It sits in the ungrouped block for exactly the reason `MY_WORK` states — everything below the
- * switcher is scoped *by* the switcher, and this screen is the one that lists what the switcher
- * chooses between — but it is placed **last in that block, directly above the switcher**, because
- * the two are one thought: "all of them" and "this one". `MY_WORK` above it is personal and
- * belongs to neither.
- *
- * Until this existed the picker had no affordance at all once you were inside a project. It is the
- * route the app lands on after sign-in and the fallback when a URL names a project the caller
- * cannot see, so it was reachable only by editing the address bar — the one screen in the app that
- * every session starts on and no screen linked to. The wordmark above links here too, which is the
- * convention every reader already has; this entry is the discoverable, labelled, active-marked one.
- *
- * `end` states the intent — this item is current on `/` and nowhere else — but it is **belt and
- * braces rather than load-bearing**, which is worth recording because the opposite is the obvious
- * assumption: `/` is a prefix of every route in the app, so a prefix match would light this item up
- * on all of them. `NavLink` already refuses that specific case (it requires the next character of
- * the location to be `/`, and for `to="/"` there is none), so removing `end` here changes nothing
- * and the test below does not redden. Kept because relying on a special case in the router to make
- * a nav item behave is a worse reason than saying what you meant.
- */
-const ALL_PROJECTS: NavItem = {
-  label: 'All projects',
-  to: '/',
-  icon: <LayoutGrid className="size-4" />,
-  end: true,
-};
-
-/**
- * The third rail item outside the project frame (016 M6), and the one whose placement is an
- * argument rather than a convenience.
- *
- * A timesheet period is per person and per fortnight and **spans projects** (016 D-i) — the
- * mockup's own example carries two clients' projects and a project-less meeting in one submission.
- * So listing it under the switcher would say the opposite of what a period is: that switching
- * projects changes which hours you are looking at. It belongs with `MY_WORK` above it, which is
- * personal for the same reason, and it is placed *after* that item and *before* `ALL_PROJECTS`
- * because the two personal screens read as a pair.
- *
- * <h2>No waiting-count badge, and that is a measured omission rather than an oversight</h2>
- *
- * `timesheet-approvals.html`'s rail shows a `4` beside this entry behind the mockup's
- * `SEES_APPROVALS` role gate, and the plan asked for it. There is no honest way to draw it here.
- * The count comes from `GET /timesheets/approvals`, which **403s** for any caller without
- * `time:approve`, and `time:approve` is a PROJECT-scope grant — so there is no company-wide
- * question this shell could ask first. `useCanInCompany` answers about COMPANY-scope grants and
- * would say no for the Project Managers the badge is for, and `useCan(activeProjectId)` would key a
- * cross-project count on whichever project happens to be in the switcher, which is the very
- * statement the placement above exists to avoid.
- *
- * Firing the read unconditionally is the option that was rejected: it would raise a refused-request
- * notification on every page load for the majority of this company, to draw a number on a rail.
- * The count is therefore on the approvals screen's own subtitle, where the data already is, and the
- * timesheet screen carries a labelled link to it. Revisit this if the contract ever grows a
- * company-wide "where may I approve" read; do not revisit it by making the rail guess.
- */
-const TIMESHEETS: NavItem = {
-  label: 'Timesheets',
-  to: '/timesheets',
-  icon: <Timer className="size-4" />,
-  end: true,
-};
-
-/**
- * Billing (019 M8), and **the fifth gated entry in a rail whose standing rule is
- * disable-don't-hide** (§31) — after the two audit entries, the three credential entries and
- * Clients.
- *
- * `billing.html` says it in a callout on the screen itself: *"Switch the top bar to Test Engineer
- * or Account Manager and this entry disappears from the sidebar entirely — not greyed out, not
- * empty. It is not their screen."*
- *
- * The argument is `ApiTokenService`'s, restated by the Clients entry below and sharpest here: the
- * read is **refused rather than narrowed**, so the whole screen behind this entry exists only to
- * say no, and an entry into that refusal is the same refusal one click earlier. A Test Engineer
- * has no business learning from a sidebar what their employer bills — which is the sentence the
- * Clients entry makes about how many customers they have, one step less sensitive.
- *
- * Placement: this ungrouped block outside the project frame, **after `TIMESHEETS`**, for that
- * item's own reason inverted. A timesheet period is personal and spans projects; an invoice is the
- * company's and spans projects; neither is changed by the switcher, so neither may sit under it.
- *
- * Gated on `billing:read` — the key every money-holding role holds and every billing read on that
- * screen requires. It fails CLOSED while pending, like the other gates here: the item appears once
- * the answer arrives, where a wrongly-shown one would flash a link that then vanishes.
- *
- * The `/billing` **route** stays open to everybody and refuses with a sentence, as every readable
- * screen in this app does. That is not in tension with hiding the entry: a pasted link must land
- * on a refusal naming who holds the key, and this rail simply does not offer the trip.
- */
-const BILLING: NavItem = {
-  label: 'Billing',
-  to: '/billing',
-  icon: <Receipt className="size-4" />,
-  end: false,
-};
-
-/**
- * Which audit trails this reader may open.
- *
- * <strong>The two audit entries are the only permission-gated items in this rail, and they are
- * HIDDEN rather than shown-and-refused — which is the opposite of what every other entry here
- * does.</strong> That is a deliberate exception taken at the product owner's direction (§242), not
- * an oversight, and it is worth stating because five separate comments in this file argue the other
- * way and a later reader will find them first.
- *
- * The argument those comments make is that hiding an entry tells a lie about the *product* — "this
- * instance has no CI credentials" — which is worse than telling the truth about the reader's
- * *access*. An audit trail is the one place that trade runs the other way: the screen's whole
- * subject is who did what, so advertising it to somebody who may not read it invites exactly the
- * request the permission exists to refuse, and the entry itself becomes a standing hint that the
- * company is being watched in a way this person is not trusted to see.
- *
- * If this is ever revisited, revisit it here rather than one entry at a time — the pair must agree.
- */
-interface AuditReach {
-  project: boolean;
-  company: boolean;
-}
-
-/**
- * The three **credential** entries, and whether this reader may open the page each one leads to
- * (005 C2, decided).
- *
- * ~~Family 7's second governing rule: a rail entry the caller can see leads to a page they can
- * read — so every entry here is listed for everybody, and the page explains its own refusal.~~ →
- * **superseded 2026-08-28: the rule is now conditional.** The three pages named here are the ones
- * where the argument the comments below make — that hiding an entry lies about the *product* —
- * is outweighed, because the page has **no read-only view at all**: the reads themselves cost
- * `integration:manage` / `token:issue` / `company:idp`, so what a caller without the key gets is a
- * whole screen that exists only to refuse them. `Audit trail` already worked this way, at the
- * product owner's direction, and the reasoning generalises to credentials: a standing entry into
- * a page whose entire content is withheld is an invitation to ask for exactly what the key exists
- * to refuse.
- *
- * The old reasoning is kept above rather than deleted because it is still right everywhere else in
- * this rail — `Review` and `Access & roles` are listed for everybody precisely because both render
- * read-only for a caller without the write key. **The test is whether the page can be read, not
- * whether it can be written.**
- *
- * `Project access` (`Access & roles`) is the fourth screen and it moves the *other* way: 005 Q2
- * relaxed `GET /projects/{id}/members` to `project:read`, so the page became readable and the
- * entry is listed *because* of that — the same rule applied correctly.
- */
-interface CredentialReach {
-  /** `integration:manage` — the project's notification channels **and** its tracker bindings. */
-  integrations: boolean;
-  /** `token:issue` — the company's API tokens. */
-  tokens: boolean;
-  /** `company:idp` — single sign-on. */
-  sso: boolean;
-}
-
-function projectNav(
-  projectId: string,
-  audit: AuditReach,
-  credentials: CredentialReach,
-  /**
-   * `issue:import` — the migration offramp (014 D-e). Its own parameter rather than a fourth field
-   * on {@link CredentialReach}: that interface's whole subject is a *credential the product keeps*,
-   * and an import connection is the opposite — used once for one run and never stored. The rule the
-   * two share is `CredentialReach`'s, not its name: the page has no read-only view, so the entry is
-   * listed only for a caller who has one.
-   */
-  canImport: boolean,
-  /**
-   * `client:read` — the Clients screen (018 Mc). Its own parameter for `canImport`'s reason: it is
-   * not a credential the product keeps, so it does not belong on {@link CredentialReach}. The rule
-   * it shares with that interface is the one that matters — the entry is listed only for a caller
-   * who can read the list behind it.
-   */
-  canReadClients: boolean,
-): { heading: string; items: NavItem[] }[] {
-  const p = `/projects/${projectId}`;
-  return [
-    {
-      heading: 'Repository',
-      items: [
-        { label: 'Overview', to: p, icon: <LayoutDashboard className="size-4" />, end: true },
-        { label: 'Test cases', to: `${p}/cases`, icon: <Folder className="size-4" /> },
-        { label: 'Documentation', to: `${p}/docs`, icon: <FileText className="size-4" /> },
-      ],
-    },
-    {
-      heading: 'Execution',
-      items: [
-        { label: 'Test plans', to: `${p}/plans`, icon: <ClipboardList className="size-4" /> },
-        { label: 'Test runs', to: `${p}/runs`, icon: <ListChecks className="size-4" /> },
-        /*
-          §5's Work screen (011 D34) — **one entry, five views**, which is the decision this
-          replaces the `Board` entry with. ~~`Board`, at `${p}/board`.~~ Board, Backlog, Table,
-          Timeline and Calendar are one dataset with different renderers and one shared filter, so
-          five rail entries would be five names for one place — and the filter a person set on one
-          would be invisible on the next.
-
-          The board route survives and is still linked from the Work screen's own Board tab, which
-          names the module that folds it in. Only the rail entry is gone.
-        */
-        { label: 'Work', to: `${p}/work`, icon: <Kanban className="size-4" /> },
-        /*
-          013 M3's releases, immediately after Work — the mockup rail's own order
-          (*Overview · Work · Releases · Documents · …*). Execution rather than Project because a
-          release is what ships, not how the project is configured, and because the person asking
-          "can we ship 2.4?" is the person who was just looking at the work.
-
-          Ungated, like every item in this rail: `release:read` is held by every project-scoped role
-          that renders a rail at all, so a gate would hide it from nobody who can reach it while
-          teaching that rail items come and go by permission. The two writes are gated on their own
-          controls (§31).
-
-          **The Timeline and Calendar views are NOT rail entries.** They are `?view=` arms of Work
-          (D34), for the reason the comment above gives about the five views.
-        */
-        { label: 'Releases', to: `${p}/releases`, icon: <Rocket className="size-4" /> },
-        /*
-          017 M7's project staffing, immediately after Releases — story S1's *"I open a project's
-          staffing"*, and the screen `/staffing` and `/directory` name when they refuse a Project
-          Manager. Execution rather than Project for Releases' reason: who is on this project this
-          month is what somebody planning the work needs, not how the project is configured.
-
-          Ungated, like every item in this rail. `staffing:read` is a project-scoped key and the
-          allocate controls are disabled with a reason on the screen itself (§31); a gate here would
-          teach that rail items come and go by permission, which is the opposite of that rule.
-
-          **Not to be confused with the two Company entries below.** Those are company-wide and sit
-          outside the project segment, because an allocation spans every project a person is on.
-        */
-        { label: 'Staffing', to: `${p}/staffing`, icon: <Users2 className="size-4" /> },
-        /*
-          §6e's reports (§89). Execution rather than Project, because what a report is *of* is
-          execution results — the only one that exists today summarises a run, and every one §6e
-          names is computed over the fact log. Filing it under Project would put it beside the
-          administration screens, which is where people would stop looking for it.
-
-          **Ungated, like every other item in this rail.** The plan's F1 line asked for a gate on
-          `report:view`; the `Review` item above records the argument against it, and it applies
-          more strongly here — `report:view` is held by every project-scoped role that renders a
-          rail at all, the one exception being Automation Service, which is API-token only and
-          renders none. (`V2`'s Account Manager and Finance are company-scoped and hold it not, for
-          the same reason they hold no `project:read`.) So the gate
-          would hide the entry from nobody who can reach it, while teaching that rail items come
-          and go by permission, which is the opposite of §31's disable-don't-hide.
-        */
-        { label: 'Reports', to: `${p}/reports`, icon: <ChartColumn className="size-4" /> },
-        /*
-          Delivery analytics (020, M9) — the burn-up, cycle time and the flow.
-
-          **A second entry beside Reports, and the mockup wanted one entry.** `reports.html` carries
-          `data-projnav="reports"`, so the render puts delivery analytics in the slot above. That
-          slot is taken by a screen that ships, has saved definitions pointing at its route and is
-          not this module's to remove, so the divergence is recorded here and in 020 D-l rather than
-          settled by quietly renaming something.
-
-          Filed under **Project** where Reports is under Execution, and the split is the same test
-          every heading in this rail applies: what a report is *of* is execution results, and what
-          this is *of* is whether the project's own work is converging on a release.
-
-          Ungated, like every item in this rail. It costs `report:view`, which every project-scoped
-          role that renders a rail at all holds — so a gate would hide it from nobody while teaching
-          that rail items come and go by permission, which is the opposite of §31.
-        */
-        { label: 'Analytics', to: `${p}/analytics`, icon: <TrendingUp className="size-4" /> },
-        /*
-          §119. Execution, beside Test runs, because an ingested report *is* a run's results
-          arriving by another door — and because the person who goes looking for "why did my CI
-          results not show up" is looking at the run that should have them.
-
-          Ungated, like every item in this rail. The history needs only membership; the binding
-          inside it costs `case:edit` and is disabled with a reason there (§31). Hiding the entry
-          would teach a Test Engineer that this instance has no CI integration, which is the same
-          lie an empty list would tell.
-        */
-        {
-          label: 'CI ingestion',
-          to: `${p}/ingestions`,
-          icon: <CloudUpload className="size-4" />,
-        },
-      ],
-    },
-    {
-      heading: 'Authoring',
-      items: [
-        /*
-          §138. Its own heading rather than under Repository, because what is here is NOT in the
-          repository — that is the entire point of the boundary — and a rail entry sitting beside
-          `Test cases` would suggest otherwise before anybody clicked it.
-
-          Ungated, like every item in this rail. The queue is readable by anyone who may read cases;
-          the two decisions cost `case:create` and are disabled with a reason on the proposal itself
-          (§31). Hiding the entry would teach a Viewer that this instance has no generation at all,
-          which is the same lie an empty list would tell.
-        */
-        {
-          label: 'Generated cases',
-          to: `${p}/generated-cases`,
-          icon: <Sparkles className="size-4" />,
-        },
-      ],
-    },
-    {
-      heading: 'Project',
-      items: [
-        { label: 'Artifacts', to: `${p}/artifacts`, icon: <Package className="size-4" /> },
-        /*
-          `${p}/…`, and it earns the Project heading on exactly the test the note below sets: it is
-          about the project in the picker and switching projects changes what it shows. It is the
-          per-project view of the access model — what THIS project granted, and what it inherits
-          from the company — while `Teams & roles` below stays the company-wide one. Two headings,
-          two scopes, one implementation underneath.
-        */
-        { label: 'Access & roles', to: `${p}/access`, icon: <Users className="size-4" /> },
-        /*
-          The project's classification vocabulary. Project-headed on the same test: Feature belongs
-          to this project and switching projects changes the tree — even though three of the four
-          axes on that screen are the company's, which is what the page itself says.
-        */
-        /*
-          011 T7's two. `General` is what the project is called, what prefixes its issues and the
-          six issue types it holds; `Workflow` is story B1's statuses, their kinds and the legal
-          moves. Both are ungated in the rail, like Classification and Review: the reads cost
-          project visibility alone and each page renders read-only for a caller who cannot write,
-          so hiding the entry would leave a reader with no way to find out what the statuses in
-          their project even mean.
-
-          `General` sits first because it is the settings screen a person looks for by that name,
-          and it is where `settings-general.html` puts the Danger zone.
-        */
-        {
-          label: 'General',
-          to: `${p}/settings/general`,
-          icon: <Settings className="size-4" />,
-        },
-        {
-          label: 'Workflow',
-          to: `${p}/settings/workflow`,
-          icon: <GitBranch className="size-4" />,
-        },
-        /*
-          012 T9's board settings, at `settings-boards.html`'s position in the mockup's subnav —
-          between Workflow and the one entry this rail still does NOT have. That row reads
-          *General · Workflow · Boards · Repositories · Imports*; ~~Repositories is M5's and Imports
-          is M4's~~ → **both landed**: Imports in 014, Repositories in 015 T5, so that subnav row is
-          complete and this rail matches it.
-
-          Ungated, like the two above it: the reads cost `board:read`, which every role holds, and
-          the page renders read-only without `board:configure`.
-        */
-        {
-          label: 'Boards',
-          to: `${p}/settings/boards`,
-          icon: <Kanban className="size-4" />,
-        },
-        {
-          label: 'Repositories',
-          to: `${p}/settings/repositories`,
-          icon: <FolderGit2 className="size-4" />,
-        },
-        /*
-          014 T8's imports, at `settings-import.html`'s position in that same subnav — and **gated**,
-          which is the opposite of the three entries above it and matches Notifications (005 C2).
-
-          Those three are ungated because each renders read-only for a caller who cannot write, so a
-          reader without the key still learns what their project's statuses mean. There is no
-          read-only view of an import: every operation in the family costs `issue:import` (014 D-e,
-          because a report names the source site, the account that connected to it and the person
-          who ran the migration), so the entry would lead to a screen whose whole content is a
-          refusal.
-        */
-        ...(canImport
-          ? [
-              {
-                label: 'Imports',
-                to: `${p}/imports`,
-                icon: <Import className="size-4" />,
-              },
-            ]
-          : []),
-        {
-          label: 'Classification',
-          to: `${p}/settings/classification`,
-          icon: <Tag className="size-4" />,
-        },
-        /*
-          §6g's review policy. Shown to everybody who can see the project, not only to holders of
-          `project:settings`: the page renders its current state read-only for the rest, which is
-          §31's disable-don't-hide, and hiding the rail item would leave a reader with no way to
-          find out why no artifact in the project shows a review panel.
-        */
-        {
-          label: 'Review',
-          to: `${p}/settings/review`,
-          icon: <MessageSquareText className="size-4" />,
-        },
-        /*
-          §218's channels. ~~Ungated like every item in this rail — a rail with no Notifications
-          entry tells a test engineer that this instance cannot send notifications, which is a lie
-          about the product rather than about their access.~~ → **superseded 2026-08-28 (005 C2):
-          gated on `integration:manage` and un-listed without it.**
-
-          The sentence above already conceded the thing that reverses it — "there is no read-only
-          view to fall back on" — and that is exactly the condition `CredentialReach` now turns on.
-          The entry led to a screen whose whole content is a refusal.
-        */
-        ...(credentials.integrations
-          ? [
-              {
-                label: 'Notifications',
-                to: `${p}/settings/notifications`,
-                icon: <Bell className="size-4" />,
-              },
-              /*
-                004 Phase 1's bindings, beside Notifications because they are the same module, the
-                same key and the same argument: the reads cost `integration:manage`, so there is no
-                read-only view and the entry is listed only for a caller who has one.
-
-                A person's own tracker credential is NOT here — it is in the account menu, because
-                it is not scoped by the project switcher this rail sits under.
-              */
-              {
-                label: 'Issue tracker',
-                to: `${p}/settings/trackers`,
-                icon: <Bug className="size-4" />,
-              },
-            ]
-          : []),
-        // The project trail (§242). Gated on `project:audit` and HIDDEN without it — see
-        // AuditReach above for why this pair breaks the rail's rule on purpose.
-        ...(audit.project
-          ? [
-              {
-                label: 'Audit trail',
-                to: `${p}/audit`,
-                icon: <History className="size-4" />,
-              },
-            ]
-          : []),
-      ],
-    },
-    /*
-      Company, not Project — and the grouping was a real misstatement rather than a tidy-up.
-
-      Every other item in this rail is `${p}/…`: it is about the project in the picker, and switching
-      projects changes what it shows. `Teams & roles` is `/admin/teams`, which is company-wide and
-      does not change when you switch projects. Listing it under "Project" told the reader that roles
-      are granted per project — which is the opposite of the model (a role is held across the whole
-      company), so the one place a person goes to understand permissions was mis-teaching them before
-      they arrived.
-
-      That remains true and `Access & roles` above does not undo it. A role is still *held* across
-      the company; a project may grant its own and, per roles spec §A1.1, a project grant REPLACES
-      the company-wide one there. Two entries because there are two genuinely different questions —
-      "who is in this company and what do they hold" and "who can act on this project" — not because
-      the same screen is listed twice.
-    */
-    {
-      heading: 'Company',
-      items: [
-        /*
-          The org chart (§6k), first under this heading because it is the one screen here every
-          member can actually use — the other three lead to administration.
-
-          **Ungated, like every item in this rail — and for the stronger reason.** The three below
-          are ungated despite leading to screens that refuse a non-administrator, on §31's
-          disable-don't-hide grounds. This one leads to a screen with no gate at all: there is
-          nothing to refuse, so the entry is not a promise the page has to walk back.
-        */
-        { label: 'Org chart', to: '/org-chart', icon: <Network className="size-4" /> },
-        /*
-          Clients (018 Mc), after Org chart because it answers the same shape of question one step
-          out — who this company is, then who it works for.
-
-          **GATED, and it is the fourth entry in this rail that is.** The standing rule here is
-          disable-don't-hide, and the three credential entries below are the recorded exceptions;
-          this is the same exception for the same reason `ApiTokenService` gives — *the read is
-          refused rather than narrowed, because an empty array would be a claim about the company
-          told to somebody who may not ask*, and an entry into that refusal is the same claim one
-          click earlier. A Test Engineer has no business learning from a sidebar how many customers
-          their employer has.
-
-          It does NOT weaken `clients-empty.html`'s promise that the page stays reachable so the
-          first client can be created. Everybody who could create one holds `client:read`
-          (Instance Admin, Company Admin, Account Manager; Finance holds the read alone) — the
-          entry stays for exactly them, and for a company with no clients it is the only
-          client-shaped thing in the entire product.
-        */
-        ...(canReadClients
-          ? [{ label: 'Clients', to: '/clients', icon: <Building2 className="size-4" /> }]
-          : []),
-        /*
-          Staffing and Directory (017 M7), after Org chart because they answer the same shape of
-          question one step further on — who these people are, then who is free and who knows what.
-
-          **Ungated, like every item in this rail, and here the argument has a second half.** Both
-          screens cost `staffing:directory`, which a Project Manager does not hold (017 D-g), so a
-          gate would hide them from one of the roles most likely to look. Hiding would teach a PM
-          that this product cannot answer "who is free next month" — which it can, for the people
-          who own that question — where the refusal they get instead names the screen that answers
-          *theirs*: their own project's Staffing. That is the only refusal in this product that can
-          point at the page the reader actually wants, and it is only reachable if the entry is
-          shown.
-        */
-        { label: 'Staffing', to: '/staffing', icon: <Users2 className="size-4" /> },
-        { label: 'Directory', to: '/directory', icon: <UserRoundSearch className="size-4" /> },
-        { label: 'Teams & roles', to: '/admin/teams', icon: <Users className="size-4" /> },
-        /*
-          Company, beside Teams & roles, for the same reason that one is here: a token belongs to
-          the company, and switching projects does not change the list.
-
-          ~~**Shown to everyone, not gated** — hiding it would teach a Test Lead that this product
-          has no CI credentials.~~ → **superseded 2026-08-28 (005 C2): gated on `token:issue`.**
-          `ApiTokenService` argues that the *read* is refused rather than narrowed, because an empty
-          array would be a claim about the company told to somebody who may not ask; an entry into
-          that refusal is the same claim one click earlier.
-        */
-        ...(credentials.tokens
-          ? [{ label: 'API tokens', to: '/admin/tokens', icon: <Key className="size-4" /> }]
-          : []),
-        /*
-          ~~Ungated for the same reason the two above are.~~ → **superseded 2026-08-28 (005 C2):
-          gated on `company:idp`.** This one is the strongest of the three: a readable SSO page
-          would disclose issuer URLs, client ids and claimed email domains — reconnaissance for
-          whoever is trying to get in — which is why `IdentityProviderService` treats them as the
-          module's strictest credentials and why no read-only view was ever going to exist here.
-        */
-        ...(credentials.sso
-          ? [{ label: 'Single sign-on', to: '/admin/sso', icon: <LogIn className="size-4" /> }]
-          : []),
-        // The company trail (§242). Gated on `audit:view` and HIDDEN without it — the pair to the
-        // project entry above, and the same deliberate exception.
-        ...(audit.company
-          ? [
-              {
-                label: 'Audit trail',
-                to: '/admin/audit',
-                icon: <History className="size-4" />,
-              },
-            ]
-          : []),
-      ],
-    },
-  ];
+function visibleEntries(
+  zone: NavZone,
+  allows: (gate: NavGate | undefined) => boolean,
+): NavEntry[] {
+  return zone.entries.flatMap<NavEntry>((entry) => {
+    if (!isFolder(entry)) return allows(entry.gate) ? [entry] : [];
+    const items = entry.items.filter((child) => allows(child.gate));
+    return items.length ? [{ ...entry, items }] : [];
+  });
 }
 
 export function AppShell() {
@@ -850,6 +321,14 @@ export function AppShell() {
  * covers the page, so collapsing it to icons would save nothing and remove the labels from the one
  * variant whose users are on the smallest screens. The drawer is therefore always expanded, and
  * has no toggle to mislead anyone into thinking otherwise.
+ *
+ * ## Three zones, and the collapse is now a label swap and nothing else
+ *
+ * The proposal's finding 10 asked for a 64px rail that is *the expanded rail with the labels
+ * removed* — no row changing depth, nothing appearing or disappearing, muscle memory surviving the
+ * collapse. The flat project zone is what makes that true: the only depth left anywhere in this
+ * rail is `Administration`, and it keeps its behaviour at both widths (a disclosure when there is
+ * room for labels, a labelled flyout when there is not).
  */
 function RailContent({
   onNavigate,
@@ -862,46 +341,7 @@ function RailContent({
 }) {
   // See `useActiveProject` for why the path segment alone is not enough to name the project.
   const { activeProjectId } = useActiveProject();
-
-  /*
-    The rail's only permission reads. ~~The only two entries any verdict here decides~~ → nine of
-    them now, across the project frame and the ungrouped block above it — the two audit entries
-    (`AuditReach`), the three credential entries (`CredentialReach`), Imports, Clients, and
-    `BILLING`. The count grew; the rule did not, and each of those carries its own paragraph saying
-    why it is the exception rather than the pattern.
-
-    Both gates fail CLOSED while pending, which is `useCan`'s `can()` and the right default for an
-    entry that is hidden rather than disabled: the item appears once the answer arrives, where a
-    wrongly-shown one would flash a link that then vanishes.
-
-    Both hooks read `/me/permissions`, which every screen behind this rail already fetches, so the
-    keys are warm and this costs no extra round trip on navigation. `BILLING` reads the same warm
-    company gate, so the fifth exception costs no fifth request.
-  */
-  const projectGate = useCan(activeProjectId);
-  const companyGate = useCanInCompany();
-  const groups = activeProjectId
-    ? projectNav(
-        activeProjectId,
-        {
-          project: projectGate.can('project:audit'),
-          company: companyGate.can('audit:view'),
-        },
-        /*
-          The three credential entries (005 C2). Read from the same two warm gates, so this costs
-          no request — and read through `can()`, which falls OPEN when `/me/permissions` itself
-          failed: an entry wrongly shown leads to a page that refuses, while an entry wrongly
-          hidden takes an administrator's own screens away with nothing on screen to say why.
-        */
-        {
-          integrations: projectGate.can('integration:manage'),
-          tokens: companyGate.can('token:issue'),
-          sso: companyGate.can('company:idp'),
-        },
-        projectGate.can('issue:import'),
-        companyGate.can('client:read'),
-      )
-    : [];
+  const allows = useNavGates(activeProjectId);
 
   return (
     <>
@@ -935,12 +375,10 @@ function RailContent({
         {/*
           Top of the rail, in the wordmark row. ~~Bottom of the rail, below the scrolling nav
           list.~~ → **superseded 2026-08-29:** the foot put the control furthest from the edge it
-          moves and furthest from the header the switcher and the search field now live in, so the
-          one gesture that changes the rail's width sat at the opposite end of the screen from
-          everything else that frames it. The wordmark row is the rail's own header, it never
-          scrolls, and it is where the reader's eye already is on arrival — the original note's
-          real requirement ("a toggle that scrolls away with the links is one the user cannot find
-          to undo") is satisfied here too, and better.
+          moves and furthest from the header the search field lives in, so the one gesture that
+          changes the rail's width sat at the opposite end of the screen from everything else that
+          frames it. The wordmark row is the rail's own header, it never scrolls, and it is where
+          the reader's eye already is on arrival.
 
           Rendered only where it does something — the drawer omits it, and so does a route that
           forced the collapse.
@@ -972,77 +410,84 @@ function RailContent({
         )}
       </div>
 
-      {/*
-        Outside the project frame below it, all four of them. `MY_WORK` and `TIMESHEETS` are
-        personal, `BILLING` is the company's, and `ALL_PROJECTS` is what the switcher chooses
-        between — see each one's own note.
-
-        `BILLING` is the only one of the four that is conditional, and it is ABSENT rather than
-        disabled for a caller without `billing:read` — see {@link BILLING} for why this rail breaks
-        its own disable-don't-hide rule here for the fifth recorded time.
-      */}
-      <ul className={cn('m-0 list-none py-2', collapsed ? 'px-0' : 'px-2')}>
-        <li>
-          <RailLink item={MY_WORK} onNavigate={onNavigate} collapsed={collapsed} />
-        </li>
-        <li>
-          <RailLink item={TIMESHEETS} onNavigate={onNavigate} collapsed={collapsed} />
-        </li>
-        {companyGate.can('billing:read') && (
-          <li>
-            <RailLink item={BILLING} onNavigate={onNavigate} collapsed={collapsed} />
-          </li>
-        )}
-        <li>
-          <RailLink item={ALL_PROJECTS} onNavigate={onNavigate} collapsed={collapsed} />
-        </li>
-      </ul>
-
-      {/*
-        ~~The project switcher sat here, between the ungrouped block and the project groups it
-        frames.~~ → **superseded 2026-08-29: it lives in the header.** The frame is now stated once,
-        across the full width of the page, beside the search field that reaches across every project
-        — and it no longer has to be two controls, because the header does not collapse to 64px.
-
-        What the rail loses is the adjacency argument the old note made: the groups below are scoped
-        by the switcher, and the switcher used to sit directly above them saying so. The headings
-        still say it (`Repository`, `Execution`, `Project`), and the header switcher is the more
-        prominent of the two placements, so a reader is more likely to see it, not less.
-      */}
-      <hr className="m-0 border-t border-line" />
-
       <div className="flex-1 overflow-y-auto py-2">
-        {groups.map((group, index) => (
-          <div key={group.heading} className="mb-3">
-            {/*
-              Collapsed, the heading is replaced by a rule rather than dropped. The grouping is the
-              only thing telling a reader that Reports is about execution and Classification is
-              about the project, and four icons in one undifferentiated column lose it entirely.
-              The first group needs no rule — there is already a divider above it.
-            */}
-            {collapsed ? (
-              index > 0 && <hr className="mx-3 mb-2 border-t border-line" />
-            ) : (
-              <p className="m-0 px-[18px] py-1 font-mono text-[10px] uppercase tracking-[.1em] text-ink-4">
-                {group.heading}
-              </p>
-            )}
-            {/*
-              8px of inset so the rows read as pills inside the rail rather than as full-bleed
-              bands — `.rail .grp` in the render kit. With the row's own 10px that puts label text
-              18px from the rail edge, which is where the group heading above it sits too.
-            */}
-            <ul className={cn('m-0 list-none', collapsed ? 'p-0' : 'px-2 py-0')}>
-              {group.items.map((item) => (
-                <li key={item.to}>
-                  <RailLink item={item} onNavigate={onNavigate} collapsed={collapsed} />
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </div>
+        {NAV.map((zone, index) => {
+          /*
+            The zone-level gate (`Project` needs `project:read`) and the row-level ones are the
+            same predicate asked at two altitudes. A zone that survives its own gate but has no
+            visible rows is not drawn either — an empty heading is a claim that something is there.
 
+            The project zone additionally needs a project to be *about*. A member holding no
+            grants at all sees `You` and `Company` and no empty frame in between.
+          */
+          if (!allows(zone.needs)) return null;
+          if (zone.id === 'project' && !activeProjectId) return null;
+          const entries = visibleEntries(zone, allows);
+          if (!entries.length) return null;
+
+          const headingId = `nav-zone-${zone.id}`;
+          return (
+            <div key={zone.id} data-testid={`Nav.Zone.${zone.id}`} className="mb-3">
+              {/*
+                Collapsed, the heading is replaced by a rule rather than dropped. The three zones
+                are the only structure left in this rail, and three undifferentiated columns of
+                icons lose it entirely. The first zone needs no rule — the wordmark row's border
+                is already above it.
+              */}
+              {index > 0 && collapsed && <hr className="mx-3 mb-2 border-t border-line" />}
+              {zone.switcher ? (
+                /*
+                  **The switcher is the zone header** (R1) — the control that changes the eleven
+                  rows below it, sitting on top of them. Collapsed it is the project key chip,
+                  which opens the same `Select`.
+                */
+                <div className={cn('mb-1', collapsed ? 'px-1.5' : 'px-2')}>
+                  <ProjectSwitcher collapsed={collapsed} onNavigate={onNavigate} />
+                </div>
+              ) : (
+                !collapsed && (
+                  <p
+                    id={headingId}
+                    className="m-0 px-[18px] py-1 font-mono text-[10px] uppercase tracking-[.1em] text-ink-4"
+                  >
+                    {zone.label}
+                  </p>
+                )
+              )}
+              {/*
+                8px of inset so the rows read as pills inside the rail rather than as full-bleed
+                bands — `.rail .grp` in the render kit. With the row's own 10px that puts label
+                text 18px from the rail edge, which is where the zone heading above it sits too.
+              */}
+              <ul
+                aria-label={zone.switcher || collapsed ? zone.label : undefined}
+                aria-labelledby={zone.switcher || collapsed ? undefined : headingId}
+                className={cn('m-0 list-none', collapsed ? 'p-0' : 'px-2 py-0')}
+              >
+                {entries.map((entry) => (
+                  <li key={entry.label}>
+                    {isFolder(entry) ? (
+                      <RailFolder
+                        folder={entry}
+                        projectId={activeProjectId ?? ''}
+                        onNavigate={onNavigate}
+                        collapsed={collapsed}
+                      />
+                    ) : (
+                      <RailLink
+                        item={entry}
+                        projectId={activeProjectId ?? ''}
+                        onNavigate={onNavigate}
+                        collapsed={collapsed}
+                      />
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
     </>
   );
 }
@@ -1073,36 +518,74 @@ function useActiveProject(): { projects: Project[]; activeProjectId: string | un
 }
 
 /**
- * The project switcher, in the header.
+ * The project switcher — **the Project zone's header, inside the rail** (021 R1).
  *
  * ~~The switcher in both widths — collapsed it becomes the project's key in a button, because the
  * one thing this control must answer at a glance is *which project am I in* and that is the
- * question a 64px rail is most likely to drop.~~ → **superseded 2026-08-29: one control, in the
+ * question a 64px rail is most likely to drop.~~ → ~~**superseded 2026-08-29: one control, in the
  * header.** The header has a fixed height and does not collapse, so the two-variant design and the
- * question it answered both go away — the switcher now states the frame at full width on every
- * screen, at the same altitude as the search field that deliberately escapes that frame.
+ * question it answered both go away.~~ → **superseded again (021 R1): back in the rail, as the
+ * zone header, and the two-variant design comes back with it.**
  *
- * It still renders with **no project to switch to**, which is the one part of the old design that
- * survives unchanged: a member holding no project grants should see that the control exists and is
- * empty, not conclude the app has no projects in it.
+ * The 2026-08-29 note traded adjacency for width and the trade did not pay. What it bought — the
+ * frame stated at full width — is now stated by the breadcrumb's first segment (R2), which is
+ * shell-owned and on every route; what it cost was the one thing this control is for. Everything
+ * under this switcher is scoped BY it, and a control that changes eleven rows belongs on top of
+ * those eleven rows rather than across the page beside a search field that deliberately escapes
+ * the frame. Moving it out also left the header with nowhere to put the breadcrumbs and the
+ * company slot, which is the second half of what R1 pays for.
  *
- * The project's **key** rides beside its name in the list for the reason the collapsed variant
- * existed at all — the key is what the rest of the product identifies a project by, so it needs no
- * legend — but as a companion to the name rather than a replacement for it.
+ * **Collapsed, it is the project key chip** — the render's `ACME` — and it opens the same `Select`.
+ * That is the variant the old note argued for and then removed: at 64px there is no room for a
+ * name, and the key is what the rest of the product identifies a project by, so it needs no legend.
+ *
+ * It still renders with **no project to switch to**, which is the one part of the original design
+ * that has survived both reversals: a member holding no project grants should see that the control
+ * exists and is empty, not conclude the app has no projects in it.
  */
-function ProjectSwitcher() {
+function ProjectSwitcher({
+  collapsed = false,
+  onNavigate,
+}: {
+  collapsed?: boolean;
+  onNavigate?: () => void;
+}) {
   const navigate = useNavigate();
   const { projects, activeProjectId } = useActiveProject();
+  const active = projects.find((project) => project.id === activeProjectId);
 
   return (
-    <Select value={activeProjectId ?? ''} onValueChange={(id) => navigate(`/projects/${id}`)}>
+    <Select
+      value={activeProjectId ?? ''}
+      onValueChange={(id) => {
+        onNavigate?.();
+        navigate(`/projects/${id}`);
+      }}
+    >
       <SelectTrigger
         id="project-switcher"
-        aria-label="Project"
+        /*
+          The name says the current value AND the action, because collapsed there is no label
+          beside it and the visible text is a two-to-ten character key. "Project" alone would
+          announce a control whose purpose a reader has to infer from a code.
+        */
+        aria-label={active ? `Project: ${active.name}. Switch project` : 'Project'}
         data-testid="Nav.ProjectSwitcher"
-        className="h-8 w-[168px] shrink-0 md:w-[212px]"
+        className={cn(
+          'h-8',
+          collapsed
+            // No room for a name and none for a chevron: at 64px the chip IS the control.
+            ? 'w-full justify-center px-0 [&>span]:text-center [&>svg]:hidden'
+            : 'w-full [&>span]:text-left',
+        )}
       >
-        <SelectValue placeholder="Select a project" />
+        {collapsed ? (
+          <Identifier variant="strong" className="text-[11px]">
+            {active?.key ?? '—'}
+          </Identifier>
+        ) : (
+          <SelectValue placeholder="Select a project" />
+        )}
       </SelectTrigger>
       <SelectContent>
         {projects.map((project) => (
@@ -1188,16 +671,20 @@ function HeaderCaseSearch() {
  */
 function RailLink({
   item,
+  projectId,
   onNavigate,
   collapsed = false,
 }: {
   item: NavItem;
+  /** `''` outside the project frame; a row that does not use it ignores it. */
+  projectId: string;
   onNavigate?: () => void;
   collapsed?: boolean;
 }) {
+  const Icon = item.icon;
   const link = (
     <NavLink
-      to={item.to}
+      to={item.to(projectId)}
       end={item.end}
       onClick={onNavigate}
       /*
@@ -1214,15 +701,15 @@ function RailLink({
           aria-current={isActive ? 'page' : undefined}
           className={cn(
             // `.rail .n` in the render kit: an inset pill, `6px 10px`, 5px radius, 9px gap —
-            // and the active state is the tinted fill ALONE. The build kept the fill and added a
-            // 3px steel bar at the row's left edge, which the kit does not draw; two active
-            // treatments on the most-looked-at component in the product.
+            // and the active state is the tinted fill ALONE.
             'relative flex items-center rounded-[5px] py-1.5 text-[13px]',
             collapsed ? 'justify-center gap-0 px-0' : 'justify-start gap-[9px] px-2.5',
             isActive ? 'bg-steel/12 font-medium text-ink' : 'text-ink-2 hover:bg-wash-1',
           )}
         >
-          <span className={cn('flex', isActive ? 'text-steel' : 'text-ink-3')}>{item.icon}</span>
+          <span className={cn('flex', isActive ? 'text-steel' : 'text-ink-3')}>
+            <Icon className="size-4" />
+          </span>
           {!collapsed && item.label}
         </div>
       )}
@@ -1244,7 +731,154 @@ function RailLink({
   );
 }
 
+/**
+ * The one folder left anywhere in the rail (021 §1) — `Administration`, and its two widths.
+ *
+ * Expanded it is a disclosure: a button carrying `aria-expanded` and `aria-controls`, and a nested
+ * list that starts **open when the current route is inside it**, so a reader who navigated to
+ * `/admin/sso` does not find the trail they are standing on shut. Collapsed there is no room for a
+ * nested list, so it is a menu — the render's labelled flyout — and the label is carried into it
+ * as a heading rather than dropped, because three icons with no group name is exactly the state
+ * the folder exists to avoid.
+ *
+ * There is no roll-up badge, and the absence is measured rather than missing: §8.3's badge table
+ * lists seven, and none of them is behind this folder. A folder that acquires a badged child later
+ * needs one, and this is the note that says so.
+ */
+function RailFolder({
+  folder,
+  projectId,
+  onNavigate,
+  collapsed = false,
+}: {
+  folder: NavFolder;
+  projectId: string;
+  onNavigate?: () => void;
+  collapsed?: boolean;
+}) {
+  const { pathname } = useLocation();
+  const Icon = folder.icon;
+  /*
+    Prefix match with a boundary, which is what `NavLink` itself does: `/admin/tokens` must claim
+    `/admin/tokens/new` and must not claim `/admin/tokensomething`.
+  */
+  const holdsActive = folder.items.some((child) => {
+    const to = child.to(projectId);
+    return pathname === to || pathname.startsWith(`${to}/`);
+  });
+  const [open, setOpen] = useState(holdsActive);
+
+  if (collapsed) {
+    return (
+      <DropdownMenu>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label={folder.label}
+                data-testid={`Nav.Folder.${folder.label.replace(/[^A-Za-z]/g, '')}`}
+                className={cn(
+                  'relative flex w-full cursor-pointer items-center justify-center rounded-[5px] ' +
+                    'border-0 bg-transparent py-1.5 text-[13px]',
+                  holdsActive ? 'bg-steel/12 text-ink' : 'text-ink-2 hover:bg-wash-1',
+                )}
+              >
+                <span className={cn('flex', holdsActive ? 'text-steel' : 'text-ink-3')}>
+                  <Icon className="size-4" />
+                </span>
+              </button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="right">{folder.label}</TooltipContent>
+        </Tooltip>
+        <DropdownMenuContent side="right" align="start">
+          <DropdownMenuLabel>{folder.label}</DropdownMenuLabel>
+          {folder.items.map((child) => {
+            const ChildIcon = child.icon;
+            return (
+              <DropdownMenuItem key={child.label} asChild>
+                <RouterLink
+                  to={child.to(projectId)}
+                  onClick={onNavigate}
+                  data-testid={`Nav.Link.${child.label.replace(/[^A-Za-z]/g, '')}`}
+                >
+                  <ChildIcon className="size-4" />
+                  <span>{child.label}</span>
+                </RouterLink>
+              </DropdownMenuItem>
+            );
+          })}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
+
+  const listId = `nav-folder-${folder.label.replace(/[^A-Za-z]/g, '').toLowerCase()}`;
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((was) => !was)}
+        aria-expanded={open}
+        aria-controls={listId}
+        data-testid={`Nav.Folder.${folder.label.replace(/[^A-Za-z]/g, '')}`}
+        className={cn(
+          'relative flex w-full cursor-pointer items-center justify-start gap-[9px] rounded-[5px] ' +
+            'border-0 bg-transparent px-2.5 py-1.5 text-left text-[13px]',
+          holdsActive ? 'text-ink' : 'text-ink-2 hover:bg-wash-1',
+        )}
+      >
+        <span className={cn('flex', holdsActive ? 'text-steel' : 'text-ink-3')}>
+          <Icon className="size-4" />
+        </span>
+        <span className="flex-1">{folder.label}</span>
+        <ChevronDown
+          aria-hidden
+          className={cn('size-3.5 shrink-0 text-ink-4 transition-transform', !open && '-rotate-90')}
+        />
+      </button>
+      <ul id={listId} hidden={!open} className="m-0 list-none p-0 pl-3">
+        {folder.items.map((child) => (
+          <li key={child.label}>
+            <RailLink item={child} projectId={projectId} onNavigate={onNavigate} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 // --------------------------------------------------------------------- top bar ----
+
+/**
+ * The company slot (021 §3) — **reserved, and empty until the contract can fill it.**
+ *
+ * The proposal puts the company's name at the far left of the header, ahead of the breadcrumbs,
+ * as the outermost frame: instance → **company** → project → screen. It is drawn as static text
+ * now and becomes the company switcher at backend M6, when a session can hold more than one.
+ *
+ * **It renders nothing today, and that is the honest state rather than an oversight.** There is no
+ * company name on the wire: `GET /me` answers a `CurrentUser`, which is a `UserRef` plus
+ * `isSystemAdmin`, `hasPassword` and `teams`, and no endpoint in `openapi.yaml` names the caller's
+ * company at all. Filling this slot needs one field on that response, which is a contract change
+ * and therefore a different stack's task — so this side reserves the space and shows nothing,
+ * rather than inventing a name or hard-coding one from the mockup. A header that says "Acme Ltd"
+ * to every company on the instance is worse than a header that says nothing.
+ *
+ * The element itself exists so the layout, the locator and the reservation are real: when the
+ * field lands, one expression changes here and no other file moves.
+ */
+function CompanySlot() {
+  return (
+    <span
+      data-testid="TopBar.CompanySlot"
+      className="hidden shrink-0 truncate text-[13px] font-medium text-ink-2 md:inline"
+    >
+      {/* `CurrentUser.company?.name`, when `GET /me` carries one. */}
+    </span>
+  );
+}
 
 function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
   const { user, logout } = useAuth();
@@ -1277,11 +911,14 @@ function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
       </Button>
 
       {/*
-        The frame, then the thing that escapes it — in that order, and adjacent on purpose. The
-        switcher says which project every screen below is about; the search reaches across all of
-        them. Reading them left to right is the whole model of the app in two controls.
+        ~~The frame, then the thing that escapes it — the project switcher and the search, adjacent
+        on purpose.~~ → **superseded (021 R1): the switcher is the rail's Project zone header.**
+        What the header holds instead is the OUTER frame — the company — and, from T7, the
+        breadcrumb trail whose first segment restates the project at full width. That is the trade
+        R1 makes: the header stops repeating what the rail says and starts saying the thing the
+        rail cannot, which is where in the product this particular screen sits.
       */}
-      <ProjectSwitcher />
+      <CompanySlot />
       <HeaderCaseSearch />
 
       {/*
@@ -1289,11 +926,6 @@ function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
         footer bar of its own (design language rule 1, 007 §0 item 7). Empty on every route that
         fills nothing, so it doubles as the spacer this header already needed.
 
-        `flex-1` alongside the search field's own `flex-1`: with nothing in the strip it collapses
-        to zero and the search keeps its `max-w`, and when a page fills it the two share what is
-        left. It stays right-aligned either way.
-      */}
-      {/*
         `min-w-0` and no `flex-wrap`. The audit's finding 2.1 was a page filling this slot with a
         `flex-wrap` group, which in a header this file fixes at 52px wraps THROUGH the header onto
         the content. The slot cannot stop a page doing that on its own, but it can stop being the
@@ -1328,7 +960,48 @@ function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
             <p className="m-0 text-[13px] font-semibold text-ink">{user?.displayName}</p>
             <p className="m-0 text-[12px] text-ink-3">{user?.email}</p>
           </div>
-          <div className="my-1 h-px bg-line" />
+          <DropdownMenuSeparator />
+          {/*
+            **The two rows that moved** (021 R11), and they are first in the menu because they are
+            the ones that moved.
+
+            ~~`Timesheets` is a rail item, above the project frame, because a timesheet period is
+            per person and per fortnight and SPANS PROJECTS — listing it under the switcher would
+            say that switching projects changes which hours you are looking at.~~ → **superseded
+            (021 R11): the premise is right and the conclusion was wrong.** The rail's rule is *a
+            place in the product scoped by the project switcher or by the company*; "personal, and
+            spanning projects" fails that test rather than earning an ungrouped block of its own.
+            The user menu's rule is the person's own things, and a fortnight of one person's hours
+            is exactly that — the same rule that already put their tracker credential here.
+
+            `Timesheet approvals` comes with it, listed for **everybody** and carrying **no count**.
+            Both are the standing decisions, unchanged: it is listed because the page explains its
+            own refusal (§31, disable-don't-hide), and it is countless because the count comes from
+            `GET /timesheets/approvals`, which 403s for any caller without `time:approve` — a
+            PROJECT-scope grant, so there is no company-wide "where may I approve" read this shell
+            could ask first. §8.3's badge table says `none` on that row, alone among its seven.
+            Firing the read unconditionally would raise a refused-request notification on every
+            page load for the majority of this company, to draw a number on a menu.
+          */}
+          <DropdownMenuItem asChild>
+            <RouterLink to="/timesheets" data-testid="TopBar.TimesheetsLink">
+              <Timer className="size-4" />
+              <span>Timesheets</span>
+            </RouterLink>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <RouterLink to="/timesheets/approvals" data-testid="TopBar.TimesheetApprovalsLink">
+              <Stamp className="size-4" />
+              <span>Timesheet approvals</span>
+            </RouterLink>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          {/*
+            The account group (§4). Three credentials that belong to the PERSON rather than to a
+            project or the company — which is the same test that moved the two rows above, applied
+            to things that were already here.
+          */}
+          <DropdownMenuLabel>Account</DropdownMenuLabel>
           {/* The account's own sign-in identities (V58) — self-service, so no gate. */}
           <DropdownMenuItem asChild>
             <RouterLink to="/account/security" data-testid="TopBar.SecurityLink">
@@ -1362,20 +1035,29 @@ function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
               <span>AI assistants</span>
             </RouterLink>
           </DropdownMenuItem>
+          <DropdownMenuSeparator />
           {/*
-            The user guide (§252). Beside Security rather than in the rail: the rail's every item is
-            a place in the *product* — a project's cases, a company's teams — and its grouping tells
-            the reader whether the project switcher changes what they are looking at. Help is about
-            the product rather than a place in it, so it belongs with the two other entries whose
-            subject is the session itself. The footer link below is the second, more discoverable
-            door.
+            ~~`Help & documentation`~~ → **`User guide`** (021 §8.1, R6). The placement stands and
+            only the collision goes: the rail spent the word `Documentation` on the project's own
+            doc pages, so one shell named two destinations the same thing and a reader had to guess
+            which one held the CLI instructions. Both ends move — the rail row is `Documents` now —
+            and this one says what it is: the eleven-section guide.
+
+            Beside Security rather than in the rail, which is unchanged: the rail's every item is a
+            place in the *product*, and its zone tells the reader whether the project switcher
+            changes what they are looking at. Help is about the product rather than a place in it.
+
+            §4 lists `Your access` and `Keyboard shortcuts` above this row. Neither is here yet:
+            `/account/access` is a route T7 builds, and a menu entry pointing at a route that does
+            not exist is worse than an absent one — it costs a click and lands on the 404.
           */}
           <DropdownMenuItem asChild>
             <RouterLink to="/help" data-testid="TopBar.HelpLink">
               <HelpCircle className="size-4" />
-              <span>Help &amp; documentation</span>
+              <span>User guide</span>
             </RouterLink>
           </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem onClick={logout} data-testid="TopBar.SignOutButton">
             <LogOut className="size-4" />
             <span>Sign out</span>
@@ -1401,10 +1083,12 @@ function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
  * a constant — a self-hosted instance's support contact is not something this repository knows —
  * so it belongs with the instance settings that release, not hard-coded here.
  *
- * The link reads ~~"Documentation"~~ **"Help & documentation"**, the account menu's wording, because
- * the rail already spends that word on the project's own doc pages (`Repository → Documentation`,
- * `/projects/:projectId/docs`) and the render fixes that label. One shell cannot name two
- * destinations the same thing and expect a reader to guess which one holds the CLI instructions.
+ * The link reads ~~"Documentation"~~ ~~"Help & documentation"~~ **"User guide"** (021 §8.1, R6),
+ * the account menu's wording, because the rail already spends the word `Documents` on the
+ * project's own doc pages (`/projects/:projectId/docs`). One shell cannot name two destinations
+ * the same thing and expect a reader to guess which one holds the CLI instructions — and the
+ * previous repair only moved the collision, since `Help & documentation` still contained the word
+ * the rail row was called.
  *
  * The gutter is the shell's 22px, matching `main` and the kit's `.foot` rather than the 16px it
  * drew before — a footer inset differently from every strip above it reads as a rendering slip.
@@ -1424,7 +1108,7 @@ function AppFooter() {
           data-testid="AppFooter.HelpLink"
           className="text-[12px] text-steel underline-offset-4 hover:underline"
         >
-          Help &amp; documentation
+          User guide
         </RouterLink>
       </div>
     </footer>

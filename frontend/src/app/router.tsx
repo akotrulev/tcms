@@ -192,6 +192,14 @@ const ConnectAssistantPage = lazy(() =>
     default: m.ConnectAssistantPage,
   })),
 );
+const SettingsLandingPage = lazy(() =>
+  import('../features/settings/SettingsLandingPage').then((m) => ({
+    default: m.SettingsLandingPage,
+  })),
+);
+const SuiteListPage = lazy(() =>
+  import('../features/cases/SuiteListPage').then((m) => ({ default: m.SuiteListPage })),
+);
 const ClassificationSettingsPage = lazy(() =>
   import('../features/settings/ClassificationSettingsPage').then((m) => ({
     default: m.ClassificationSettingsPage,
@@ -648,6 +656,37 @@ function AppRoutes() {
               </Suspense>
             }
           />
+          {/*
+            Suites, at last with routes of their own (021 §1, brief §8.6). `…/suites/:suiteId/history`
+            below has existed since §52 — a detail route hanging under a list route that did not
+            exist, which is how a shipped feature ends up reachable only by typing the URL.
+
+            **The list and the "detail" are two different components on purpose.** `…/suites` is a
+            table of the project's suites; `…/suites/:suiteId` is `CaseListPage` — *the same case
+            list*, with that suite selected. A suite is a named collection of cases, so its detail
+            view IS the case list scoped to it, and a second grid over the same rows would be a
+            second place for the filters, the bulk bar and the empty states to drift.
+
+            Declared before `:suiteId/history` for readability only: React Router 7 ranks static
+            segments above dynamic ones, so the order does not decide the match — reading them
+            together is what stops somebody adding a third spelling.
+          */}
+          <Route
+            path="/projects/:projectId/suites"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <SuiteListPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/projects/:projectId/suites/:suiteId"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <CaseListPage />
+              </Suspense>
+            }
+          />
           <Route
             path="/projects/:projectId/suites/:suiteId/history"
             element={
@@ -897,6 +936,31 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <ProjectAccessPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            The settings landing (021 §5) — `/projects/:projectId/settings`, one rail row where
+            eleven stood. Each card carries one live fact, so the page answers "what is configured
+            here?" before a click.
+
+            **No route below it moved**, and that is the constraint the whole section was built
+            under: every pasted `/settings/*`, `/access`, `/imports` and `/audit` link still lands
+            where it always did. Three of the eleven sections are not under this prefix at all —
+            `Imports`, `Access & roles` and `Project audit` — and they stay where they are. The
+            grouping the landing page expresses is a navigation fact, not a URL one, and renaming
+            addresses to match a menu is how bookmarks die.
+
+            Routed for everybody, like everything under it: the landing itself reads nothing that
+            costs a permission, and each card is drawn only for a caller who can read the section
+            behind it.
+          */}
+          <Route
+            path="/projects/:projectId/settings"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <SettingsLandingPage />
               </Suspense>
             }
           />

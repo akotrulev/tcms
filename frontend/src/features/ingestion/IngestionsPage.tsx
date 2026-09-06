@@ -20,6 +20,8 @@ import {
   type BadgeTone,
 } from '../../components/kit';
 import { PageHeader } from '../../components/PageHeader';
+import { TabStrip } from '../../components/TabStrip';
+import { TABS } from '../../app/nav';
 import { PermissionGate } from '../../components/PermissionGate';
 import { Button } from '../../components/ui';
 import { EM_DASH, formatDateTime } from '../../lib/format';
@@ -61,16 +63,25 @@ export function IngestionsPage() {
 
   return (
     <div>
+      {/*
+        ~~`CI ingestion`~~ → **`CI results`** (021 §8.1). The system's verb becomes the reader's
+        noun: nobody goes looking for an ingestion, they go looking for the results their pipeline
+        posted. The route keeps `/ingestions`, which is the endpoint's word and belongs in the
+        contract rather than in a breadcrumb.
+      */}
       <PageHeader
         testId="Ingestions.Header"
-        title="CI ingestion"
-        documentTitle={project.data ? `CI ingestion · ${project.data.name}` : 'CI ingestion'}
+        title="CI results"
+        documentTitle={project.data ? `CI results · ${project.data.name}` : 'CI results'}
         crumbs={[
           { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'CI ingestion' },
+          { label: 'Test runs', to: `/projects/${projectId}/runs` },
+          { label: 'CI results' },
         ]}
         subtitle="Reports your pipeline has posted, and what each one matched. A test that matched nothing recorded no result — bind it to a case here and every later build finds it."
       />
+
+      <TabStrip tabs={TABS.runs} projectId={projectId} label="Test run views" testId="Runs.Tabs" />
 
       <section data-testid="Ingestions.Panel" className="mb-6">
         <DataRegion

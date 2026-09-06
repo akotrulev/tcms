@@ -1,11 +1,13 @@
 import { FileUp, Plus } from 'lucide-react';
 import { useState } from 'react';
-import { Link as RouterLink, useParams } from 'react-router-dom';
+import { Link as RouterLink, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useCases, useClassification, useProject, useSuites } from '../../api/queries';
 import { useCan } from '../../auth/useCan';
 import { DataRegion, GridSkeleton } from '../../components/DataRegion';
 import { PermissionGate } from '../../components/PermissionGate';
 import { PageHeader } from '../../components/PageHeader';
+import { TabStrip } from '../../components/TabStrip';
+import { TABS } from '../../app/nav';
 import { Button } from '../../components/ui';
 import { formatCount } from '../../lib/format';
 import { toast } from '../../notifications/toast';
@@ -14,7 +16,7 @@ import { CaseFilterBar } from './CaseFilterBar';
 import { CaseGrid } from './CaseGrid';
 import { SuiteList } from './SuiteList';
 import { SuitePanel } from './SuitePanel';
-import { useCaseFilters } from './useCaseFilters';
+import { useCaseFilters, type CaseFilterState } from './useCaseFilters';
 import { useAnnouncedResults } from '../../a11y/useAnnouncedResults';
 
 /**
@@ -35,9 +37,50 @@ import { useAnnouncedResults } from '../../a11y/useAnnouncedResults';
  * sections that replaced them, because they name the regions, not the chrome.
  */
 export function CaseListPage() {
-  const { projectId = '' } = useParams();
+  /*
+    `suiteId` is present on `/projects/:projectId/suites/:suiteId` and absent on
+    `/projects/:projectId/cases` — **one component, two addresses** (021 §1, brief §8.6). A suite
+    is a named collection of cases, so its detail view IS this list scoped to it; a second grid
+    over the same rows would be a second place for the filters, the bulk bar and the four empty
+    states to drift apart.
+  */
+  const { projectId = '', suiteId: routeSuiteId } = useParams();
+  const navigate = useNavigate();
+  const { search } = useLocation();
 
-  const filterState = useCaseFilters();
+  const urlFilters = useCaseFilters();
+  /*
+    On the addressed route the suite comes from the PATH, and picking another one is a navigation
+    rather than a filter change — otherwise the address would say one suite while the grid showed
+    another. Everything else about the state is unchanged, which is why this wraps the hook instead
+    of teaching it about routes: `useCaseFilters` owns filter-state-in-the-URL and knows nothing
+    about which screen is mounted, and it should stay that way.
+
+    The pinned suite counts as an active filter. It narrows the result exactly as the query
+    parameter did, and the count drives the difference between "this project has no cases" and
+    "nothing matches what you asked for" — the wrong one of those on an empty suite reads as a
+    broken repository.
+  */
+  const filterState: CaseFilterState = routeSuiteId
+    ? {
+        ...urlFilters,
+        filters: { ...urlFilters.filters, suiteId: routeSuiteId },
+        hasActiveFilters: true,
+        activeFilterCount: urlFilters.activeFilterCount + 1,
+        setFilter: (key, value) => {
+          if (key !== 'suiteId') {
+            urlFilters.setFilter(key, value);
+            return;
+          }
+          navigate(
+            typeof value === 'string' && value
+              ? `/projects/${projectId}/suites/${value}${search}`
+              : `/projects/${projectId}/cases${search}`,
+          );
+        },
+      }
+    : urlFilters;
+
   const {
     filters,
     sort,
@@ -141,6 +184,13 @@ export function CaseListPage() {
           </div>
         }
       />
+
+      {/*
+        Cases · Suites · Proposals (021 §1). Two of the three were rail rows until this task and one
+        had no presence at all; a tab keeps its own URL, so the active one is read from the route
+        rather than stored and every pasted link still lands.
+      */}
+      <TabStrip tabs={TABS.cases} projectId={projectId} label="Test case views" testId="Cases.Tabs" />
 
       <div className="flex flex-col items-start gap-4 md:flex-row">
         {/* The tree is its own region — its failure must not empty the grid beside it. */}

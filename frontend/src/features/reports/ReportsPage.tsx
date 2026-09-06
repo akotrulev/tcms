@@ -96,13 +96,20 @@ export function ReportsPage() {
 
   return (
     <div>
+      {/*
+        ~~`Reports`~~ → **`Test reports`** (021 §8.1, R5). Two adjacent rail entries, `Reports` and
+        `Analytics`, left a reader asking "reports of what?" — and 020 D-l recorded the divergence
+        rather than resolving it. R5 resolves it by naming rather than by merging: this screen is
+        *of* execution results, `Analytics` is *of* whether the project's work is converging on a
+        release, and they stay two screens.
+      */}
       <PageHeader
         testId="Reports.Header"
-        title="Reports"
-        documentTitle={project.data ? `Reports · ${project.data.name}` : 'Reports'}
+        title="Test reports"
+        documentTitle={project.data ? `Test reports · ${project.data.name}` : 'Test reports'}
         crumbs={[
           { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Reports' },
+          { label: 'Test reports' },
         ]}
         subtitle="Generated in the background and downloaded as a file. Every report carries a header saying what it covers, who asked for it and when."
         actions={
