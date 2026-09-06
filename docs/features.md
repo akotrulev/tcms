@@ -96,8 +96,11 @@ Written for a reader deciding what the product does. Implementation detail is co
 - Clients are visible to Company Admins, Account Managers and Finance. **Finance can read a client
   and not edit one**: an invoice has to name a customer, and maintaining the record is the Account
   Manager's job
-- What a client's work is **worth** is not here. Rate cards, budgets and invoices are a separate
-  module; an Account Manager knows the client and the hours and never a rate
+- What a client's work is **worth** is a separate module — see [Billing](#billing) — and an Account
+  Manager still knows the client and the hours and never a rate. ~~It is not here.~~ →
+  **superseded 2026-09-05 (plan 019, M8):** the client screen now carries the hours and the
+  invoices raised against them, and **gains a value column only for a reader Finance's permission
+  covers.** The absence of that column is the server's answer, not the browser's guess
 
 ## Writing Test Cases
 
@@ -449,8 +452,12 @@ Logging hours against work, and having somebody sign for them. Landed 2026-09-04
   four tiles and My Work shows Capacity beside Logged with the meter under it. What the old
   reasoning got right is still true and still visible: a person with no staffing profile reads `—`
   and *no profile recorded*, never `0h` and never a defaulted week
-- **Budget and burn.** `settings-general.html`'s Budget row reads `600h · Edit in Billing`; there is
-  no hours ceiling, no rate and no Billing screen. M8's
+- ~~**Budget and burn.** `settings-general.html`'s Budget row reads `600h · Edit in Billing`; there
+  is no hours ceiling, no rate and no Billing screen. M8's~~ → **landed 2026-09-05 with Billing
+  (plan 019).** The row shows the ceiling and links to Billing, and the project overview draws the
+  burn. What the old reasoning was protecting is still true and is now enforced rather than
+  incidental: **neither surface carries a currency**, because the endpoint they read has no amount
+  and no currency field on it at all
 - **Approve-all and Remind on the approvals queue.** There is no batch operation on the contract for
   the first — it would be N irreversible writes with a partial outcome nobody could word, and there
   is no un-approve — and no endpoint at all behind the second
@@ -515,6 +522,76 @@ Who is on what, at what percentage, and who is free. Landed 2026-09-04 (plan 017
   it would put two contradictory numbers on the same screen
 - **Also on the command line and over MCP** — the directory, one project's allocations, allocating
   somebody, and recording absence. Maintaining a profile or a skill set is deliberately screen-only
+
+## Billing
+
+What an approved hour is worth, what a project may spend, and the invoice that says so. Landed
+2026-09-05 (plan 019, M8).
+
+**Two screens, and three figures on screens other modules own:**
+
+- **`/billing` — rate cards, project budgets and invoices**, behind `billing:read`, which Instance
+  Admin, Company Admin and Finance hold and nobody else does
+- **`/billing/invoices/:invoiceId` — one invoice**: its lines, the approved hours behind each, the
+  hours that are *not* on it and why, and the budgets it moves
+- **The client screen** gains the hours-and-invoices table and two tiles; **a project's Overview**
+  gains a Budget burn panel; **General settings** gains a Budget row
+
+**How it works:**
+
+- **A rate card belongs to a client, and there is one per client.** A card carries a currency and a
+  ladder of rates: **a person's rate beats their role's rate, and a role's beats the all-roles
+  rate**, each effective from a date. The ladder is read **as of the day the hour was worked**, so
+  an invoice for August prices August's hours at August's rate whatever the card says today
+- **Only approved hours are priced.** Hours nobody has signed for are not a fact about the money —
+  they are counted and **named** on every draft as excluded, never silently dropped, and the same
+  goes for hours whose client has no rate card
+- **A budget is a ceiling on a project, in hours or in money**, set by Finance. Setting one is
+  optional and a project without one is in an ordinary state, not a deficient one
+- **A Project Manager sees the burn and never the rate.** The project-scope read carries a
+  percentage, the approved hours and the ceiling in hours — and has **no amount and no currency
+  field at all**, which is why it costs no money permission. A money-basis budget therefore reads as
+  a percentage alone, and where the client has no rate card the burn is **unknown rather than
+  zero** — a project that has spent a quarter must not read as one that has spent nothing
+- **The burn is not capped at 100%.** 102% draws as a full bar with the overrun beside it, in the
+  danger tone, on every screen that draws it. Clamping would make an overrun look identical to
+  landing exactly on budget
+- **A draft invoice stores no lines — it is a live report.** Draft one for a client and a period and
+  it recomputes from the approved hours that exist *now*, on every read: approve a timesheet and the
+  draft moves, with no recalculate button, no staleness flag and no window in which it disagrees
+  with the timesheets behind it
+- **Issuing writes the lines once and assigns the number, and after that nothing can change them.**
+  Not by a guard somebody can forget — there is no operation anywhere that edits a line. The rate is
+  stored **as applied**, so doubling a rate card next month does not reprice an invoice sent last
+  month, and discarding an issued invoice is refused
+- **Issuing sends nothing.** Sending an invoice is your mail client's job; what issuing does is make
+  the figures stop moving
+- **Expenses are recorded against a project and are never invoice lines.** Reachable from the
+  command line and over MCP; there is no expenses screen
+- **Billing is absent from the sidebar** — not greyed out — for anybody without `billing:read`. The
+  deliberate exception to this app's disable-don't-hide rule: what a colleague costs is not
+  something to advertise the existence of to the colleague. The route stays reachable and refuses
+  with a sentence naming who does hold the key
+- **A Test Engineer who logs the hours cannot see what they cost, and an Account Manager sees the
+  client and the hours and never a rate.** Both are pinned by tests that ask the server, not the
+  screen
+- **Also on the command line and over MCP** — rate cards, budgets, drafting, issuing and expenses
+
+**What this module does not do, and will not:**
+
+- **No payment tracking.** Nothing anywhere says *Sent* or *Paid*, and there is no running balance
+  per client. An invoice's states are Draft and Issued, and issuing is the last thing this product
+  knows about it
+- **No fixed-fee or retainer invoicing.** An invoice line is approved time at a rate-card rate, and
+  nothing else — stated on the Billing screen itself rather than only in a decision document
+- **AI-assistant usage is a cost, never a line.** An assistant's hours are never charged to a
+  client
+- **No PDF.** There is no rendering of an invoice to a document, and no *Preview PDF* button that
+  would promise one
+- **A project with no client cannot be invoiced, and nothing marks that as a deficiency.** It
+  appears in the budgets table as *None (internal)*, with a budget of its own if it has one, no
+  warning tone and no call to action — which is the whole state a company that builds its own
+  products lives in
 
 ## Teams and People
 

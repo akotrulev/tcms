@@ -71,7 +71,7 @@ would mean eight edits to three documents that a test pins byte-for-byte. It is 
 | **M5** | Agent execution | ~~`V7`~~ → ~~`V6`~~ → ~~`V7`~~ → `V8` | connect their own assistant and have it work a task, but never close it | M1 | done 2026-09-04 @ `4f3bbf8b` — plan 015 |
 | **M6** | Time | ~~`V8`~~ → ~~`V10`~~ → ~~`V11`~~ → `V9` | log hours, submit a period, and have a PM approve it | M1 | done 2026-09-04 @ `3471358c` — plan 016 |
 | **M7** | Staffing | ~~`V9` (unchanged)~~ → **`V10` — taken 2026-09-04** | allocate people, see capacity, and find who is free | ~~M6~~ → **M0** (review R11) | done 2026-09-04 @ `44f8d39a` — plan [017-staffing.md](017-staffing.md) |
-| **M8** | Billing | ~~`V10`~~ → ~~`V11`~~ → ~~`V12`~~ → **whatever `ls` says on the day** (`V11` is now spent by Mc) | price approved time and issue an invoice | M6 · Mc — **both `done`** | not started — same reason as `Mc` was: this column has been re-derived by arithmetic six times and been wrong six times, and the directory settles it in one command |
+| **M8** | Billing | ~~`V10`~~ → ~~`V11`~~ → ~~whatever `ls` says on the day~~ → **`V12` — taken 2026-09-05** | price approved time and issue an invoice | M6 · Mc — **both `done`** | done 2026-09-06 @ `c58384b5` — plan [019-billing.md](019-billing.md) |
 | **M9** | Delivery analytics | none | read burn-up, cycle time and flow | M3 | not started |
 | **Mc** | Clients | ~~`V8`~~ → ~~`V9`~~ → ~~whatever `ls` says on the day~~ → **`V11` — taken 2026-09-05** | record a client and attach projects to it | M0 | done 2026-09-05 @ `c7e504ff` — plan [018-clients.md](018-clients.md) |
 
@@ -246,9 +246,11 @@ hardcoding the paragraph above warns about).
 `V1__initial_schema.sql` and nothing else when plan 010 T2 checked it. No correction needed here or
 in the `**db**` line above.
 
-**Built and unverified:** the 33 new permission rows exist and are granted, and **no code reads any
-of them** — the first evaluation site for `issue:*` arrives with M1, for `board:*` with M2, and for
-`billing:*` with M8. A grant that is never evaluated is a grant nobody can tell is inverted, which
+**Built and unverified:** the 33 new permission rows exist and are granted, and ~~**no code reads
+any of them**~~ — the first evaluation site for `issue:*` arrives with M1, for `board:*` with M2,
+and for `billing:*` with M8. → **all three arrived**, the last of them on 2026-09-06; every one of
+the 33 is now evaluated by a running endpoint, and the seven money keys are asserted as a *lack* by
+two tests rather than read off the matrix (019 D-n). A grant that is never evaluated is a grant nobody can tell is inverted, which
 is the same standing this repository already gives `doc:read` and `artifact:read` (§A3, flow audit
 C8). `ProjectKeys` is tested against a real Postgres but has **no production caller** until M1's
 issue creation — it carries an expiring entry in `ArchitectureRulesTest.UNEXERCISED_BY_DECISION`
@@ -769,13 +771,13 @@ close attempt is refused and the refusal is on the issue's history.
 Each one is a module on the same shape. Their own plans carry the detail; what matters at this
 altitude is the boundary between them.
 
-| | **M6 Time** (~~`V8`~~ → `V9`) | **M7 Staffing** (~~`V9`~~ → `V10`) | **M8 Billing** (~~`V10`~~ → `V11`?) |
+| | **M6 Time** (~~`V8`~~ → `V9`) | **M7 Staffing** (~~`V9`~~ → `V10`) | **M8 Billing** (~~`V10`~~ → ~~`V11`?~~ → `V12`) |
 |---|---|---|---|
-| **db** | ~~`V8`~~ → **`V9`** (Mc and M7 unspent). `time_entry` (`subject_type` + `subject_id` — an issue, a meeting, leave, training or admin: **five** members, and `TEST_RUN` is deliberately not one), `timesheet_period`, and **`issue_time_rollup`** — the projection, which the table below did not name. Plus `project_settings.track_time` and, added by T5, `project_settings.trackTime` on the wire | ~~`V9`~~ → **`V10`, landed 2026-09-04** — the version the directory gave matched the reservation for the first time in five, because M6 spent `V9` and nothing else had moved. `person_profile`, `skill`, `person_skill`, `allocation`, `absence`; five `FORCE` policies, `SchemaConventionTest` 95 → 100. **No capacity column**: capacity is derived on every read (017 D-a). **M8's `V10` above is therefore spent** — Mc is still unstarted, so M8 takes whatever `ls` says on its own day and does not do this arithmetic in advance | `rate_card`, `rate_card_entry`, `budget`, `invoice`, `invoice_line`, `expense` |
+| **db** | ~~`V8`~~ → **`V9`** (Mc and M7 unspent). `time_entry` (`subject_type` + `subject_id` — an issue, a meeting, leave, training or admin: **five** members, and `TEST_RUN` is deliberately not one), `timesheet_period`, and **`issue_time_rollup`** — the projection, which the table below did not name. Plus `project_settings.track_time` and, added by T5, `project_settings.trackTime` on the wire | ~~`V9`~~ → **`V10`, landed 2026-09-04** — the version the directory gave matched the reservation for the first time in five, because M6 spent `V9` and nothing else had moved. `person_profile`, `skill`, `person_skill`, `allocation`, `absence`; five `FORCE` policies, `SchemaConventionTest` 95 → 100. **No capacity column**: capacity is derived on every read (017 D-a). **M8's `V10` above is therefore spent** — Mc is still unstarted, so M8 takes whatever `ls` says on its own day and does not do this arithmetic in advance | ~~`V10`~~ → ~~`V11`?~~ → **`V12`, landed 2026-09-05** — `ls` showed `V1 … V11` on the day, Mc having spent `V11` the day before. `rate_card`, `rate_card_entry`, `budget`, `invoice`, `invoice_line`, `expense` — and **`invoice_line_entry`**, a **seventh** table this row did not name (019 D-b): billing may not write a column on `time_entry`, so *which approved hours are already on an issued invoice* is a billing-owned join with no foreign key to the second side, and it is the only thing standing between this module and double-billing. Seven `FORCE` policies, `SchemaConventionTest` 102 → 109 |
 | **be** | log, submit, approve, reject-with-note; approved hours roll up to story, epic, project as a **`time`-owned projection joined to `issue_fact`** — `time` reads `issue_fact` and never writes it (review R10; the trap scope §3 names) | capacity, allocation percentage, over-allocation flag, absence zeroing capacity everywhere | approved time priced by rate card, budget burn, draft and issue an invoice, lines lock on issue |
-| **fe** | `timesheets.html`, `timesheet-approvals.html`, **and the five additive surfaces T5 added**: the story's Time panel and its `Logged` detail row, the epic's estimate-vs-actual table, the work table's `Logged` column and footer, My Work's This-period figure, and the Track-time toggle on General settings | ~~`staffing.html`, `directory.html`~~ → **four screens**: `/staffing` and `/directory` (COMPANY, `staffing:directory`), `/projects/:projectId/staffing` (PROJECT, `staffing:read` / `staffing:allocate`) and `/directory/:userId`, which carries `member.html`'s Profile / Skills / Absence panels — **there is no member page under Teams and M7 built none** (017 D-g). Plus the two figures M6 left absent, completed by T6 | `billing.html`, `invoice.html`, and the client page's hours-and-invoices table |
+| **fe** | `timesheets.html`, `timesheet-approvals.html`, **and the five additive surfaces T5 added**: the story's Time panel and its `Logged` detail row, the epic's estimate-vs-actual table, the work table's `Logged` column and footer, My Work's This-period figure, and the Track-time toggle on General settings | ~~`staffing.html`, `directory.html`~~ → **four screens**: `/staffing` and `/directory` (COMPANY, `staffing:directory`), `/projects/:projectId/staffing` (PROJECT, `staffing:read` / `staffing:allocate`) and `/directory/:userId`, which carries `member.html`'s Profile / Skills / Absence panels — **there is no member page under Teams and M7 built none** (017 D-g). Plus the two figures M6 left absent, completed by T6 | `billing.html`, `invoice.html`, and the client page's hours-and-invoices table — **all three, plus three figures on screens other modules own**: the client page's two KPI tiles and its rate-card panel, the project overview's Budget burn panel, and General settings' Budget row. The **Billing rail entry is absent** rather than disabled for a caller without `billing:read` (019 D-o), the fifth recorded exception to this app's disable-don't-hide rule |
 | **Depends on** | M1 | ~~M6~~ → **M0** (review R11: profiles, skills, allocation, absence and capacity read no time entry — allocation is against a project, which is foundation. *Utilisation*, allocated vs logged, is the one figure that needs M6, and it is out of M7 unless M6 has landed) | M6 · Mc |
-| **A person can now** | record where the day went and have it approved — **landed 2026-09-04 @ `3471358c`, plan [016-time.md](016-time.md)**, closure below | answer "who is free, and when" — **landed 2026-09-04 @ `44f8d39a`, plan [017-staffing.md](017-staffing.md)**, closure below | turn approved hours into an invoice |
+| **A person can now** | record where the day went and have it approved — **landed 2026-09-04 @ `3471358c`, plan [016-time.md](016-time.md)**, closure below | answer "who is free, and when" — **landed 2026-09-04 @ `44f8d39a`, plan [017-staffing.md](017-staffing.md)**, closure below | turn approved hours into an invoice — **landed 2026-09-06 @ `c58384b5`, plan [019-billing.md](019-billing.md)**, closure below |
 
 **The sharpest boundary in the expansion is money, and it needs a test asserting the negative.**
 `billing:*` and `ratecard:read` are Finance and Company Admin only. A Test Engineer with `time:log`
@@ -937,6 +939,81 @@ inputs `build.gradle.kts` declares, so the last real backend run of this module 
   is a new predicate, not a widened prefix.
 - **The lab was not seeded and no real allocation was made** during this module. The demo seeder
   above is the route to both, and running it is the first thing a verification pass should do.
+
+### M8 closed — 2026-09-06 @ `c58384b5`, plan [019-billing.md](019-billing.md)
+
+**The migration actually taken is `V12`**, which is what this table's third reservation guessed and
+what `ls` showed on the day — Mc spent `V11` on 2026-09-05 and nothing else had moved. The
+strikethroughs above are kept: the number was **re-derived from the directory**, not inherited, and
+019 D-a records that T2's first command was the `ls` and that the directory wins over the plan if
+they disagree. **This column has now been re-derived six times and been wrong five.** R15 stays
+open by design.
+
+**Seven tables, not the six this table named.** `invoice_line_entry` is the seventh (019 D-b) and it
+is not a convenience: *"which approved hours are already on an issued invoice"* has no other place
+to live, and without it the module double-bills. It is a billing-owned join with **no foreign key**
+to `time_entry`, the polymorphic crossing scope §3 prescribes.
+
+**Six tasks, one stack each:** T1 the contract + both generated clients + the CLI/MCP verbs, T2
+`V12` and the seven tables, T3 rate cards, pricing, budgets and expenses, T4 the invoice lifecycle
+and the two negatives, T5 the rail entry and the two billing screens, T6 the client table, the two
+budget figures and this close-out.
+
+#### The two figures other modules left absent — **both completed**
+
+016 T5 left `settings-general.html`'s Budget row unbuilt and 011 T7 left the overview's Budget burn
+panel unbuilt, each because the module that owned the number did not exist. Both are built, and
+**both assertions of their absence were reversed in place rather than deleted** — struck through
+with the reversal beside them, in this repo's superseded style, so the next reader can see the old
+reasoning was considered rather than missed.
+
+The rule that made those absences right is now the rule that constrains what landed: **neither
+surface carries a currency, ever.** `GET /projects/{projectId}/budget-burn` is gated on
+`project:read` and its schema has no `amount` and no `currency` member **at all** (019 D-h), which
+is what makes it safe for the one reader who may call no other endpoint in this module. A
+`MONEY`-basis budget renders as a percentage alone; where the client has no rate card the burn is
+`null`, which reads as **unknown** and never as zero.
+
+#### The money boundary, asserted as a lack rather than read off the matrix
+
+The paragraph above this section asked for a test that asserts the negative, and there are two:
+`BillingMoneyBoundaryTest` derives its paths **from the contract** and asserts a Test Engineer is
+refused every one, and `TimeMoneyBoundaryTest` was **extended rather than rewritten** (019 D-n) with
+an arm asserting an Account Manager holds `client:read` and not one of the seven money keys. The
+third statement of the same boundary is on the client screen and is the server's: `amountsVisible`
+is a field on the payload, not a decision the browser makes, because a `null` amount that means
+either *no invoice* or *not your business* is a lie a renderer cannot detect (019 D-i).
+
+#### Built and unverified
+
+The gates prove it compiles and that the assertions written for it hold. They do not prove it works.
+On `shanks` at T6: **frontend build clean, lint 0 warnings, 2939 tests in 212 files, 2 failing.**
+Backend and packages last ran at T4 and T1; T5 and T6 changed no backend source and none of the
+out-of-source inputs `build.gradle.kts` declares.
+
+- **The two failures are `src/features/cases/CaseGrid.test.tsx` and they predate this module** —
+  *survives paging* and *select-all reaches the page*, the same two 016 and 017 both recorded, both
+  `Number of calls: 0` after a `userEvent.click` on the Radix `Checkbox`. **Not absorbed.** Three
+  modules have now declined to absorb them; they are a real defect in that grid's selection or in
+  its test, and nobody has opened it.
+- **No screen in this module has been opened against a running instance.** `/billing`,
+  `/billing/invoices/:invoiceId`, the client page's table and rate-card panel, the project
+  overview's Budget burn panel and General settings' Budget row are proved by RTL against doubles
+  and by the contract conformance checks only.
+- **`seed-demo-data` was extended and RUN at T4** — `DemoWorkspaceSeeder.seedBilling` writes rate
+  cards, budgets and two invoices, and T4's step 8 required running it rather than only writing it.
+  **Nobody has signed in afterwards and looked at the result**, which is the difference between a
+  seeder that executes and a screen that renders what it wrote.
+- **The concurrent-draft race in 019 D-c has never been executed by two callers.** A draft is a live
+  computation over approved hours, and two people drafting the same client and period at the same
+  moment is a case no test drives — the immutability proof issues, doubles the rate card and
+  re-reads, which is a sequence, not a race.
+- **`Preview PDF` does not exist and there is no expenses screen**, both deliberately (019 D-j,
+  D-q). Expenses are reachable from the CLI and MCP; no mockup draws a panel, and plan 009's rule is
+  that no module ports a screen it has no endpoint for — this is that rule in the other direction,
+  recorded so the absence is not later read as unfinished work.
+- **No invoice has been issued from the UI against a real database.** The lock on issue is proved at
+  the service level; the button that fires it is proved against a double.
 
 ---
 
@@ -1882,7 +1959,15 @@ Then:
    and record whether the two capacity figures above were completed or left absent again.
 ````
 
-### M8 — Billing
+### ~~M8 — Billing~~ → **done. Do not run this prompt.**
+
+**M8 landed 2026-09-06 at `c58384b5`** — `V12__billing.sql`, plan
+[019-billing.md](019-billing.md). Its closure is written up in
+[the M8 section above](#m6--time--m7--staffing--m8--billing): the V actually taken (`V12`,
+re-derived from `ls` and not from this table), the **seventh** table this plan did not name
+(`invoice_line_entry`, 019 D-b), the two negatives asserted as a lack, and the built-and-unverified
+list. **No module depends on M8, so no prompt below was rewritten.** The block below is kept for the
+reader who wants to see what was asked for against what landed.
 
 ````text
 You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
@@ -2230,7 +2315,7 @@ where it was resolved above; the two that need the owner or a module plan are na
 | R12 | M9 "needs no migration" was only true if M1/M3 stored timestamps `issue_fact` was not sketched with. | **Resolved** — four timestamps on `issue_fact` in M1, `release.created_at` in M3. |
 | R13 | M2 did not say what happens to a workflow status added after a board exists. | **Resolved, and built (M2, 2026-09-01)** — auto-claimed by the same-`kind` default column; unique index, not a CHECK. The claim is a **direct call** from `WorkflowService` into `BoardConfigService.claimNewStatus`, same module and same transaction, not an event (012 D-g): an unclaimed status is not a state the data can be in, rather than one it is briefly in. `settings-boards` shows the claim where it landed and lets it be moved. **Unverified end to end** — the screen's test seeds the claim by hand; nothing has driven the workflow `PUT` and read the board back. |
 | R14 | M4: whether the importer may reuse `integration.tracker`'s per-person credential. | **Closed (014 D-a, 2026-09-02)** — neither of the two the review named. The connection is entered per run, carried in the request body, held for the life of the run and **written nowhere**: `import_run` has no secret column at all. Reuse was refused because it does not compile — `tracker`'s `allowedDependencies` does not name `integration`, and `ArchitectureRulesTest` is a hard gate with no exception list. Encrypting it onto `import_run`, which is the option this plan expected to be taken, was refused because `SecretCipher` is in `integration` too: taking it meant a **second AES-GCM key user**, which is the rotation defect that class's own header names. It costs re-typing the token after a browser reload, and `import-connect.html` already promised exactly this under the field. |
-| R15 | The migration numbers ~~`V8 / V9 / V10`~~ → `V11 / V10 / V12` for M6–M8 are wrong the moment a second lane lands anything out of table order. | **Open by design, and it has now bitten FOUR times with no second lane at all** — M5 placed ahead of M4 (2026-08-30); M1 spending two versions rather than one (2026-09-01); M4 begun before M5, so `V7` was free when the table had spent it (2026-09-01); and **M6 taking `V9` rather than the reserved `V11` (2026-09-04), because neither Mc nor M7 — both ahead of it in the confirmed order — had started.** Four causes, none of them a second lane. The reservation warning covers it; the parallel section restates it because that is where it bites hardest. |
+| R15 | The migration numbers ~~`V8 / V9 / V10`~~ → `V11 / V10 / V12` for M6–M8 are wrong the moment a second lane lands anything out of table order. | **Open by design, and it has now bitten FOUR times with no second lane at all** — M5 placed ahead of M4 (2026-08-30); M1 spending two versions rather than one (2026-09-01); M4 begun before M5, so `V7` was free when the table had spent it (2026-09-01); and **M6 taking `V9` rather than the reserved `V11` (2026-09-04), because neither Mc nor M7 — both ahead of it in the confirmed order — had started.** Four causes, none of them a second lane. The reservation warning covers it; the parallel section restates it because that is where it bites hardest. **Closed 2026-09-06 by M8, the last module this row reserved a number for** — and closed by the *practice* rather than by the arithmetic ever coming right: Mc took `V11` and M8 took `V12`, both re-derived from `ls` on the day, and every module plan since 016 has made that `ls` its first command. The three reservations here ended `V9 / V10 / V12`, two of three wrong. **Nothing after M9 may read a `V` from a table; read the directory.** |
 
 ---
 
