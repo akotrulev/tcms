@@ -6,6 +6,7 @@ import {
   useEpicCompletions,
   useIssues,
   useProject,
+  useProjectBudgetBurn,
   useReadiness,
   useReleases,
 } from '../../api/queries';
@@ -35,6 +36,7 @@ import {
   formatCount,
   formatDate,
   formatDueIn,
+  formatHours,
   formatPercent,
   percentOf,
   plural,
@@ -42,6 +44,7 @@ import {
 } from '../../lib/format';
 import { labelForKey, lastRunLabels } from '../../lib/labels';
 import { statusVar } from '../../lib/statusColors';
+import { BurnMeter } from '../billing/BudgetPanel';
 import { doneButFailing, releaseBadge } from '../releases/releaseBadge';
 import { nextRelease } from '../releases/nextRelease';
 import { CompletionMeter } from '../tracker/CompletionMeter';
@@ -83,8 +86,17 @@ const TEST_ID = 'ProjectOverview';
  *
  * - **Next release** renders `solo-overview.html`'s empty state, because a release is a thing this
  *   project *will* have and has none **yet**.
- * - **Budget burn** (M6) and **Team** (M7) are **not rendered at all**. A budget is a module that is
- *   not installed, and an empty-state card for one is an advertisement rather than an explanation.
+ * - ~~**Budget burn** (M6) and **Team** (M7) are **not rendered at all**. A budget is a module that
+ *   is not installed, and an empty-state card for one is an advertisement rather than an
+ *   explanation.~~ → **superseded 2026-09-05 (019 T6) for the budget half:** the module exists, so
+ *   {@link BudgetBurnPanel} reads `GET /projects/{projectId}/budget-burn`. That endpoint is gated
+ *   on `project:read` and carries a percentage and hours and **no currency and no amount** (019
+ *   D-h) — the mockup's own hint is *"hours, no rates"* and its copy is *"What an hour costs is
+ *   Finance's, and is not on this page."* A `MONEY`-basis budget therefore renders as a percentage
+ *   alone, and where the project's client has no rate card the burn is **unknown**, not zero. A
+ *   project with **no budget renders no panel at all**, which is the state `billing.html`'s
+ *   internal project is in and is not a deficiency (019 D-p). Team (M7) is still not rendered
+ *   here: staffing has its own screen and this page links to none of it yet.
  *
  * ~~The two KPI tiles the mockup carries and this page does not are the same call: `2.4 complete`
  * and `To target date` are both a release's numbers (M3).~~ → **superseded 2026-09-01 (plan 013,
@@ -190,6 +202,7 @@ export function ProjectOverviewPage() {
         <div className="flex flex-col gap-3.5">
           <NextReleasePanel projectId={projectId} />
           <TestHealthPanel projectId={projectId} dashboard={dashboard} />
+          <BudgetBurnPanel projectId={projectId} />
         </div>
       </div>
 
@@ -958,6 +971,87 @@ function ReleaseMeter({
           ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * `project-overview.html`'s **Budget burn** panel — *"hours, no rates"*, and never a currency.
+ *
+ * <h2>Nothing on this panel can carry money, because nothing on the endpoint does</h2>
+ *
+ * `GET /projects/{projectId}/budget-burn` is gated on `project:read` and `BudgetBurn` has **no
+ * `amount` and no `currency` member at all** (019 D-h). That is what makes it safe for the one
+ * reader who may call no other endpoint in the billing module: there is nothing here to withhold,
+ * so gating a project's own ceiling behind a money key would only hide it from the people
+ * delivering against it. The mockup's own copy is the statement — *"A Project Manager sees the
+ * ceiling and the burn. What an hour costs is Finance's, and is not on this page."*
+ *
+ * A `MONEY`-basis budget therefore reaches this panel as a **percentage alone**: `budgetHours` is
+ * null, the hours line shows what has been approved and no ceiling beside it, and the meter carries
+ * the burn. `money.ts` is not imported here, and reaching for it would mean reaching for the wrong
+ * hook.
+ *
+ * <h2>No budget is no panel, and that is not a deficiency</h2>
+ *
+ * `basis: null` is a project nobody has set a ceiling on — the common case, and the state
+ * `billing.html`'s internal project is in. It draws nothing: no empty card, no warning tone, no
+ * *set a budget* prompt (019 D-p). A **failed** read is different and does render, because a panel
+ * that vanished on an outage would be indistinguishable from a project that has no budget, and
+ * this screen would then be quietly reporting a fact it does not have.
+ *
+ * <h2>`BurnMeter` is the Billing screen's, imported rather than redrawn</h2>
+ *
+ * An overrun must not look one way here and another to Finance. 102% is a nearly-full bar with a
+ * red tail on both screens, `null` reads as *unknown* rather than as zero on both, and neither
+ * clamps at 100 — clamping hides the one row that matters.
+ */
+function BudgetBurnPanel({ projectId }: { projectId: string }) {
+  const burn = useProjectBudgetBurn(projectId);
+
+  // Nothing to draw and nothing to report: no ceiling set, or the answer has not arrived and a
+  // card that appeared and then vanished would move the two panels above it.
+  if (burn.isPending || burn.data?.basis === null) return null;
+
+  return (
+    <section className="rounded-[10px] border border-line bg-panel" data-testid={`${TEST_ID}.Budget`}>
+      <div className="flex items-center gap-2.5 border-b border-line px-3.5 py-2.5">
+        <h2 className="m-0 text-[13.5px] font-semibold text-ink">Budget burn</h2>
+        <span className="text-[11.5px] text-ink-4">hours, no rates</span>
+      </div>
+
+      <DataRegion
+        testId={`${TEST_ID}.Budget.Region`}
+        state={{ ...burn, refetch: () => void burn.refetch() }}
+      >
+        {(data) => (
+          <div className="flex flex-col gap-2.5 px-3.5 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[12px] text-ink-3">Approved hours</span>
+              <span
+                className="font-mono text-[13px] tabular-nums text-ink"
+                data-testid={`${TEST_ID}.Budget.Hours`}
+              >
+                {/*
+                  `418h / 600h` for an hours ceiling; `418h` alone for a money one, where the
+                  ceiling is a figure this page may not carry. Not `418h / —`: an em dash in a
+                  ratio reads as a number that failed to load rather than as one that is Finance's.
+                */}
+                {data.budgetHours === null ?
+                  formatHours(data.approvedHours)
+                : `${formatHours(data.approvedHours)} / ${formatHours(data.budgetHours)}`}
+              </span>
+            </div>
+
+            <BurnMeter percent={data.burnPercent} hasBudget testId={`${TEST_ID}.Budget.Meter`} />
+
+            <p className="m-0 text-[11.5px] leading-[1.5] text-ink-4">
+              A Project Manager sees the ceiling and the burn. What an hour costs is Finance&rsquo;s,
+              and is not on this page.
+            </p>
+          </div>
+        )}
+      </DataRegion>
+    </section>
   );
 }
 

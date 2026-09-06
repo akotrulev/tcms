@@ -3,6 +3,7 @@ import { Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
 import type {
+  BudgetBurn,
   ClientRef,
   Issue,
   IssueSummary,
@@ -16,6 +17,7 @@ import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
 import {
+  aBudgetBurn,
   aProject,
   aReadinessSummary,
   aReleaseBlocker,
@@ -39,9 +41,15 @@ import { ProjectOverviewPage } from './ProjectOverviewPage'
  * 1. **A section M1 has no data for explains itself.** The release panel renders the empty state,
  *    with what a release IS in it. Worded as a negative because the failure is a panel that renders
  *    with nothing in it and no explanation.
- * 2. **Budget and Team are not rendered at all.** The difference from the release panel is the whole
- *    rule: a release is a thing this project will have and has none yet, while a budget is a module
- *    that is not installed — and an empty-state card for one is an advertisement.
+ * 2. ~~**Budget and Team are not rendered at all.** The difference from the release panel is the
+ *    whole rule: a release is a thing this project will have and has none yet, while a budget is a
+ *    module that is not installed — and an empty-state card for one is an advertisement.~~ →
+ *    **reversed 2026-09-05 (019 T6) for the budget half.** The assertion was correct when it was
+ *    written and the module it waited for landed, so what is pinned now is the panel and its three
+ *    readings: an hours ceiling draws `418h / 600h`, a MONEY ceiling draws the hours and the
+ *    percentage and **never a currency** (019 D-h), and a project with **no** budget still draws no
+ *    panel — which is the one part of the old assertion that survives, and is now 019 D-p rather
+ *    than an absent module. Team (M7) is still absent and is still asserted.
  * 3. **No client chip and no client prompt.** `solo-overview.html`'s own note: the Clients sidebar
  *    entry staying is "the only trace". An empty `Client: —` chip is exactly what a naive port
  *    produces, and today the criterion holds structurally because `Project` carries no client at
@@ -129,6 +137,11 @@ interface Reads {
   permissions?: PermissionKey[]
   /** 018 Mc — the client this project is for, or `null` for internal work (the default). */
   client?: ClientRef | null
+  /**
+   * 019 M8 — the project-scope burn. The default is a project with **no budget** (`basis: null`),
+   * which is the common case and the one that draws no panel at all.
+   */
+  burn?: BudgetBurn
 }
 
 function mockReads({
@@ -156,10 +169,13 @@ function mockReads({
   failReadiness = false,
   permissions = ['project:read', 'issue:create'],
   client = null,
+  burn = aBudgetBurn(),
 }: Reads = {}) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
     if (path.includes('/dashboard')) return dashboard
+    // Anchored, so the burn sub-resource is not caught by the `/projects/{id}` prefix below.
+    if (/^\/projects\/[^/]+\/budget-burn$/.test(path)) return burn
     // Anchored ahead of `/releases/{id}` so the readiness sub-resource is not caught by the prefix —
     // the collision `/boards/{id}` vs `/boards/{id}/cards` cost 012 T7 the same half hour.
     if (/^\/releases\/[^/]+\/readiness$/.test(path)) {
@@ -345,20 +361,62 @@ describe('A project with no releases — solo-overview.html\u2019s rendering, un
     expect(target.textContent).toContain('no release planned')
   })
 
-  it('renders no budget card and no team card at all', async () => {
+  it('renders no budget card for a project that has no budget, and no team card at all', async () => {
     /*
-      M6 and M7, and the difference from the release panel is the whole rule: a release is a thing
-      this project will have, so its absence is a STATE with a tile and an empty panel. A budget is a
-      module that is not installed, and an empty-state card for one is an advertisement.
+      ~~M6 and M7, and the difference from the release panel is the whole rule: a release is a thing
+      this project will have, so its absence is a STATE with a tile and an empty panel. A budget is
+      a module that is not installed, and an empty-state card for one is an advertisement.~~ →
+      **reversed by 019 T6.** The module exists. What is asserted here now is the OTHER reason the
+      card is absent: `basis: null` is a project nobody set a ceiling on — the common case, and the
+      state `billing.html`'s internal project is in — and it draws no panel, no empty state, no
+      warning tone and no *set a budget* prompt (019 D-p). Team (M7) is still not built.
     */
     mockReads()
     renderPage()
 
     await screen.findByTestId('ProjectOverview.Release.Empty')
 
+    expect(screen.queryByTestId('ProjectOverview.Budget')).toBeNull()
     expect(screen.queryByText(/Budget burn/i)).toBeNull()
-    expect(screen.queryByText(/Approved hours/i)).toBeNull()
     expect(screen.queryByText(/Staffing/i)).toBeNull()
+  })
+
+  it('draws the burn against an hours ceiling, and never a currency', async () => {
+    mockReads({ burn: aBudgetBurn({ basis: 'HOURS', budgetHours: 600, approvedHours: 418, burnPercent: 70 }) })
+    renderPage()
+
+    const hours = await screen.findByTestId('ProjectOverview.Budget.Hours')
+    expect(hours.textContent).toBe('418h / 600h')
+    expect(screen.getByTestId('ProjectOverview.Budget.Meter.Percent').textContent).toBe('70%')
+    expect(screen.getByTestId('ProjectOverview.Budget')).toHaveTextContent(
+      /What an hour costs is Finance’s, and is not on this page/i,
+    )
+    expect(screen.queryByText(/€|CHF|\$/)).toBeNull()
+  })
+
+  it('draws a money ceiling as a percentage alone, and an unpriceable one as unknown', async () => {
+    /*
+      019 D-h: `BudgetBurn` has no amount and no currency member at all, so a MONEY budget reaches
+      this page as a percentage and the hours behind it. And `burnPercent: null` is *unknown* — a
+      money ceiling on a project whose client has no rate card cannot be priced, and a zero would
+      read as *nothing spent* on a project that has spent a quarter.
+    */
+    mockReads({ burn: aBudgetBurn({ basis: 'MONEY', budgetHours: null, approvedHours: 418 }) })
+    renderPage()
+
+    const hours = await screen.findByTestId('ProjectOverview.Budget.Hours')
+    expect(hours.textContent).toBe('418h')
+    expect(screen.getByTestId('ProjectOverview.Budget.Meter.Unknown').textContent).toBe('unknown')
+    expect(screen.queryByText(/€|CHF|\$/)).toBeNull()
+  })
+
+  it('draws an overrun past 100% rather than clamping it', async () => {
+    // The meter is `BudgetPanel`'s, so 102% looks the same here as it does to Finance — a full bar
+    // with a red tail. A `Math.min(percent, 100)` anywhere would hide the one project that matters.
+    mockReads({ burn: aBudgetBurn({ basis: 'HOURS', budgetHours: 500, approvedHours: 512, burnPercent: 102.4 }) })
+    renderPage()
+
+    expect((await screen.findByTestId('ProjectOverview.Budget.Meter.Percent')).textContent).toBe('102%')
   })
 
   it('renders the test-health panel, which M1 owns rather than defers', async () => {

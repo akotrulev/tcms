@@ -7,7 +7,7 @@ import type { PermissionKey, Project, ProjectWorkflow } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
-import { aProjectWorkflow, projectSettings } from '../../test/fixtures'
+import { aBudgetBurn, aProjectWorkflow, projectSettings } from '../../test/fixtures'
 import { GeneralSettingsPage } from './GeneralSettingsPage'
 import { ProjectsPage } from '../projects/ProjectsPage'
 
@@ -59,6 +59,9 @@ function mockReads(permissions: PermissionKey[], project: Project = LIVE, projec
     // The settings document, read since 015 T5 put D33's close gate on this screen. Anchored for
     // the same reason as the workflow arm above it.
     if (/^\/projects\/[^/]+\/settings$/.test(path)) return projectSettings({ projectId: 'p1' })
+    // 019 T6's Budget row on the Time panel. A project with no budget — the state this file's
+    // assertions are all indifferent to, and the one the row reads as *no budget set*.
+    if (/^\/projects\/[^/]+\/budget-burn$/.test(path)) return aBudgetBurn()
     if (/^\/projects\/[^/]+$/.test(path)) return project
     /*
       018 T5's ClientPanel reads this. Answered EMPTY, which is the state every test in this file is

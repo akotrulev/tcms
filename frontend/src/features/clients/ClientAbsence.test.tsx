@@ -8,7 +8,7 @@ import { ProjectCreateDialog } from '../projects/ProjectCreateDialog'
 import { ProjectsPage } from '../projects/ProjectsPage'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
-import { aClient, aProject, aProjectWorkflow, projectSettings } from '../../test/fixtures'
+import { aBudgetBurn, aClient, aProject, aProjectWorkflow, projectSettings } from '../../test/fixtures'
 import { heldPermissions } from '../../test/permissions'
 
 /**
@@ -65,6 +65,10 @@ function mockReads({
     if (/^\/clients(\?|$)/.test(path)) return clients
     if (/\/settings\/client-options$/.test(path)) return options ?? clients.map((c) => ({ id: c.id, name: c.name }))
     if (/\/projects\/[^/]+\/settings$/.test(path)) return projectSettings({ projectId: PROJECT_ID })
+    // 019 M8's Budget row on General settings. A project with no budget, which is what every
+    // assertion in this file is about — the catch-all below would serve `{}`, and the contract
+    // double correctly refuses a body missing four required fields.
+    if (/\/projects\/[^/]+\/budget-burn$/.test(path)) return aBudgetBurn()
     if (/\/projects\/[^/]+\/workflow$/.test(path)) return aProjectWorkflow()
     if (/^\/projects\/[^/]+$/.test(path)) {
       return aProject({ id: PROJECT_ID, key: 'ACME', name: 'Storefront', client: projectClient })

@@ -3,12 +3,12 @@ import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { IssueTypeRef, PermissionKey, ProjectWorkflow } from '../../api/types'
+import type { BudgetBurn, IssueTypeRef, PermissionKey, ProjectWorkflow } from '../../api/types'
 import { issueLevels } from '../../lib/labels'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
-import { aProject, projectSettings } from '../../test/fixtures'
+import { aBudgetBurn, aProject, projectSettings } from '../../test/fixtures'
 import { GeneralSettingsPage } from './GeneralSettingsPage'
 
 /**
@@ -22,9 +22,13 @@ import { GeneralSettingsPage } from './GeneralSettingsPage'
  *
  * The other assertions are absences, and an absence is exactly what a naive port gets wrong: the
  * Client select (Mc) is not here, ~~the "Closing work" toggles (M5) and the "Time" panel (M6)~~ →
- * both landed, in 015 T5 and 016 T5 — and neither is a rename form the API cannot honour. What is
+ * both landed, in 015 T5 and 016 T5 — and neither is a rename form the API cannot honour. ~~What is
  * still absent from the Time panel is the mockup's **Budget** row, which is M8's, and that absence
- * is asserted below.
+ * is asserted below.~~ → **reversed 2026-09-05 (019 T6): the row is built.** What is asserted in
+ * its place is what the row may and may not say — the ceiling in hours, *set in money* rather than
+ * a currency for a MONEY budget (019 D-h), *no budget set* for a project with none, and an
+ * `Edit in Billing` button **disabled with its reason** rather than hidden for the many callers who
+ * can open this screen and cannot open that one (§31).
  */
 
 const PROJECT_ID = 'p1'
@@ -50,6 +54,8 @@ function mockReads(
   types: IssueTypeRef[] = SEEDED_TYPES,
   permissions: PermissionKey[] = ['project:read'],
   settings = projectSettings({ projectId: PROJECT_ID }),
+  /** 019 M8. The default is a project with no budget — the common case, and the row says so. */
+  burn: BudgetBurn = aBudgetBurn(),
 ) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
@@ -57,6 +63,7 @@ function mockReads(
     // Anchored, so the settings sub-resource is not caught by the project prefix — the collision
     // the harness rules name explicitly.
     if (/^\/projects\/[^/]+\/settings$/.test(path)) return settings
+    if (/^\/projects\/[^/]+\/budget-burn$/.test(path)) return burn
     if (/^\/projects\/[^/]+$/.test(path)) {
       return aProject({ id: PROJECT_ID, key: 'ACME', name: 'Acme Storefront', caseCount: 12 })
     }
@@ -349,13 +356,67 @@ describe('Track time on this project', () => {
     expect(await screen.findByText(/still there and still approved/i)).toBeInTheDocument()
   })
 
-  it('does not build the mockup’s Budget row — there is no ceiling, no rate and no Billing', async () => {
+  it('shows the hours ceiling and disables Edit in Billing for somebody without the money key', async () => {
+    /*
+      ~~The mockup's Budget row is not built — there is no ceiling, no rate and no Billing.~~ →
+      reversed by 019 T6. Two things are pinned here at once: the ceiling arrives from the burn
+      endpoint, which is gated on `project:read` and carries no currency (019 D-h), so a project
+      administrator reads it without a money key — and the button to the screen that SETS it is
+      disabled with the gate's own sentence rather than hidden (§31).
+    */
+    mockReads(
+      SEEDED_TYPES,
+      ['project:read', 'project:settings'],
+      projectSettings({ projectId: PROJECT_ID }),
+      aBudgetBurn({ basis: 'HOURS', budgetHours: 600, approvedHours: 418, burnPercent: 70 }),
+    )
+    renderPage()
+
+    /*
+      The row renders before its read answers, so the element is there with nothing in it — `find`
+      would resolve on the empty one. The wait is on the CONTENT, which is what this asserts.
+    */
+    await waitFor(() =>
+      expect(screen.getByTestId('GeneralSettings.Budget.Ceiling').textContent).toBe('600h'),
+    )
+    expect(screen.getByTestId('GeneralSettings.Budget.Edit')).toBeDisabled()
+    expect(screen.queryByText(/€|CHF|\$/)).toBeNull()
+  })
+
+  it('says a money ceiling is set in money rather than drawing an em dash or an amount', async () => {
+    // The dash means *absent* everywhere else in this app, and the ceiling is not absent — it is
+    // not this reader's. `budgetHours` is null for a MONEY budget, and there is nothing else on the
+    // payload to draw.
+    mockReads(
+      SEEDED_TYPES,
+      ['project:read', 'project:settings'],
+      projectSettings({ projectId: PROJECT_ID }),
+      aBudgetBurn({ basis: 'MONEY', budgetHours: null, approvedHours: 418, burnPercent: 62 }),
+    )
+    renderPage()
+
+    await waitFor(() =>
+      expect(screen.getByTestId('GeneralSettings.Budget.Ceiling').textContent).toBe('set in money'),
+    )
+  })
+
+  it('reads “no budget set” for a project with none, with no prompt to set one', async () => {
+    // 019 D-p: a project with no budget is not in a deficient state, and nothing here nags.
     mockReads(SEEDED_TYPES, ['project:read', 'project:settings'])
     renderPage()
 
-    await screen.findByTestId('GeneralSettings.trackTime')
-    expect(screen.queryByText(/Edit in Billing/i)).toBeNull()
-    expect(screen.queryByText(/600h/)).toBeNull()
+    await waitFor(() =>
+      expect(screen.getByTestId('GeneralSettings.Budget.Ceiling').textContent).toBe('no budget set'),
+    )
+  })
+
+  it('links Edit in Billing through for a caller who holds the money key', async () => {
+    mockReads(SEEDED_TYPES, ['project:read', 'project:settings', 'billing:read'])
+    renderPage()
+
+    await waitFor(() =>
+      expect(screen.getByTestId('GeneralSettings.Budget.Edit')).toHaveAttribute('href', '/billing'),
+    )
   })
 
   it('is read-only for somebody who cannot change the project’s settings', async () => {

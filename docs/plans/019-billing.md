@@ -2821,7 +2821,7 @@ carrying a currency; and M8 is closed per plan 009's hand-off protocol.
 - Modify: `frontend/src/features/settings/GeneralSettingsPage.tsx` and its test
 - Modify: `docs/features.md`, `docs/plans/009-project-management-expansion-modules.md`
 
-- [ ] **Step 1: `BillingSlot` — the whole table, not three of its columns**
+- [x] **Step 1: `BillingSlot` — the whole table, not three of its columns**
 
 The file's own header states what it is reserving and why; replace the body, keep the seam, and
 rewrite the header to say what landed. `Period · Project · Approved hours · Invoice · Status`, plus
@@ -2851,7 +2851,7 @@ it('renders no value column for an Account Manager', async () => {
 })
 ```
 
-- [ ] **Step 2: `ClientRateCardPanel` — a link, not a second editor**
+- [x] **Step 2: `ClientRateCardPanel` — a link, not a second editor**
 
 `client.html` renders this panel for an Account Manager as an empty state reading *"Not visible to
 you — Rates are Finance's. An Account Manager knows the client and the hours; never the money."*
@@ -2859,7 +2859,7 @@ That copy is now true rather than aspirational, and it stays. For a caller holdi
 the panel shows the card's currency and entry count and **links into `/billing`**: one place edits a
 rate card, and T5 built it.
 
-- [ ] **Step 3: The Overview's Budget burn panel — and the reversal of the assertion that it is absent**
+- [x] **Step 3: The Overview's Budget burn panel — and the reversal of the assertion that it is absent**
 
 `ProjectOverviewPage.tsx:86` and its test both currently state, in terms, that the budget card is not
 rendered *because a budget is a module that does not exist*. That was correct when written. Rewrite
@@ -2876,7 +2876,7 @@ deleting the reasoning:
  *   no budget renders no panel, which is the state `billing.html`'s internal project is in.
 ```
 
-- [ ] **Step 4: General settings' Budget row**
+- [x] **Step 4: General settings' Budget row**
 
 `settings-general.html`'s Time panel row: `Budget · Hours ceiling — the PM sees the burn, never the
 rate · 600h · [Edit in Billing]`. It reads the same `budget-burn` endpoint the overview does, so a
@@ -2892,13 +2892,13 @@ Reverse both in the superseded style, as step 3 does.
 `ProjectSettingsUpdate`'s field list is written, and `trackTime` is the single boolean the server
 reads as `true` when omitted (016 T5) — the budget is not part of that document and must not join it.
 
-- [ ] **Step 5: `docs/features.md`**
+- [x] **Step 5: `docs/features.md`**
 
 Write the Billing section for a reader deciding what the product does: rate cards per client,
 budgets per project, approved hours priced, a draft that recalculates, an issue that locks, and the
 five things it does not do (D-q). Strike through and supersede what it replaces; never delete.
 
-- [ ] **Step 6: Close plan 009 per the hand-off protocol**
+- [x] **Step 6: Close plan 009 per the hand-off protocol**
 
 1. **Status table** — M8's row to `done 2026-09-0N @ <short sha>` of the last commit.
 2. **Built and unverified** — under the `M6 · M7 · M8` section, a `**Built and unverified:**` list.
@@ -2914,7 +2914,7 @@ five things it does not do (D-q). Strike through and supersede what it replaces;
 5. **Review table** — record any `R15+` number this module took.
 6. **Commit it alone**, `docs(plan): M8 done`.
 
-- [ ] **Step 7: Gate and commit — two commits**
+- [x] **Step 7: Gate and commit — two commits**
 
 ```bash
 ~/bin/tcms-remote sync
@@ -2931,21 +2931,75 @@ git commit -m "docs(plan): M8 done — V12, the built-and-unverified list, and n
 
 ---
 
+## Close-out
+
+**Status:** done 2026-09-06 — T6 @ the commit this section ships in, module M8 closed in plan
+[009](009-project-management-expansion-modules.md).
+**Migration actually taken:** **`V12`** — `V12__billing.sql`, which is what D-a projected *and*
+what `ls` showed on the day, because Mc spent `V11` the day before and nothing else had moved.
+D-a's argument stands anyway: the projection agreed with the directory by luck of ordering, not by
+arithmetic, and T2's first command was still the `ls`.
+**Plan number taken:** `019`, as projected.
+
+### What T6 landed, and the two assertions it reversed
+
+- **`BillingSlot` is the whole five-column table plus a sixth**, and the sixth is **absent** rather
+  than empty for a caller whose summary says `amountsVisible: false` (D-i). Asserted from both
+  sides in `ClientPage.test.tsx` — an Account Manager's render carries no `Value` columnheader and
+  no currency character anywhere, and Finance's carries both.
+- **The client page gained the mockup's two-column grid** and the rate-card panel beside it, which
+  018 left out entirely. For a reader without `ratecard:read` it is `client.html`'s own refusal,
+  word for word; for one with it, a currency, a rung count and a **link into `/billing`** — one
+  place edits a rate card, and it is the screen T5 built.
+- **`ProjectOverviewPage.tsx:86` and its test both said the budget card is not rendered.** Both were
+  correct when written and are now struck through with the reversal beside them, per this repo's
+  superseded style, rather than deleted. What survives of the old assertion is the half that is
+  still true and now means something else: a project with **no budget** draws no panel, and that is
+  D-p rather than an absent module.
+- **`GeneralSettingsPage.tsx`'s Budget row** reads the same `budget-burn` endpoint the overview
+  does, so a project administrator sees the ceiling without holding a money key, and its
+  `Edit in Billing` button is **disabled with the gate's own sentence** rather than hidden.
+  `settingsUpdate.ts` was not touched: the budget is not part of that document, and `trackTime`
+  remains the one boolean the server reads as `true` when omitted.
+
+### Built and unverified
+
+The gates prove it compiles and that the assertions written for it hold. They do not prove it
+works. On `shanks` at T6: **frontend build clean, lint 0 warnings, 2939 tests in 212 files, 2
+failing.**
+
+- **The two failures are `src/features/cases/CaseGrid.test.tsx`** — *survives paging* and
+  *select-all reaches the page* — and they **predate this module**, recorded by both 016 and 017.
+  Not absorbed here either.
+- **No screen this module built has been opened against a running instance**, T6's three surfaces
+  included. Every one is proved by RTL against doubles and by the contract conformance checks.
+- **`npm run test:run` was the only suite T6 ran.** The backend was not rebuilt: T6 changed no
+  backend source and none of the out-of-source inputs `build.gradle.kts` declares, so the last real
+  backend run of this module is T4's.
+- **Four test files that render these two pages needed a `budget-burn` arm added to their doubles**
+  — `ClientAbsence`, `ArchiveProject`, `TileLabels` and the two pages' own tests. Three of them
+  failed on the *contract* double rather than on an assertion, which is that harness working: a
+  catch-all `{}` served for a new read is a body the server could not send.
+
+---
+
 ## Definition of done
 
 From the module prompt, and each is checkable by someone who did not do the work:
 
-- [ ] **Approved hours are priced by the rate card** — `PricingTest` walks D-d's ladder on all three
+- [x] **Approved hours are priced by the rate card** — `PricingTest` walks D-d's ladder on all three
       scopes and on the two-role tie.
-- [ ] **Budget burn is visible** — on `/billing` in money and hours to Finance, and on the project
-      overview as a percentage with no currency to anybody holding `project:read`.
-- [ ] **A draft invoice is issued and its lines are then immutable** — proven by issuing, doubling
+- [x] **Budget burn is visible** — on `/billing` in money and hours to Finance, and on the project
+      overview as a percentage with no currency to anybody holding `project:read`. T6 added the
+      third surface the mockups draw: General settings' Budget row, which is the ceiling and no
+      rate.
+- [x] **A draft invoice is issued and its lines are then immutable** — proven by issuing, doubling
       the rate card, re-reading, and asserting the line is unchanged (T4 step 4), not by a rejected
       `PUT` to an endpoint nobody built.
-- [ ] **The two negative permission tests are green** — `BillingMoneyBoundaryTest` derives its paths
+- [x] **The two negative permission tests are green** — `BillingMoneyBoundaryTest` derives its paths
       from the contract and asserts a Test Engineer is refused every one; the extended
       `TimeMoneyBoundaryTest` asserts an Account Manager holds `client:read` and not one money key.
-- [ ] **Billing is absent from the sidebar** for a Test Engineer and an Account Manager, asserted by
+- [x] **Billing is absent from the sidebar** for a Test Engineer and an Account Manager, asserted by
       a test, and absent means not rendered.
 - [ ] All three gates green on `shanks`, with the two pre-existing `CaseGrid.test.tsx` failures
       named and not absorbed.

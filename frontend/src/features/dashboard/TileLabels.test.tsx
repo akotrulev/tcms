@@ -7,7 +7,7 @@ import { healthLabels, lifecycleLabels } from '../../lib/labels'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
-import { anIssueSummary, aProjectWorkflow } from '../../test/fixtures'
+import { aBudgetBurn, anIssueSummary, aProjectWorkflow } from '../../test/fixtures'
 import { ProjectOverviewPage } from '../projects/ProjectOverviewPage'
 
 /**
@@ -90,6 +90,9 @@ function renderDashboard(dashboard: RepositoryDashboard = DASHBOARD) {
     // the tiles — but answered rather than left to fail, since a failed read renders an error
     // branch and an assertion pointed elsewhere would never see it.
     if (/^\/projects\/[^/]+\/releases$/.test(path)) return []
+    // The Budget burn panel 019 T6 added to the same column. A project with no budget, so the
+    // panel does not render at all — answered rather than left to fail, for the reason above.
+    if (/^\/projects\/[^/]+\/budget-burn$/.test(path)) return aBudgetBurn()
     if (/^\/projects\/[^/]+$/.test(path)) return PROJECT
     throw new Error(`unmocked read: ${path}`)
   }) as never)

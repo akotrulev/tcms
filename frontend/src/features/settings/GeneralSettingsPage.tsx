@@ -1,6 +1,7 @@
-import { useParams } from 'react-router-dom';
+import { Link as RouterLink, useParams } from 'react-router-dom';
 import {
   useProject,
+  useProjectBudgetBurn,
   useProjectSettings,
   useProjectWorkflow,
   useSetProjectArchived,
@@ -8,7 +9,7 @@ import {
   useSetProjectClient,
   useUpdateProjectSettings,
 } from '../../api/queries';
-import type { IssueTypeRef, Project, ProjectSettings } from '../../api/types';
+import type { BudgetBurn, IssueTypeRef, Project, ProjectSettings } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader } from '../../components/PageHeader';
@@ -16,7 +17,8 @@ import { PermissionGate } from '../../components/PermissionGate';
 import { Badge, Banner } from '../../components/kit';
 import { SettingRow } from '../../components/kit/SettingRow';
 import { Button, Switch } from '../../components/ui';
-import { useCan } from '../../auth/useCan';
+import { useCan, useCanInCompany } from '../../auth/useCan';
+import { formatHours } from '../../lib/format';
 import { issueLevels } from '../../lib/labels';
 import { fullSettingsUpdate } from './settingsUpdate';
 import { TypeIcon } from '../tracker/TypeIcon';
@@ -32,7 +34,7 @@ const TEST_ID = 'GeneralSettings';
  * |---|---|---|
  * | ~~Client select~~ | ~~Mc~~ | → **landed 2026-09-05 (018 T4/T5)** as {@link ClientPanel}. The reason it was absent is now the reason it is CONDITIONAL: it renders only when the company has at least one client, so a company with none still sees no "Client: —" |
  * | ~~"Closing work" review toggles~~ | ~~M5~~ | → **landed in 015 T5.** `review_enabled_issue` exists and `TransitionService` reads it, so the toggle changes behaviour |
- * | ~~"Time" panel~~ | ~~M6~~ | → **landed 2026-09-04 (016 T5)** as {@link TimePanel}. Its *Budget* row did **not**: that row reads `Edit in Billing`, and there is no hours ceiling, no rate and no Billing screen — M8's, all three |
+ * | ~~"Time" panel~~ | ~~M6~~ | → **landed 2026-09-04 (016 T5)** as {@link TimePanel}. ~~Its *Budget* row did **not**: that row reads `Edit in Billing`, and there is no hours ceiling, no rate and no Billing screen — M8's, all three~~ → **the row landed too, 2026-09-05 (019 T6)**, as {@link BudgetRow} |
  *
  * What lands is **Identity**, **Closing work** and the **Issue types** list.
 
@@ -235,10 +237,21 @@ function ClosingWorkPanel({
  * hour already logged, approved and rolled up stays exactly where it is. Somebody turning it off to
  * tidy a screen must be able to read, before they click, that they are not destroying a timesheet.
  *
- * **The mockup's Budget row is deliberately not built.** It reads `600h` beside an `Edit in
+ * ~~**The mockup's Budget row is deliberately not built.** It reads `600h` beside an `Edit in
  * Billing` button, and there is no hours ceiling on the contract, no rate anywhere in the product,
  * and no Billing screen to send anybody to — all three are M8's. A row rendering a number this
- * build cannot source, behind a link to a screen that does not exist, is two failures at once.
+ * build cannot source, behind a link to a screen that does not exist, is two failures at once.~~ →
+ * **superseded 2026-09-05 (019 T6):** all three exist, so the row is built — see
+ * {@link BudgetRow}. It reads the same `budget-burn` endpoint the project overview does, which is
+ * gated on `project:read` and carries **no amount and no currency** (019 D-h), so a project
+ * administrator reads the ceiling without holding a money key. The `Edit in Billing` button is
+ * **disabled with its reason** for a caller without `billing:read` rather than hidden: this is a
+ * screen control and not a rail entry, so §31's disable-don't-hide applies to it in full.
+ *
+ * **The budget is not part of this document and must not join it.** `PUT /projects/{id}/settings`
+ * is a whole-document replacement whose field list is written once in `settingsUpdate.ts`; the
+ * ceiling is set by `PUT /projects/{id}/budget` on a money key. Two screens writing one budget
+ * through two shapes is how a ceiling gets cleared by somebody flipping a switch.
  *
  * Saved on the switch, like {@link ClosingWorkPanel} beside it and for the same reason: one control
  * and no second decision to make with it. It goes through `fullSettingsUpdate` because the `PUT` is
@@ -286,6 +299,8 @@ function TimePanel({
             />
           }
         />
+
+        <BudgetRow projectId={projectId} />
       </div>
 
       {save.isError && (
@@ -298,12 +313,78 @@ function TimePanel({
 
       <div className="border-t border-line px-3.5 py-2.5">
         <span className="text-[11.5px] leading-[1.55] text-ink-4">
-          The mockup&rsquo;s <strong>Budget</strong> row is not here: there is no hours ceiling and
-          no rate in this build, and what an hour costs is on no screen anybody can reach.
+          A budget is a ceiling, not a switch: hours are recorded against this project whether it
+          has one or not, and a project with none is in an ordinary state rather than an unfinished
+          one.
         </span>
       </div>
     </section>
   );
+}
+
+/**
+ * `settings-general.html`'s **Budget** row — the ceiling, and the button that goes where it is set.
+ *
+ * <h2>It reads the burn endpoint, which is the one billing read with no money on it</h2>
+ *
+ * `GET /projects/{projectId}/budget-burn` is gated on `project:read` and its schema has no `amount`
+ * and no `currency` member at all (019 D-h), so a project administrator sees their own ceiling
+ * without holding one of the seven money keys. That is the whole reason this row can exist on a
+ * project screen at all.
+ *
+ * <h2>A money ceiling has no number here, and an em dash would be the wrong one</h2>
+ *
+ * `budgetHours` is null for a `MONEY`-basis budget, because what it costs is Finance's. The row
+ * says *set in money* rather than drawing `—`: the dash this app uses means *absent*, and the
+ * ceiling is not absent — it is not this reader's.
+ *
+ * <h2>The button is disabled with its reason, never hidden</h2>
+ *
+ * `billing:read` is a COMPANY-scope key that a Project Manager does not hold, so most callers who
+ * can open this screen cannot open the one the button points at. §31: an absent control teaches
+ * them the product cannot do this; a disabled one with the gate's own sentence tells them who to
+ * ask. The rail entry into `/billing` is the deliberate exception (019 D-o) and it is a rail entry,
+ * not a control on a screen somebody is already reading.
+ */
+function BudgetRow({ projectId }: { projectId: string }) {
+  const burn = useProjectBudgetBurn(projectId);
+  const gate = useCanInCompany();
+  const canOpenBilling = gate.can('billing:read');
+
+  return (
+    <SettingRow
+      label="Budget"
+      description="Hours ceiling — the PM sees the burn, never the rate."
+      consequence="Set in Billing, on a money key. Approved hours are counted against it here; what they are worth is not on this screen."
+      control={
+        <>
+          <span
+            className="font-mono text-[13px] tabular-nums text-ink"
+            data-testid={`${TEST_ID}.Budget.Ceiling`}
+          >
+            {burn.data === undefined ? '' : ceilingOf(burn.data)}
+          </span>
+          {canOpenBilling ?
+            <Button asChild size="sm" data-testid={`${TEST_ID}.Budget.Edit`}>
+              <RouterLink to="/billing">Edit in Billing</RouterLink>
+            </Button>
+          : <span title={gate.reason('billing:read')}>
+              <Button size="sm" disabled data-testid={`${TEST_ID}.Budget.Edit`}>
+                Edit in Billing
+              </Button>
+            </span>
+          }
+        </>
+      }
+    />
+  );
+}
+
+/** The ceiling as this row shows it — never a currency, and never an em dash for a money one. */
+function ceilingOf(burn: BudgetBurn): string {
+  if (burn.basis === null) return 'no budget set';
+  if (burn.budgetHours === null) return 'set in money';
+  return formatHours(burn.budgetHours);
 }
 
 /**
