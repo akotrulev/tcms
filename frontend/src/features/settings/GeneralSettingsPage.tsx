@@ -89,11 +89,6 @@ export function GeneralSettingsPage() {
         testId={`${TEST_ID}.Header`}
         title="General"
         documentTitle={project.data ? `Settings · ${project.data.name}` : 'Project settings'}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Settings', to: `/projects/${projectId}/settings` },
-          { label: 'General' },
-        ]}
         subtitle="What this project is called, what prefixes its issues, and the kinds of issue it holds."
       />
 

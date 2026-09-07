@@ -43,6 +43,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
 } from '../../components/ui';
 import { CaseCloneDialog } from './CaseCloneDialog';
 import { CaseDeleteDialog } from './CaseDeleteDialog';
@@ -165,44 +167,18 @@ export function CaseDetailPage() {
       <title>{`${pageTitle} · TCMS`}</title>
 
       {/*
-        THE BREADCRUMB IS CHROME AND STAYS UP. It renders outside the region on purpose: a failed
-        or slow read must not take the only non-rail way back to the list with it — the resilience
-        rule that a failure is scoped to the response-dependent subtree, applied to the one piece
-        of this screen that is not about the case's body.
+        ~~THE BREADCRUMB IS CHROME AND STAYS UP — it renders outside the region on purpose, so a
+        failed or slow read does not take the only non-rail way back to the list with it.~~ →
+        **superseded (021 R2): the shell owns the trail** and draws it in the header, which is
+        outside not just this region but this page. The property that argument was protecting is
+        strictly stronger now: the trail no longer depends on the case read at all, so it cannot be
+        taken down by a failure it was rendered beside.
+
+        What it loses is the suite crumb — `Test cases / Checkout / TC-311` becomes
+        `Test cases / Case`, because a case's suite is in the CASE and not in the URL. See
+        `app/routeMeta.ts`' header for why the shell does not read a record to decorate a trail. The
+        suite is on the page, in the record's own header, where it always was.
       */}
-      <TopStripSlot>
-        <nav
-          aria-label="Breadcrumb"
-          data-testid="CaseDetail.Breadcrumbs"
-          className="mr-auto hidden min-w-0 truncate text-[12.5px] text-ink-3 sm:block"
-        >
-          <RouterLink to={`/projects/${projectId}/cases`} className="hover:underline">
-            Test cases
-          </RouterLink>
-          {' / '}
-          {/*
-            An unfiled case has no folder to point at, so the crumb becomes the grid's own
-            unfiled filter rather than a link to `?suiteId=null` — which would render every
-            case in the project and read as the crumb being broken.
-          */}
-          {testCase.data && (
-            <>
-              <RouterLink
-                to={
-                  testCase.data.suiteId === null
-                    ? `/projects/${projectId}/cases?unfiled=true`
-                    : `/projects/${projectId}/cases?suiteId=${testCase.data.suiteId}`
-                }
-                className="hover:underline"
-              >
-                {testCase.data.suiteId === null ? 'Not filed' : (testCase.data.suiteName ?? '')}
-              </RouterLink>
-              {' / '}
-            </>
-          )}
-          <span className="font-medium text-ink-2">{testCase.data?.key ?? 'Case'}</span>
-        </nav>
-      </TopStripSlot>
 
       <DataRegion testId="CaseDetail.Content" state={{ ...testCase, refetch: () => void testCase.refetch() }}>
         {(data) => (
@@ -222,40 +198,93 @@ export function CaseDetailPage() {
                 menu is the hiding it exists to refuse. Only `Edit case`, the one primary action,
                 keeps its label, which is what the render draws.
               */}
-              <HeaderActions data-testid="CaseDetail.Actions">
-                <Button asChild size="icon" data-testid="CaseDetail.HistoryLink">
-                  <RouterLink
-                    to={`/projects/${projectId}/cases/${caseId}/history`}
-                    aria-label="Execution history"
-                    title="Execution history"
-                  >
-                    <History aria-hidden className="size-3.5" />
-                  </RouterLink>
-                </Button>
+              {/*
+                **One primary, one status control, one `⋯`** (021 §8.2).
 
-                <LifecycleMenu projectId={projectId} caseId={caseId} testCase={data} />
+                ~~Five controls in one row — History, Status, Clone, Edit, Delete — icon-only from
+                the second onward so they fit.~~ → **superseded (021 §8.2).** Fitting was the wrong
+                goal: five actions in a 52px strip are five actions competing, and three of them had
+                been reduced to unlabelled glyphs to buy the room. The header now carries what a
+                case detail is *for* — change its state, edit it — and the rest is one keystroke
+                away under `⋯`, with its words back.
 
-                {/*
-                  §129. `case:create` and not `case:edit`: a clone creates a case and changes
-                  nothing about this one, which is the key the endpoint charges. Disabled rather
-                  than hidden (§31) — an Automation Service token holds `case:create` only in
-                  quarantine and a Viewer holds neither, and both should be able to see that the
-                  action exists.
-                */}
-                <PermissionGate projectId={projectId} permission="case:create">
-                  {({ allowed }) => (
-                    <Button
-                      size="icon"
-                      disabled={!allowed}
-                      onClick={() => setCloning(true)}
-                      aria-label="Clone"
-                      title="Clone"
-                      data-testid="CaseDetail.CloneButton"
+                ~~Deliberately not an overflow menu: this group is three `PermissionGate` children,
+                and that component's whole argument is that a Viewer seeing a greyed Delete learns
+                the capability exists — folding it behind a menu is the hiding it exists to
+                refuse.~~ → **superseded, and the argument is honoured rather than dropped.** The
+                overflow items are `PermissionGate` children too: a Viewer who opens `⋯` finds
+                Delete present, disabled, and saying who could do it. `HeaderActions`' own docblock
+                anticipated this — a `MenuItem` takes `disabled` the way a `Button` does. What §31
+                forbids is *removing* the affordance, not putting it one click away; the entries the
+                rail genuinely hides are the nine on `/account/access`, and none of them is here.
+              */}
+              <HeaderActions
+                data-testid="CaseDetail.Actions"
+                overflow={
+                  <>
+                    <DropdownMenuItem asChild data-testid="CaseDetail.HistoryLink">
+                      <RouterLink to={`/projects/${projectId}/cases/${caseId}/history`}>
+                        <History aria-hidden className="size-4" />
+                        <span>History</span>
+                      </RouterLink>
+                    </DropdownMenuItem>
+
+                    {/*
+                      §129. `case:create` and not `case:edit`: a clone creates a case and changes
+                      nothing about this one, which is the key the endpoint charges. Disabled rather
+                      than hidden (§31) — an Automation Service token holds `case:create` only in
+                      quarantine and a Viewer holds neither, and both should be able to see that the
+                      action exists.
+                    */}
+                    <PermissionGate projectId={projectId} permission="case:create">
+                      {({ allowed }) => (
+                        <DropdownMenuItem
+                          disabled={!allowed}
+                          onSelect={() => setCloning(true)}
+                          data-testid="CaseDetail.CloneButton"
+                        >
+                          <Copy aria-hidden className="size-4" />
+                          <span>Clone</span>
+                        </DropdownMenuItem>
+                      )}
+                    </PermissionGate>
+
+                    <DropdownMenuSeparator />
+
+                    {/*
+                      Asks about the ROW as well as the caller — and since V51 (§207) the row half
+                      no longer changes the answer: `case:delete` is unqualified for every role that
+                      holds it, so any non-Viewer contributor deletes any case.
+
+                      `authorId` is still passed, deliberately. The qualifier is data on the server
+                      (see IdentityProjectAccess.canDoOnAuthored), so a future OWN grant must find
+                      this gate already asking the question — hard-coding "authorship never matters"
+                      is what would re-create the original defect inverted: an enabled Delete that
+                      403s. It costs one already-loaded field.
+
+                      Destructive, so it is red and it is in the menu, never a primary (§8.2).
+                    */}
+                    <PermissionGate
+                      projectId={projectId}
+                      permission="case:delete"
+                      authorId={data.createdBy?.id ?? null}
                     >
-                      <Copy aria-hidden className="size-3.5" />
-                    </Button>
-                  )}
-                </PermissionGate>
+                      {({ allowed }) => (
+                        <DropdownMenuItem
+                          disabled={!allowed}
+                          onSelect={() => setConfirmingDelete(true)}
+                          data-testid="CaseDetail.DeleteButton"
+                          className="text-[color:var(--color-failed)]"
+                        >
+                          <Trash2 aria-hidden className="size-4" />
+                          <span>Delete case</span>
+                        </DropdownMenuItem>
+                      )}
+                    </PermissionGate>
+                  </>
+                }
+              >
+                <LifecycleMenu projectId={projectId} caseId={caseId} testCase={data} />
 
                 {/*
                   The denied branch renders a plain `<button>`, NOT a disabled link.
@@ -285,42 +314,6 @@ export function CaseDetailPage() {
                       </Button>
                     )
                   }
-                </PermissionGate>
-
-                {/*
-                  Asks about the ROW as well as the caller — and since V51 (§207) the row half
-                  no longer changes the answer: `case:delete` is unqualified for every role that
-                  holds it, so any non-Viewer contributor deletes any case.
-
-                  ~~`case:delete` is OWN-qualified for a Test Engineer (roles spec §A5), so
-                  holding it is not the same as holding it *here*. Before `createdBy` was on the
-                  wire this button enabled on every case and the caller discovered whose was
-                  whose by being refused.~~ That was true from §65 until 2026-08-14.
-
-                  `authorId` is still passed, deliberately. The qualifier is data on the server
-                  (see IdentityProjectAccess.canDoOnAuthored), so a future OWN grant must find
-                  this gate already asking the question — hard-coding "authorship never matters"
-                  is what would re-create the original defect inverted: an enabled Delete that
-                  403s. It costs one already-loaded field.
-                */}
-                <PermissionGate
-                  projectId={projectId}
-                  permission="case:delete"
-                  authorId={data.createdBy?.id ?? null}
-                >
-                  {({ allowed }) => (
-                    <Button
-                      size="icon"
-                      variant="danger"
-                      disabled={!allowed}
-                      onClick={() => setConfirmingDelete(true)}
-                      aria-label="Delete"
-                      title="Delete"
-                      data-testid="CaseDetail.DeleteButton"
-                    >
-                      <Trash2 aria-hidden className="size-3.5" />
-                    </Button>
-                  )}
                 </PermissionGate>
               </HeaderActions>
             </TopStripSlot>

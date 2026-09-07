@@ -59,10 +59,6 @@ export function PlanListPage() {
         testId="Plans.Header"
         title="Test plans"
         documentTitle={project.data ? `Test plans · ${project.data.name}` : 'Test plans'}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Test plans' },
-        ]}
         subtitle="A plan fixes the scope, configurations and exit criteria for a release. Runs execute against it."
         actions={
           <div className="flex items-center gap-4">

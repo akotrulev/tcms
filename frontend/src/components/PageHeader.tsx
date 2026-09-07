@@ -1,10 +1,9 @@
-import { Link as RouterLink } from 'react-router-dom';
-import { Fragment, useEffect, type ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { useAnnounce } from '../a11y/useAnnounce';
 import { cn } from '../lib/cn';
 
 /**
- * One page-header treatment, one breadcrumb source, and a title on every route.
+ * One page-header treatment, and a title on every route.
  *
  * The title is emitted with a plain `<title>` element: React 19 hoists it to `<head>`, so
  * this SPA needs no `react-helmet`. Browser tabs full of "TCMS" are unusable, and a title
@@ -23,26 +22,26 @@ import { cn } from '../lib/cn';
  * the thing every route mounts. The `<title>` and the announcement stayed here because the
  * reasoning below about `lazy()` is unchanged for the screens that still use it.
  *
- * ## `MuiBreadcrumbs` → a plain `<nav><ol>`
+ * ## ~~`MuiBreadcrumbs` → a plain `<nav><ol>`~~ → the trail left this component entirely
  *
- * MUI's component inserted its own separators and its own list semantics. Ported in T16 to the
+ * ~~MUI's component inserted its own separators and its own list semantics. Ported in T16 to the
  * markup underneath it: an ordered list is what a breadcrumb trail is, the separator is
  * `aria-hidden` so it is not read out between every segment, and the last crumb carries
- * `aria-current="page"` — which the MUI version never did.
+ * `aria-current="page"` — which the MUI version never did.~~ → **superseded (021 R2).** The markup
+ * was right and its address was not: forty-six screens each composed their own trail, which is
+ * forty-six places a rename has to reach, and the audit found two of them it had not. The trail is
+ * `app/ShellBreadcrumbs.tsx` now, fed by `app/routeMeta.ts`, drawn in the header once for every
+ * route — and it survives a page's failed read, which a trail rendered inside the page could not.
+ *
+ * **`crumbs` is gone from this component and from every caller.** A page that wants a different
+ * trail changes `routeMeta.ts`, where the whole trail is visible beside its siblings.
  */
-
-export interface Crumb {
-  label: string;
-  /** Omit on the final crumb — the current page is not a link to itself. */
-  to?: string;
-}
 
 export function PageHeader({
   title,
   /** Browser-tab title. Defaults to `title`; pass a shorter form when the heading is long. */
   documentTitle,
   subtitle,
-  crumbs,
   actions,
   meta,
   announcement,
@@ -51,7 +50,6 @@ export function PageHeader({
   title: ReactNode;
   documentTitle?: string;
   subtitle?: ReactNode;
-  crumbs?: Crumb[];
   /** Primary and secondary actions for this page, right-aligned. */
   actions?: ReactNode;
   /** Identifiers and counts that belong with the heading rather than in the body. */
@@ -88,41 +86,6 @@ export function PageHeader({
   return (
     <header data-testid={testId} className="mb-6">
       {tabTitle && <title>{`${tabTitle} · TCMS`}</title>}
-
-      {crumbs && crumbs.length > 0 && (
-        <nav aria-label="Breadcrumb" data-testid={`${testId}.Breadcrumbs`} className="mb-2">
-          <ol className="m-0 flex list-none flex-wrap items-center gap-1.5 p-0 text-[12.5px] text-ink-3">
-            {crumbs.map((crumb, index) => (
-              <Fragment key={crumb.label}>
-                {index > 0 && (
-                  <li aria-hidden="true" className="text-ink-4">
-                    /
-                  </li>
-                )}
-                <li>
-                  {crumb.to ? (
-                    <RouterLink
-                      to={crumb.to}
-                      className="text-inherit no-underline hover:underline"
-                      data-testid={`${testId}.Breadcrumb`}
-                    >
-                      {crumb.label}
-                    </RouterLink>
-                  ) : (
-                    <span
-                      aria-current="page"
-                      className="font-medium text-ink-2"
-                      data-testid={`${testId}.Breadcrumb`}
-                    >
-                      {crumb.label}
-                    </span>
-                  )}
-                </li>
-              </Fragment>
-            ))}
-          </ol>
-        </nav>
-      )}
 
       <div className="flex flex-col items-stretch gap-4 md:flex-row md:items-start">
         <div className="min-w-0 flex-1">

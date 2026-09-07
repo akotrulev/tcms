@@ -9,7 +9,6 @@ import {
   usePlan,
   usePlans,
   usePlanStatistics,
-  useProject,
   useSetPlanStatus,
 } from '../../api/queries';
 import { useUnsavedWork } from '../../auth/useSessionRecovery';
@@ -104,7 +103,11 @@ export function PlanStatisticsPage() {
     setParams(updated, { replace: true });
   };
 
-  const project = useProject(projectId);
+  /*
+    ~~`useProject`, for the project's name in this screen's own breadcrumb.~~ →
+    **superseded (021 R2): the shell names the project**, from the read it already makes
+    for the rail's switcher — so this page's copy of that read went with its trail.
+  */
   const plan = usePlan(projectId, planId);
   const statistics = usePlanStatistics(projectId, planId, aggregation);
 
@@ -114,11 +117,6 @@ export function PlanStatisticsPage() {
         testId="PlanStats.Header"
         title={plan.data?.name ?? 'Test plan'}
         documentTitle={plan.data ? `${plan.data.key} ${plan.data.name}` : 'Test plan'}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Test plans', to: `/projects/${projectId}/plans` },
-          { label: plan.data?.key ?? 'Plan' },
-        ]}
         meta={
           plan.data && (
             <>

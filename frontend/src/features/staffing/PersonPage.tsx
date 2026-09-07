@@ -75,11 +75,6 @@ export function PersonPage() {
         testId={`${TEST_ID}.Header`}
         title={displayName ?? 'Person'}
         documentTitle={displayName ? `${displayName} · Directory` : 'Directory'}
-        crumbs={[
-          { label: 'Company' },
-          { label: 'Directory', to: '/directory' },
-          { label: displayName ?? 'Person' },
-        ]}
         subtitle={
           isSelf ?
             'Your own staffing — contracted hours, skills, and the days you are away.'

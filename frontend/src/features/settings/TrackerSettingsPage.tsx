@@ -117,11 +117,6 @@ export function TrackerSettingsPage() {
         testId={`${TestId}.Header`}
         title="Issue tracker"
         documentTitle={project.data ? `Issue tracker · ${project.data.name}` : 'Issue tracker'}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Settings', to: `/projects/${projectId}/settings` },
-          { label: 'Issue tracker' },
-        ]}
         subtitle="Which tracker this project links and files into. Each person connects their own account — nothing here holds a credential."
         actions={
           <PermissionGate projectId={projectId} permission="integration:manage">

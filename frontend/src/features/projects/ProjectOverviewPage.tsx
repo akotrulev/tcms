@@ -758,14 +758,14 @@ function NextReleasePanel({ projectId }: { projectId: string }) {
                 allowed ? (
                   <Button asChild data-testid={`${TEST_ID}.Release.Create`}>
                     <RouterLink to={`/projects/${projectId}/releases/new`}>
-                      Create a release
+                      New release
                     </RouterLink>
                   </Button>
                 ) : (
                   // Disabled rather than hidden (§31), and the reason is now the caller's key
                   // rather than the module's absence.
                   <Button disabled title={reason} data-testid={`${TEST_ID}.Release.Create`}>
-                    Create a release
+                    New release
                   </Button>
                 )
               }

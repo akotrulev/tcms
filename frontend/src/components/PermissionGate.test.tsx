@@ -117,7 +117,7 @@ describe('PermissionGate', () => {
     await user.hover(button.parentElement as HTMLElement)
 
     expect(await screen.findByRole('tooltip')).toHaveTextContent(
-      "You don't have permission to delete test cases in this project.",
+      'Needs Delete test cases, held by Test Engineer, Test Lead and Company Admin.',
     )
   })
 
@@ -357,9 +357,11 @@ describe('PermissionGate', () => {
       await waitFor(() => expect(screen.getByRole('button', { name: 'Import feature files' })).toBeDisabled())
       await userEvent.hover(screen.getByTestId('Import').parentElement as HTMLElement)
       // Both, joined with "or": the caller needs one, and naming only the first would send somebody
-      // to ask for a permission when the other was already on its way to them.
+      // to ask for a permission when the other was already on its way to them. The holders are the
+      // UNION for the same reason — a role holding either key is a role that could unblock this.
       expect(await screen.findByRole('tooltip')).toHaveTextContent(
-        'create test cases or edit test cases',
+        'Needs Create test cases or edit test cases, held by Automation Service, Test Engineer, '
+          + 'Test Lead and Company Admin.',
       )
     })
   })

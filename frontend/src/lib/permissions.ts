@@ -350,3 +350,385 @@ export function refusalSentence(permission: string | null, scope: string | null)
   const label = (permissionLabels as Record<string, string>)[permission] ?? permission;
   return `You do not have permission to ${label}${where}.`;
 }
+
+/**
+ * The nine seeded roles, in §A3's column order — least-permissioned first.
+ *
+ * A **display** vocabulary and nothing more. Nothing in this app may branch on a role name (plan
+ * §6b, and `OrgChartAssignment.roleName` says it again on the wire); these strings exist so a
+ * refusal can name somebody to ask, which is the one thing a permission key cannot do.
+ *
+ * `Every member` is not a role a person is granted — it is how §A3's COMPANY table spells the
+ * non-assignable `Company Member` baseline that joining a company confers (`V15`). It is in the
+ * list because the table has a column for it, and a holders row that dropped it would claim a key
+ * every member holds is held by nobody.
+ */
+export const ROLE_NAMES = [
+  'Every member',
+  'Viewer',
+  'Automation Service',
+  'Test Engineer',
+  'Project Manager',
+  'Test Lead',
+  'Account Manager',
+  'Finance',
+  'Company Admin',
+  'Instance Admin',
+] as const;
+
+export type RoleName = (typeof ROLE_NAMES)[number];
+
+/**
+ * Who holds each permission — roles spec §A3, transcribed.
+ *
+ * ## Why a transcription rather than a read
+ *
+ * This is the second copy problem `matrixCopies.test.ts` exists for, arriving in a third place —
+ * and the answer is the same one: **copy it, then compare the copy.** The alternative was
+ * considered and does not work. `docs/specs/permission-matrix-summary.md` is a document on disk,
+ * not a module; a browser bundle cannot read it, and importing it through a Vite raw-text loader
+ * would ship 12KB of markdown and a markdown-table parser into every session so the shell can put
+ * three role names in a tooltip. So the table is here, and `permissions.test.ts` parses §A3's copy
+ * the way `matrixCopies.test.ts` does and fails on any cell where the two disagree.
+ *
+ * ## What a cell means here
+ *
+ * **Held, or not held.** §A3 writes some cells as a qualifier rather than a `✓` — `case:create` is
+ * `quarantine only` for an Automation Service — and a qualifier *narrows* a grant without removing
+ * it. This table records the role as a holder, because the question it answers is "who could do
+ * this for me", and the answer "an Automation Service, but only in quarantine" is still a lead.
+ * The qualifier itself is deliberately not carried: nothing on screen has anywhere to put it, and
+ * a half-transcribed qualifier is worse than an honestly absent one.
+ *
+ * `satisfies Record<PermissionKey, ...>` for the reason every table in this file has it — a
+ * permission added to the contract is a compile error here until somebody says who holds it.
+ */
+export const permissionHolders = {
+  'suite:manage': ['Test Engineer', 'Test Lead', 'Company Admin', 'Instance Admin'],
+  'suite:delete': ['Test Engineer', 'Test Lead', 'Company Admin', 'Instance Admin'],
+  'case:read': [
+    'Viewer',
+    'Automation Service',
+    'Test Engineer',
+    'Project Manager',
+    'Test Lead',
+    'Company Admin',
+    'Instance Admin',
+  ],
+  'case:create': [
+    'Automation Service',
+    'Test Engineer',
+    'Test Lead',
+    'Company Admin',
+    'Instance Admin',
+  ],
+  'case:edit': ['Test Engineer', 'Test Lead', 'Company Admin', 'Instance Admin'],
+  'case:delete': ['Test Engineer', 'Test Lead', 'Company Admin', 'Instance Admin'],
+  'library:manage': ['Test Engineer', 'Test Lead', 'Company Admin', 'Instance Admin'],
+
+  'case:comment': [
+    'Viewer',
+    'Test Engineer',
+    'Project Manager',
+    'Test Lead',
+    'Company Admin',
+    'Instance Admin',
+  ],
+  'case:review': ['Test Engineer', 'Test Lead', 'Company Admin', 'Instance Admin'],
+  'suite:review': ['Test Engineer', 'Test Lead', 'Company Admin', 'Instance Admin'],
+  'plan:review': ['Test Engineer', 'Test Lead', 'Company Admin', 'Instance Admin'],
+  'doc:review': ['Test Engineer', 'Test Lead', 'Company Admin', 'Instance Admin'],
+  'case:approve': ['Test Lead', 'Company Admin', 'Instance Admin'],
+  'suite:approve': ['Test Lead', 'Company Admin', 'Instance Admin'],
+  'plan:approve': ['Test Lead', 'Company Admin', 'Instance Admin'],
+
+  'plan:create': ['Test Engineer', 'Test Lead', 'Company Admin', 'Instance Admin'],
+  'plan:edit': ['Test Engineer', 'Test Lead', 'Company Admin', 'Instance Admin'],
+  'plan:delete': ['Test Engineer', 'Test Lead', 'Company Admin', 'Instance Admin'],
+  'run:create': [
+    'Automation Service',
+    'Test Engineer',
+    'Test Lead',
+    'Company Admin',
+    'Instance Admin',
+  ],
+  'run:execute': ['Test Engineer', 'Test Lead', 'Company Admin', 'Instance Admin'],
+  'run:close': ['Test Engineer', 'Test Lead', 'Company Admin', 'Instance Admin'],
+  'result:submit': [
+    'Automation Service',
+    'Test Engineer',
+    'Test Lead',
+    'Company Admin',
+    'Instance Admin',
+  ],
+  'result:amend': ['Test Engineer', 'Test Lead', 'Company Admin', 'Instance Admin'],
+  'evidence:attach': [
+    'Automation Service',
+    'Test Engineer',
+    'Test Lead',
+    'Company Admin',
+    'Instance Admin',
+  ],
+  'evidence:delete': ['Test Engineer', 'Test Lead', 'Company Admin', 'Instance Admin'],
+
+  'defect:create': [
+    'Test Engineer',
+    'Project Manager',
+    'Test Lead',
+    'Company Admin',
+    'Instance Admin',
+  ],
+  'workitem:manage': [
+    'Test Engineer',
+    'Project Manager',
+    'Test Lead',
+    'Company Admin',
+    'Instance Admin',
+  ],
+
+  'issue:read': [
+    'Viewer',
+    'Automation Service',
+    'Test Engineer',
+    'Project Manager',
+    'Test Lead',
+    'Company Admin',
+    'Instance Admin',
+  ],
+  'issue:create': [
+    'Test Engineer',
+    'Project Manager',
+    'Test Lead',
+    'Company Admin',
+    'Instance Admin',
+  ],
+  'issue:edit': [
+    'Test Engineer',
+    'Project Manager',
+    'Test Lead',
+    'Company Admin',
+    'Instance Admin',
+  ],
+  'issue:delete': ['Project Manager', 'Test Lead', 'Company Admin', 'Instance Admin'],
+  'issue:comment': [
+    'Viewer',
+    'Test Engineer',
+    'Project Manager',
+    'Test Lead',
+    'Company Admin',
+    'Instance Admin',
+  ],
+  'issue:workflow': ['Project Manager', 'Test Lead', 'Company Admin', 'Instance Admin'],
+  'issue:import': ['Project Manager', 'Test Lead', 'Company Admin', 'Instance Admin'],
+
+  'board:read': [
+    'Viewer',
+    'Automation Service',
+    'Test Engineer',
+    'Project Manager',
+    'Test Lead',
+    'Company Admin',
+    'Instance Admin',
+  ],
+  'board:rank': ['Project Manager', 'Company Admin', 'Instance Admin'],
+  'board:configure': ['Project Manager', 'Company Admin', 'Instance Admin'],
+
+  'release:read': [
+    'Viewer',
+    'Test Engineer',
+    'Project Manager',
+    'Test Lead',
+    'Company Admin',
+    'Instance Admin',
+  ],
+  'release:manage': ['Project Manager', 'Company Admin', 'Instance Admin'],
+  'release:publish': ['Project Manager', 'Company Admin', 'Instance Admin'],
+
+  'time:log': ['Test Engineer', 'Project Manager', 'Test Lead', 'Company Admin', 'Instance Admin'],
+  'time:read': ['Project Manager', 'Company Admin', 'Instance Admin'],
+  'time:edit': ['Project Manager', 'Company Admin', 'Instance Admin'],
+  'time:approve': ['Project Manager', 'Company Admin', 'Instance Admin'],
+
+  'staffing:read': ['Project Manager', 'Company Admin', 'Instance Admin'],
+  'staffing:allocate': ['Project Manager', 'Company Admin', 'Instance Admin'],
+  'staffing:directory': ['Account Manager', 'Finance', 'Company Admin', 'Instance Admin'],
+  'staffing:profile': ['Account Manager', 'Company Admin', 'Instance Admin'],
+  'staffing:absence': ['Account Manager', 'Company Admin', 'Instance Admin'],
+
+  'report:view': [
+    'Viewer',
+    'Test Engineer',
+    'Project Manager',
+    'Test Lead',
+    'Company Admin',
+    'Instance Admin',
+  ],
+  'report:export': [
+    'Viewer',
+    'Test Engineer',
+    'Project Manager',
+    'Test Lead',
+    'Company Admin',
+    'Instance Admin',
+  ],
+
+  'doc:read': [
+    'Viewer',
+    'Test Engineer',
+    'Project Manager',
+    'Test Lead',
+    'Company Admin',
+    'Instance Admin',
+  ],
+  'doc:edit': ['Test Engineer', 'Project Manager', 'Test Lead', 'Company Admin', 'Instance Admin'],
+  'doc:publish': [
+    'Test Engineer',
+    'Project Manager',
+    'Test Lead',
+    'Company Admin',
+    'Instance Admin',
+  ],
+
+  'artifact:read': [
+    'Viewer',
+    'Test Engineer',
+    'Project Manager',
+    'Test Lead',
+    'Company Admin',
+    'Instance Admin',
+  ],
+  'artifact:edit': ['Test Engineer', 'Test Lead', 'Company Admin', 'Instance Admin'],
+  'artifact:delete': ['Test Engineer', 'Test Lead', 'Company Admin', 'Instance Admin'],
+
+  'project:read': [
+    'Viewer',
+    'Automation Service',
+    'Test Engineer',
+    'Project Manager',
+    'Test Lead',
+    'Company Admin',
+    'Instance Admin',
+  ],
+  'project:audit': ['Project Manager', 'Test Lead', 'Company Admin', 'Instance Admin'],
+  'project:settings': ['Project Manager', 'Test Lead', 'Company Admin', 'Instance Admin'],
+  'project:members': ['Project Manager', 'Test Lead', 'Company Admin', 'Instance Admin'],
+  'integration:manage': ['Project Manager', 'Test Lead', 'Company Admin', 'Instance Admin'],
+
+  'client:read': ['Account Manager', 'Finance', 'Company Admin', 'Instance Admin'],
+  'client:create': ['Account Manager', 'Company Admin', 'Instance Admin'],
+  'client:edit': ['Account Manager', 'Company Admin', 'Instance Admin'],
+  'client:delete': ['Account Manager', 'Company Admin', 'Instance Admin'],
+
+  'ratecard:read': ['Finance', 'Company Admin', 'Instance Admin'],
+  'ratecard:manage': ['Finance', 'Company Admin', 'Instance Admin'],
+  'billing:read': ['Finance', 'Company Admin', 'Instance Admin'],
+  'billing:budget': ['Finance', 'Company Admin', 'Instance Admin'],
+  'billing:expense': ['Finance', 'Company Admin', 'Instance Admin'],
+  'billing:invoice': ['Finance', 'Company Admin', 'Instance Admin'],
+  'billing:issue': ['Finance', 'Company Admin', 'Instance Admin'],
+
+  'company:read': ['Every member', 'Account Manager', 'Finance', 'Company Admin', 'Instance Admin'],
+  'company:settings': ['Company Admin', 'Instance Admin'],
+  'company:members': ['Company Admin', 'Instance Admin'],
+  'company:teams': ['Company Admin', 'Instance Admin'],
+  'company:vocabulary': ['Company Admin', 'Instance Admin'],
+  'company:idp': ['Company Admin', 'Instance Admin'],
+  'project:create': ['Company Admin', 'Instance Admin'],
+  'token:issue': ['Company Admin', 'Instance Admin'],
+  'audit:view': ['Company Admin', 'Instance Admin'],
+
+  'company:create': ['Instance Admin'],
+  'company:delete': ['Instance Admin'],
+  'company:suspend': ['Instance Admin'],
+  'user:manage': ['Instance Admin'],
+  'role:manage': ['Instance Admin'],
+  'system:settings': ['Instance Admin'],
+  'instance:audit': ['Instance Admin'],
+} as const satisfies Record<PermissionKey, readonly RoleName[]>;
+
+/**
+ * The roles §A3 records as holding a permission, in the spec's own column order.
+ *
+ * Least-permissioned first, which is deliberate and is what makes the sentence useful: the first
+ * name in the list is the *cheapest* grant that would unblock the reader, and a list that led with
+ * `Instance Admin` would send everyone to the operator of the instance for a key their own team
+ * lead holds.
+ */
+export function holdersOf(permission: PermissionKey): readonly RoleName[] {
+  return permissionHolders[permission];
+}
+
+/**
+ * `a`, `a and b`, `a, b and c` — the English list a refusal sentence needs.
+ *
+ * No serial comma, matching the mockups and §8.2's example sentence. Exported for the access page,
+ * which prints role lists and project-key lists side by side and must not spell one of them a
+ * second way — hence `readonly string[]` rather than `RoleName[]`: the punctuation rule is about
+ * English, not about roles.
+ */
+export function listOfRoles(items: readonly string[]): string {
+  if (items.length === 0) return 'nobody';
+  if (items.length === 1) return items[0] as string;
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1] as string}`;
+}
+
+/**
+ * The roles worth *naming to the reader* as somebody to ask.
+ *
+ * `Instance Admin` is dropped, and this is the one place the two lists differ. An Instance Admin
+ * operates the whole instance and is very often not a person inside the reader's company at all —
+ * naming them in "held by" turns an actionable sentence into an escalation the reader cannot make.
+ * Both mockups drop it for that reason: 09's tooltip reads *held by Test Lead and Company Admin*
+ * where §A3's row has three names, and 08's badges do the same.
+ *
+ * It survives when it is the ONLY holder: the seven SYSTEM-scope keys are held by nobody else, and
+ * a sentence reading "held by nobody" would be false as well as useless.
+ *
+ * `Every member` survives too, for the opposite reason — a refusal naming it is telling the reader
+ * they already hold the key, which is a bug report worth being able to make.
+ */
+export function askableHoldersOf(permission: PermissionKey): readonly RoleName[] {
+  const holders = holdersOf(permission);
+  const askable = holders.filter((role) => role !== 'Instance Admin');
+  return askable.length > 0 ? askable : holders;
+}
+
+/**
+ * **The one disabled-reason sentence in the app** (021 §8.2, T7).
+ *
+ * One shape, one place: *"Needs Approve timesheets, held by Project Manager, Test Lead and Company
+ * Admin."* Every disabled control that names a reason calls this and none of them composes its
+ * own — which is the point, because a convention stated in a spec and spelled four ways in the
+ * code is not a convention.
+ *
+ * **Not a replacement for {@link refusalSentence}.** The two answer different questions from
+ * different sides of a request. That one turns a 403 the server *already sent* into copy, and it
+ * deliberately refuses to name roles because the server said which key was missing and nothing
+ * about who holds it. This one is the pre-emptive form, on a control the client disabled before
+ * anything was sent, where naming somebody to ask is the whole value: the reader is looking at a
+ * greyed button, and the useful sentence is the one that ends the dead end.
+ *
+ * Pair it with `aria-describedby` on the control, never with `title` alone — a `title` is a hover
+ * affordance and a keyboard user never triggers it.
+ */
+export function disabledReason(permission: PermissionKey): string {
+  const label = permissionLabels[permission];
+  const capitalized = label.charAt(0).toUpperCase() + label.slice(1);
+  return `Needs ${capitalized}, held by ${listOfRoles(askableHoldersOf(permission))}.`;
+}
+
+/**
+ * {@link disabledReason} for an action reachable by **any one of several keys**.
+ *
+ * The holder list is the **union**, and the union is the right answer rather than a convenient one:
+ * `canAny` is satisfied by holding one of the keys, so a role holding one of them is a role that
+ * could do this — which is exactly what "who do I ask" means here. Printed in `ROLE_NAMES` order so
+ * the cheapest grant still leads, the way the single-key sentence's does.
+ */
+export function disabledReasonAny(permissions: readonly PermissionKey[]): string {
+  const labels = permissions.map((permission) => permissionLabels[permission]).join(' or ');
+  const capitalized = labels.charAt(0).toUpperCase() + labels.slice(1);
+  const union = new Set(permissions.flatMap((permission) => askableHoldersOf(permission)));
+  const holders = ROLE_NAMES.filter((role) => union.has(role));
+  return `Needs ${capitalized}, held by ${listOfRoles(holders)}.`;
+}

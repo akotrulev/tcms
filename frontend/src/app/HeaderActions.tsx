@@ -1,5 +1,5 @@
 import { MoreHorizontal } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { Children, type ReactNode } from 'react';
 
 import { Button } from '../components/ui';
 import {
@@ -33,8 +33,42 @@ import {
  * `overflow` is menu content — `DropdownMenuItem`s, gated the same way the inline ones are
  * (`PermissionGate`'s docblock covers a `MenuItem`, which takes `disabled` like a `Button`).
  */
+/**
+ * **One primary plus one overflow, and the cap is enforced** (021 §8.2, T7).
+ *
+ * ~~"Keep it to three at the labels this shell uses."~~ → **superseded (021 §8.2).** A comment is
+ * not a cap. `CaseDetailPage` had five controls in here — the exact group whose wrap through the
+ * header this component was built to stop — and every one of them was added by somebody who had
+ * read the note and judged their action to be the important one. The convention is now the shape
+ * of the API: what stays visible is at most two children, and everything else is `overflow`.
+ *
+ * **Two, not one.** §8.2 says "one primary per screen", and one primary is what the five
+ * document-mode screens now carry — but the runner's strip is a status cluster beside a layout
+ * switch and neither is an action, so a hard cap of one would push a mode control into a menu to
+ * satisfy a rule about action groups. Two visible children, at most one of which is a primary
+ * button, is the shape all five fit without an argument.
+ *
+ * It warns rather than throws, and only in dev. A `console.error` reaches the person adding the
+ * third child on the first render, which is when the decision is being made; a throw would turn a
+ * layout convention into a blank screen in production, and this is not a correctness rule.
+ */
+function assertCapped(children: ReactNode, testId: string) {
+  if (!import.meta.env.DEV) return;
+  const count = Children.count(children);
+  if (count <= 2) return;
+  console.error(
+    `${testId}: ${String(count)} visible header controls. The shell's header is fixed at 52px and `
+      + 'does not collapse, so a group that outgrows it wraps THROUGH the header onto the page '
+      + '(2026-08-30 renders audit, finding 2.1). One primary plus `overflow` — 021 §8.2. Group '
+      + 'anything that is one cluster rather than one action into a single child.',
+  );
+}
+
 export interface HeaderActionsProps {
-  /** The controls that stay visible. Keep it to three at the labels this shell uses. */
+  /**
+   * The controls that stay visible — **at most two**, and see {@link assertCapped} for why that is
+   * checked rather than asked for. Everything past them goes in `overflow`.
+   */
   children: ReactNode;
   /** `DropdownMenuItem`s for everything else. Omitted means there is no overflow control. */
   overflow?: ReactNode;
@@ -43,6 +77,7 @@ export interface HeaderActionsProps {
 
 export function HeaderActions({ children, overflow, ...rest }: HeaderActionsProps) {
   const testId = rest['data-testid'] ?? 'Header.Actions';
+  assertCapped(children, testId);
   return (
     <div className="flex min-w-0 items-center gap-2" data-testid={rest['data-testid']}>
       {children}

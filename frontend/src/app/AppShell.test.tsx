@@ -66,6 +66,11 @@ function renderShell(route: string, permissions: PermissionKey[] = []) {
     // the contract declares an object — the contract double catches it, and the failure reads as a
     // navigation defect rather than as a missing arm.
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
+    // The palette's case arm. Anchored on the whole sub-resource so a `/cases` prefix does not
+    // swallow it (the fixtures rule), and answered with the real `Paged` shape — an `[]` here is
+    // an array where the contract declares an object, which the contract double catches as a
+    // shape failure rather than as the navigation defect it would look like on screen.
+    if (/^\/cases\/search(\?|$)/.test(path)) return { items: [], page: 0, size: 25, total: 0 }
     return []
   }) as typeof api.get)
 
@@ -481,12 +486,19 @@ describe('the rail collapses on the document routes (design language §4)', () =
  *    caller's company, so this side shows nothing rather than hard-coding the mockup's "Acme Ltd"
  *    onto every company on the instance. The element is the reservation, and the test is what says
  *    the reservation is deliberate.
- * 2. **The search is a field, not a link.** The regression that matters is somebody restoring the
- *    rail entry: a link satisfies "you can reach search" while giving back the empty-input round
- *    trip the field exists to remove. So this asserts the *submission*, not the presence.
- * 3. **The query is carried in the URL.** A field that navigates to a bare `/search` looks
- *    identical on screen and loses everything the reader typed.
- * 4. **The collapse toggle is in the rail's header row**, not its foot — the placement is the
+ * 2. ~~**The search is a field, not a link.**~~ → **the search is the palette** (021 §7, T7). The
+ *    regression that matters is unchanged and only its shape moved: what must not come back is a
+ *    control that costs a navigation before it can be typed into. So the tests below open the
+ *    palette by its two shortcuts and by the trigger, and assert that a query with no match still
+ *    reaches `/search` — which is the property the field had and the one a palette most easily
+ *    loses.
+ * 3. **`/` must not fire inside a text field.** The way this feature ships broken: the shortcut
+ *    eats the character in every input in the app, and no test that does not type a slash into one
+ *    will see it.
+ * 4. **The trail is the shell's, and it names the project.** R1 took the switcher out of the
+ *    header on the promise that the breadcrumb would state the frame at full width instead. If the
+ *    trail is absent or generic, R1 is a net loss rather than a trade.
+ * 5. **The collapse toggle is in the rail's header row**, not its foot — the placement is the
  *    change, so the test names the row rather than only the button.
  */
 describe('AppShell header controls', () => {
@@ -496,6 +508,7 @@ describe('AppShell header controls', () => {
     vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
       if (path === '/projects') return PROJECTS
       if (path.startsWith('/me/permissions')) return heldPermissions([])
+      if (/^\/cases\/search(\?|$)/.test(path)) return { items: [], page: 0, size: 25, total: 0 }
       return []
     }) as typeof api.get)
 
@@ -527,33 +540,131 @@ describe('AppShell header controls', () => {
     expect(slot).toBeEmptyDOMElement()
   })
 
-  it('searches cases from the header field, carrying the query into the URL', async () => {
+  it('draws the trail in the header, leading with Projects and the project key', async () => {
+    renderShell(`/projects/${OLB}/cases`)
+    await railReady()
+
+    const trail = within(screen.getByTestId('TopBar.Breadcrumbs'))
+    await waitFor(() =>
+      expect(trail.getAllByTestId('TopBar.Breadcrumb').map((crumb) => crumb.textContent)).toEqual([
+        'Projects',
+        'OLB',
+        'Test cases',
+      ]),
+    )
+    // The trail is chrome: it is in the header, not in the page, so a page's failed read cannot
+    // take the only non-rail way back up with it.
+    expect(screen.getByTestId('TopBar.Breadcrumbs').closest('header')).not.toBeNull()
+    expect(trail.getByText('Test cases')).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('opens the palette with the trigger, and lands a query with no match on /search', async () => {
     const user = userEvent.setup()
     renderWithProbe(`/projects/${OLB}/cases`)
     await railReady()
 
-    // The rail entry it replaced is gone: a link would satisfy "search is reachable" while
-    // restoring the empty-input hop this field exists to remove.
+    // The rail entry the search replaced is still gone: a link would satisfy "search is reachable"
+    // while restoring the empty-input hop the header control exists to remove.
     expect(rail().queryByTestId('Nav.Link.Searchcases')).toBeNull()
 
-    const field = screen.getByRole('searchbox', { name: 'Search test cases' })
-    expect(field.closest('header')).not.toBeNull()
+    const trigger = screen.getByTestId('TopBar.Search')
+    expect(trigger.closest('header')).not.toBeNull()
+    // The `role="search"` landmark moved from the field onto the trigger's form, not away.
+    expect(trigger.closest('[role="search"]')).not.toBeNull()
 
-    await user.type(field, 'login timeout{Enter}')
+    await user.click(trigger)
+    await user.type(screen.getByTestId('Palette.Input'), 'login timeout')
+    await user.click(await screen.findByText(/Search all test cases for/))
 
     await waitFor(() => expect(probe()).toBe('/search?q=login+timeout'))
   })
 
-  it('leaves the query off entirely when the field is empty', async () => {
+  it.each([
+    ['{Meta>}k{/Meta}', 'command'],
+    ['{Control>}k{/Control}', 'control'],
+    ['/', 'slash'],
+  ])('opens on %s', async (keys) => {
+    const user = userEvent.setup()
+    renderShell(`/projects/${OLB}/cases`)
+    await railReady()
+
+    await user.keyboard(keys)
+
+    expect(await screen.findByTestId('Palette.Input')).toBeInTheDocument()
+  })
+
+  it('does not fire the slash shortcut while the caret is in a text field', async () => {
+    const user = userEvent.setup()
+    renderShell(`/projects/${OLB}/cases`)
+    await railReady()
+
+    // A stand-in for every input in the app. The shortcut is registered on `document`, so what is
+    // being asserted is a property of the listener rather than of any one screen's markup.
+    const field = document.createElement('input')
+    document.body.append(field)
+    await user.click(field)
+    await user.keyboard('a/b')
+
+    // Both halves matter: the palette stayed shut AND the character was typed. A shortcut that
+    // opens nothing but still swallows the slash is the same defect with a quieter symptom.
+    expect(screen.queryByTestId('Palette.Input')).toBeNull()
+    expect(field).toHaveValue('a/b')
+  })
+
+  it('closes on Escape and returns focus to the trigger', async () => {
+    const user = userEvent.setup()
+    renderShell(`/projects/${OLB}/cases`)
+    await railReady()
+
+    const trigger = screen.getByTestId('TopBar.Search')
+    await user.click(trigger)
+    expect(await screen.findByTestId('Palette.Input')).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+
+    await waitFor(() => expect(screen.queryByTestId('Palette.Input')).toBeNull())
+    // Focus left behind in a closed dialog strands a keyboard user at the top of the document.
+    await waitFor(() => expect(trigger).toHaveFocus())
+  })
+
+  it('offers places by name, including the tabs and settings sections the rail no longer lists', async () => {
     const user = userEvent.setup()
     renderWithProbe(`/projects/${OLB}/cases`)
     await railReady()
 
-    // Whitespace only — a `?q=` carrying nothing but spaces is a filter the results page would
-    // honour, and it reads as "no matches" rather than as "you searched for nothing".
-    await user.type(screen.getByRole('searchbox', { name: 'Search test cases' }), '   {Enter}')
+    await user.click(screen.getByTestId('TopBar.Search'))
+    await user.type(screen.getByTestId('Palette.Input'), 'suites')
 
-    await waitFor(() => expect(probe()).toBe('/search'))
+    // `Suites` is a TAB on Test cases — invisible until you are already on the screen it extends,
+    // which is exactly why the palette indexes it.
+    await user.click(await screen.findByText('Suites'))
+
+    await waitFor(() => expect(probe()).toBe(`/projects/${OLB}/suites`))
+  })
+
+  it('hides a gated place from the palette exactly as the rail hides it', async () => {
+    const user = userEvent.setup()
+    renderShell(`/projects/${OLB}/cases`)
+    await railReady()
+
+    await user.click(screen.getByTestId('TopBar.Search'))
+    await user.type(screen.getByTestId('Palette.Input'), 'billing')
+
+    // The caller holds no `billing:read`. A palette that offered it by name would undo the
+    // recorded decision in the one surface searched by name rather than scanned.
+    await waitFor(() => expect(screen.queryByText('Billing')).toBeNull())
+  })
+
+  it('jumps to an issue typed as a key', async () => {
+    const user = userEvent.setup()
+    renderWithProbe(`/projects/${OLB}/cases`)
+    await railReady()
+
+    await user.click(screen.getByTestId('TopBar.Search'))
+    await user.type(screen.getByTestId('Palette.Input'), 'ACME-118')
+    await user.click(await screen.findByText('ACME-118'))
+
+    await waitFor(() => expect(probe()).toBe('/issues/ACME-118'))
   })
 
   it('puts the collapse toggle in the rail header row, beside the wordmark', async () => {
@@ -646,6 +757,7 @@ describe('AppShell top-strip slot', () => {
     vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
       if (path === '/projects') return PROJECTS
       if (path.startsWith('/me/permissions')) return heldPermissions([])
+      if (/^\/cases\/search(\?|$)/.test(path)) return { items: [], page: 0, size: 25, total: 0 }
       return []
     }) as typeof api.get)
 

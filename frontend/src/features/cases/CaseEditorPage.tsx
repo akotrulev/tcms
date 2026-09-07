@@ -1036,30 +1036,11 @@ function CaseEditorForm({
       */}
       <TopStripSlot>
         {/*
-          The breadcrumb the removed `PageHeader` used to draw, in the strip the render puts it in.
-          It is the only way back to the list that is not the rail, and dropping it with the H1
-          would have been the item taking a navigation affordance with it.
+          ~~The breadcrumb the removed `PageHeader` used to draw, in the strip the render puts it
+          in — the only way back to the list that is not the rail.~~ → **superseded (021 R2): the
+          shell draws it, in the header, on every route.** The strip keeps the commit bar, which is
+          what the render puts here that no other screen has.
         */}
-        <nav
-          aria-label="Breadcrumb"
-          data-testid={`${TestIdPrefix}.Breadcrumbs`}
-          className="mr-auto hidden min-w-0 truncate text-[12.5px] text-ink-3 sm:block"
-        >
-          <RouterLink to={`/projects/${projectId}/cases`} className="hover:underline">
-            Test cases
-          </RouterLink>
-          {existing && (
-            <>
-              {' / '}
-              <RouterLink to={`/projects/${projectId}/cases/${existing.id}`} className="hover:underline">
-                {existing.key}
-              </RouterLink>
-            </>
-          )}
-          {' / '}
-          <span className="font-medium text-ink-2">{mode === 'edit' ? 'Edit' : 'New'}</span>
-        </nav>
-
         <div className="flex items-center gap-2" data-testid={`${TestIdPrefix}.CommitBar`}>
           <div className="hidden min-w-0 max-w-[420px] flex-1 md:block">
             <CaseDraftStatus

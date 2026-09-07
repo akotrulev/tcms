@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
 import { ApiError } from '../../api/client';
-import { useCreateRelease, useProject } from '../../api/queries';
+import { useCreateRelease } from '../../api/queries';
 import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
 import { Banner } from '../../components/kit';
@@ -48,7 +48,11 @@ type ReleaseFormInput = z.infer<typeof ReleaseSchema>;
 export function ReleaseNewPage() {
   const { projectId = '' } = useParams();
   const navigate = useNavigate();
-  const project = useProject(projectId);
+  /*
+    ~~`useProject`, for the project's name in this screen's own breadcrumb.~~ →
+    **superseded (021 R2): the shell names the project**, from the read it already makes
+    for the rail's switcher — so this page's copy of that read went with its trail.
+  */
   const create = useCreateRelease(projectId);
 
   const form = useForm<ReleaseFormInput>({
@@ -100,11 +104,6 @@ export function ReleaseNewPage() {
         title="New release"
         documentTitle="New release"
         subtitle="A version, and optionally a date and a description. Nothing else is required."
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Releases', to: `/projects/${projectId}/releases` },
-          { label: 'New' },
-        ]}
       />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">

@@ -93,7 +93,6 @@ export function AnalyticsPage() {
         testId={`${TEST_ID}.Header`}
         title="Delivery analytics"
         documentTitle="Delivery analytics"
-        crumbs={[{ label: 'Project' }, { label: 'Analytics' }]}
         subtitle="Whether this project is converging on its next release."
         actions={
           <DropdownMenu>

@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useMyCompanyPermissions, useMyPermissions } from '../api/queries';
 import type { EffectivePermissions, PermissionKey } from '../api/types';
-import { permissionLabels } from '../lib/permissions';
+import { disabledReason, disabledReasonAny, permissionLabels } from '../lib/permissions';
 import { useCurrentUserId } from './useAuth';
 import type { UseQueryResult } from '@tanstack/react-query';
 
@@ -50,9 +50,9 @@ export interface Gate {
    * server would serve, which is the wrong half of the disable-don't-hide rule — a control greyed
    * out for a caller who may use it teaches them the product cannot do something it can.
    *
-   * Here rather than composed at the call site, because {@link reasonAny}'s sentence needs `where`,
-   * which is this hook's and not a screen's. A component assembling "you don't have permission to X"
-   * from two `reason` calls would produce two sentences about one disabled button.
+   * Here rather than composed at the call site, because {@link reasonAny}'s sentence names the
+   * union of the keys' holders — see `disabledReasonAny`. A component assembling one sentence from
+   * two `reason` calls would produce two sentences about one disabled button.
    */
   canAny: (permissions: PermissionKey[]) => boolean;
   /**
@@ -127,7 +127,7 @@ export interface Gate {
 export function useCan(projectId: string | undefined): Gate {
   // `isPending` covers the disabled case too (no projectId → the query never runs), which is the
   // right answer: without a project there is nothing to be permitted in.
-  return useGate(useMyPermissions(projectId), 'in this project');
+  return useGate(useMyPermissions(projectId));
 }
 
 /**
@@ -138,12 +138,16 @@ export function useCan(projectId: string | undefined): Gate {
  * `undefined` id. The three states, the fall-open on failure and the asymmetry behind it are
  * identical — that part is shared, so a change to the policy cannot land in one and not the other.
  *
- * The sentence differs, and it has to: "you don't have permission to create projects in this
- * project" would send a Test Lead to ask their project admin for something only a Company Admin can
- * grant.
+ * ~~The sentence differs, and it has to: "you don't have permission to create projects in this
+ * project" would send a Test Lead to ask their project admin for something only a Company Admin
+ * can grant.~~ → **superseded (021 §8.2, T7): the sentence is the same and the concern is better
+ * served.** Every refusal is now `disabledReason`'s one shape, which names **who holds the key**
+ * rather than where it would apply — so `project:create` reads *"Needs Create projects, held by
+ * Company Admin."* and sends that Test Lead to the right person by naming them, which the
+ * where-clause only ever implied.
  */
 export function useCanInCompany(enabled = true): Gate {
-  return useGate(useMyCompanyPermissions(enabled), 'in this company');
+  return useGate(useMyCompanyPermissions(enabled));
 }
 
 /**
@@ -160,7 +164,7 @@ function isTheAuthor(callerId: string | undefined, authorId: string | null | und
 }
 
 /** The one implementation of the three states, so the two scopes cannot drift apart. */
-function useGate(query: UseQueryResult<EffectivePermissions>, where: string): Gate {
+function useGate(query: UseQueryResult<EffectivePermissions>): Gate {
   const pending = query.isPending && !query.isError;
   const held = query.data?.permissions;
   // The `OWN` arm compares the row's author against the caller, so the caller's id has to be in
@@ -195,7 +199,7 @@ function useGate(query: UseQueryResult<EffectivePermissions>, where: string): Ga
         if (pending) return 'Checking your permissions…';
         const qualifier = qualifierOf(permission);
         if (qualifier === undefined || qualifier !== null) return undefined;
-        return `You don't have permission to ${permissionLabels[permission]} ${where}.`;
+        return disabledReason(permission);
       },
 
       /*
@@ -218,9 +222,7 @@ function useGate(query: UseQueryResult<EffectivePermissions>, where: string): Ga
           return qualifier === undefined || qualifier !== null;
         });
         if (reachable) return undefined;
-        return `You don't have permission to ${permissions
-          .map((permission) => permissionLabels[permission])
-          .join(' or ')} ${where}.`;
+        return disabledReasonAny(permissions);
       },
 
       // The same three arms as the server's canDoOnScope, in the same order. OWN is not among
@@ -238,9 +240,7 @@ function useGate(query: UseQueryResult<EffectivePermissions>, where: string): Ga
       reasonOnScope: (permission, rowIsPlanScoped) => {
         if (pending) return 'Checking your permissions…';
         const qualifier = qualifierOf(permission);
-        if (qualifier === null) {
-          return `You don't have permission to ${permissionLabels[permission]} ${where}.`;
-        }
+        if (qualifier === null) return disabledReason(permission);
         if (qualifier === 'PLAN_SCOPE' && !rowIsPlanScoped) {
           // Deliberately a different sentence from the one above. "You don't have permission to
           // manage artifacts" is false for this caller — they manage them every cycle — and
@@ -267,9 +267,7 @@ function useGate(query: UseQueryResult<EffectivePermissions>, where: string): Ga
       reasonOnAuthored: (permission, authorId) => {
         if (pending) return 'Checking your permissions…';
         const qualifier = qualifierOf(permission);
-        if (qualifier === null) {
-          return `You don't have permission to ${permissionLabels[permission]} ${where}.`;
-        }
+        if (qualifier === null) return disabledReason(permission);
         if (qualifier === 'OWN' && !isTheAuthor(callerId, authorId)) {
           // Names the restriction rather than denying the permission, for reasonOnScope's reason:
           // "you don't have permission to delete test cases" is false for this caller — they delete
@@ -281,5 +279,5 @@ function useGate(query: UseQueryResult<EffectivePermissions>, where: string): Ga
         return undefined;
       },
     };
-  }, [pending, held, where, callerId]);
+  }, [pending, held, callerId]);
 }

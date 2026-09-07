@@ -37,11 +37,6 @@ export function ArtifactsPage() {
         testId="Artifacts.Header"
         title="Artifacts"
         documentTitle={project.data ? `Artifacts · ${project.data.name}` : 'Artifacts'}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Documents', to: `/projects/${projectId}/docs` },
-          { label: 'Artifacts' },
-        ]}
         subtitle="Strategy, environment, test data and sign-off documents. Plan artifacts sit alongside the project's, which they inherit."
         actions={
           <div className="flex items-center gap-2">

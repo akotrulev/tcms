@@ -89,11 +89,6 @@ export function WorkflowSettingsPage() {
         testId={`${TEST_ID}.Header`}
         title="Workflow"
         documentTitle={project.data ? `Workflow · ${project.data.name}` : 'Workflow'}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Settings', to: `/projects/${projectId}/settings` },
-          { label: 'Workflow' },
-        ]}
         subtitle="The statuses an issue in this project can be in, the order they read in, and which of them mean done."
       />
 

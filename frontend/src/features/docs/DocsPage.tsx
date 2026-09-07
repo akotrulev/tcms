@@ -175,7 +175,12 @@ export function DocsPage() {
     }
   }, [pageMissing, projectId, suffix, navigate]);
 
-  const openPage = pages.data?.find((row) => row.id === pageId);
+  /*
+    ~~`openPage`, for the reading pane's title in this screen's own breadcrumb.~~ →
+    **superseded (021 R2): the shell owns the trail**, and it names the screen rather than the
+    record open inside it — see `app/routeMeta.ts` for why a trail does not read a record. The
+    open page's title is its own heading, in the pane.
+  */
 
   return (
     <div>
@@ -189,22 +194,6 @@ export function DocsPage() {
 
       <header className="mb-3 flex flex-wrap items-start gap-3 border-b border-line pb-3">
         <div className="min-w-0 flex-1">
-          <nav aria-label="Breadcrumb" className="mb-1 text-[12.5px] text-ink-3">
-            <RouterLink
-              to={`/projects/${projectId}`}
-              className="text-ink-3 no-underline hover:text-ink-2"
-            >
-              {project.data?.name ?? 'Project'}
-            </RouterLink>
-            <span className="px-1.5 text-ink-4">/</span>
-            <b className="font-medium text-ink-2">Documents</b>
-            {openPage && (
-              <>
-                <span className="px-1.5 text-ink-4">/</span>
-                <b className="font-medium text-ink-2">{openPage.title}</b>
-              </>
-            )}
-          </nav>
           <h1 className="m-0 text-[19px] font-semibold tracking-[-.018em] text-ink">Documents</h1>
           <p className="m-0 mt-1 max-w-[74ch] text-[13px] text-ink-3">
             Specifications live here. Cases link to individual blocks, and each block shows what

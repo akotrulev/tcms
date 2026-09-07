@@ -52,10 +52,6 @@ export function RunListPage() {
         testId="Runs.Header"
         title="Test runs"
         documentTitle={project.data ? `Test runs · ${project.data.name}` : 'Test runs'}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Test runs' },
-        ]}
         subtitle="Every pass over a plan, manual or ingested from CI."
         actions={
           /*

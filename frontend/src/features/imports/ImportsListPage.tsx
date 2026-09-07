@@ -79,11 +79,6 @@ export function ImportsListPage() {
         testId={`${TEST_ID}.Header`}
         title="Imports"
         documentTitle={project.data ? `Imports · ${project.data.name}` : 'Imports'}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Settings', to: `/projects/${projectId}/settings` },
-          { label: 'Imports' },
-        ]}
         subtitle="Bring a Jira or Azure DevOps project in, keeping its issue keys."
         actions={startButton(undefined)}
       />

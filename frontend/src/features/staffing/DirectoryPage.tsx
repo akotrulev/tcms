@@ -129,7 +129,6 @@ export function DirectoryPage() {
         testId={`${TEST_ID}.Header`}
         title="Directory"
         documentTitle="Skills directory"
-        crumbs={[{ label: 'Company' }, { label: 'Directory' }]}
         subtitle="Who has which skills, and when they are free."
         actions={
           <Button size="sm" asChild>

@@ -81,7 +81,6 @@ export function TeamsPage() {
         testId="Admin.Header"
         title="Teams & roles"
         documentTitle="Teams and roles"
-        crumbs={[{ label: 'Administration' }, { label: 'Teams & roles' }]}
         subtitle="Team structure, who holds which role on which project, and what each role can do."
         actions={
           /*

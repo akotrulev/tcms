@@ -144,7 +144,26 @@ function renderPage() {
   )
 }
 
-const deleteButton = () => screen.getByTestId('CaseDetail.DeleteButton')
+/**
+ * Delete, from inside the overflow menu it moved to (021 §8.2, T7).
+ *
+ * ~~`screen.getByTestId('CaseDetail.DeleteButton')`~~ — the header carries one primary and a `⋯`
+ * now, so the control is not in the document until the menu is opened. **Disable-don't-hide is
+ * unchanged and is what these tests still assert**: the item is present and refused, not missing.
+ *
+ * The verdict is read from `aria-disabled` rather than through `toBeDisabled()`, because a Radix
+ * menu item is a `div[role="menuitem"]` and `disabled` is not an attribute a `div` carries —
+ * `toBeDisabled()` would answer "enabled" for every one of them, which would turn all four tests
+ * below green against a page with no gate at all.
+ */
+async function deleteItem(): Promise<HTMLElement> {
+  if (screen.queryByTestId('CaseDetail.DeleteButton') === null) {
+    await userEvent.click(await screen.findByTestId('CaseDetail.Actions.More'))
+  }
+  return screen.findByTestId('CaseDetail.DeleteButton')
+}
+
+const REFUSED = 'true'
 
 /**
  * Wait until the permission answer has actually landed — **without this, every "disabled"
@@ -172,7 +191,8 @@ describe('CaseDetailPage — the Delete gate reads the row, not just the caller'
     mockReads(CALLER, 'OWN')
     renderPage()
 
-    await waitFor(() => expect(deleteButton()).toBeEnabled())
+    await permissionsResolved()
+    expect(await deleteItem()).not.toHaveAttribute('aria-disabled', REFUSED)
   })
 
   it('refuses it on a colleagues case, even though the caller holds case:delete', async () => {
@@ -182,7 +202,7 @@ describe('CaseDetailPage — the Delete gate reads the row, not just the caller'
     renderPage()
     await permissionsResolved()
 
-    expect(deleteButton()).toBeDisabled()
+    expect(await deleteItem()).toHaveAttribute('aria-disabled', REFUSED)
   })
 
   it('refuses it on an unauthored case', async () => {
@@ -193,7 +213,7 @@ describe('CaseDetailPage — the Delete gate reads the row, not just the caller'
     renderPage()
     await permissionsResolved()
 
-    expect(deleteButton()).toBeDisabled()
+    expect(await deleteItem()).toHaveAttribute('aria-disabled', REFUSED)
   })
 
   it('offers Delete on every row to an unqualified holder', async () => {
@@ -203,7 +223,8 @@ describe('CaseDetailPage — the Delete gate reads the row, not just the caller'
     mockReads(COLLEAGUE)
     renderPage()
 
-    await waitFor(() => expect(deleteButton()).toBeEnabled())
+    await permissionsResolved()
+    expect(await deleteItem()).not.toHaveAttribute('aria-disabled', REFUSED)
   })
 })
 
@@ -237,7 +258,7 @@ describe('CaseDetailPage — the attachment panel is gated on case:edit', () => 
     )
     // The same render, the same caller: the two gates disagree, which is what proves they are
     // reading different keys rather than one verdict shared by accident.
-    expect(deleteButton()).toBeDisabled()
+    expect(await deleteItem()).toHaveAttribute('aria-disabled', REFUSED)
   })
 
   it('refuses Attach to a caller with no case:edit', async () => {

@@ -124,11 +124,6 @@ export function RunSchedulePage() {
         documentTitle={
           project.data ? `Run schedules · ${project.data.name}` : 'Run schedules'
         }
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Test runs', to: `/projects/${projectId}/runs` },
-          { label: 'Schedules' },
-        ]}
         subtitle="A standing request for a run — what to ask for, and when. The runs a schedule creates are ordinary runs; nobody is recorded as having created them, because nobody did. Each schedule fires with the grants of the person it is listed against, checked at the moment it fires."
         actions={
           <PermissionGate projectId={projectId} permission="run:create">

@@ -233,16 +233,6 @@ export function FeatureImportPage() {
 
       <header className="mb-3 flex flex-wrap items-center gap-2 border-b border-line pb-3">
         <div className="min-w-0 flex-1">
-          <nav aria-label="Breadcrumb" className="mb-1 text-[12.5px] text-ink-3">
-            <RouterLink
-              to={`/projects/${projectId}/cases`}
-              className="text-ink-3 no-underline hover:text-ink-2"
-            >
-              Test cases
-            </RouterLink>
-            <span className="px-1.5 text-ink-4">/</span>
-            <b className="font-medium text-ink-2">Import feature files</b>
-          </nav>
           <h1 className="m-0 text-[19px] font-semibold tracking-[-.018em] text-ink">
             Import feature files
           </h1>

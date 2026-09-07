@@ -75,26 +75,6 @@ export function CaseHistoryPage() {
       <title>{`${pageTitle} · TCMS`}</title>
 
       <TopStripSlot>
-        <nav
-          aria-label="Breadcrumb"
-          data-testid="CaseHistory.Breadcrumbs"
-          className="mr-auto hidden min-w-0 truncate text-[12.5px] text-ink-3 sm:block"
-        >
-          <RouterLink to={`/projects/${projectId}/cases`} className="hover:underline">
-            Test cases
-          </RouterLink>
-          {' / '}
-          <RouterLink
-            to={`/projects/${projectId}/cases/${caseId}`}
-            className="hover:underline"
-            data-testid="CaseHistory.CaseLink"
-          >
-            {testCase.data?.key ?? 'Case'}
-          </RouterLink>
-          {' / '}
-          <span className="font-medium text-ink-2">History</span>
-        </nav>
-
         {/*
           THE SCOPE LENS. Both readings are legitimate — *current version* answers "is this test
           passing as it stands", *all versions* answers "has this area ever been stable" — so the

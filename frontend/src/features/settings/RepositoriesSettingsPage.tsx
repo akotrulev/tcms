@@ -81,11 +81,6 @@ export function RepositoriesSettingsPage() {
         documentTitle={
           project.data ? `Code repositories · ${project.data.name}` : 'Code repositories'
         }
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Settings', to: `/projects/${projectId}/settings` },
-          { label: 'Code repositories' },
-        ]}
         subtitle="Where this project's code lives, and how it is built. Reference information — nothing here is cloned, fetched or run."
         actions={
           canEdit ?

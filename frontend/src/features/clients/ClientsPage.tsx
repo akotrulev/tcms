@@ -79,7 +79,6 @@ export function ClientsPage() {
         testId={`${TEST_ID}.Header`}
         title="Clients"
         documentTitle="Clients"
-        crumbs={[{ label: 'Company' }, { label: 'Clients' }]}
         subtitle={
           total === undefined || total === 0 ?
             'Organisations this company delivers software for.'

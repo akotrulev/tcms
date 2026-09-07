@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
-import { useProject, usePublishRelease, useReadiness, useRelease } from '../../api/queries';
+import { usePublishRelease, useReadiness, useRelease } from '../../api/queries';
 import type { Release, ReleaseReadiness } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
 import { PageHeader } from '../../components/PageHeader';
@@ -46,7 +46,11 @@ const TEST_ID = 'Release';
 
 export function ReleaseDetailPage() {
   const { projectId = '', releaseId = '' } = useParams();
-  const project = useProject(projectId);
+  /*
+    ~~`useProject`, for the project's name in this screen's own breadcrumb.~~ →
+    **superseded (021 R2): the shell names the project**, from the read it already makes
+    for the rail's switcher — so this page's copy of that read went with its trail.
+  */
   const release = useRelease(releaseId);
   const readiness = useReadiness(releaseId);
 
@@ -57,11 +61,6 @@ export function ReleaseDetailPage() {
         title={release.data ? `Release ${release.data.version}` : 'Release'}
         documentTitle={release.data ? `Release ${release.data.version}` : 'Release'}
         subtitle={release.data?.description ?? undefined}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Releases', to: `/projects/${projectId}/releases` },
-          { label: release.data?.version ?? 'Release' },
-        ]}
         meta={
           release.data && (
             <span className="flex flex-wrap items-center gap-2">

@@ -82,7 +82,6 @@ export function ApprovalsPage() {
         testId={`${TEST_ID}.Header`}
         title="Timesheet approvals"
         documentTitle="Timesheet approvals"
-        crumbs={[{ label: 'Timesheets', to: '/timesheets' }, { label: 'Approvals' }]}
         subtitle={
           queue.data
             ? `Period ${formatPeriodRange(bounds.startsOn, bounds.endsOn)} · ${waiting} waiting on you`

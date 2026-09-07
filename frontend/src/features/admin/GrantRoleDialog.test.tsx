@@ -229,7 +229,7 @@ describe('GrantRoleDialog', () => {
     await waitFor(() => expect(grant).toBeDisabled())
     await userEvent.hover(grant.parentElement!)
     expect(await screen.findByRole('tooltip')).toHaveTextContent(
-      "You don't have permission to manage company members in this company.",
+      'Needs Manage company members, held by Company Admin.',
     )
   })
 

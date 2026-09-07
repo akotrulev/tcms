@@ -112,17 +112,6 @@ export function BoardPage() {
         className="mb-3 flex flex-wrap items-start gap-3 border-b border-line pb-3"
       >
         <div className="min-w-0 flex-1">
-          <nav aria-label="Breadcrumb" className="mb-1 text-[12.5px] text-ink-3">
-            <RouterLink
-              to={`/projects/${projectId}`}
-              data-testid="Board.Header.Breadcrumb"
-              className="text-ink-3 no-underline hover:text-ink-2"
-            >
-              {project.data?.name ?? 'Project'}
-            </RouterLink>
-            <span className="px-1.5 text-ink-4">/</span>
-            <b className="font-medium text-ink-2">Board</b>
-          </nav>
           <h1
             data-testid="Board.Header.Title"
             className="m-0 text-[19px] font-semibold tracking-[-.018em] text-ink"

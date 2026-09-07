@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import type { RunStatus, StatusKind, TestRunDetail } from '../../api/types';
-import { useProject, useRun, useSetRunStatus } from '../../api/queries';
+import { useRun, useSetRunStatus } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import {
@@ -75,7 +75,11 @@ const RowTestId = 'RunDetail.Executions.Row';
  */
 export function RunDetailPage() {
   const { projectId = '', runId = '' } = useParams();
-  const project = useProject(projectId);
+  /*
+    ~~`useProject`, for the project's name in this screen's own breadcrumb.~~ →
+    **superseded (021 R2): the shell names the project**, from the read it already makes
+    for the rail's switcher — so this page's copy of that read went with its trail.
+  */
   const run = useRun(projectId, runId);
 
   return (
@@ -84,11 +88,6 @@ export function RunDetailPage() {
         testId="RunDetail.Header"
         title={run.data?.name ?? 'Test run'}
         documentTitle={run.data ? `${run.data.key} ${run.data.name}` : 'Test run'}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Test runs', to: `/projects/${projectId}/runs` },
-          { label: run.data?.key ?? 'Run' },
-        ]}
         actions={run.data && <RunActions projectId={projectId} run={run.data} />}
         meta={
           run.data && (

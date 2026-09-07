@@ -129,10 +129,6 @@ export function CaseListPage() {
         testId="Cases.Header"
         title="Test cases"
         documentTitle={project.data ? `Test cases · ${project.data.name}` : 'Test cases'}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Test cases' },
-        ]}
         subtitle={
           selectedSuite
             ? `Scoped to ${selectedSuite.name} — cases filed here, added here, or carrying one of its tags.`

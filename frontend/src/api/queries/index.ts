@@ -34,6 +34,7 @@ export {
   useInvitationPreview,
   useMyCompanyPermissions,
   useMyPermissions,
+  useMyPermissionsAcross,
   useMySocialIdentities,
   useSignOutOtherSessions,
   useSocialProviders,

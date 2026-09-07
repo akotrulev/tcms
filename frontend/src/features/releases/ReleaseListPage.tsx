@@ -63,10 +63,6 @@ export function ReleaseListPage() {
         title="Releases"
         documentTitle={project.data ? `Releases · ${project.data.name}` : 'Releases'}
         subtitle="A cadence without inventing sprints — there are none, and no velocity to measure over them"
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Releases' },
-        ]}
         actions={
           <>
             {/*
@@ -101,7 +97,7 @@ export function ReleaseListPage() {
               'Nothing is migrated into releases when this module ships — deliberately, because '
               + 'version strings across a real instance are not as clean as they look — so the '
               + 'first one is one you type. A version is all it needs.',
-            action: <NewReleaseButton projectId={projectId} testId={`${TEST_ID}.Empty.New`} label="Create a release" />,
+            action: <NewReleaseButton projectId={projectId} testId={`${TEST_ID}.Empty.New`} label="New release" />,
           }}
         >
           {(rows) => (

@@ -88,7 +88,6 @@ export function StaffingPage() {
         testId={`${TEST_ID}.Header`}
         title="Capacity"
         documentTitle="Company capacity"
-        crumbs={[{ label: 'Company' }, { label: 'Capacity' }]}
         subtitle={
           window ?
             `Company view · ${formatDate(window.from)} – ${formatDate(window.to)}`

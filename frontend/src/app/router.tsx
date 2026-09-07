@@ -187,6 +187,9 @@ const AssistantsPage = lazy(() =>
     default: m.AssistantsPage,
   })),
 );
+const AccessPage = lazy(() =>
+  import('../features/account/AccessPage').then((m) => ({ default: m.AccessPage })),
+);
 const ConnectAssistantPage = lazy(() =>
   import('../features/account/ConnectAssistantPage').then((m) => ({
     default: m.ConnectAssistantPage,
@@ -449,6 +452,23 @@ function AppRoutes() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <ConnectAssistantPage />
+              </Suspense>
+            }
+          />
+
+          {/*
+            `Your access` (021 §4, T7) — why this shell looks different from a colleague's.
+
+            **Ungated, and it has to be.** Its whole subject is what the caller does not hold, so a
+            permission on the route would hide the explanation from exactly the reader it is
+            written for. It discloses nothing: the entries stay hidden, and what it adds is their
+            names and who holds the key, both of which `AccessPage` argues at length.
+          */}
+          <Route
+            path="/account/access"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <AccessPage />
               </Suspense>
             }
           />

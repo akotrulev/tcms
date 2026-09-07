@@ -1,7 +1,7 @@
 import { Fragment, useState } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import type { SuiteRunSummary, VersionMarker } from '../../api/types';
-import { useProject, useSuiteHistory, useSuites } from '../../api/queries';
+import { useSuiteHistory, useSuites } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import {
@@ -31,7 +31,11 @@ import { EM_DASH, formatComputedAt, formatCount, formatDateTime, formatPercent }
  */
 export function SuiteHistoryPage() {
   const { projectId = '', suiteId = '' } = useParams();
-  const project = useProject(projectId);
+  /*
+    ~~`useProject`, for the project's name in this screen's own breadcrumb.~~ →
+    **superseded (021 R2): the shell names the project**, from the read it already makes
+    for the rail's switcher — so this page's copy of that read went with its trail.
+  */
   const suites = useSuites(projectId);
   const history = useSuiteHistory(projectId, suiteId);
 
@@ -43,12 +47,6 @@ export function SuiteHistoryPage() {
         testId="SuiteHistory.Header"
         title={`${suite?.name ?? 'Suite'} — execution history`}
         documentTitle={suite ? `History · ${suite.key}` : 'Suite history'}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Test cases', to: `/projects/${projectId}/cases` },
-          ...(suite ? [{ label: suite.name, to: `/projects/${projectId}/cases?suiteId=${suite.id}` }] : []),
-          { label: 'History' },
-        ]}
         meta={
           suite && (
             <>

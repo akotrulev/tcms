@@ -109,11 +109,6 @@ export function BoardSettingsPage() {
         testId={`${TEST_ID}.Header`}
         title="Boards"
         documentTitle={project.data ? `Boards · ${project.data.name}` : 'Boards'}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Settings', to: `/projects/${projectId}/settings` },
-          { label: 'Boards' },
-        ]}
         subtitle="Every board over this project, the statuses each column claims, and the check that says the claims add up."
         actions={
           <PermissionGate projectId={projectId} permission="board:configure">

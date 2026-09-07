@@ -78,6 +78,19 @@ import type { PermissionKey } from '../api/types';
 export interface NavGate {
   key: PermissionKey;
   scope: 'project' | 'company';
+  /**
+   * Why this entry is **hidden** rather than shown-and-refused — one clause, no full stop.
+   *
+   * Each of the nine is argued at the entry that carries it, and every one of those arguments used
+   * to live only in a comment: true, recorded, and invisible to the person the decision was made
+   * about. `/account/access` (021 §4, T7) is where they are shown, so the clause is on the gate
+   * beside the label rather than in a second table keyed by label — which is the table a rename
+   * would silently orphan.
+   *
+   * It says why the ENTRY is absent, never what the screen behind it contains: a reason that
+   * disclosed the thing the permission protects would defeat the hiding it explains.
+   */
+  why: string;
 }
 
 export interface NavItem {
@@ -277,7 +290,11 @@ export const NAV: NavZone[] = [
         label: 'Clients',
         to: () => '/clients',
         icon: Building2,
-        gate: { key: 'client:read', scope: 'company' },
+        gate: {
+          key: 'client:read',
+          scope: 'company',
+          why: 'a sidebar should not teach you how many customers your employer has',
+        },
       },
       /*
         GATED (019 D-o), and sharpest of the nine: the whole screen behind this entry exists only
@@ -290,7 +307,11 @@ export const NAV: NavZone[] = [
         label: 'Billing',
         to: () => '/billing',
         icon: Receipt,
-        gate: { key: 'billing:read', scope: 'company' },
+        gate: {
+          key: 'billing:read',
+          scope: 'company',
+          why: 'what a colleague costs is not advertised to the colleague',
+        },
       },
       /*
         **The one folder left anywhere in the rail** (§1), and it survives on a test the four
@@ -311,7 +332,11 @@ export const NAV: NavZone[] = [
             label: 'API tokens',
             to: () => '/admin/tokens',
             icon: Key,
-            gate: { key: 'token:issue', scope: 'company' },
+            gate: {
+              key: 'token:issue',
+              scope: 'company',
+              why: 'the read is refused, not narrowed — an empty list would still be a claim',
+            },
           },
           /*
             The strongest of the three: a readable SSO page would disclose issuer URLs, client ids
@@ -322,7 +347,11 @@ export const NAV: NavZone[] = [
             label: 'Single sign-on',
             to: () => '/admin/sso',
             icon: LogIn,
-            gate: { key: 'company:idp', scope: 'company' },
+            gate: {
+              key: 'company:idp',
+              scope: 'company',
+              why: 'a readable page would disclose issuer URLs, client ids and claimed domains',
+            },
           },
           /*
             ~~`Audit trail`~~ → **`Company audit`** (§8.1). The rail carried that label twice, at
@@ -338,7 +367,13 @@ export const NAV: NavZone[] = [
             label: 'Company audit',
             to: () => '/admin/audit',
             icon: ScrollText,
-            gate: { key: 'audit:view', scope: 'company' },
+            gate: {
+              key: 'audit:view',
+              scope: 'company',
+              why:
+                'advertising an audit trail to somebody who may not read it invites the request it '
+                + 'exists to refuse',
+            },
           },
         ],
       },
@@ -391,19 +426,31 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     label: 'Imports',
     to: (p) => `/projects/${p}/imports`,
     icon: FileText,
-    gate: { key: 'issue:import', scope: 'project' },
+    gate: {
+      key: 'issue:import',
+      scope: 'project',
+      why: 'the report names the source site, the connecting account and the operator',
+    },
   },
   {
     label: 'Notifications',
     to: (p) => `/projects/${p}/settings/notifications`,
     icon: ChartColumn,
-    gate: { key: 'integration:manage', scope: 'project' },
+    gate: {
+      key: 'integration:manage',
+      scope: 'project',
+      why: 'the reads are refused, so the page would be entirely refusal',
+    },
   },
   {
     label: 'Issue tracker',
     to: (p) => `/projects/${p}/settings/trackers`,
     icon: Network,
-    gate: { key: 'integration:manage', scope: 'project' },
+    gate: {
+      key: 'integration:manage',
+      scope: 'project',
+      why: 'the same module, the same key and the same argument as Notifications',
+    },
   },
   /*
     Ungated, and it is the counter-example the gated three are measured against: 005 Q2 relaxed
@@ -421,7 +468,11 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     label: 'Project audit',
     to: (p) => `/projects/${p}/audit`,
     icon: ScrollText,
-    gate: { key: 'project:audit', scope: 'project' },
+    gate: {
+      key: 'project:audit',
+      scope: 'project',
+      why: 'the pair to Company audit — the two must agree',
+    },
   },
 ];
 

@@ -109,10 +109,17 @@ describe('useCan', () => {
       const { result } = renderHook(() => useCan(PROJECT), { wrapper: ({ children }) => wrapper(children) })
       await waitFor(() => expect(result.current.can('case:read')).toBe(true))
 
-      // The tooltip §31 put on eleven controls. A key in this sentence would be a bug the
-      // compiler cannot see.
+      /*
+        The tooltip §31 put on eleven controls. A key in this sentence would be a bug the compiler
+        cannot see.
+
+        ~~"You don't have permission to delete test cases in this project."~~ → **021 §8.2's one
+        shape**, which every disabled control in the app now uses: the capability, then who holds
+        it. The where-clause went with it, and what replaced it is strictly more useful — a reader
+        who is told *who* can do this does not also need to be told where.
+      */
       expect(result.current.reason('case:delete')).toBe(
-        "You don't have permission to delete test cases in this project.",
+        'Needs Delete test cases, held by Test Engineer, Test Lead and Company Admin.',
       )
       expect(result.current.reason('case:delete')).not.toContain('case:delete')
       expect(result.current.reason('case:read')).toBeUndefined()
@@ -136,7 +143,7 @@ describe('useCan', () => {
       expect(result.current.can('case:read')).toBe(false)
       expect(result.current.can('case:create')).toBe(false)
       expect(result.current.reason('case:create')).toBe(
-        "You don't have permission to create test cases in this project.",
+        'Needs Create test cases, held by Automation Service, Test Engineer, Test Lead and Company Admin.',
       )
     })
   })
@@ -253,9 +260,9 @@ describe('useCan', () => {
       await waitFor(() => expect(result.current.can('artifact:edit')).toBe(true))
 
       const reason = result.current.reasonOnScope('artifact:edit', false)
-      // "You don't have permission to manage artifacts" is FALSE for this caller — they manage
+      // "Needs Upload or edit artifacts" is FALSE for this caller — they manage
       // them every cycle — and it sends them to ask for a grant they already hold.
-      expect(reason).not.toMatch(/don't have permission/)
+      expect(reason).not.toMatch(/^Needs /)
       expect(reason).toMatch(/single plan/)
       expect(result.current.reasonOnScope('artifact:edit', true)).toBeUndefined()
     })
@@ -279,8 +286,10 @@ describe('useCan', () => {
 
       expect(result.current.canOnScope('artifact:edit', true)).toBe(false)
       // The scope is not the reason here, and saying it was would send a Viewer to change a
-      // control that cannot help them.
-      expect(result.current.reasonOnScope('artifact:edit', true)).toMatch(/don't have permission/)
+      // control that cannot help them. Matched on the ORDINARY sentence's shape — 021 §8.2's
+      // `Needs …, held by …` — rather than on its words, because the words are
+      // `disabledReason`'s and this test is about which of the two sentences was chosen.
+      expect(result.current.reasonOnScope('artifact:edit', true)).toMatch(/^Needs .*, held by /)
     })
 
     it('follows the same three states as `can` — closed while pending, open on failure', async () => {
@@ -360,7 +369,7 @@ describe('useCan', () => {
       await waitFor(() => expect(result.current.can('case:delete')).toBe(true))
 
       const reason = result.current.reasonOnAuthored('case:delete', COLLEAGUE)
-      expect(reason).not.toMatch(/don't have permission/)
+      expect(reason).not.toMatch(/^Needs /)
       expect(reason).toMatch(/you created/)
       expect(result.current.reasonOnAuthored('case:delete', CALLER)).toBeUndefined()
     })
@@ -384,8 +393,9 @@ describe('useCan', () => {
 
       expect(result.current.canOnAuthored('case:delete', CALLER)).toBe(false)
       // Not "you can only delete cases you created" — that would tell a Viewer to go and write
-      // one, which would not help.
-      expect(result.current.reasonOnAuthored('case:delete', CALLER)).toMatch(/don't have permission/)
+      // one, which would not help. The other sentence is §8.2's ordinary one, matched on its
+      // shape for `reasonOnScope`'s reason one describe block up.
+      expect(result.current.reasonOnAuthored('case:delete', CALLER)).toMatch(/^Needs .*, held by /)
     })
 
     it('with no session, an OWN grant matches nothing', async () => {

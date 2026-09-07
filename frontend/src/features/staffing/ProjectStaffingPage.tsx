@@ -98,10 +98,6 @@ export function ProjectStaffingPage() {
         testId={`${TEST_ID}.Header`}
         title="Team"
         documentTitle={project.data ? `Team · ${project.data.name}` : 'Team'}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Team' },
-        ]}
         subtitle={
           window ?
             `This project · ${formatDate(window.from)} – ${formatDate(window.to)}`

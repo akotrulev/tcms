@@ -1,7 +1,7 @@
 import { Bot, ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { useCompanyAuditEvents, useProject, useProjectAuditEvents } from '../../api/queries';
+import { useCompanyAuditEvents, useProjectAuditEvents } from '../../api/queries';
 import type { AuditEvent } from '../../api/types';
 import { groupByBulkOperation, type AuditGroup } from './auditGrouping';
 import { useCan, useCanInCompany } from '../../auth/useCan';
@@ -72,7 +72,11 @@ export function AuditLogPage() {
   const pending = scope === 'project' ? projectGate.pending : companyGate.pending;
 
   // Undefined on `/admin/audit`, where the hook's own `enabled` gate keeps it from firing.
-  const project = useProject(projectId);
+  /*
+    ~~`useProject`, for the project's name in this screen's own breadcrumb.~~ →
+    **superseded (021 R2): the shell names the project**, from the read it already makes
+    for the rail's switcher — so this page's copy of that read went with its trail.
+  */
 
   // Exactly one of these ever runs: the other's `enabled` is false for the whole life of the
   // screen, because `scope` is decided by the route. Both hooks are called unconditionally —
@@ -104,16 +108,6 @@ export function AuditLogPage() {
         testId="Audit.Header"
         title={title}
         documentTitle={scope === 'project' ? 'Project audit' : 'Company audit'}
-        crumbs={
-          scope === 'project'
-            ? [
-                { label: 'Projects', to: '/projects' },
-                { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-                { label: 'Settings', to: `/projects/${projectId}/settings` },
-                { label: 'Project audit' },
-              ]
-            : [{ label: 'Administration' }, { label: 'Company audit' }]
-        }
         subtitle={
           scope === 'project'
             ? 'Every recorded act in this project, newest first. Company-wide acts appear on the company trail.'

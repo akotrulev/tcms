@@ -68,7 +68,7 @@ describe('the empty roadmap explains itself', () => {
       const action = within(screen.getByTestId('Roadmap.Content.Empty')).getByTestId(
         'Roadmap.Empty.New',
       )
-      expect(action).toHaveTextContent('Create a release')
+      expect(action).toHaveTextContent('New release')
       expect(action.closest('a')).toHaveAttribute('href', `/projects/${PROJECT}/releases/new`)
     })
   })

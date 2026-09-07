@@ -73,11 +73,6 @@ export function ReportViewPage() {
         testId={`${TestId}.Header`}
         title={title}
         documentTitle={project.data ? `${title} · ${project.data.name}` : title}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Test reports', to: `/projects/${projectId}/reports` },
-          { label: title },
-        ]}
         subtitle="What you see here is the model the exported file was rendered from — the same numbers, the same header."
         actions={
           job.data ? (

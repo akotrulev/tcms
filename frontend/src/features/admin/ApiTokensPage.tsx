@@ -122,7 +122,6 @@ export function ApiTokensPage() {
         testId={`${TestId}.Header`}
         title="API tokens"
         documentTitle="API tokens"
-        crumbs={[{ label: 'Administration' }, { label: 'API tokens' }]}
         subtitle="Credentials a CI job presents to post results into this instance. Each one carries a role and belongs to the person who issued it."
         actions={
           /*

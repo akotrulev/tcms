@@ -1,5 +1,12 @@
 /** Who the caller is, how they got in, and what they may do. */
-import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+  type UseMutationResult,
+  type UseQueryResult,
+} from '@tanstack/react-query';
 import { api, qs } from '../client';
 import type {
   AuthResult,
@@ -89,6 +96,36 @@ export function useMyPermissions(projectId: string | undefined): UseQueryResult<
     enabled: !!projectId,
     staleTime: 5 * 60_000,
     meta: { handled: true },
+  });
+}
+
+/**
+ * {@link useMyPermissions} asked of **several projects at once** — `/account/access` (021 T7).
+ *
+ * That page's whole subject is why the shell looks different for two colleagues, and the answer is
+ * per project: a caller is a Test Engineer on one and a Viewer on another, so a hidden settings
+ * card is hidden on three projects and shown on a fourth. One project's answer cannot state that.
+ *
+ * `useQueries` rather than a loop of `useMyPermissions`, because the project list is data and the
+ * rules of hooks are not — a caller gaining a project grant between two renders would otherwise
+ * change the number of hooks this component calls.
+ *
+ * **The same query key, options and `meta` as the single-project hook**, deliberately: every one of
+ * these is already in the cache for the active project, and a second spelling of the same request
+ * would refetch it under a key nothing else invalidates. The `staleTime` matters here more than
+ * anywhere — this is the one screen that asks the question N times.
+ */
+export function useMyPermissionsAcross(
+  projectIds: readonly string[],
+): UseQueryResult<EffectivePermissions>[] {
+  return useQueries({
+    queries: projectIds.map((projectId) => ({
+      queryKey: keys.permissions(projectId),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        api.get<EffectivePermissions>(`/me/permissions${qs({ projectId })}`, { signal }),
+      staleTime: 5 * 60_000,
+      meta: { handled: true },
+    })),
   });
 }
 

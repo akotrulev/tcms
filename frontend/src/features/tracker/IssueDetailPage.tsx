@@ -109,7 +109,24 @@ function IssueBody({ issue }: { issue: ReturnType<typeof useIssue>['data'] & {} 
         className="mb-4 flex flex-wrap items-start gap-3 border-b border-line pb-3"
       >
         <div className="min-w-0 flex-1">
-          <nav aria-label="Breadcrumb" className="mb-1.5 flex flex-wrap items-center gap-2 text-[12.5px]">
+          {/*
+            ~~The breadcrumb trail.~~ → **superseded (021 R2): the shell owns the trail**, and what
+            is left here is the half the shell cannot build.
+
+            `/issues/:key` carries no project segment, so `routeMeta.ts` can name the issue and
+            nothing above it: which project this issue belongs to, and which epic or story it hangs
+            off, are both in the ISSUE, which the header has not read. So this row survives as what
+            it uniquely is — the way back into the project's board, and the ancestor above this
+            card — and it stops repeating the key the trail already shows and the `<h1>` says next.
+
+            Labelled `Issue ancestors` rather than `Breadcrumb` deliberately: two `navigation`
+            landmarks both called Breadcrumb, one in the header and one here, is a screen reader
+            being told the same region exists twice.
+          */}
+          <nav
+            aria-label="Issue ancestors"
+            className="mb-1.5 flex flex-wrap items-center gap-2 text-[12.5px]"
+          >
             <RouterLink
               to={`/projects/${issue.projectId}/work`}
               className="text-ink-3 no-underline hover:text-ink-2"
@@ -134,8 +151,6 @@ function IssueBody({ issue }: { issue: ReturnType<typeof useIssue>['data'] & {} 
                 </RouterLink>
               </>
             )}
-            <span className="text-ink-4">/</span>
-            <b className="font-medium text-ink-2">{issue.key}</b>
           </nav>
 
           <div className="mb-1.5 flex flex-wrap items-center gap-2">

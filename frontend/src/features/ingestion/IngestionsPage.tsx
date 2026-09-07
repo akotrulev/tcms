@@ -73,11 +73,6 @@ export function IngestionsPage() {
         testId="Ingestions.Header"
         title="CI results"
         documentTitle={project.data ? `CI results · ${project.data.name}` : 'CI results'}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Test runs', to: `/projects/${projectId}/runs` },
-          { label: 'CI results' },
-        ]}
         subtitle="Reports your pipeline has posted, and what each one matched. A test that matched nothing recorded no result — bind it to a case here and every later build finds it."
       />
 

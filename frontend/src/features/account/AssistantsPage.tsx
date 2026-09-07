@@ -41,7 +41,6 @@ export function AssistantsPage() {
         testId={`${TEST_ID}.Header`}
         title="AI assistants"
         documentTitle="My AI assistants"
-        crumbs={[{ label: 'My profile' }, { label: 'AI assistants' }]}
         subtitle="An assistant connects with a credential of its own that carries your identity and your permissions — never more."
         actions={
           <Button variant="primary" asChild data-testid={`${TEST_ID}.Connect`}>

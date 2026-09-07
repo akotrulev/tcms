@@ -81,11 +81,6 @@ export function ReviewSettingsPage() {
         testId="ReviewSettings.Header"
         title="Review policy"
         documentTitle={project.data ? `Review policy · ${project.data.name}` : 'Review policy'}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Settings', to: `/projects/${projectId}/settings` },
-          { label: 'Review policy' },
-        ]}
         subtitle="Whether cases, suites and plans go through review before they count as authoritative — and what approval requires when they do. Review is off by default."
       />
 

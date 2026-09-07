@@ -142,7 +142,7 @@ describe('the empty state is an acceptance criterion, not a caveat', () => {
 
     const empty = await screen.findByTestId('Releases.Content.Empty')
     expect(empty).toHaveTextContent('Nothing is migrated into releases when this module ships')
-    expect(within(empty).getByTestId('Releases.Empty.New')).toHaveTextContent('Create a release')
+    expect(within(empty).getByTestId('Releases.Empty.New')).toHaveTextContent('New release')
   })
 
   it('disables the create for a caller without `release:manage`, rather than hiding it', async () => {

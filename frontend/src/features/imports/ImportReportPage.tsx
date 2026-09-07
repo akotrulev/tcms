@@ -89,11 +89,6 @@ export function ImportReportPage() {
               testId={`${TEST_ID}.Header`}
               title={`Import report · ${current.sourceProjectKey} → ${projectName}`}
               documentTitle={`Import ${current.sourceProjectKey}`}
-              crumbs={[
-                { label: projectName, to: `/projects/${projectId}` },
-                { label: 'Imports', to: `/projects/${projectId}/imports` },
-                { label: 'Report' },
-              ]}
               subtitle="Kept indefinitely, and reachable from this project's Imports list long after the migration."
               actions={
                 <>

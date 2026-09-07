@@ -125,11 +125,6 @@ export function NotificationSettingsPage() {
         testId={`${TestId}.Header`}
         title="Notifications"
         documentTitle={project.data ? `Notifications · ${project.data.name}` : 'Notifications'}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Settings', to: `/projects/${projectId}/settings` },
-          { label: 'Notifications' },
-        ]}
         subtitle="Where this project sends word that a run finished or a task landed on somebody. Each channel posts to one place and chooses what it is told about."
         actions={
           /*

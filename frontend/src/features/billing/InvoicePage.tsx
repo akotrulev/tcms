@@ -82,11 +82,6 @@ export function InvoicePage() {
         testId={`${TEST_ID}.Header`}
         title={titleOf(loaded)}
         documentTitle={loaded?.invoice.number ?? 'Draft invoice'}
-        crumbs={[
-          { label: 'Company' },
-          { label: 'Billing', to: '/billing' },
-          { label: loaded?.invoice.number ?? 'Draft invoice' },
-        ]}
         subtitle="Every line is approved time at the rate-card rate. Billing is a report, not a spreadsheet."
         meta={
           loaded && (

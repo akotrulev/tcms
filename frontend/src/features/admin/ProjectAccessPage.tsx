@@ -120,11 +120,6 @@ export function ProjectAccessPage() {
         documentTitle={
           project.data ? `Access & roles · ${project.data.name}` : 'Access and roles'
         }
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Settings', to: `/projects/${projectId}/settings` },
-          { label: 'Access & roles' },
-        ]}
         subtitle="Who holds which role on this project, what it inherits from the company, and what each role can do here."
         actions={
           /*

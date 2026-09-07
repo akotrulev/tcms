@@ -136,11 +136,6 @@ export function ImportWizardPage() {
         title="Import from another tracker"
         documentTitle="Import"
         subtitle="Four steps, and nothing is written before the third one"
-        crumbs={[
-          { label: projectName, to: `/projects/${projectId}` },
-          { label: 'Imports', to: `/projects/${projectId}/imports` },
-          { label: 'New' },
-        ]}
       />
 
       <ImportStepper current={stepNumber} testId={`${TEST_ID}.Steps`} />

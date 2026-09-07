@@ -71,7 +71,6 @@ export function SsoProvidersPage() {
         testId={`${TestId}.Header`}
         title="Single sign-on"
         documentTitle="Single sign-on"
-        crumbs={[{ label: 'Administration' }, { label: 'Single sign-on' }]}
         subtitle="The issuers your people sign in through, and the email domains this company claims. A provider is a live sign-in route only once somebody turns it on."
         actions={
           allowed ? (

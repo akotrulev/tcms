@@ -84,7 +84,6 @@ export function BillingPage() {
         testId={`${TEST_ID}.Header`}
         title="Billing"
         documentTitle="Billing"
-        crumbs={[{ label: 'Company' }, { label: 'Billing' }]}
         subtitle={
           allowed ?
             `Rate cards, budgets and invoices · ${formatMonth(on)}`

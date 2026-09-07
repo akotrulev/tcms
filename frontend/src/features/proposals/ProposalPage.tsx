@@ -2,9 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { useAnnounce } from '../../a11y/useAnnounce';
 import { ApiError } from '../../api/client';
-import { useAcceptProposal, useAiProposal, useProject, useRejectProposal } from '../../api/queries';
+import { useAcceptProposal, useAiProposal, useRejectProposal } from '../../api/queries';
 import type { AiProposal } from '../../api/types';
-import { TopStripSlot } from '../../app/topStripSlot';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import {
@@ -56,7 +55,11 @@ export function ProposalPage() {
   const { projectId = '', proposalId = '' } = useParams();
   const navigate = useNavigate();
 
-  const project = useProject(projectId);
+  /*
+    ~~`useProject`, for the project's name in this screen's own breadcrumb.~~ →
+    **superseded (021 R2): the shell names the project**, from the read it already makes
+    for the rail's switcher — so this page's copy of that read went with its trail.
+  */
   const proposal = useAiProposal(projectId, proposalId);
   const accept = useAcceptProposal(projectId);
   const reject = useRejectProposal(projectId);
@@ -82,27 +85,6 @@ export function ProposalPage() {
   return (
     <div className="flex min-h-full flex-col">
       <title>{`${pageTitle} · TCMS`}</title>
-
-      <TopStripSlot>
-        <nav
-          aria-label="Breadcrumb"
-          data-testid="Proposal.Breadcrumbs"
-          className="mr-auto hidden min-w-0 truncate text-[12.5px] text-ink-3 sm:block"
-        >
-          <RouterLink to={`/projects/${projectId}`} className="hover:underline">
-            {project.data?.name ?? 'Project'}
-          </RouterLink>
-          {' / '}
-          <RouterLink
-            to={`/projects/${projectId}/generated-cases`}
-            className="hover:underline"
-          >
-            Generated cases
-          </RouterLink>
-          {' / '}
-          <span className="font-medium text-ink-2">{proposal.data?.title ?? 'Proposal'}</span>
-        </nav>
-      </TopStripSlot>
 
       <DataRegion
         testId="Proposal.Detail"

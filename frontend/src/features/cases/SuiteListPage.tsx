@@ -52,11 +52,6 @@ export function SuiteListPage() {
         testId="Suites.Header"
         title="Test cases"
         documentTitle={project.data ? `Suites · ${project.data.name}` : 'Suites'}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Test cases', to: `/projects/${projectId}/cases` },
-          { label: 'Suites' },
-        ]}
         subtitle="A suite is a flat, named collection — not a folder in a tree. Its members are the cases filed in it, added to it, or carrying one of its tags."
       />
 

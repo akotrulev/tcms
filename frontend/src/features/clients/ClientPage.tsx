@@ -61,11 +61,6 @@ export function ClientPage() {
         testId={`${TEST_ID}.Header`}
         title={client.data?.client.name ?? 'Client'}
         documentTitle={client.data?.client.name}
-        crumbs={[
-          { label: 'Company' },
-          { label: 'Clients', to: '/clients' },
-          { label: client.data?.client.name ?? 'Client' },
-        ]}
         subtitle={
           client.data === undefined ? undefined : (
             [client.data.client.location, client.data.client.industry].filter(Boolean).join(' · ') ||

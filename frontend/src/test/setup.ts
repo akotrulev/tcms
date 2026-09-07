@@ -96,6 +96,25 @@ beforeEach(() => {
     })
   }
 
+  /**
+   * `Element.scrollIntoView` — a jsdom gap in the same sense as the two around it.
+   *
+   * `cmdk` calls it on the selected row as the highlight moves, which is how a palette keeps the
+   * keyboard selection in view. jsdom implements no layout at all, so the method simply is not
+   * there and the call throws out of a layout effect — taking the whole render down and reporting
+   * itself as a `TypeError` rather than as anything about the palette.
+   *
+   * A no-op is the honest polyfill: there is no viewport to scroll and nothing under test asserts
+   * about scrolling. Guarded like its neighbours, so a jsdom that grows a real one wins.
+   */
+  if (!Element.prototype.scrollIntoView) {
+    Object.defineProperty(Element.prototype, 'scrollIntoView', {
+      writable: true,
+      configurable: true,
+      value: () => {},
+    })
+  }
+
   if (!('ResizeObserver' in window)) {
     Object.defineProperty(window, 'ResizeObserver', {
       writable: true,

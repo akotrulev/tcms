@@ -1,7 +1,7 @@
 import { Link2 } from 'lucide-react';
 import { useState } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
-import { useIngestion, useProject } from '../../api/queries';
+import { useIngestion } from '../../api/queries';
 import type { IngestedOutcome, UnmatchedTest } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
@@ -70,7 +70,11 @@ export function IngestionJobPage() {
   const { projectId = '', jobId = '' } = useParams();
   const [binding, setBinding] = useState<UnmatchedTest | null>(null);
 
-  const project = useProject(projectId);
+  /*
+    ~~`useProject`, for the project's name in this screen's own breadcrumb.~~ →
+    **superseded (021 R2): the shell names the project**, from the read it already makes
+    for the rail's switcher — so this page's copy of that read went with its trail.
+  */
   const job = useIngestion(projectId, jobId);
 
   const posted = job.data ? formatDateTime(job.data.createdAt) : '';
@@ -81,11 +85,6 @@ export function IngestionJobPage() {
         testId="Ingestion.Header"
         title={posted ? `Report posted ${posted}` : 'Posted report'}
         documentTitle={posted ? `Ingestion · ${posted}` : 'Ingestion'}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'CI results', to: `/projects/${projectId}/ingestions` },
-          { label: 'Report' },
-        ]}
         subtitle="What this report matched, and the tests it could not place. Binding a test name here makes every later build find it."
         meta={
           job.data ? (

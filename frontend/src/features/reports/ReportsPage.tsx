@@ -107,10 +107,6 @@ export function ReportsPage() {
         testId="Reports.Header"
         title="Test reports"
         documentTitle={project.data ? `Test reports · ${project.data.name}` : 'Test reports'}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Test reports' },
-        ]}
         subtitle="Generated in the background and downloaded as a file. Every report carries a header saying what it covers, who asked for it and when."
         actions={
           <PermissionGate projectId={projectId} permission="report:export">

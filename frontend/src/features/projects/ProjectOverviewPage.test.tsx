@@ -316,7 +316,7 @@ describe('A project with no releases — solo-overview.html\u2019s rendering, un
     )
   })
 
-  it('disables Create a release for a caller without release:manage, and says why', async () => {
+  it('disables New release for a caller without release:manage, and says why', async () => {
     // §31 disable-don't-hide. The reason is now the CALLER'S KEY rather than the module's absence,
     // which is the one thing 013 T6 changed about this button.
     mockReads()
@@ -330,7 +330,7 @@ describe('A project with no releases — solo-overview.html\u2019s rendering, un
     })
   })
 
-  it('links Create a release for a caller who holds release:manage', async () => {
+  it('links New release for a caller who holds release:manage', async () => {
     mockReads({ permissions: ['project:read', 'issue:create', 'release:manage'] })
     renderPage()
 

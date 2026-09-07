@@ -84,10 +84,6 @@ export function ConnectAssistantPage() {
         testId={`${TEST_ID}.Header`}
         title="Connect an AI assistant"
         documentTitle="Connect an assistant"
-        crumbs={[
-          { label: 'AI assistants', to: '/account/assistants' },
-          { label: 'Connect' },
-        ]}
         subtitle="Name it, scope it, take the snippet. Everything after that happens on your own machine."
         actions={
           <Button asChild data-testid={`${TEST_ID}.Cancel`}>

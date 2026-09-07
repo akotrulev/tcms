@@ -9,7 +9,6 @@ import {
   LogOut,
   Menu as MenuIcon,
   Moon,
-  Search,
   Shield,
   Sun,
   Timer,
@@ -33,6 +32,8 @@ import { RouteErrorBoundary } from '../components/ErrorBoundaries';
 import { SkipToContentLink } from '../components/SkipToContentLink';
 import { useAuth } from '../auth/useAuth';
 import { safeStorage } from '../lib/safeStorage';
+import { CommandPalette } from './CommandPalette';
+import { ShellBreadcrumbs } from './ShellBreadcrumbs';
 import { TopStripProvider, TopStripTarget } from './topStripSlot';
 import { cn } from '../lib/cn';
 import {
@@ -55,7 +56,6 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Input,
   Select,
   SelectContent,
   SelectItem,
@@ -602,70 +602,6 @@ function ProjectSwitcher({
 }
 
 /**
- * §249's cross-project case search, as a **field** rather than a link to one.
- *
- * ~~A rail entry beside `My work`, ungated.~~ → **superseded 2026-08-29:** the entry was a link to
- * a screen whose first act was to ask for a query, so the reader paid a navigation to reach an
- * empty input. The field is that input, hoisted one level: type, press Enter, land on the results.
- *
- * Two properties of the old entry are kept deliberately, because both were argued and neither
- * changed:
- *
- * - **No permission gate at all** — every company member may search, and a member holding no
- *   project grants gets an honest empty result rather than a refusal. Gating it would need a key,
- *   and a key invented for this would be seeded to nobody.
- * - **It is not scoped by the switcher beside it.** The search's bound is the caller's project
- *   visibility, computed server-side per request — not knowing which project holds the case is the
- *   entire premise of the screen. That is exactly why it does not pass `projectId`, and why the two
- *   controls sit side by side rather than the search sitting inside the project frame.
- *
- * It is a `<form>` with a submit, not an input that navigates per keystroke: routing on every
- * character would push a history entry per letter and re-run the query behind the reader's typing.
- * `CaseSearchPage` owns the live filtering once you are there — this only has to get you there with
- * the query you meant.
- */
-function HeaderCaseSearch() {
-  const navigate = useNavigate();
-  const [query, setQuery] = useState('');
-
-  return (
-    <form
-      role="search"
-      className="flex min-w-0 flex-1 items-center"
-      onSubmit={(event) => {
-        event.preventDefault();
-        const q = query.trim();
-        // `URLSearchParams` rather than `encodeURIComponent`, so the query this writes is
-        // byte-identical to the one `CaseSearchPage` writes back through `useSearchParams` — two
-        // spellings of the same search would show as two history entries and two cache keys.
-        navigate(q ? `/search?${new URLSearchParams({ q })}` : '/search');
-      }}
-    >
-      <div className="relative w-full max-w-[420px]">
-        <Search
-          aria-hidden
-          className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-ink-4"
-        />
-        <Input
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          /*
-            The accessible name says what is searched, because "Search" alone in a product with a
-            case list, a document tree and a board is three different promises. The placeholder is
-            not the name — it disappears the moment anyone types.
-          */
-          aria-label="Search test cases"
-          placeholder="Search test cases"
-          data-testid="TopBar.CaseSearch"
-          className="h-8 pl-8"
-        />
-      </div>
-    </form>
-  );
-}
-
-/**
  * The active item is marked three ways at once — an indicator bar, heavier weight, and
  * `aria-current="page"` — so the current location is never communicated by colour alone.
  */
@@ -883,6 +819,13 @@ function CompanySlot() {
 function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
   const { user, logout } = useAuth();
   const { resolved, setMode } = useColorScheme();
+  /*
+    The same resolution the rail's switcher makes, from the same hook, so the breadcrumb's project
+    segment and the switcher can never name two different projects. Read here rather than passed
+    down: `useActiveProject` is a read of two cached things and the shell already made both.
+  */
+  const { projects, activeProjectId } = useActiveProject();
+  const activeProject = projects.find((project) => project.id === activeProjectId);
 
   /**
    * The toggle must reflect the scheme the user is *looking at*, not the stored setting.
@@ -919,7 +862,14 @@ function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
         rail cannot, which is where in the product this particular screen sits.
       */}
       <CompanySlot />
-      <HeaderCaseSearch />
+      {/*
+        The trail sits to the right of the company slot, so the header reads outward-in: company,
+        project, screen (021 §3). It is `shrink`, and the palette and the page slot are not — a
+        header that must lose something at 900px loses the shortcut back up, never the control the
+        page needs.
+      */}
+      <ShellBreadcrumbs projectKey={activeProject?.key} projectName={activeProject?.name} />
+      <CommandPalette projectId={activeProjectId} />
 
       {/*
         Where a page puts its own commit bar — the case editor's Save sits here rather than in a
@@ -1047,10 +997,26 @@ function TopBar({ onOpenNav }: { onOpenNav: () => void }) {
             place in the *product*, and its zone tells the reader whether the project switcher
             changes what they are looking at. Help is about the product rather than a place in it.
 
-            §4 lists `Your access` and `Keyboard shortcuts` above this row. Neither is here yet:
-            `/account/access` is a route T7 builds, and a menu entry pointing at a route that does
-            not exist is worse than an absent one — it costs a click and lands on the 404.
+            §4 lists two rows above this one. `Your access` is here since T7 built the route it
+            points at. **`Keyboard shortcuts` is still not**, and the condition is the one this note
+            has always stated rather than a rule being waived: there is no shortcuts page and no
+            help section to anchor — T8 writes the help sections — and a menu entry pointing at a
+            route that does not exist is worse than an absent one, because it costs a click and
+            lands on the 404. The keys the palette accepts are drawn along its own footer in the
+            meantime, which is where somebody looking for them is already standing.
           */}
+          {/*
+            The answer to "why is your rail different from mine?" (§4, brief finding 15). Nine
+            entries are hidden rather than disabled, each for a recorded reason, and until this
+            page nothing on screen said so. It restores nothing and discloses nothing the
+            permissions exist to protect — it names the entries and who holds the key.
+          */}
+          <DropdownMenuItem asChild>
+            <RouterLink to="/account/access" data-testid="TopBar.AccessLink">
+              <Shield className="size-4" />
+              <span>Your access</span>
+            </RouterLink>
+          </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <RouterLink to="/help" data-testid="TopBar.HelpLink">
               <HelpCircle className="size-4" />

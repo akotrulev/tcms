@@ -81,11 +81,6 @@ export function ClassificationSettingsPage() {
         documentTitle={
           project.data ? `Classification · ${project.data.name}` : 'Classification'
         }
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Settings', to: `/projects/${projectId}/settings` },
-          { label: 'Classification' },
-        ]}
         subtitle="The axes a test case is classified on. Feature belongs to this project; Test Type, Test Level and Execution Phase are shared by every project in the company."
       />
 

@@ -82,11 +82,6 @@ export function ProposalsPage() {
         testId="Proposals.Header"
         title="Proposals"
         documentTitle={project.data ? `Proposals · ${project.data.name}` : 'Proposals'}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Test cases', to: `/projects/${projectId}/cases` },
-          { label: 'Proposals' },
-        ]}
         subtitle="Cases an agent has proposed. Nothing here is in the repository yet — accepting one creates it exactly as writing it by hand would, with you as its author."
       />
 

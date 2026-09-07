@@ -13,7 +13,7 @@ import type {
   TestExecution,
   TestExecutionSummary,
 } from '../../api/types';
-import { useExecution, useProject, useRun, useStatuses, useSubmitResult } from '../../api/queries';
+import { useExecution, useRun, useStatuses, useSubmitResult } from '../../api/queries';
 import { HeaderActions } from '../../app/HeaderActions';
 import { TopStripSlot } from '../../app/topStripSlot';
 import { DataRegion } from '../../components/DataRegion';
@@ -101,7 +101,11 @@ import { suggestedVerdict } from './suggestedVerdict';
 export function ExecutionPage() {
   const { projectId = '', runId = '', executionId = '' } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const project = useProject(projectId);
+  /*
+    ~~`useProject`, for the project's name in this screen's own breadcrumb.~~ →
+    **superseded (021 R2): the shell names the project**, from the read it already makes
+    for the rail's switcher — so this page's copy of that read went with its trail.
+  */
   const execution = useExecution(projectId, runId, executionId);
   const statuses = useStatuses(projectId);
 
@@ -158,31 +162,11 @@ export function ExecutionPage() {
       <title>{`${pageTitle} · TCMS`}</title>
 
       {/*
-        THE CRUMB AND THE LENS ARE CHROME AND STAY UP. They render outside the region on purpose:
-        a failed or slow read must not take the only non-rail way back to the run with it, and a
-        tester whose case failed to load still needs the layout switch — the resilience rule that
-        a failure is scoped to the response-dependent subtree.
+        ~~THE CRUMB AND THE LENS ARE CHROME AND STAY UP~~ → **the crumb left (021 R2)** and the
+        rule it was an instance of is unchanged for what remains: the lens renders outside the
+        region on purpose, because a tester whose case failed to load still needs the layout
+        switch. The trail is the shell's now and is outside the page entirely.
       */}
-      <TopStripSlot>
-        <nav
-          aria-label="Breadcrumb"
-          data-testid="Execution.Breadcrumbs"
-          className="mr-auto hidden min-w-0 truncate text-[12.5px] text-ink-3 sm:block"
-        >
-          <RouterLink to={`/projects/${projectId}`} className="hover:underline">
-            {project.data?.name ?? 'Project'}
-          </RouterLink>
-          {' / '}
-          <RouterLink to={`/projects/${projectId}/runs`} className="hover:underline">
-            Test runs
-          </RouterLink>
-          {' / '}
-          <RouterLink to={`/projects/${projectId}/runs/${runId}`} className="hover:underline">
-            <span className="font-medium text-ink-2">{run.data?.key ?? 'Run'}</span>
-          </RouterLink>
-        </nav>
-      </TopStripSlot>
-
       <TopStripSlot>
         {/*
           One row, and it does not wrap. `flex-wrap` inside a header the shell fixes at 52px does
@@ -195,52 +179,61 @@ export function ExecutionPage() {
           the count is the thing they can also read from the queue.
         */}
         <HeaderActions data-testid="Execution.TopStrip">
-          {execution.data && (
-            <>
-              {arrivalAt >= 0 && (
-                <span className="hidden min-w-0 truncate text-[12px] text-ink-4 md:block">
-                  Case <b className="font-mono font-medium text-ink-2">{arrivalAt + 1}</b> of{' '}
-                  <b className="font-mono font-medium text-ink-2">{arrivalQueue.length}</b>
-                </span>
-              )}
-              {/*
-                An execution has no display key of its own (plan §6t) — it is identified by the
-                case it ran and the run it belongs to. So the case key IS the subject identifier
-                here, and it links to the case. Showing "TE_1401" told a tester nothing; "TC-3"
-                is what they recognise and what they'd paste into a message.
-              */}
-              <RouterLink
-                to={`/projects/${projectId}/cases/${execution.data.caseId}`}
-                data-testid="Execution.CaseLink"
-              >
-                <Identifier variant="strong">{execution.data.caseKey}</Identifier>
-              </RouterLink>
-              <span
-                className="hidden md:inline"
-                title="This execution is recorded against this version of the case. Later edits do not change it."
-              >
-                <Identifier variant="muted">v{execution.data.caseVersionNo}</Identifier>
-              </span>
-              {execution.data.status?.kind && <StatusChip kind={execution.data.status.kind} />}
-              {execution.data.quarantined && <QuarantineChip testId="Execution.Quarantined" />}
-            </>
-          )}
           {/*
-            How long this run has been open — the render's top strip carries it, and a tester who
-            has been on a run for two hours reads it differently from one ten minutes in.
-
-            Driven by the RUN's `startedAt`, never by when this tab opened: a counter that starts on
-            mount measures the tab, and two testers on the same run would read two different
-            elapsed times for it.
-
-            The render also draws **Pause run** beside this, and it is deliberately not here: this
-            product's run lifecycle is `NOT_STARTED → IN_PROGRESS → COMPLETED → ABORTED` and has no
-            paused state, so the control would either lie or abort the run under a gentler word.
-            That divergence is recorded in the design language rather than invented in the client.
+            **One cluster, not five controls** — which is what `HeaderActions`' two-child cap is
+            asking for (021 §8.2). Everything up to and including the elapsed timer is one
+            *indicator*: it states which case, which version, how it stands and how long the run has
+            been open, and none of it is an action. The layout switch is the strip's only control.
+            Grouping them says that, and it is also what the cap counts.
           */}
-          {run.data?.startedAt && !isRunClosed(run.data.status) && (
-            <ElapsedSince startedAt={run.data.startedAt} />
-          )}
+          <span className="flex min-w-0 items-center gap-2">
+            {execution.data && (
+              <>
+                {arrivalAt >= 0 && (
+                  <span className="hidden min-w-0 truncate text-[12px] text-ink-4 md:block">
+                    Case <b className="font-mono font-medium text-ink-2">{arrivalAt + 1}</b> of{' '}
+                    <b className="font-mono font-medium text-ink-2">{arrivalQueue.length}</b>
+                  </span>
+                )}
+                {/*
+                  An execution has no display key of its own (plan §6t) — it is identified by the
+                  case it ran and the run it belongs to. So the case key IS the subject identifier
+                  here, and it links to the case. Showing "TE_1401" told a tester nothing; "TC-3"
+                  is what they recognise and what they'd paste into a message.
+                */}
+                <RouterLink
+                  to={`/projects/${projectId}/cases/${execution.data.caseId}`}
+                  data-testid="Execution.CaseLink"
+                >
+                  <Identifier variant="strong">{execution.data.caseKey}</Identifier>
+                </RouterLink>
+                <span
+                  className="hidden md:inline"
+                  title="This execution is recorded against this version of the case. Later edits do not change it."
+                >
+                  <Identifier variant="muted">v{execution.data.caseVersionNo}</Identifier>
+                </span>
+                {execution.data.status?.kind && <StatusChip kind={execution.data.status.kind} />}
+                {execution.data.quarantined && <QuarantineChip testId="Execution.Quarantined" />}
+              </>
+            )}
+            {/*
+              How long this run has been open — the render's top strip carries it, and a tester who
+              has been on a run for two hours reads it differently from one ten minutes in.
+
+              Driven by the RUN's `startedAt`, never by when this tab opened: a counter that starts on
+              mount measures the tab, and two testers on the same run would read two different
+              elapsed times for it.
+
+              The render also draws **Pause run** beside this, and it is deliberately not here: this
+              product's run lifecycle is `NOT_STARTED → IN_PROGRESS → COMPLETED → ABORTED` and has no
+              paused state, so the control would either lie or abort the run under a gentler word.
+              That divergence is recorded in the design language rather than invented in the client.
+            */}
+            {run.data?.startedAt && !isRunClosed(run.data.status) && (
+              <ElapsedSince startedAt={run.data.startedAt} />
+            )}
+          </span>
           <ModeSwitch mode={mode} onChange={setMode} />
         </HeaderActions>
       </TopStripSlot>

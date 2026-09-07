@@ -80,10 +80,6 @@ export function SettingsLandingPage() {
         testId="Settings.Header"
         title="Settings"
         documentTitle={project.data ? `Settings · ${project.data.name}` : 'Settings'}
-        crumbs={[
-          { label: project.data?.name ?? 'Project', to: `/projects/${projectId}` },
-          { label: 'Settings' },
-        ]}
         subtitle="What is configured in this project, and by whom."
       />
 

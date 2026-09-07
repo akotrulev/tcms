@@ -6,7 +6,7 @@ import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
 import { useAnnounce } from '../../a11y/useAnnounce';
 import { ApiError } from '../../api/client';
-import { useDocPage, useProject, useUpdateDocPage } from '../../api/queries';
+import { useDocPage, useUpdateDocPage } from '../../api/queries';
 import { useUnsavedWork } from '../../auth/useSessionRecovery';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
@@ -144,7 +144,11 @@ const GUTTER_LABEL = {
 
 export function DocPageEditorPage() {
   const { projectId = '', pageId = '' } = useParams();
-  const project = useProject(projectId);
+  /*
+    ~~`useProject`, for the project's name in this screen's own breadcrumb.~~ →
+    **superseded (021 R2): the shell names the project**, from the read it already makes
+    for the rail's switcher — so this page's copy of that read went with its trail.
+  */
   const page = useDocPage(projectId, pageId);
 
   /*
@@ -160,31 +164,6 @@ export function DocPageEditorPage() {
   return (
     <div>
       <title>{page.data ? `Edit · ${page.data.title} · TCMS` : 'Edit page · TCMS'}</title>
-
-      <nav aria-label="Breadcrumb" className="mb-3 text-[12.5px] text-ink-3">
-        <RouterLink
-          to={`/projects/${projectId}`}
-          className="text-ink-3 no-underline hover:text-ink-2"
-        >
-          {project.data?.name ?? 'Project'}
-        </RouterLink>
-        <span className="px-1.5 text-ink-4">/</span>
-        <RouterLink
-          to={`/projects/${projectId}/docs`}
-          className="text-ink-3 no-underline hover:text-ink-2"
-        >
-          Documentation
-        </RouterLink>
-        <span className="px-1.5 text-ink-4">/</span>
-        <RouterLink
-          to={`/projects/${projectId}/docs/${pageId}`}
-          className="text-ink-3 no-underline hover:text-ink-2"
-        >
-          {page.data?.title ?? 'Page'}
-        </RouterLink>
-        <span className="px-1.5 text-ink-4">/</span>
-        <b className="font-medium text-ink-2">Edit</b>
-      </nav>
 
       <DataRegion
         testId={`${TestIdPrefix}.Region`}

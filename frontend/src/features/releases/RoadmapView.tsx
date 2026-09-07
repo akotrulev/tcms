@@ -91,10 +91,10 @@ export function RoadmapView({
                 >
                   {allowed ? (
                     <RouterLink to={`/projects/${projectId}/releases/new`}>
-                      Create a release
+                      New release
                     </RouterLink>
                   ) : (
-                    <span>Create a release</span>
+                    <span>New release</span>
                   )}
                 </Button>
               )}
