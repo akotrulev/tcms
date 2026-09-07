@@ -12,6 +12,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { PROCESSES, processCatalogue, processGuideFor, processNamed } from './processes.js';
+import { specRows } from '../test/roleMatrix.js';
 
 /**
  * The tools the processes reach, as of the surface's 44 (45 once `tcms_process` lands).
@@ -62,6 +63,21 @@ describe('the process catalogue', () => {
         // A step spells the call, not just the tool — `tcms_open_doc_page {as: "markdown"}`.
         const name = step.tool.split(/[\s{]/)[0]!;
         expect(TOOLS, `${process.name}: ${step.tool}`).toContain(name);
+      }
+    }
+  });
+
+  it('names only permissions the roles spec catalogues', () => {
+    // A step's `permission` is the sentence an agent hands to an administrator when it is refused,
+    // so a key the catalogue does not hold is an ask nobody can grant. The first cut named
+    // `report:generate` — a plausible spelling of a key that has never existed (the report tool's
+    // arms cost `report:view` and `report:export`) — and nothing here read it until this did.
+    const catalogued = new Set(specRows().flatMap((row) => row.keys));
+    for (const process of PROCESSES) {
+      for (const step of process.steps) {
+        if (!step.permission) continue;
+        expect(catalogued, `${process.name}: '${step.permission}' is not in §A3`)
+          .toContain(step.permission);
       }
     }
   });

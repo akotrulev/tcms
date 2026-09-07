@@ -300,14 +300,14 @@ export const PROCESSES: readonly ProcessSpec[] = [
       {
         does: 'Ask what this deployment can generate.',
         tool: 'tcms_report {action: "capabilities"}',
-        permission: 'report:generate',
+        permission: 'report:view',
         check: 'The types and formats offered. Asking for one that is not there is a refusal you '
           + 'could have read.',
       },
       {
         does: 'Generate the coverage matrix, poll it, and return the URL.',
         tool: 'tcms_report {action: "generate"} then {action: "poll"}',
-        permission: 'report:generate',
+        permission: 'report:export',
         check: 'The job reaches a terminal state before you answer. A queued job is not a report.',
       },
     ],

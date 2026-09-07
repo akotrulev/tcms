@@ -778,19 +778,28 @@ contract, which is the contract's shape and not a handler's answer.
 
 ## AI Agent Access (MCP Server)
 
-An MCP server exposing ~~**26 tools**~~ → **28**, over stdio or HTTP, so an AI assistant can work
-with TCMS directly.
+An MCP server exposing ~~**26 tools**~~ ~~→ **28**~~ → **45** (2026-09-07; the help guide's MCP
+section is the pinned copy — `guideCopies.test.ts` compares it to the registry, and this paragraph
+went stale at 28 while the registry grew to 44), over stdio or HTTP, so an AI assistant can work with
+TCMS directly.
 
-*Orientation (3)* — `tcms_whoami` · `tcms_orient` (project summary with vocabularies and
-capabilities) · `tcms_shape` (what a payload of a given kind must look like, reaching no instance)
+*Orientation (4)* — `tcms_whoami` · `tcms_orient` (project summary with vocabularies and
+capabilities) · `tcms_shape` (what a payload of a given kind must look like, reaching no instance) ·
+`tcms_process` (the ordered steps of a job — ingest a specification, cover it, plan it, revise it,
+report on it — also reaching no instance; the same five are MCP **prompts**, `tcms://process/*`
+resources and `tcms process` on the CLI)
 
-*Reading (13)* — `tcms_search_cases` · `tcms_open_case` · `tcms_list_suites` · `tcms_list_library` ·
+*Reading (21)* — `tcms_search_cases` · `tcms_open_case` · `tcms_list_suites` · `tcms_list_library` ·
 `tcms_list_artifacts` · `tcms_doc_tree` · `tcms_open_doc_page` · `tcms_list_plans` · `tcms_open_run` ·
-`tcms_read_issue` · **`tcms_read_board`** · `tcms_list_proposals` · `tcms_triage`
+`tcms_read_issue` · `tcms_read_board` · `tcms_read_release` · `tcms_read_timesheet` ·
+`tcms_read_time_rollup` · `tcms_read_staffing` · `tcms_read_client` · `tcms_read_billing` ·
+`tcms_read_rate_card` · `tcms_read_analytics` · `tcms_list_proposals` · `tcms_triage`
 
-*Writing (12)* — `tcms_write_case` · `tcms_write_suite` · `tcms_write_doc_page` · `tcms_write_plan` ·
+*Writing (20)* — `tcms_write_case` · `tcms_write_suite` · `tcms_write_doc_page` · `tcms_write_plan` ·
 `tcms_write_run` · `tcms_record_result` · `tcms_review_comment` · `tcms_review_verdict` ·
-`tcms_write_issue` · **`tcms_write_backlog`** · `tcms_write_artifact` · `tcms_report`
+`tcms_write_issue` · `tcms_write_backlog` · `tcms_write_release` · `tcms_write_artifact` ·
+`tcms_write_timesheet` · `tcms_approve_timesheet` · `tcms_write_allocation` · `tcms_write_absence` ·
+`tcms_write_client` · `tcms_write_billing` · `tcms_write_rate_card` · `tcms_report`
 
 **Defining a board is not on this surface**, and neither is creating or deleting one: composing a
 column array blind against a rule the server enforces in a 422 spends an agent's turns on the

@@ -4,7 +4,9 @@ Two client specifications, run through the format in
 [`../../2026-09-07-agent-specification-formatter.md`](../../2026-09-07-agent-specification-formatter.md) §2
 by hand, exactly as the `ingest-spec` process would have a model do it. Each has the page
 (`*.page.md`, valid TCMS spec markdown), the bundle a `tcms spec import` would take (`*.bundle.json`,
-cases and plan with `verifies` written against the page's labels), and below, **the formatter's
+cases and plan with `verifies` written against the page's labels — `page.markdown` is a placeholder
+here for readability; a bundle handed to `tcms spec import` carries the page text itself in that
+string), and below, **the formatter's
 report** — the part of the answer that is not the page: what was dropped, what was reconstructed,
 and what the source itself gets wrong or leaves open. The report is the deliverable a reviewer reads
 first; the page is what they accept.
