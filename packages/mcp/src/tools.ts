@@ -15,6 +15,7 @@
  * spanning two gates is either hidden from a caller who holds one of them or listed for a caller
  * who 403s on half of it.
  */
+import { process } from './process.js';
 import { READ_TOOLS } from './reads.js';
 import { shape } from './shape.js';
 import { whoami } from './whoami.js';
@@ -22,7 +23,7 @@ import { WRITE_TOOLS } from './writes.js';
 
 import type { ToolDefinition } from './tool.js';
 
-export const TOOLS: readonly ToolDefinition[] = [whoami, shape, ...READ_TOOLS, ...WRITE_TOOLS];
+export const TOOLS: readonly ToolDefinition[] = [whoami, shape, process, ...READ_TOOLS, ...WRITE_TOOLS];
 
 export function findTool(name: string): ToolDefinition | undefined {
   return TOOLS.find((tool) => tool.name === name);

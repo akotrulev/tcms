@@ -274,8 +274,12 @@ function scaffolding(): Record<string, { status: number; body?: unknown }> {
 }
 
 function tempJson(name: string, value: unknown): string {
+  return tempText(name, JSON.stringify(value));
+}
+
+function tempText(name: string, contents: string): string {
   const path = join(mkdtempSync(join(tmpdir(), 'tcms-cli-')), name);
-  writeFileSync(path, JSON.stringify(value));
+  writeFileSync(path, contents);
   return path;
 }
 
@@ -1530,5 +1534,275 @@ describe('the story-to-release and story-to-case links', () => {
     // `issue cases` with `set` as the issue key — a GET to `/issues/set/test-cases`.
     expect(await mainWith(['issue', 'cases', 'set', 'ACME-124'], out, stub.fetch)).toBe(EXIT.ok);
     expect(stub.sent.some((request) => request.path.includes('/issues/set/'))).toBe(false);
+  });
+});
+
+describe('the specification formatter at a terminal (022)', () => {
+  const SPEC = '# Charging\n\nThe system charges the card at capture. {#charges}\n';
+  const WRITTEN = docPage({
+    ...PAGE,
+    blocks: [
+      docBlock({ id: 'b-h', blockType: 'heading', level: 1, text: 'Charging' }),
+      docBlock({ id: 'b-1', text: 'The system charges the card at capture.' }),
+    ],
+  });
+
+  it('doc create --from converts the file and prints the label → block id table', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'POST /doc-pages': { status: 201, body: WRITTEN } });
+
+    expect(await mainWith(
+      ['doc', 'create', '--title', 'Payments spec', '--from', tempText('spec.md', SPEC)],
+      out, stub.fetch,
+    )).toBe(EXIT.ok);
+
+    expect(JSON.parse(stub.write('/doc-pages').body ?? '{}')).toEqual({
+      title: 'Payments spec',
+      blocks: [
+        { blockType: 'heading', text: 'Charging', level: 1 },
+        { blockType: 'paragraph', text: 'The system charges the card at capture.' },
+      ],
+    });
+    // The only place the id a `{#charges}` was given can be read — `--verifies` is spelled from
+    // this table and from nowhere else.
+    expect(out.stdout).toContain('charges');
+    expect(out.stdout).toContain('b-1');
+  });
+
+  it('refuses --from and --file together rather than picking one', async () => {
+    const out = recorder();
+    const stub = api(scaffolding());
+
+    expect(await mainWith(
+      ['doc', 'create', '--title', 'Spec', '--from', tempText('spec.md', SPEC),
+        '--file', tempJson('blocks.json', { blocks: [] })],
+      out, stub.fetch,
+    )).toBe(EXIT.usage);
+    expect(out.stderr).toMatch(/not both/);
+  });
+
+  it('names the line when the file is not something this format can carry', async () => {
+    const out = recorder();
+    const stub = api(scaffolding());
+
+    expect(await mainWith(
+      ['doc', 'create', '--title', 'Spec', '--from', tempText('spec.md', '# Charging\n\n> Quoted.\n')],
+      out, stub.fetch,
+    )).toBe(EXIT.usage);
+    expect(out.stderr).toMatch(/Line 3/);
+  });
+
+  it('doc edit --from refuses to drop a block a case claims, and names it', async () => {
+    const out = recorder();
+    const claimed = docPage({
+      ...PAGE,
+      blocks: [docBlock({
+        id: 'b-1',
+        text: 'Refunds settle in 3 days.',
+        links: [{
+          id: 'l-1', sourceType: 'TEST_CASE', sourceId: 'c-9', sourceKey: 'TC-42',
+          sourceTitle: 'Refunds settle', relationship: 'VERIFIES',
+        }],
+      })],
+    });
+    const stub = api({ ...scaffolding(), 'GET /doc-pages/d-1': { status: 200, body: claimed } });
+
+    expect(await mainWith(
+      ['doc', 'edit', 'DOC-3', '--from', tempText('spec.md', SPEC), '--lock-version', '5'],
+      out, stub.fetch,
+    )).toBe(EXIT.usage);
+    expect(out.stderr).toMatch(/TC-42/);
+    // Refused before the request: nothing was sent, so nothing was lost.
+    expect(stub.sent.filter((request) => request.method !== 'GET')).toHaveLength(0);
+  });
+
+  it('doc edit --from --drop-linked proceeds on the caller\'s own lock version', async () => {
+    const out = recorder();
+    const claimed = docPage({
+      ...PAGE,
+      blocks: [docBlock({
+        id: 'b-1',
+        text: 'Refunds settle in 3 days.',
+        links: [{
+          id: 'l-1', sourceType: 'TEST_CASE', sourceId: 'c-9', sourceKey: 'TC-42',
+          sourceTitle: 'Refunds settle', relationship: 'VERIFIES',
+        }],
+      })],
+    });
+    const stub = api({
+      ...scaffolding(),
+      'GET /doc-pages/d-1': { status: 200, body: claimed },
+      'PATCH /doc-pages/d-1': { status: 200, body: WRITTEN },
+    });
+
+    expect(await mainWith(
+      ['doc', 'edit', 'DOC-3', '--from', tempText('spec.md', SPEC), '--drop-linked', '--lock-version', '5'],
+      out, stub.fetch,
+    )).toBe(EXIT.ok);
+    expect(stub.write('/doc-pages/d-1').headers.get('If-Match')).toBe('5');
+  });
+
+  it('doc edit --from demands a lock version, because the text came from an earlier read', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'PATCH /doc-pages/d-1': { status: 200, body: WRITTEN } });
+
+    expect(await mainWith(
+      ['doc', 'edit', 'DOC-3', '--from', tempText('spec.md', SPEC)],
+      out, stub.fetch,
+    )).toBe(EXIT.usage);
+    expect(out.stderr).toMatch(/lock-version/);
+  });
+
+  it('doc show --markdown prints the text alone, every block carrying its id', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'GET /doc-pages/d-1': { status: 200, body: WRITTEN } });
+
+    expect(await mainWith(['doc', 'show', 'DOC-3', '--markdown'], out, stub.fetch)).toBe(EXIT.ok);
+
+    // Redirectable into the file `doc edit --from` takes, which is the whole point of it — so a
+    // heading row above the document would be a heading row in the file.
+    expect(out.stdout).toBe(
+      '# Charging {#b-h}\n\nThe system charges the card at capture. {#b-1}\n',
+    );
+  });
+
+  it('doc adopt links the page to a plan and refuses both flags at once', async () => {
+    const out = recorder();
+    const stub = api({
+      ...scaffolding(),
+      'PUT /plans/tp-1/document': { status: 200, body: { ...PAGE, subjectType: 'TEST_PLAN', subjectId: 'tp-1' } },
+    });
+
+    expect(await mainWith(['doc', 'adopt', 'DOC-3', '--plan', 'TP-1'], out, stub.fetch)).toBe(EXIT.ok);
+    expect(JSON.parse(stub.write('/plans/tp-1/document').body ?? '{}')).toEqual({ pageId: 'd-1' });
+
+    const second = recorder();
+    expect(await mainWith(
+      ['doc', 'adopt', 'DOC-3', '--plan', 'TP-1', '--none'], second, api(scaffolding()).fetch,
+    )).toBe(EXIT.usage);
+    expect(second.stderr).toMatch(/exactly one/);
+  });
+
+  it('case propose --verifies resolves the page key and sends the block id', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'POST /ai-proposals': { status: 201, body: PROPOSAL } });
+
+    expect(await mainWith(
+      ['case', 'propose', '--file', tempJson('case.json', PROPOSABLE), '--verifies', 'DOC-3:b-1'],
+      out, stub.fetch,
+    )).toBe(EXIT.ok);
+
+    expect(JSON.parse(stub.write('/ai-proposals').body ?? '{}')['verifies'])
+      .toEqual([{ pageId: 'd-1', blockId: 'b-1', relationship: 'VERIFIES' }]);
+  });
+
+  it('says what --verifies takes rather than sending a target it could not read', async () => {
+    const out = recorder();
+    const stub = api(scaffolding());
+
+    expect(await mainWith(
+      ['case', 'propose', '--file', tempJson('case.json', PROPOSABLE), '--verifies', 'b-1'],
+      out, stub.fetch,
+    )).toBe(EXIT.usage);
+    expect(out.stderr).toMatch(/PAGE:BLOCK/);
+  });
+
+  it('plan create carries the three flags argv can spell and the three it cannot', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'POST /plans': { status: 201, body: PLAN } });
+
+    expect(await mainWith([
+      'plan', 'create', '--name', 'Payments', '--scope-text', 'Charging and capture.',
+      '--out-of-scope-text', 'The beta flag.', '--tag', 'spec:payments',
+      // The object arrays travel here, because argv has no object at all.
+      '--file', tempJson('plan.json', {
+        exitCriteria: [{ metric: 'pass_rate', op: '>=', value: 95 }],
+        sections: [{ name: 'Charging', tags: ['spec:payments'] }],
+      }),
+    ], out, stub.fetch)).toBe(EXIT.ok);
+
+    expect(JSON.parse(stub.write('/plans').body ?? '{}')).toEqual({
+      name: 'Payments',
+      scopeText: 'Charging and capture.',
+      outOfScopeText: 'The beta flag.',
+      tags: ['spec:payments'],
+      exitCriteria: [{ metric: 'pass_rate', op: '>=', value: 95 }],
+      sections: [{ name: 'Charging', tags: ['spec:payments'] }],
+    });
+  });
+
+  it('spec import writes the page, files each case against its label, plans and adopts', async () => {
+    const out = recorder();
+    const stub = api({
+      ...scaffolding(),
+      'POST /doc-pages': { status: 201, body: WRITTEN },
+      'POST /ai-proposals': { status: 201, body: PROPOSAL },
+      'POST /plans': { status: 201, body: PLAN },
+      'PUT /plans/tp-1/document': { status: 200, body: WRITTEN },
+    });
+
+    expect(await mainWith(['spec', 'import', tempJson('bundle.json', {
+      page: { title: 'Payments spec', markdown: SPEC },
+      cases: [{ ...PROPOSABLE, verifies: ['charges'] }],
+      plan: { name: 'Payments' },
+    })], out, stub.fetch)).toBe(EXIT.ok);
+
+    // The label resolved to the id the PAGE WRITE answered with, which is the one step of the
+    // import that cannot be reordered: a bundle is composed before the page exists.
+    expect(JSON.parse(stub.write('/ai-proposals').body ?? '{}')).toEqual({
+      testCase: PROPOSABLE,
+      verifies: [{ pageId: 'd-1', blockId: 'b-1', relationship: 'VERIFIES' }],
+    });
+    expect(JSON.parse(stub.write('/plans/tp-1/document').body ?? '{}')).toEqual({ pageId: 'd-1' });
+    expect(out.stdout).toMatch(/Nothing here is a test case/);
+  });
+
+  it('derives each create\'s idempotency key from the bundle, so a re-run replays', async () => {
+    const bundle = { page: { title: 'Payments spec', markdown: SPEC }, cases: [] };
+    const keys: string[] = [];
+
+    for (const _attempt of [1, 2]) {
+      const stub = api({ ...scaffolding(), 'POST /doc-pages': { status: 201, body: WRITTEN } });
+      await mainWith(['spec', 'import', tempJson('bundle.json', bundle)], recorder(), stub.fetch);
+      keys.push(stub.write('/doc-pages').headers.get('Idempotency-Key') ?? '');
+    }
+
+    expect(keys[0]).toBe(keys[1]);
+    expect(keys[0]).not.toBe('');
+  });
+
+  it('stops at the first refusal and prints what landed', async () => {
+    const out = recorder();
+    const stub = api({
+      ...scaffolding(),
+      'POST /doc-pages': { status: 201, body: WRITTEN },
+      'POST /ai-proposals': { status: 403, body: undefined },
+    });
+
+    expect(await mainWith(['spec', 'import', tempJson('bundle.json', {
+      page: { title: 'Payments spec', markdown: SPEC },
+      cases: [{ ...PROPOSABLE, verifies: ['charges'] }],
+    })], out, stub.fetch)).toBe(EXIT.denied);
+
+    /*
+      The ledger is what makes a four-gate composite readable rather than merely honest: the caller
+      knows the page landed, which step's 403 it was, and that re-running the same bundle will not
+      write a second page.
+    */
+    expect(out.stderr).toMatch(/What landed: page DOC-3/);
+    expect(out.stderr).toMatch(/replays/);
+  });
+
+  it('names the label a case claims that the page markdown does not have', async () => {
+    const out = recorder();
+    const stub = api({ ...scaffolding(), 'POST /doc-pages': { status: 201, body: WRITTEN } });
+
+    expect(await mainWith(['spec', 'import', tempJson('bundle.json', {
+      page: { title: 'Payments spec', markdown: SPEC },
+      cases: [{ ...PROPOSABLE, verifies: ['refunds'] }],
+    })], out, stub.fetch)).toBe(EXIT.usage);
+
+    expect(out.stderr).toMatch(/refunds/);
+    expect(out.stderr).toMatch(/Labelled blocks: charges/);
   });
 });

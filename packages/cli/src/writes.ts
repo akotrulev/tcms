@@ -23,12 +23,17 @@
  * accept command would 403 on every invocation it could ever make. It is the one arm this surface
  * is structurally incapable of, rather than one it declines to offer.
  */
+import { createHash } from 'node:crypto';
+
 import {
   CASE_SHAPE,
   ISSUE_SHAPE,
   TcmsClientError,
+  anchorsFor,
+  blocksFromMarkdown,
   caseInputFrom,
   classify,
+  docPageInputFrom,
   createIntent,
   editIntent,
   planInputFrom,
@@ -40,6 +45,8 @@ import {
   suiteInputFrom,
   type CreateIntent,
   type EditVersion,
+  type MarkdownOptions,
+  type MarkdownPage,
   type components,
 } from '@tcms/client';
 
@@ -49,6 +56,7 @@ import {
   objectFrom,
   projectOf,
   requireArg,
+  readTextFile,
   requireOption,
   requireSomethingToDo,
   strictNumber,
@@ -397,13 +405,58 @@ function conditionsFrom(
   return completeSet(value)?.map((conditionId) => ({ conditionId }));
 }
 
+/**
+ * One `--verifies DOC-7:<blockId>` target, as the contract's `ProposalLinkInput`.
+ *
+ * `page:block` in one word because argv has no object, and colon-separated because a display key
+ * cannot contain one while a UUID cannot either. A third field would be a third segment; the
+ * relationship is deliberately not spellable here — the CLI files VERIFIES, which is the only
+ * value that is coverage, and the other two are a judgement somebody makes on a screen.
+ */
+async function verifiesFrom(
+  context: CommandContext,
+  projectId: string,
+): Promise<components['schemas']['ProposalLinkInput'][] | undefined> {
+  const values = all(context.options['verifies']).filter((value) => value !== '');
+  if (values.length === 0) return undefined;
+
+  const targets: components['schemas']['ProposalLinkInput'][] = [];
+  for (const value of values) {
+    const at = value.lastIndexOf(':');
+    if (at <= 0 || at === value.length - 1) {
+      throw new UsageError(
+        `--verifies takes PAGE:BLOCK — a page key and one of its block ids, as `
+          + `'DOC-7:0f6a1c2e-7b41-4d90-9d1a-4c1f2b6e33aa'. '${value}' is not that. `
+          + 'tcms doc show DOC-7 prints the block ids.',
+      );
+    }
+    targets.push({
+      pageId: await resolveId({
+        client: context.client, projectId, value: value.slice(0, at), entity: 'DOC_PAGE',
+      }),
+      blockId: value.slice(at + 1),
+      // Sent rather than omitted, `doc link`'s reason exactly: `openapi-typescript` reads a
+      // schema default as "the server always has one", which is true of the stored row and not
+      // of the request. This asks for what an omission would have got.
+      relationship: 'VERIFIES',
+    });
+  }
+  return targets;
+}
+
 const caseProposal: Command = {
   name: 'case propose',
   summary: 'File a generated test case for a person to review',
-  usage: 'tcms case propose --file CASE.json [--verdict V] [--idempotency-key K]',
+  usage:
+    'tcms case propose --file CASE.json [--verdict V] [--verifies DOC-7:BLOCK]...\n'
+    + '                  [--idempotency-key K]\n\n'
+    + '  --verifies\n      A requirement this case claims to verify — a page key and one of its\n'
+    + '      block ids, from `tcms doc show DOC-7`. Repeatable. The links are written when a\n'
+    + '      person ACCEPTS; a block deleted before then is a field error on their screen.',
   options: {
     file: { type: 'string' },
     verdict: { type: 'string' },
+    verifies: { type: 'string', multiple: true },
     'idempotency-key': { type: 'string' },
   },
   write: { kind: 'create', permission: 'case:create' },
@@ -436,6 +489,7 @@ const caseProposal: Command = {
     );
 
     const verdict = text(options['verdict']);
+    const verifies = await verifiesFrom(context, projectId);
     const body = {
       ...proposal,
       // Deliberately not defaulted. Absent and `UNVERIFIED` are **different**: both store the
@@ -443,6 +497,7 @@ const caseProposal: Command = {
       // an agent claiming it had not checked. A client that filled this in would turn every
       // silence into a claim.
       ...(verdict === undefined ? {} : { verdict }),
+      ...(verifies === undefined ? {} : { verifies }),
     } as components['schemas']['AiProposalInput'];
 
     const intent = createIntent({ key: text(options['idempotency-key']) });
@@ -459,6 +514,9 @@ const caseProposal: Command = {
       // Printed together, always, for the reason `VerdictChip` takes both props and has no way to
       // render one without the other (§138): a verdict without its source reads as a finding.
       ['Verdict', `${show(filed.verdict)} (${show(filed.verdictSource)})`],
+      ...(filed.verifies.length > 0
+        ? [['Verifies', `${filed.verifies.length} block(s), linked when a person accepts`] as const]
+        : []),
     ]);
 
     if (!json) {
@@ -642,15 +700,60 @@ const suiteStatus: Command = {
 
 /* -------------------------------------------------------------------- docs ---- */
 
+/**
+ * The page body from `--from`, which takes a **path** rather than the text.
+ *
+ * The MCP argument takes the Markdown itself and this takes a filename, and the asymmetry is the
+ * medium rather than an inconsistency: a tool call carries a whole document in a JSON string and
+ * an argv word cannot, so the shell's own way of naming a document is the file it is in. `-` reads
+ * standard input, on `--file`'s rule, so a specification can be piped.
+ */
+function markdownFrom(
+  context: CommandContext,
+  options: MarkdownOptions,
+): MarkdownPage | undefined {
+  const from = text(context.options['from']);
+  if (from === undefined) return undefined;
+  if (text(context.options['file']) !== undefined) {
+    throw new UsageError(
+      'Pass --from or --file, not both — they are the same page in two forms, and sending both '
+        + 'means one of them is being ignored.',
+    );
+  }
+  return blocksFromMarkdown(readTextFile(from), options);
+}
+
+/**
+ * The label → block id table a write answers with, printed as the thing the next command needs.
+ *
+ * A label is never stored, so this table exists only in the answer to the write that used it —
+ * `tcms case propose --verifies DOC-7:<blockId>` is spelled from these ids and from nowhere else.
+ */
+function reportAnchors(out: Output, written: MarkdownPage, page: { blocks: readonly { id: string }[] }): void {
+  for (const warning of written.warnings) out.line(`Note: ${warning}`);
+  if (written.labels.size === 0) return;
+
+  out.line();
+  out.line('LABEL                          BLOCK');
+  for (const [label, id] of Object.entries(anchorsFor(written.labels, page))) {
+    out.line(`${label.padEnd(30)} ${id}`);
+  }
+}
+
 const docCreate: Command = {
   name: 'doc create',
   summary: 'Create a documentation page',
-  usage: 'tcms doc create --title T [--parent DOC-n | --root] [--file BLOCKS.json] [--idempotency-key K]',
+  usage:
+    'tcms doc create --title T [--parent DOC-n | --root] [--from SPEC.md | --file BLOCKS.json]\n'
+    + '                [--idempotency-key K]\n\n'
+    + '  --from\n      A file of TCMS spec markdown, or - for stdin. Prints the label → block id\n'
+    + '      table the answer carries; `tcms process ingest-spec` is what fills the file.',
   options: {
     title: { type: 'string' },
     parent: { type: 'string' },
     // Explicit here and load-bearing on `doc edit`: absent and null are different requests.
     root: { type: 'boolean' },
+    from: { type: 'string' },
     file: { type: 'string' },
     'idempotency-key': { type: 'string' },
   },
@@ -667,6 +770,7 @@ const docCreate: Command = {
       whatever title it names.
     */
     const fromFile = file ? objectFrom(file, 'a DocPageInput') : {};
+    const written = markdownFrom(context, { mode: 'create' });
     const title = text(options['title']) ?? (typeof fromFile['title'] === 'string' ? fromFile['title'] : undefined);
     if (title === undefined) throw new UsageError('--title is required, or name one in --file.');
 
@@ -676,6 +780,7 @@ const docCreate: Command = {
       body: present({
         ...fromFile,
         title,
+        ...(written ? { blocks: written.blocks } : {}),
         parentId: await parentIdFrom(context, projectId),
       }) as components['schemas']['DocPageInput'],
       tcms: { ...request, ...intent },
@@ -687,13 +792,20 @@ const docCreate: Command = {
       ['Blocks', show(created.blocks.length)],
       ['Lock version', show(created.lockVersion)],
     ]);
+    if (written && !json) reportAnchors(out, written, created);
   },
 };
 
 const docEdit: Command = {
   name: 'doc edit',
-  summary: 'Retitle a page, or replace its blocks',
-  usage: 'tcms doc edit DOC-1 [--title T] [--parent DOC-n | --root] [--file BODY.json --lock-version N]',
+  summary: 'Retitle a page, or rewrite its body',
+  usage:
+    'tcms doc edit DOC-1 [--title T] [--parent DOC-n | --root]\n'
+    + '                    [--from SPEC.md [--drop-linked] | --file BODY.json] [--lock-version N]\n\n'
+    + '  --from\n      A file of TCMS spec markdown. Start it from `tcms doc show DOC-1 --markdown`:\n'
+    + '      every block carries its `{#<id>}`, and keeping the anchor keeps the block\'s links.\n'
+    + '  --drop-linked\n      Consent to delete the claims on any block this text drops. Without it\n'
+    + '      such an edit is refused, naming the blocks and the cases claiming them.',
   options: {
     title: { type: 'string' },
     /*
@@ -704,6 +816,8 @@ const docEdit: Command = {
     */
     parent: { type: 'string' },
     root: { type: 'boolean' },
+    from: { type: 'string' },
+    'drop-linked': { type: 'boolean' },
     file: { type: 'string' },
     'lock-version': { type: 'string' },
   },
@@ -719,23 +833,47 @@ const docEdit: Command = {
     const path = { projectId, pageId };
 
     /*
+      A whole-body edit reads the page first, for two things it cannot compose without it: the
+      linked-block refusal, computable only against the blocks and links currently on the page, and
+      `DocPageInput.title`, which the contract REQUIRES — so a body edit naming no title was a 400
+      on a field nobody meant to change (`core/rewrite.ts`). The version does NOT come from this
+      read: the text was composed against an earlier one, `--lock-version` is still required, and
+      a read taken to answer a different question is not a licence to relax that.
+    */
+    const whole = text(options['from']) !== undefined || file !== undefined;
+    const current = whole
+      ? await client.GET('/projects/{projectId}/doc-pages/{pageId}', { params: { path }, tcms: request })
+      : undefined;
+    const written = current === undefined
+      ? undefined
+      : markdownFrom(context, {
+        mode: 'edit',
+        current: current.blocks,
+        dropLinked: flag(options['drop-linked']),
+      });
+
+    /*
       `blocks` is the whole page, in order, and a block OMITTED is DELETED — so a `--title`-only
       edit must not send the key at all. `present()` drops it, which is the difference between a
       retitle and emptying somebody's specification. The contract states the rule and this is the
       one command where forgetting it destroys content rather than failing.
     */
     const body = file
-      ? objectFrom(file, 'a DocPageInput')
+      ? { ...docPageInputFrom(current!), ...objectFrom(file, 'a DocPageInput') }
       : requireSomethingToDo(
-        present({
-          title: text(options['title']),
-          parentId: await parentIdFrom(context, projectId),
-        }),
-        'Pass --title or --parent, or --file with the page body.',
+        {
+          ...(current ? docPageInputFrom(current) : {}),
+          ...present({
+            title: text(options['title']),
+            ...(written ? { blocks: written.blocks } : {}),
+            parentId: await parentIdFrom(context, projectId),
+          }),
+        },
+        'Pass --title or --parent, --from with the page as markdown, or --file with its body.',
       );
 
     const version = await versionFor(context, {
-      fromFile: file !== undefined,
+      fromFile: whole,
       operation: 'edit this page',
       read: () => client.GET('/projects/{projectId}/doc-pages/{pageId}', { params: { path }, tcms: request }),
     });
@@ -750,6 +888,70 @@ const docEdit: Command = {
       ['Updated', `${show(updated.key)} — ${show(updated.title)}`],
       ['Blocks', show(updated.blocks.length)],
       ['Lock version', show(updated.lockVersion)],
+    ]);
+    if (written && !json) reportAnchors(out, written, updated);
+  },
+};
+
+/**
+ * `tcms doc adopt` — the page becomes a plan's document, or stops being one.
+ *
+ * It is a **doc** verb and not a plan one because the contract says the gate is `doc:edit`, *"the
+ * same key as editing the page, because it is the same act seen from the other end"*: it writes
+ * the page's `subjectType`/`subjectId` and nothing on the plan. `tcms_write_doc_page`'s `adopt`
+ * arm is the same decision on the other surface.
+ */
+const docAdopt: Command = {
+  name: 'doc adopt',
+  summary: 'Make a page a test plan\'s document, or unlink it',
+  usage:
+    'tcms doc adopt DOC-1 --plan TP-3\n'
+    + 'tcms doc adopt DOC-1 --none\n\n'
+    + '  --none\n      Unlinks the page from the plan it documents. The PAGE is kept — its blocks,\n'
+    + '      its history and its links are untouched. Relinking is --none then --plan, two steps.',
+  options: { plan: { type: 'string' }, none: { type: 'boolean' } },
+  write: { kind: 'state', permission: 'doc:edit' },
+  run: async (context) => {
+    const { client, out, json, options, request } = context;
+    const projectId = await projectOf(context);
+    const pageId = await resolveId({
+      client, projectId, value: requireArg(context, 'page'), entity: 'DOC_PAGE',
+    });
+
+    const plan = text(options['plan']);
+    const none = flag(options['none']);
+    // Refused before the call, `doc link`'s rule: the endpoint would answer either way, and what
+    // is gained is a message naming the flags somebody typed.
+    if ((plan === undefined) === !none) throw new UsageError('Name exactly one of --plan or --none.');
+
+    if (none) {
+      const page = await client.GET('/projects/{projectId}/doc-pages/{pageId}', {
+        params: { path: { projectId, pageId } }, tcms: request,
+      });
+      if (page.subjectType !== 'TEST_PLAN' || !page.subjectId) {
+        throw new UsageError(`${show(page.key)} is not a plan's document, so there is nothing to unlink.`);
+      }
+      await client.DELETE('/projects/{projectId}/plans/{planId}/document', {
+        params: { path: { projectId, planId: page.subjectId } }, tcms: request,
+      });
+      reportWrite(out, json, { page: page.key, adoptedBy: null }, [
+        ['Unlinked', show(page.key)],
+        ['Kept', 'the page, its blocks, its history and its links'],
+      ]);
+      return;
+    }
+
+    const planId = await resolveId({ client, projectId, value: plan ?? '', entity: 'PLAN' });
+    const adopted = await client.PUT('/projects/{projectId}/plans/{planId}/document', {
+      params: { path: { projectId, planId } },
+      body: { pageId },
+      tcms: request,
+    });
+
+    reportWrite(out, json, adopted, [
+      ['Adopted', `${show(adopted.key)} — ${show(adopted.title)}`],
+      ['Documents', show(plan)],
+      ['Subject', show(adopted.subjectType)],
     ]);
   },
 };
@@ -836,14 +1038,220 @@ const docUnlink: Command = {
   },
 };
 
+/* ------------------------------------------------------- the specification ---- */
+
+/**
+ * `tcms spec import` — one bundle becomes a page, its proposals and its plan.
+ *
+ * ## Why this is the CLI's alone
+ *
+ * Design §4.5 and §6, and the reason is the one surface spec §3.3 already gives for excluding
+ * `POST …/cases/bulk` from MCP: **a composite spans four gates** — `doc:edit`, `case:create`,
+ * `plan:create`, `doc:edit` again — and a tool whose 403 could come from any of four is a tool no
+ * caller can predict. A person at a terminal reads which step's refusal it was, off the ledger
+ * this prints. On the other surface the same work is three processes with a check between each,
+ * which is what having them written down buys.
+ *
+ * ## The keys, and what re-running a half-finished import does
+ *
+ * Every create carries an `Idempotency-Key` derived from **the bundle's content and the item's
+ * position** — so a run that died at case seven, re-run unchanged, replays the page and the first
+ * six rather than making a second page and six more proposals. Change the bundle and the keys
+ * change with it, which is correct: it is a different intent.
+ *
+ * ## What it does not do
+ *
+ * It does not publish the page, accept a proposal or approve the plan. Nothing on this surface
+ * does, and a composite is exactly where that boundary would be easiest to lose.
+ */
+const specImport: Command = {
+  name: 'spec import',
+  summary: 'Write a page, propose its cases and plan it, from one bundle',
+  usage:
+    'tcms spec import BUNDLE.json\n\n'
+    + '  The bundle is { page: {title, parent?, markdown}, cases: [...], plan?: {...} }, where\n'
+    + '  each case carries `verifies: ["label"]` naming the {#labels} in the page markdown. The\n'
+    + '  labels resolve to block ids from the page write\'s own answer, which is the only place\n'
+    + '  they exist. `tcms process ingest-spec` is what produces the bundle.\n\n'
+    + '  A step\'s refusal stops the run and prints what landed. Re-running an unchanged bundle\n'
+    + '  replays what already happened rather than duplicating it.',
+  write: { kind: 'create', permission: 'doc:edit' },
+  run: async (context) => {
+    const { client, out, json, request } = context;
+    const projectId = await projectOf(context);
+
+    const path = requireArg(context, 'bundle file');
+    const digest = createHash('sha256').update(readTextFile(path)).digest('hex').slice(0, 32);
+    const bundle = objectFrom(path, 'an import bundle');
+
+    const page = bundle['page'];
+    if (!page || typeof page !== 'object' || Array.isArray(page)) {
+      throw new UsageError("The bundle needs a 'page' object with a title and its markdown.");
+    }
+    const pageInput = page as Record<string, unknown>;
+    const markdown = pageInput['markdown'];
+    if (typeof markdown !== 'string') {
+      throw new UsageError(
+        "The bundle's 'page' needs a 'markdown' string — the page as TCMS spec markdown.",
+      );
+    }
+
+    const landed: string[] = [];
+    try {
+      const written = blocksFromMarkdown(markdown, { mode: 'create' });
+      const parent = typeof pageInput['parent'] === 'string' ? pageInput['parent'] : undefined;
+      const created = await client.POST('/projects/{projectId}/doc-pages', {
+        params: { path: { projectId } },
+        body: present({
+          title: typeof pageInput['title'] === 'string' ? pageInput['title'] : 'Untitled specification',
+          parentId: parent === undefined
+            ? undefined
+            : await resolveId({ client, projectId, value: parent, entity: 'DOC_PAGE' }),
+          blocks: written.blocks,
+        }) as components['schemas']['DocPageInput'],
+        tcms: { ...request, ...createIntent({ key: `${digest}-page` }) },
+      });
+      landed.push(`page ${show(created.key)} (${String(created.blocks.length)} blocks)`);
+
+      const anchors = anchorsFor(written.labels, created);
+      const cases = Array.isArray(bundle['cases']) ? bundle['cases'] : [];
+      const proposals: string[] = [];
+
+      for (const [index, entry] of cases.entries()) {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+          throw new UsageError(`cases[${String(index)}] must be an object — a case with its verifies.`);
+        }
+        const { verifies, ...testCase } = entry as Record<string, unknown>;
+        requireProposableCase(testCase, `cases[${String(index)}]`);
+
+        const filed = await client.POST('/projects/{projectId}/ai-proposals', {
+          params: { path: { projectId } },
+          body: {
+            testCase,
+            verifies: labelsToTargets(verifies, anchors, created.id, index),
+          } as components['schemas']['AiProposalInput'],
+          tcms: { ...request, ...createIntent({ key: `${digest}-case-${String(index)}` }) },
+        });
+        proposals.push(filed.id);
+      }
+      if (proposals.length > 0) landed.push(`${String(proposals.length)} proposal(s)`);
+
+      const planned = bundle['plan'];
+      let planKey: string | undefined;
+      if (planned && typeof planned === 'object' && !Array.isArray(planned)) {
+        const plan = await client.POST('/projects/{projectId}/plans', {
+          params: { path: { projectId } },
+          body: planned as components['schemas']['TestPlanInput'],
+          tcms: { ...request, ...createIntent({ key: `${digest}-plan` }) },
+        });
+        planKey = plan.key;
+        landed.push(`plan ${show(plan.key)}`);
+
+        await client.PUT('/projects/{projectId}/plans/{planId}/document', {
+          params: { path: { projectId, planId: plan.id } },
+          body: { pageId: created.id },
+          tcms: request,
+        });
+        landed.push(`the page adopted by ${show(plan.key)}`);
+      }
+
+      reportWrite(out, json, { page: created.key, proposals, plan: planKey ?? null }, [
+        ['Page', `${show(created.key)} — ${show(created.title)}`],
+        ['Blocks', show(created.blocks.length)],
+        ['Labels', show(Object.keys(anchors).length)],
+        ['Proposals', show(proposals.length)],
+        ['Plan', show(planKey ?? '—')],
+      ]);
+      if (!json) {
+        out.line();
+        out.line('Nothing here is a test case and nothing is published. A person accepts each '
+          + 'proposal, and the links to the blocks are written at that moment.');
+      }
+    } catch (error) {
+      /*
+        The ledger, on stderr, before the failure reaches `main` — which is what makes the
+        four-gate span readable rather than merely honest: a caller refused at the proposals knows
+        the page landed and that re-running the same bundle will not write a second one.
+      */
+      out.error(landed.length > 0
+        ? `Stopped part way. What landed: ${landed.join('; ')}. Re-running this bundle unchanged `
+          + 'replays those rather than repeating them.'
+        : 'Stopped at the first step; nothing landed.');
+      throw error;
+    }
+  },
+};
+
+/**
+ * A case's `verifies` labels, resolved against the page that was just written.
+ *
+ * Labels rather than block ids because a bundle is composed **before** the page exists, so the ids
+ * are not knowable when it is written — which is the whole reason labels exist, and the reason
+ * this is the one step of the import that cannot be reordered.
+ */
+function labelsToTargets(
+  verifies: unknown,
+  anchors: Record<string, string>,
+  pageId: string,
+  index: number,
+): components['schemas']['ProposalLinkInput'][] {
+  if (verifies === undefined || verifies === null) return [];
+  if (!Array.isArray(verifies) || verifies.some((label) => typeof label !== 'string')) {
+    throw new UsageError(
+      `cases[${String(index)}].verifies must be an array of labels from the page markdown.`,
+    );
+  }
+
+  return (verifies as string[]).map((label) => {
+    const blockId = anchors[label];
+    if (!blockId) {
+      throw new UsageError(
+        `cases[${String(index)}] verifies '${label}', which no block in the page markdown is `
+          + `labelled {#${label}}. Labelled blocks: ${Object.keys(anchors).join(', ') || 'none'}.`,
+      );
+    }
+    return { pageId, blockId, relationship: 'VERIFIES' as const };
+  });
+}
+
 /* ------------------------------------------------------------------- plans ---- */
+
+/**
+ * The plan's *written for a specification* half, as far as argv can carry it.
+ *
+ * Three of the six are spellable and three are not. `entryCriteria`, `exitCriteria` and `sections`
+ * are object arrays — a criterion is a metric, an operator and a threshold, a section is a name and
+ * three membership lists — and argv has no object, so they travel in `--file` exactly as a page's
+ * blocks do. `tcms format plan` prints which is which, and it prints it from the same catalogue
+ * this reads.
+ */
+const PLAN_DOCUMENT_OPTIONS = {
+  'scope-text': { type: 'string' },
+  'out-of-scope-text': { type: 'string' },
+  tag: { type: 'string', multiple: true },
+} as const;
+
+function planDocumentFrom(context: CommandContext): Record<string, unknown> {
+  return present({
+    scopeText: nullableText(context.options['scope-text']),
+    outOfScopeText: nullableText(context.options['out-of-scope-text']),
+    tags: completeSet(context.options['tag']),
+  });
+}
 
 const planCreate: Command = {
   name: 'plan create',
   summary: 'Create a test plan',
   usage:
     'tcms plan create --name N [--description D] [--milestone M] [--milestone-date YYYY-MM-DD]\n'
-    + '                 [--suite TS-n]... [--case TC-n]... [--idempotency-key K]',
+    + '                 [--suite TS-n]... [--case TC-n]... [--tag T]...\n'
+    + '                 [--scope-text S] [--out-of-scope-text S] [--file BODY.json]\n'
+    + '                 [--idempotency-key K]\n\n'
+    + '  --scope-text / --out-of-scope-text\n'
+    + '      What the plan covers, and what it deliberately does not. The second is where\n'
+    + '      "not in this release" is stated.\n'
+    + '  --file\n      A TestPlanInput. The only way to send entryCriteria, exitCriteria and\n'
+    + '      sections: argv cannot carry an object. Flags override what it names.',
   options: {
     name: { type: 'string' },
     description: { type: 'string' },
@@ -851,6 +1259,8 @@ const planCreate: Command = {
     'milestone-date': { type: 'string' },
     suite: { type: 'string', multiple: true },
     case: { type: 'string', multiple: true },
+    ...PLAN_DOCUMENT_OPTIONS,
+    file: { type: 'string' },
     'idempotency-key': { type: 'string' },
   },
   write: { kind: 'create', permission: 'plan:create' },
@@ -858,16 +1268,22 @@ const planCreate: Command = {
     const { client, out, json, options, request } = context;
     const projectId = await projectOf(context);
 
+    const file = text(options['file']);
+    const fromFile = file ? objectFrom(file, 'a TestPlanInput') : {};
+
     const intent = createIntent({ key: text(options['idempotency-key']) });
     const created = await client.POST('/projects/{projectId}/plans', {
       params: { path: { projectId } },
       body: present({
-        name: requireOption(context, 'name'),
+        ...fromFile,
+        name: text(options['name'])
+          ?? (typeof fromFile['name'] === 'string' ? fromFile['name'] : requireOption(context, 'name')),
         description: nullableText(options['description']),
         milestoneName: nullableText(options['milestone']),
         milestoneDate: nullableText(options['milestone-date']),
         suiteIds: await resolveMany(context, projectId, options['suite'], 'SUITE'),
         caseIds: await resolveMany(context, projectId, options['case'], 'CASE'),
+        ...planDocumentFrom(context),
       }) as components['schemas']['TestPlanInput'],
       tcms: { ...request, ...intent },
     });
@@ -885,7 +1301,8 @@ const planEdit: Command = {
   summary: 'Change a test plan',
   usage:
     'tcms plan edit TP-1 [--name N] [--description D] [--milestone M] [--suite TS-n]...\n'
-    + '                   [--case TC-n]... [--file BODY.json --lock-version N]',
+    + '                   [--case TC-n]... [--tag T]... [--scope-text S] [--out-of-scope-text S]\n'
+    + '                   [--file BODY.json --lock-version N]',
   options: {
     name: { type: 'string' },
     description: { type: 'string' },
@@ -893,6 +1310,7 @@ const planEdit: Command = {
     'milestone-date': { type: 'string' },
     suite: { type: 'string', multiple: true },
     case: { type: 'string', multiple: true },
+    ...PLAN_DOCUMENT_OPTIONS,
     file: { type: 'string' },
     'lock-version': { type: 'string' },
   },
@@ -941,6 +1359,7 @@ const planEdit: Command = {
           milestoneDate: nullableText(options['milestone-date']),
           suiteIds: await resolveMany(context, projectId, options['suite'], 'SUITE'),
           caseIds: await resolveMany(context, projectId, options['case'], 'CASE'),
+          ...planDocumentFrom(context),
         }),
         'Name at least one field to change, or pass --file with a body.',
       );
@@ -2713,9 +3132,11 @@ export const WRITES: readonly Command[] = [
   docEdit,
   docLink,
   docUnlink,
+  docAdopt,
   planCreate,
   planEdit,
   planStatus,
+  specImport,
   runCreate,
   runStatus,
   resultRecord,

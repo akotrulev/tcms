@@ -46,7 +46,7 @@ export type { Concurrency, NoVersionReason } from './core/concurrency.js';
 export { createIntent, editIntent, requireExplicitVersion } from './core/mutation.js';
 export type { CreateIntent, CreateOptions, EditVersion, WriteKind } from './core/mutation.js';
 
-export { caseInputFrom, planInputFrom, suiteInputFrom } from './core/rewrite.js';
+export { caseInputFrom, docPageInputFrom, planInputFrom, suiteInputFrom } from './core/rewrite.js';
 
 export { REQUIRED_CASE_FIELDS, requireProposableCase } from './core/proposal.js';
 

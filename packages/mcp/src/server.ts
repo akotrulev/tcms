@@ -24,6 +24,8 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import {
   CallToolRequestSchema,
+  GetPromptRequestSchema,
+  ListPromptsRequestSchema,
   ListResourcesRequestSchema,
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
@@ -31,7 +33,7 @@ import {
   type Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 
-import { SHAPES, guideFor } from '@tcms/client';
+import { PROCESSES, SHAPES, guideFor, processGuideFor, processNamed } from '@tcms/client';
 
 import { renderInstructions } from './instructions.js';
 import { RESULT_SCHEMA, failed, ok } from './result.js';
@@ -62,6 +64,17 @@ export function buildServer(session: Session, tools: readonly ToolDefinition[] =
           and not the first: `tcms_shape` serves the same guide to a host that has no resource UI.
         */
         resources: {},
+        /*
+          The one carrier a **person** reaches. A host that surfaces prompts lists them as slash
+          commands, so *"turn this specification into a page"* is `/tcms:ingest-spec` and a paste
+          rather than a sentence somebody has to know to type. The tool and the resource are for
+          the model; this is for the user sitting in front of it, which is why the five processes
+          have four carriers and the shapes have three.
+
+          `listChanged` is not advertised, on the rule the two capabilities above already state:
+          the catalogue is compiled into the build and cannot change within a session.
+        */
+        prompts: {},
       },
       instructions: renderInstructions(session.reach, tools),
     },
@@ -99,25 +112,89 @@ export function buildServer(session: Session, tools: readonly ToolDefinition[] =
     nothing except that it must guess the format instead.
   */
   server.setRequestHandler(ListResourcesRequestSchema, () => ({
-    resources: Object.values(SHAPES).map((entity) => ({
-      uri: `tcms://shape/${entity.entity}`,
-      name: `${entity.title} — authoring format`,
-      description: `Every field of a ${entity.title.toLowerCase()}, what it takes, and the `
-        + 'mistakes that cost a round trip.',
-      mimeType: 'text/markdown',
-    })),
+    resources: [
+      ...Object.values(SHAPES).map((entity) => ({
+        uri: `tcms://shape/${entity.entity}`,
+        name: `${entity.title} — authoring format`,
+        description: `Every field of a ${entity.title.toLowerCase()}, what it takes, and the `
+          + 'mistakes that cost a round trip.',
+        mimeType: 'text/markdown',
+      })),
+      // Beside the shapes and on the same terms: a shape says what one object looks like and a
+      // process says the order they are written in, and neither names a project or a row.
+      ...PROCESSES.map((candidate) => ({
+        uri: `tcms://process/${candidate.name}`,
+        name: `${candidate.title} — the steps`,
+        description: candidate.summary,
+        mimeType: 'text/markdown',
+      })),
+    ],
   }));
 
   server.setRequestHandler(ReadResourceRequestSchema, (request) => {
-    const entity = Object.values(SHAPES)
-      .find((candidate) => request.params.uri === `tcms://shape/${candidate.entity}`);
-    if (!entity) throw new Error(`No resource at '${request.params.uri}'.`);
+    const { uri } = request.params;
+
+    const entity = Object.values(SHAPES).find((candidate) => uri === `tcms://shape/${candidate.entity}`);
+    if (entity) {
+      return { contents: [{ uri, mimeType: 'text/markdown', text: guideFor(entity) }] };
+    }
+
+    const process = PROCESSES.find((candidate) => uri === `tcms://process/${candidate.name}`);
+    if (process) {
+      return { contents: [{ uri, mimeType: 'text/markdown', text: processGuideFor(process) }] };
+    }
+
+    throw new Error(`No resource at '${uri}'.`);
+  });
+
+  server.setRequestHandler(ListPromptsRequestSchema, () => ({
+    prompts: PROCESSES.map((candidate) => ({
+      name: candidate.name,
+      title: candidate.title,
+      description: candidate.summary,
+      arguments: candidate.arguments.map((argument) => ({
+        name: argument.name,
+        description: argument.describe,
+        required: argument.required,
+      })),
+    })),
+  }));
+
+  server.setRequestHandler(GetPromptRequestSchema, (request) => {
+    const process = processNamed(request.params.name);
+    if (!process) throw new Error(`No prompt named '${request.params.name}'.`);
+
+    /*
+      One `user` message carrying the guide and then the arguments the person filled in, rather
+      than a rendered instruction with the values interpolated into prose. The guide is the same
+      text the resource and `tcms_process` serve — one source, three carriers — and interpolating
+      would make this a fourth rendering of it that drifts. A missing optional argument is simply
+      not stated; the steps already say what to do without it.
+    */
+    const given = request.params.arguments ?? {};
+    const filled = process.arguments
+      .filter((argument) => typeof given[argument.name] === 'string' && given[argument.name] !== '')
+      .map((argument) => `## ${argument.name}\n\n${given[argument.name] ?? ''}`);
+
+    const missing = process.arguments
+      .filter((argument) => argument.required && !filled.some((text) => text.startsWith(`## ${argument.name}\n`)))
+      .map((argument) => argument.name);
 
     return {
-      contents: [{
-        uri: request.params.uri,
-        mimeType: 'text/markdown',
-        text: guideFor(entity),
+      description: process.summary,
+      messages: [{
+        role: 'user' as const,
+        content: {
+          type: 'text' as const,
+          text: [
+            processGuideFor(process),
+            ...filled,
+            ...(missing.length > 0
+              ? [`## Still needed\n\n${missing.map((name) => `- ${name}`).join('\n')}\n\nAsk for `
+                + 'these before starting; do not invent them.']
+              : []),
+          ].join('\n'),
+        },
       }],
     };
   });

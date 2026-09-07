@@ -487,6 +487,31 @@ const INVOCATIONS: Record<string, Invocation> = {
     path: '/links/l-1',
     routes: { 'DELETE /links/l-1': { status: 204 } },
   },
+  'doc adopt': {
+    argv: () => ['doc', 'adopt', 'DOC-3', '--plan', 'TP-1'],
+    path: '/plans/tp-1/document',
+    routes: { 'PUT /plans/tp-1/document': { status: 200, body: PAGE } },
+  },
+  /*
+    The composite, driven end to end. `path` is the FIRST write — the page — because that is the
+    act the command's `kind` declares, and it is the one whose header the declaration is a promise
+    about. The proposal, the plan and the adopt are routed so the run reaches its end; a run that
+    stopped at step two would satisfy the header assertion by never making the later calls.
+  */
+  'spec import': {
+    argv: () => ['spec', 'import', tempJson('bundle.json', {
+      page: { title: 'Payments spec', markdown: 'The system charges the card. {#charges}\n' },
+      cases: [{ ...PROPOSABLE, verifies: ['charges'] }],
+      plan: { name: 'Payments' },
+    })],
+    path: '/doc-pages',
+    routes: {
+      'POST /doc-pages': { status: 201, body: PAGE },
+      'POST /ai-proposals': { status: 201, body: proposal() },
+      'POST /plans': { status: 201, body: PLAN },
+      'PUT /plans/tp-1/document': { status: 200, body: PAGE },
+    },
+  },
   'plan create': {
     argv: () => ['plan', 'create', '--name', 'Release 4.2'],
     path: '/plans',

@@ -156,7 +156,7 @@ The count below is the **outcome** of this rule, not a target.
 
 ---
 
-## 3. The MCP surface — ~~21~~ ~~26~~ ~~28~~ ~~30~~ ~~34~~ ~~37~~ ~~39~~ ~~43~~ 44 tools
+## 3. The MCP surface — ~~21~~ ~~26~~ ~~28~~ ~~30~~ ~~34~~ ~~37~~ ~~39~~ ~~43~~ ~~44~~ 45 tools
 
 Namespaced `tcms_*`. `projectId` and `companyId` **do not appear in any schema** (§4.1).
 
@@ -170,7 +170,7 @@ Namespaced `tcms_*`. `projectId` and `companyId` **do not appear in any schema**
 | 6 | `tcms_list_library` | `case:read` | `GET …/conditions`, `GET …/shared-steps` | **Buildable** (read-only by design — §0.5) |
 | 7 | `tcms_doc_tree` | `doc:read` | `GET …/doc-pages` | **Buildable** |
 | 8 | `tcms_open_doc_page` | `doc:read` | `GET …/doc-pages/{pageId}` | **Buildable** |
-| 9 | `tcms_write_doc_page` | `doc:edit` ~~alone~~ + `doc:publish` (§212) | `POST`/`PATCH …/doc-pages`, block link `POST`/`DELETE`, `PUT …/doc-pages/{pageId}/status` | **Buildable after §4.2** |
+| 9 | `tcms_write_doc_page` | `doc:edit` ~~alone~~ + `doc:publish` (§212) | `POST`/`PATCH …/doc-pages`, block link `POST`/`DELETE`, `PUT …/doc-pages/{pageId}/status`, **`PUT`/`DELETE …/plans/{planId}/document`** (022 T3b — §3.0b) | **Buildable after §4.2** |
 | 10 | `tcms_write_case` | `case:create` + `case:edit` | `POST`/`PATCH …/cases`, submit-for-review | **edit arm buildable; create arm blocked — §5** |
 | 11 | `tcms_write_suite` | `suite:manage` | `POST`/`PATCH …/suites`, membership, `PUT …/status` (submit / withdraw only) | **Buildable after §4.2** |
 | 12 | `tcms_review_comment` | `case:comment` | `GET …/reviews`, `POST …/comments` | **Buildable** |
@@ -206,6 +206,7 @@ Namespaced `tcms_*`. `projectId` and `companyId` **do not appear in any schema**
 | 42 | `tcms_read_rate_card` | `ratecard:read` | `GET /rate-cards`, `…/{rateCardId}` | 019 T1 — see §3.11 |
 | 43 | `tcms_write_rate_card` | `ratecard:manage` | `POST`/`PUT`/`DELETE /rate-cards…` | 019 T1 — see §3.11 |
 | 44 | `tcms_read_analytics` | `report:view` | `GET …/analytics/burn-up`, `…/cycle-time`, `…/flow` | 020 T1 — see §3.12 |
+| 45 | `tcms_process` | **none** | **nothing — it reads no endpoint** | 022 T3b — see §3.0b |
 
 Eighteen are buildable against today's contract; two need §4.2's contract addition first; one has a
 blocked arm (§5).
@@ -268,6 +269,68 @@ into the build and cannot change within a session, so claiming a notification no
 a claim a host plans around. Resources are **not permission-filtered**, unlike `tools/list`: the
 shape of a test case is the same document whatever a credential holds, it names no project, no
 company and no row, and withholding it would tell a caller nothing except that it must guess.
+
+### 3.0b `tcms_process`, the prompts, and the four arms 022 added (022 T3b)
+
+Added by the agent-facing-processes slice
+([design](2026-09-07-agent-specification-formatter.md), [plan](../plans/022-agent-spec-formatter.md)).
+`tcms_shape` answered *what does one of these look like*; **nothing answered *in what order are
+they written***, and the order is where this surface is actually got wrong — a page is written,
+cases are proposed against blocks whose ids only that write's response carries, and a plan adopts
+the page. The server's `instructions` string carried one sentence of it and every other step was
+folklore.
+
+**The tool is the second on this surface that reads nothing**, and it earns its place on
+`tcms_shape`'s three arguments unchanged: it calls no endpoint (so §3.1's composite rule is not
+engaged), it needs no project (so it is callable before one is resolved, which is exactly when the
+sequence is needed), and it carries no gate (a process description is the same document whatever a
+credential holds). Each step still names the permission it costs, so a refusal maps to a sentence
+rather than arriving three steps in.
+
+**Four carriers, and the fourth is the first one a *person* reaches.**
+
+| Carrier | Serves | Why it exists when the others do |
+|---|---|---|
+| `tcms_process [process]` | The catalogue, or one process's long guide | `tools/list` is not an optional capability; resources and prompts are. A minimal host reaches the sequence through this or not at all. |
+| `tcms://process/{name}` | The long guide, `text/markdown`, unfiltered by permission like the shapes | The long form, for a host with a resource UI. |
+| **`prompts/list` · `prompts/get`** | The same guide, plus the arguments a person filled in | The one carrier a **person** reaches: a host that surfaces prompts lists them as slash commands, so *"turn this specification into a page"* is `/tcms:ingest-spec` and a paste. |
+| `tcms process [name]` | The same guide at a terminal | §6, beside `tcms format`. |
+
+The **`prompts` capability is advertised without `listChanged`**, on the rule §3.0a's `resources`
+capability already states: the catalogue is compiled into the build and cannot change within a
+session, so claiming a notification nothing emits would be a claim a host plans around. `prompts/get`
+serves the guide **verbatim** and appends the arguments under their own headings rather than
+interpolating them into prose — one source, four carriers, and a fourth rendering of the same text
+is a fourth thing to keep in step. A required argument the caller left out is named under *Still
+needed* rather than invented.
+
+**A step whose CLI spelling is absent says so.** `tcms_orient` and `tcms_report` reach **no** CLI
+command, which is §6's `report` and `triage` asymmetry arriving in a third place, so
+`processGuideFor` prints *"no command reaches this step; it is MCP-only"* instead of leaving the step
+looking complete. `mcp/src/process.test.ts` asserts the other direction — that no step names a tool
+this registry does not have — which is the cross-check the catalogue's own package cannot make.
+
+**The four arms and two arguments that close the gaps the processes ran into.** All of them are
+`doc:edit` or an existing arm's own key, so §2 is untouched:
+
+| Tool | What is new | The decision |
+|---|---|---|
+| `tcms_write_doc_page` | `markdown` **instead of** `blocks` on `create` and `edit`; both is a refusal. The answer carries `anchors` — each `{#label}` → the block id it was given | The medium a model writes in is text and the medium the API takes is an id-carrying array. `@tcms/client`'s `core/markdown.ts` closes that gap client-side; there is deliberately no endpoint (design §2.1). A label is **never stored**, so the write's own answer is the only place its id exists — and it is what a proposal's `verifies` is written against. |
+| `tcms_write_doc_page` | `dropLinked` on `edit` | An edit that drops a block cases claim deletes those claims. Refused, **naming the block and the cases**, unless the caller consents — the consent gate placed where the loss is computable rather than behind a generic prompt about a whole-page write. |
+| `tcms_write_doc_page` | New arm **`adopt`** (`doc:edit`, `kind: 'state'`): `{page, plan}` → `PUT …/plans/{planId}/document`, `{page, plan: null}` → the `DELETE` | It lives on the **doc** tool because the contract says the gate is *"`doc:edit`, the same key as editing the page, because it is the same act seen from the other end"*. A `doc:edit` arm on a `plan:*`-gated tool is exactly the two-gate span §2 refuses. The unlink resolves the plan **off the page** rather than taking a second identifier that could disagree with it. |
+| `tcms_open_doc_page` | `as: 'blocks' \| 'markdown'`, default `blocks` | Every block renders with `{#<its id>}`, which is what an edit starts from — keep the anchor and the block keeps its links however much the words change. **Not both in one answer**: a page is bounded at 200K (§4.6) and the two are the same content in two media. |
+| `tcms_write_case propose` | `verifies: [{page, block, relationship?}]` | The claim travels with the proposal and becomes a link at acceptance (design §5). The page is a **display key** resolved here; the block id is not checked here, because it is checked at accept and pre-checking would suggest a guarantee filing cannot give. `relationship` **is** checked here — a closed three-word vocabulary is exactly the part of a claim that can be judged with no knowledge of the project's state, which is why the server validates it at file time and the client can too. |
+| `tcms_write_plan` | `scopeText`, `outOfScopeText`, `entryCriteria`, `exitCriteria`, `sections`, `tags` on `create` and `edit` | The plan's *written for a specification* half, unreachable from either adapter until now — `core/rewrite.ts` records what that cost: with no argument to carry them, **every plan edit this surface ever made emptied `scopeText` and `outOfScopeText`**, silently. A section's `cases` and `suites` are display keys resolved **per section**, the way the plan's own are. |
+
+**One defect the new arm exposed in an old one, recorded because it predates this slice.**
+`DocPageInput` declares `required: [title]`, so a body edit sending **`blocks` and no `title`** is a
+`400` on a field the caller never meant to change — which both adapters have composed since the arm
+existed. Nothing caught it because no test had driven a whole-body page edit as far as the `PATCH`.
+The markdown route added the first, the contract-exchange check named it on the first run, and the
+repair is `core/rewrite.ts`'s `docPageInputFrom` on both surfaces: a whole-body edit reads the page
+and lays the caller's words over its title. **The version still does not come from that read** —
+§4.3's rule is untouched, and a read taken to answer a different question is not a licence to relax
+it.
 
 ### 3.1 The ~~two~~ three composites, and why only three
 
@@ -1300,9 +1363,10 @@ needing a separate decision. A bulk generation therefore decomposes per item.
 ## 6. The CLI surface
 
 `tcms <noun> <verb>`, one command per operation the `Agent` role can reach — approximately ~~45~~ ~~53~~ 61,
-against the MCP surface's ~~21~~ ~~28~~ ~~30~~ ~~34~~ 37. **The registry holds ~~43~~ ~~53~~ ~~55~~ ~~58~~ ~~64~~ 68** (`COMMANDS`, measured
-017 T1, eight of them 012's board verbs, ten 013's release verbs, two 014's import reads, three
-015's issue verbs, six 016's time verbs and four this slice's staffing verbs),
+against the MCP surface's ~~21~~ ~~28~~ ~~30~~ ~~34~~ ~~37~~ 45. **The registry holds ~~43~~ ~~53~~ ~~55~~ ~~58~~ ~~64~~ ~~68~~ 94** (`COMMANDS`, measured
+022 T3b, eight of them 012's board verbs, ten 013's release verbs, two 014's import reads, three
+015's issue verbs, six 016's time verbs, four 017's staffing verbs and three this slice's — `doc
+adopt`, `process` and `spec import`),
 and the two numbers have
 never met: the count above is what the
 `Agent` grant *reaches*, the registry is what has been *spelled*, and §6's own struck-through
@@ -1322,6 +1386,46 @@ it.
     `issue create`, `issue move`, `issue comment`. `report` and `triage` are the two that remain
     undelivered, and the comment in `cli/src/reads.ts` that recorded the asymmetry now names those
     two rather than going on claiming a gap that has closed.
+
+
+**The three commands 022 T3b adds, and the four flags that do not need one** (§3.0b carries the
+arms and the reasons):
+
+| Command | Kind | Permission | Reaches |
+|---|---|---|---|
+| `tcms process [NAME]` | read, **offline** | none | nothing — it reads no instance, like `tcms format` |
+| `tcms doc adopt DOC-1 --plan TP-3 \| --none` | `state` | `doc:edit` | `PUT`/`DELETE …/plans/{planId}/document` |
+| `tcms spec import BUNDLE.json` | `create` | `doc:edit` (+ `case:create`, `plan:create` as it runs) | `POST …/doc-pages`, `POST …/ai-proposals`, `POST …/plans`, `PUT …/plans/{planId}/document` |
+
+And on commands that already existed: `doc create --from SPEC.md`, `doc edit --from SPEC.md
+[--drop-linked]`, `doc show --markdown`, `case propose --verifies DOC-7:BLOCK` (repeatable), and
+`plan create` / `plan edit` gaining `--scope-text`, `--out-of-scope-text` and `--tag`.
+
+Six things there are decisions rather than spellings:
+
+- **`--from` takes a PATH; the MCP argument takes the TEXT.** That asymmetry is the medium, not an
+  inconsistency: a tool call carries a whole document in a JSON string and an argv word cannot, so
+  the shell's own way of naming a document is the file it is in. `-` reads stdin, on `--file`'s rule.
+- **`doc show --markdown` prints the text and nothing else.** `tcms doc show DOC-1 --markdown >
+  spec.md` is the whole point of it, so a heading row above the document would be a heading row in
+  the file. `--json` still answers the resource, with `markdown` in place of `blocks`.
+- **`--verifies` is `PAGE:BLOCK`, one per flag, and spells no relationship.** Argv has no object;
+  colon-separated because neither a display key nor a UUID contains one. The CLI files `VERIFIES`,
+  which is the only value that is coverage — the other two are a judgement somebody makes on a
+  screen, and the MCP argument is where they are spellable.
+- **Three of the plan's six new fields have no flag and never will.** `entryCriteria`,
+  `exitCriteria` and `sections` are object arrays, so they travel in `--file` exactly as a page's
+  blocks do. `tcms format plan` prints which is which, from the same catalogue the command reads.
+- **`spec import` is the CLI's alone**, and design §6 is the standing reason: it spans `doc:edit`,
+  `case:create`, `plan:create` and `doc:edit` again, and a *tool* whose 403 could come from any of
+  four is one no caller can predict. A person at a terminal reads which step's refusal it was, off
+  the ledger the command prints to stderr before it exits. On MCP the same work is three processes
+  with a check between each, which is the point of having them written down. It is the same
+  argument §3.3 makes for excluding `POST …/cases/bulk`.
+- **Every `spec import` create carries an `Idempotency-Key` derived from the bundle's content and
+  the item's index**, so a run that died at case seven, re-run unchanged, replays the page and the
+  first six rather than making a second page and six more proposals. Change the bundle and the keys
+  change with it, which is correct: it is a different intent.
 
 **The five issue commands**, and how each is spelled (§3.4 carries the typed inputs and the reasons):
 

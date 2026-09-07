@@ -47,9 +47,15 @@
  *
  * ## What is deliberately absent
  *
- * **`DocPageInput`** — `blocks` absent means *leave alone* server-side (`DocPageWriteService`
+ * ~~**`DocPageInput`** — `blocks` absent means *leave alone* server-side (`DocPageWriteService`
  * checks `blocks() != null`), and `title` is the only other editable field, which a title-only
- * edit supplies. It is already correct and a round-trip would gain nothing.
+ * edit supplies. It is already correct and a round-trip would gain nothing.~~
+ * → **half right, and the half it missed is the opposite edit.** `DocPageInput` declares
+ * `required: [title]`, so a body edit that sends **`blocks` and no `title`** is a `400` on a field
+ * the caller never meant to change — which both adapters have composed since the arm existed, and
+ * which nothing caught because no test drove a whole-body page edit as far as the `PATCH`. 022's
+ * markdown route added the first, and the contract-exchange check named it on the first run. See
+ * {@link docPageInputFrom}.
  *
  * **`ExecutionResultInput`** — recording a result is a whole statement, not an edit to one: the
  * verdict and its note are submitted together, `statusId` is always sent, and amending a verdict
@@ -199,4 +205,17 @@ export function planInputFrom(current: Schemas['TestPlan']): Schemas['TestPlanUp
     scopeText: current.scopeText,
     outOfScopeText: current.outOfScopeText,
   };
+}
+
+/**
+ * The one field a whole-body page edit must carry beyond its blocks.
+ *
+ * Deliberately **not** the whole resource, unlike its three siblings above. `blocks` absent means
+ * *leave alone* server-side, and `parentId` on a `PATCH` must equal the page's current parent or
+ * it is a `400` — so echoing either buys nothing and the second buys a way to fail. `title` is
+ * the whole of it, and it is here rather than in each adapter because the two composing that body
+ * differently is exactly what this module exists to prevent.
+ */
+export function docPageInputFrom(current: Schemas['DocPage']): { title: string } {
+  return { title: current.title };
 }

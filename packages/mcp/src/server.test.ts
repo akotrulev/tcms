@@ -12,7 +12,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { ElicitRequestSchema, ToolListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
 import { describe, expect, it } from 'vitest';
 
-import { TcmsApiError, TcmsTimeoutError } from '@tcms/client';
+import { PROCESSES, TcmsApiError, TcmsTimeoutError, processGuideFor } from '@tcms/client';
 
 import { caseDetail, casePage, caseSummary, docPage, docPageSummary } from '../../client/src/test/fixtures.js';
 import { roleMatrix } from '../../client/src/test/roleMatrix.js';
@@ -157,10 +157,14 @@ describe('tools/list', () => {
       none — a model that reads the first half of `declinedConditions` learns that it takes ids
       and not that they are ATTACHMENT ids, which is exactly the mistake the field exists to warn
       about. The other two are a case and a doc page; this one is the format itself.
+
+      ~~Three.~~ → **four since 022 T3b**, and `tcms_process` is the same argument a second time:
+      a process guide is one authored document whose TRAPS are at the end of each step, so a
+      truncation drops exactly the half a model could not have worked out for itself.
     */
     const raised = tools.filter((tool) => tool._meta?.['anthropic/maxResultSizeChars']);
     expect(raised.map((tool) => tool.name).sort())
-      .toEqual(['tcms_open_case', 'tcms_open_doc_page', 'tcms_shape']);
+      .toEqual(['tcms_open_case', 'tcms_open_doc_page', 'tcms_process', 'tcms_shape']);
   });
 
   it('marks the tools that remove something, because that is what makes a host prompt', async () => {
@@ -198,6 +202,71 @@ describe('tools/list', () => {
     // `Idempotency-Key`. The annotation must agree with the header the arm sends.
     expect(tools.find((tool) => tool.name === 'tcms_write_case')?.annotations?.idempotentHint)
       .toBe(false);
+  });
+});
+
+describe('resources and prompts — the carriers a tool list is not (022)', () => {
+  it('advertises prompts without listChanged, because nothing here ever changes them', async () => {
+    const client = await connect(api(agentRoutes()));
+    // The set is compiled into the build, so claiming the notification would be a claim about
+    // behaviour that will never occur — the rule the `resources` capability already states.
+    expect(client.getServerCapabilities()?.prompts).toEqual({});
+  });
+
+  it('serves a process resource beside every shape resource', async () => {
+    const client = await connect(api(agentRoutes()));
+    const { resources } = await client.listResources();
+    const uris = resources.map((resource) => resource.uri);
+
+    expect(uris).toContain('tcms://shape/case');
+    expect(uris.filter((uri) => uri.startsWith('tcms://process/'))).toHaveLength(PROCESSES.length);
+
+    const read = await client.readResource({ uri: 'tcms://process/ingest-spec' });
+    const first = read.contents[0];
+    expect(first && 'text' in first ? first.text : '').toContain('tcms_write_doc_page');
+  });
+
+  it('refuses a uri it does not serve rather than answering an empty document', async () => {
+    const client = await connect(api(agentRoutes()));
+    await expect(client.readResource({ uri: 'tcms://process/invent-spec' })).rejects.toThrow();
+  });
+
+  it('lists the five processes as prompts, with the arguments a person fills in', async () => {
+    const client = await connect(api(agentRoutes()));
+    const { prompts } = await client.listPrompts();
+
+    expect(prompts.map((prompt) => prompt.name))
+      .toEqual(PROCESSES.map((candidate) => candidate.name));
+    const ingest = prompts.find((prompt) => prompt.name === 'ingest-spec');
+    expect(ingest?.arguments?.filter((argument) => argument.required).map((argument) => argument.name))
+      .toEqual(['spec', 'title']);
+  });
+
+  it('renders one prompt with what the person pasted, and the guide unchanged', async () => {
+    const client = await connect(api(agentRoutes()));
+    const answer = await client.getPrompt({
+      name: 'ingest-spec',
+      arguments: { spec: 'Interest accrues daily.', title: 'Margin interest' },
+    });
+
+    const text = answer.messages[0]?.content.type === 'text' ? answer.messages[0].content.text : '';
+    /*
+      The guide is served verbatim and the arguments are appended, rather than interpolated into
+      prose: it is the same text the resource and `tcms_process` answer with, and a fourth
+      rendering of it is a fourth thing to keep in step.
+    */
+    expect(text).toContain('Interest accrues daily.');
+    expect(text).toContain('## title');
+    expect(text).toContain(processGuideFor(PROCESSES[0]!));
+  });
+
+  it('names what is still needed rather than starting without it', async () => {
+    const client = await connect(api(agentRoutes()));
+    const answer = await client.getPrompt({ name: 'ingest-spec', arguments: { title: 'Margin interest' } });
+
+    const text = answer.messages[0]?.content.type === 'text' ? answer.messages[0].content.text : '';
+    expect(text).toContain('Still needed');
+    expect(text).toContain('- spec');
   });
 });
 

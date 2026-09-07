@@ -142,32 +142,6 @@ describe('the shape catalogue against the commands that declare it', () => {
     'suite.edit': 'suite edit',
   };
 
-  /**
-   * Catalogue fields whose flag is one task behind, each with what it costs.
-   *
-   * The CLI half of the map `mcp/src/writes.test.ts` carries, and the same rule: a shortfall is
-   * named with its cost and pinned both ways, so a stale entry fails as loudly as a new gap. 022
-   * splits the catalogue (T3a) from the adapters (T3b); this is what that split costs for one
-   * commit. **T3b empties this map and deletes it.**
-   *
-   * The object arrays are absent from it because argv cannot carry one at all — the criteria and
-   * the plan's sections travel in `--file`, and `spellableInArgv` skips them above.
-   */
-  const PENDING_ON_THE_SURFACE: Readonly<Record<string, string>> = {
-    'doc create does not take --from':
-      'The page as TCMS spec markdown. The flag takes the PATH of the file, unlike the MCP '
-      + 'argument, which takes the text; T3b reads it and converts it through core/markdown.ts.',
-    'doc edit does not take --from':
-      'The same, on the edit, where it also carries --drop-linked.',
-    ...Object.fromEntries(['create', 'edit'].flatMap((arm) =>
-      ['scope-text', 'out-of-scope-text', 'tag'].map((flag) => [
-        `plan ${arm} does not take --${flag}`,
-        'The plan document body. T3b adds the three flags argv can carry; the criteria and the '
-        + 'sections go in --file.',
-      ])),
-    ),
-  };
-
   it('gives every field a flag the command actually takes', () => {
     const gaps: string[] = [];
 
@@ -197,9 +171,7 @@ describe('the shape catalogue against the commands that declare it', () => {
       }
     }
 
-    expect(gaps.filter((gap) => !(gap in PENDING_ON_THE_SURFACE))).toEqual([]);
-    expect(Object.keys(PENDING_ON_THE_SURFACE).filter((entry) => !gaps.includes(entry)))
-      .toEqual([]);
+    expect(gaps).toEqual([]);
   });
 
   it('maps every body-carrying action the catalogue says this surface has', () => {
@@ -209,5 +181,38 @@ describe('the shape catalogue against the commands that declare it', () => {
         .map((action) => `${entity}.${action.name}`));
 
     expect(declared.sort()).toEqual(Object.keys(COMMAND_FOR).sort());
+  });
+});
+
+describe('tcms process — the sequence beside the shape (022)', () => {
+  it('runs offline too, because the person deciding whether this can do the job has no token', async () => {
+    const { code, text } = await format('process');
+    expect(code).toBe(EXIT.ok);
+    expect(text).not.toContain('No TCMS instance');
+    expect(text).toContain('ingest-spec');
+    expect(text).toContain('report-spec');
+  });
+
+  it('prints the steps, the checks and the traps for one', async () => {
+    const { text } = await format('process', 'ingest-spec');
+    expect(text).toContain('tcms doc create --title T [--parent DOC-1] --from spec.md');
+    expect(text).toContain('Then read:');
+    expect(text).toContain('Trap:');
+  });
+
+  it('says a step is MCP-only rather than leaving it looking complete', async () => {
+    /*
+      `tcms_orient` reaches no command at all and neither does `tcms_report`. That is a real gap —
+      surface spec §6's `report` and `triage` asymmetry — so the renderer states it. A step whose
+      CLI line was simply absent would read as a step needing no command.
+    */
+    const { text } = await format('process', 'ingest-spec');
+    expect(text).toContain('no command reaches this step; it is MCP-only');
+  });
+
+  it('refuses a name it does not have, and lists what it does', async () => {
+    const { code, text } = await format('process', 'invent-spec');
+    expect(code).toBe(EXIT.usage);
+    expect(text).toContain('cover-spec');
   });
 });

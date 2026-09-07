@@ -735,6 +735,7 @@ export const helpSections: HelpSection[] = [
         <H>Reading</H>
         <Terminal>{`tcms whoami            # who this token acts as, and what it can reach
 tcms format case       # what a payload must look like — reaches no instance
+tcms process ingest-spec # the ordered steps of a job — also reaches no instance
 tcms project list      # projects this token can see
 tcms case list         # search and filter test cases
 tcms case show TC-42   # one case in full
@@ -744,7 +745,7 @@ tcms suite show TS-7   # one suite, with the conditions it imposes
 tcms plan list
 tcms run list
 tcms doc list
-tcms doc show <page>   # one documentation page, with its blocks
+tcms doc show <page>   # one documentation page, with its blocks; --markdown for its text
 tcms proposal list     # the review queue of proposed cases
 tcms proposal show <id># one proposal, with its payload and grounding
 tcms issue list        # the project's epics, stories, bugs, spikes and tasks
@@ -786,7 +787,8 @@ tcms suite create | suite edit | suite status
 tcms plan create  | plan edit  | plan status
 tcms run create   | run status
 tcms result record     # record a verdict against one case in a run
-tcms doc create | doc edit | doc link | doc unlink
+tcms doc create | doc edit | doc link | doc unlink | doc adopt
+tcms spec import bundle.json   # a page, its proposed cases and its plan, from one file
 tcms issue create | issue move | issue comment
 tcms board move ACME-1 --column "In flight"  # a card to a column; a WIP breach prints and exits 0
 tcms rank ACME-1 --after ACME-9              # exactly one of --after or --before
@@ -896,7 +898,7 @@ tcms review comment    # a remark on an open review`}</Terminal>
   {
     id: 'mcp',
     title: 'AI agent access (MCP)',
-    summary: 'Connecting an AI assistant, the 44 tools, and the limits that make it safe.',
+    summary: 'Connecting an AI assistant, the 45 tools, and the limits that make it safe.',
     body: (
       <>
         <P>
@@ -926,9 +928,9 @@ tcms review comment    # a remark on an open review`}</Terminal>
         <Definitions
           items={[
             {
-              term: 'Orientation — 3',
+              term: 'Orientation — 4',
               detail:
-                'tcms_whoami reports who the credential acts as and what it can reach. tcms_orient returns the project with its classification dimensions, execution statuses, suites, tags and case counts in one call — the vocabulary is per-project, so an agent that skips this guesses values that get refused. tcms_shape answers what a payload of a given kind must look like, and reaches no instance at all, so it is safe to call before anything is configured.',
+                'tcms_whoami reports who the credential acts as and what it can reach. tcms_orient returns the project with its classification dimensions, execution statuses, suites, tags and case counts in one call — the vocabulary is per-project, so an agent that skips this guesses values that get refused. tcms_shape answers what a payload of a given kind must look like, and reaches no instance at all, so it is safe to call before anything is configured. tcms_process answers the other half — the ordered steps of a job, which tool at each one and what to read before the next — and reaches no instance either.',
             },
             {
               term: 'Reading — 21',
@@ -936,14 +938,14 @@ tcms review comment    # a remark on an open review`}</Terminal>
                 'tcms_search_cases · tcms_open_case · tcms_list_suites · tcms_list_library · tcms_list_artifacts · tcms_doc_tree · tcms_open_doc_page · tcms_list_plans · tcms_open_run · tcms_read_issue · tcms_read_board · tcms_read_release · tcms_read_timesheet · tcms_read_time_rollup · tcms_read_staffing · tcms_read_client · tcms_read_billing · tcms_read_rate_card · tcms_read_analytics · tcms_list_proposals · tcms_triage',
             },
             {
-              term: 'Writing — 19',
+              term: 'Writing — 20',
               detail:
                 'tcms_write_case · tcms_write_suite · tcms_write_doc_page · tcms_write_plan · tcms_write_run · tcms_record_result · tcms_review_comment · tcms_review_verdict · tcms_write_issue · tcms_write_backlog · tcms_write_release · tcms_write_artifact · tcms_write_timesheet · tcms_approve_timesheet · tcms_write_allocation · tcms_write_absence · tcms_write_client · tcms_write_billing · tcms_write_rate_card · tcms_report',
             },
           ]}
         />
         <P>
-          The list is workflow-shaped rather than one tool per endpoint: 44 tools over roughly 110 API
+          The list is workflow-shaped rather than one tool per endpoint: 45 tools over roughly 110 API
           paths. Tool definitions cost the model context, so a mirror of the API would be a surface
           only the largest hosts could afford to load.
         </P>

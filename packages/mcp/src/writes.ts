@@ -99,8 +99,13 @@
 import {
   CASE_SHAPE,
   ISSUE_SHAPE,
+  SHAPES,
+  anchorsFor,
+  blocksFromMarkdown,
   caseInputFrom,
   createIntent,
+  docPageInputFrom,
+  fieldsFor,
   jsonSchemaFor,
   editIntent,
   planInputFrom,
@@ -109,6 +114,8 @@ import {
   resolveId,
   suiteInputFrom,
   type EditVersion,
+  type MarkdownOptions,
+  type MarkdownPage,
   type components,
 } from '@tcms/client';
 
@@ -205,7 +212,117 @@ const ACTION = (values: readonly string[], description: string) => ({
   description,
 });
 
+/**
+ * The page body as text, rendered from the catalogue rather than written out here.
+ *
+ * `tcms_shape docPage`, `tcms format docPage` and this schema are three carriers of one field, and
+ * a hand-written copy here is what `writes.test.ts`'s catalogue↔surface check exists to catch.
+ */
+const MARKDOWN_PROPERTY =
+  (jsonSchemaFor(SHAPES['docPage']!, 'create', 'body')['properties'] as Record<string, unknown>)['markdown'];
+
+/**
+ * The page body from `markdown`, or `undefined` when the caller sent none.
+ *
+ * **Both forms in one call is a refusal rather than a precedence rule.** `blocks` and `markdown`
+ * are the same page in two media, so a caller sending both has two answers to one question and any
+ * order of preference silently discards one of them — the failure `DocBlockInput` refuses `rows` on
+ * a paragraph to avoid, one level up.
+ */
+function bodyFromMarkdown(
+  input: Record<string, unknown>,
+  options: MarkdownOptions,
+): MarkdownPage | undefined {
+  const markdown = str(input, 'markdown');
+  if (markdown === undefined) return undefined;
+  if (input['blocks'] !== undefined) {
+    throw new InputError(
+      "Send 'markdown' or 'blocks', not both — they are the same page in two forms, and sending "
+        + 'both means one of them is being ignored.',
+    );
+  }
+  return blocksFromMarkdown(markdown, options);
+}
+
+/**
+ * The written page with the label → block id map the next step is composed against.
+ *
+ * The whole reason a label exists: it is never stored, so this response is the ONLY place the id a
+ * `{#label}` was given can be read, and `verifies` on a proposal is written against it. The
+ * warnings ride along because §2.4.8 forbids dropping anything silently — an image the create
+ * could not carry, or emphasis the page will render literally, is reported here rather than
+ * discovered on the rendered page.
+ */
+function withAnchors(
+  page: components['schemas']['DocPage'],
+  written: MarkdownPage,
+): Record<string, unknown> {
+  return {
+    ...page,
+    anchors: anchorsFor(written.labels, page),
+    ...(written.warnings.length > 0 ? { warnings: written.warnings } : {}),
+  };
+}
+
 /* ------------------------------------------------------------------- cases ---- */
+
+/** The requirements a proposal claims, from the catalogue — `MARKDOWN_PROPERTY`'s rule. */
+const VERIFIES_PROPERTY =
+  (jsonSchemaFor(CASE_SHAPE, 'propose', 'wrapper')['properties'] as Record<string, unknown>)['verifies'];
+
+/** The three words, read off the catalogue rather than repeated — it is pinned to the contract. */
+const RELATIONSHIPS: readonly string[] =
+  fieldsFor(CASE_SHAPE, 'propose', 'wrapper')
+    .find((field) => field.name === 'verifies')?.fields
+    ?.find((field) => field.name === 'relationship')?.enum ?? [];
+
+/**
+ * `verifies` as the contract takes it — display keys resolved, the wire spelling preserved.
+ *
+ * It **does not check the block ids**, because they are checked at accept and a claim filed today
+ * against a block deleted next week is refused then, on a reviewer's screen; pre-checking here
+ * would suggest a guarantee the file cannot give.
+ *
+ * It **does** check `relationship`, and the split is the point: the vocabulary is three fixed
+ * words, so *this* is exactly the part of a claim that can be judged with no knowledge of the
+ * project's state — by the server at file time, and equally by the client before the request.
+ * Refused here rather than normalised, because lower-casing would hide a typo and defaulting
+ * would invent a claim nobody made; refused here rather than sent, because a body carrying a
+ * value the contract does not admit is one no client should compose. Absent becomes the
+ * contract's own `VERIFIES` explicitly, `doc link`'s reason: `openapi-typescript` reads a schema
+ * default as "the server always has one", which is true of the stored row and not of the request.
+ */
+async function verifiesFrom(
+  session: Session,
+  projectId: string,
+  value: unknown,
+): Promise<components['schemas']['ProposalLinkInput'][] | undefined> {
+  if (value === undefined || value === null) return undefined;
+  if (!Array.isArray(value)) throw new InputError("'verifies' must be an array of {page, block}.");
+
+  const targets: components['schemas']['ProposalLinkInput'][] = [];
+  for (const [index, entry] of value.entries()) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new InputError(`'verifies[${index}]' must be an object with 'page' and 'block'.`);
+    }
+    const target = entry as Record<string, unknown>;
+    const page = requireStr(target, 'page');
+    const relationship = str(target, 'relationship') ?? 'VERIFIES';
+    if (!RELATIONSHIPS.includes(relationship)) {
+      throw new InputError(
+        `'verifies[${String(index)}].relationship' is '${relationship}'. It is one of `
+          + `${RELATIONSHIPS.join(', ')} — only VERIFIES is coverage.`,
+      );
+    }
+
+    targets.push({
+      pageId: await resolveId({ client: session.client, projectId, value: page, entity: 'DOC_PAGE' }),
+      blockId: requireStr(target, 'block'),
+      relationship: relationship as components['schemas']['ProposalLinkInput']['relationship'],
+    });
+  }
+  return targets;
+}
 
 const writeCase: ToolDefinition = {
   name: 'tcms_write_case',
@@ -259,6 +376,7 @@ const writeCase: ToolDefinition = {
           + 'it out if you did not check — absent and UNVERIFIED are different answers, and the '
           + 'difference is recorded.',
       },
+      verifies: VERIFIES_PROPERTY,
       /*
         The `edit` arm's fields, rendered from the catalogue rather than written out — which is
         how `automationKey` arrived. It was on the CLI's `case edit` and missing here, so this
@@ -303,6 +421,9 @@ const writeCase: ToolDefinition = {
       );
 
       const verdict = str(input, 'verdict');
+      // Read off the tool's own input rather than out of `testCase`: a claim ABOUT the proposal
+      // rides on the wrapper beside `verdict`, exactly as the catalogue scopes it.
+      const verifies = await verifiesFrom(session, projectId, input['verifies'] ?? wrapped['verifies']);
 
       const filed = await session.client.POST('/projects/{projectId}/ai-proposals', {
         params: { path: { projectId } },
@@ -312,6 +433,7 @@ const writeCase: ToolDefinition = {
           // in `verdictSource` — nobody claimed anything, against a model claiming it had not
           // checked. Filling this in would turn every silence into a claim.
           ...(verdict === undefined ? {} : { verdict }),
+          ...(verifies === undefined ? {} : { verifies }),
         } as components['schemas']['AiProposalInput'],
         tcms: { ...session.request, ...createIntent({ key: session.callId }) },
       });
@@ -321,9 +443,12 @@ const writeCase: ToolDefinition = {
         status: filed.status,
         verdict: filed.verdict,
         verdictSource: filed.verdictSource,
+        verifies: filed.verifies,
         // Printed together, always: a verdict without its source reads as a finding.
         note: 'Filed for review. It is not a test case, and this credential cannot accept it — '
-          + 'the accept gate is "case:create AND no API token", so a person must.',
+          + 'the accept gate is "case:create AND no API token", so a person must. The blocks in '
+          + '`verifies` become links when a person accepts, and a block that has gone by then is '
+          + 'a field error on their screen rather than yours.',
       };
     }
 
@@ -568,13 +693,19 @@ const writeDocPage: ToolDefinition = {
   name: 'tcms_write_doc_page',
   title: 'Write documentation, and link cases to it',
   description:
-    'Five actions: create a page, edit one, link a case or suite to a block, unlink, and `publish` '
-    + '— which moves the page between DRAFT, PUBLISHED and ARCHIVED. **A block omitted from '
-    + '`blocks` is DELETED** — the array is the whole page in order — so read the page first and '
-    + 'send back everything you are keeping, together with the lockVersion that read returned. '
-    + 'Linking is how a case is tied to a requirement: this product has no separate criterion '
-    + 'record, so the block IS the requirement. Publishing is a separate act from writing and '
-    + 'costs a separate key; it is not an approval and does not stand in for a review.',
+    'Six actions: create a page, edit one, link a case or suite to a block, unlink, `adopt` — '
+    + 'which makes the page a plan\'s document — and `publish`, which moves the page between '
+    + 'DRAFT, PUBLISHED and ARCHIVED. **Write the body as `markdown`, not as `blocks`**: TCMS '
+    + 'spec markdown converts to blocks here and the answer carries `anchors`, mapping each '
+    + '`{#label}` you wrote to the block id it was given — which is what a proposal\'s `verifies` '
+    + 'is written against. `blocks` still works and is the raw form. **A block omitted from '
+    + 'either is DELETED** — both are the whole page in order — so read the page first '
+    + '(tcms_open_doc_page with `as: "markdown"`) and send back everything you are keeping, with '
+    + 'the lockVersion that read returned; an edit dropping a block a case claims is refused '
+    + 'naming the cases unless you pass `dropLinked`. Linking is how a case is tied to a '
+    + 'requirement: this product has no separate criterion record, so the block IS the '
+    + 'requirement. Publishing is a separate act from writing and costs a separate key; it is not '
+    + 'an approval and does not stand in for a review. Call tcms_process ingest-spec first.',
   /*
     Two keys merged, and it is `V52` (§210) that makes it legal — `doc:publish` was Lead-only as
     "the human's signal that a document is ready" while `doc:edit` is held by everyone who writes,
@@ -595,6 +726,18 @@ const writeDocPage: ToolDefinition = {
     // the existing link, which is the property a key would have bought.
     { action: 'link', kind: 'state', permission: 'doc:edit' },
     { action: 'unlink', kind: 'delete', permission: 'doc:edit', targets: ['page', 'link'] },
+    /*
+      Adopting lives on the DOC tool and not on `tcms_write_plan`, and the contract is what decides
+      it: `PUT …/plans/{planId}/document` requires *"`doc:edit`, the same key as editing the page,
+      because it is the same act seen from the other end"* — it writes the page's
+      `subjectType`/`subjectId` and nothing on the plan. Putting a `doc:edit` arm on a tool gated
+      `plan:*` is precisely the two-gate span §2 refuses.
+
+      `state`, not `create`: it links two rows that both already exist, and the contract offers no
+      `Idempotency-Key`. Relinking is deliberately `{plan: null}` then `{plan}` rather than a
+      silent reassignment, so this arm cannot lose a plan's document by being called twice.
+    */
+    { action: 'adopt', kind: 'state', permission: 'doc:edit' },
     { action: 'publish', kind: 'state', permission: 'doc:publish' },
   ],
   inputSchema: {
@@ -602,7 +745,7 @@ const writeDocPage: ToolDefinition = {
     additionalProperties: false,
     required: ['action'],
     properties: {
-      action: ACTION(['create', 'edit', 'link', 'unlink', 'publish'], 'What to do.'),
+      action: ACTION(['create', 'edit', 'link', 'unlink', 'adopt', 'publish'], 'What to do.'),
       page: idProperty('documentation page — required for everything but create', 'DOC-1'),
       status: {
         type: 'string',
@@ -612,11 +755,26 @@ const writeDocPage: ToolDefinition = {
       },
       title: { type: 'string' },
       parent: idProperty('parent page, for create', 'DOC-1'),
+      markdown: MARKDOWN_PROPERTY,
+      dropLinked: {
+        type: 'boolean',
+        description:
+          'For `edit`: consent to delete the claims on any block this text drops. Default false, '
+          + 'which refuses and names the blocks and the cases claiming them. Say why in your '
+          + 'report when you pass it.',
+      },
       blocks: {
         type: 'array',
         items: { type: 'object' },
         description:
-          'The WHOLE page in order. A block you omit is deleted. Requires lockVersion.',
+          'The WHOLE page in order, as DocBlockInput objects — the raw form of `markdown`, and '
+          + 'refused together with it. A block you omit is deleted. Requires lockVersion.',
+      },
+      plan: {
+        type: ['string', 'null'],
+        description:
+          'For `adopt`: the plan this page documents, by display key (TP-3). Null unlinks the '
+          + 'page from the plan it currently documents and KEEPS the page.',
       },
       block: { type: 'string', description: 'For `link`: the block id from tcms_open_doc_page.' },
       case: idProperty('case to link', 'TC-42'),
@@ -633,17 +791,20 @@ const writeDocPage: ToolDefinition = {
 
     if (action === 'create') {
       const parent = str(input, 'parent');
-      return session.client.POST('/projects/{projectId}/doc-pages', {
+      const written = bodyFromMarkdown(input, { mode: 'create' });
+      const created = await session.client.POST('/projects/{projectId}/doc-pages', {
         params: { path: { projectId } },
         body: present({
           title: requireStr(input, 'title'),
           parentId: parent === undefined
             ? undefined
             : await resolveId({ client: session.client, projectId, value: parent, entity: 'DOC_PAGE' }),
-          blocks: input['blocks'],
+          blocks: written?.blocks ?? input['blocks'],
         }) as components['schemas']['DocPageInput'],
         tcms: { ...tcms, ...createIntent({ key: session.callId }) },
       });
+
+      return written ? withAnchors(created, written) : created;
     }
 
     const pageId = await resolveId({
@@ -704,12 +865,77 @@ const writeDocPage: ToolDefinition = {
       return { removed: linkId };
     }
 
+    if (action === 'adopt') {
+      const plan = nullableStr(input, 'plan');
+      if (plan === undefined) {
+        throw new InputError("'plan' is required for adopt — a plan key, or null to unlink.");
+      }
+
+      if (plan === null) {
+        /*
+          The plan is resolved from the PAGE rather than taken as an argument, because the caller
+          named the page and a second identifier is a second thing that can disagree with it. The
+          contract answers 404 when the plan has no document, which is what a page nobody adopted
+          reaches here as.
+        */
+        const current = await session.client.GET('/projects/{projectId}/doc-pages/{pageId}', {
+          params: { path }, tcms,
+        });
+        if (current.subjectType !== 'TEST_PLAN' || !current.subjectId) {
+          throw new InputError(
+            `${current.key} is not a plan's document, so there is nothing to unlink.`,
+          );
+        }
+        await session.client.DELETE('/projects/{projectId}/plans/{planId}/document', {
+          params: { path: { projectId, planId: current.subjectId } }, tcms,
+        });
+        return {
+          page: current.key,
+          adoptedBy: null,
+          note: 'Unlinked. The page still exists with its blocks, its history and its links.',
+        };
+      }
+
+      const planId = await resolveId({ client: session.client, projectId, value: plan, entity: 'PLAN' });
+      return session.client.PUT('/projects/{projectId}/plans/{planId}/document', {
+        params: { path: { projectId, planId } },
+        body: { pageId },
+        tcms,
+      });
+    }
+
     if (action !== 'edit') throw new InputError(`Unknown action '${action}'.`);
 
-    const blocks = input['blocks'];
-    const body = present({ title: str(input, 'title'), blocks });
+    /*
+      A whole-body edit reads the page first, for two things it cannot compose without it: the
+      linked-block refusal, which is computable only against the blocks and links currently on the
+      page, and `DocPageInput.title` — **required by the contract**, so a body edit that named no
+      title used to be a 400 on a field the caller never meant to change (`core/rewrite.ts`). The
+      version does NOT come from this read; see below.
+    */
+    const whole = str(input, 'markdown') !== undefined || input['blocks'] !== undefined;
+    const current = whole
+      ? await session.client.GET('/projects/{projectId}/doc-pages/{pageId}', { params: { path }, tcms })
+      : undefined;
+    const written = current === undefined
+      ? undefined
+      : bodyFromMarkdown(input, {
+        mode: 'edit',
+        current: current.blocks,
+        ...(bool(input, 'dropLinked') === undefined ? {} : { dropLinked: bool(input, 'dropLinked')! }),
+      });
+
+    const blocks = written?.blocks ?? input['blocks'];
+    // The projection first, the caller's own words over it — the order every read-modify-write on
+    // this surface uses, and the one that lets `present` mean "the caller did not name this".
+    const body = {
+      ...(current ? docPageInputFrom(current) : {}),
+      ...present({ title: str(input, 'title'), blocks }),
+    };
     if (Object.keys(body).length === 0) {
-      throw new InputError("Nothing to change. Pass 'title', or 'blocks' with the page body.");
+      throw new InputError(
+        "Nothing to change. Pass 'title', or 'markdown' with the page body, or 'blocks'.",
+      );
     }
 
     /*
@@ -719,21 +945,107 @@ const writeDocPage: ToolDefinition = {
       based on, the server would accept it, and whoever saved in between would lose their words.
       §139's rule, applied to the one place on this surface where it bites. A title-only edit is
       a delta and takes the ordinary route.
+
+      **`markdown` is the same case and takes the same route**, and the read this arm now makes
+      for the linked-block check is NOT a licence to relax it: that read tells us which claims the
+      edit would void, and it says nothing about whether the text was composed against the page as
+      it stands. Deriving the version from it would be exactly the earlier-read-fresh-version pair
+      the rule refuses, arriving through a read taken for another purpose.
     */
     const version = blocks === undefined
       ? await versionFor(input, () =>
         session.client.GET('/projects/{projectId}/doc-pages/{pageId}', { params: { path }, tcms }))
       : requireExplicitVersion(num(input, 'lockVersion'), 'Replacing a page\'s blocks', 'lockVersion');
 
-    return session.client.PATCH('/projects/{projectId}/doc-pages/{pageId}', {
+    const updated = await session.client.PATCH('/projects/{projectId}/doc-pages/{pageId}', {
       params: { path },
       body: body as components['schemas']['DocPageInput'],
       tcms: { ...tcms, ...editIntent(version, 'edit this page') },
     });
+
+    return written ? withAnchors(updated, written) : updated;
   },
 };
 
 /* -------------------------------------------------------------------- plans ---- */
+
+const PLAN_DOCUMENT_FIELDS = [
+  'scopeText',
+  'outOfScopeText',
+  'entryCriteria',
+  'exitCriteria',
+  'sections',
+  'tags',
+] as const;
+
+const PLAN_DOCUMENT_PROPERTIES = Object.fromEntries(
+  Object.entries(jsonSchemaFor(SHAPES['plan']!, 'create', 'body')['properties'] as Record<string, unknown>)
+    .filter(([name]) => (PLAN_DOCUMENT_FIELDS as readonly string[]).includes(name)),
+);
+
+/**
+ * A plan section as the contract takes it, with its members resolved.
+ *
+ * The keys are resolved **per section**, the same way the plan's own `cases` and `suites` are —
+ * a section naming `TC-42` and a plan naming `TC-42` mean the same case, and taking UUIDs in one
+ * place and keys in the other would be one noun with two spellings on one tool.
+ */
+async function sectionsFrom(
+  session: Session,
+  projectId: string,
+  value: unknown,
+): Promise<components['schemas']['PlanSectionInput'][] | undefined> {
+  if (value === undefined || value === null) return undefined;
+  if (!Array.isArray(value)) throw new InputError("'sections' must be an array of objects.");
+
+  const sections: components['schemas']['PlanSectionInput'][] = [];
+  for (const [index, entry] of value.entries()) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new InputError(`'sections[${index}]' must be an object with a 'name'.`);
+    }
+    const section = entry as Record<string, unknown>;
+    sections.push(present({
+      name: requireStr(section, 'name'),
+      caseIds: await resolveMany(session, projectId, strings(section, 'cases'), 'CASE'),
+      suiteIds: await resolveMany(session, projectId, strings(section, 'suites'), 'SUITE'),
+      tags: strings(section, 'tags'),
+    }) as components['schemas']['PlanSectionInput']);
+  }
+  return sections;
+}
+
+/** The criteria, checked to be objects here so a 400 names the index rather than the array. */
+function criteriaFrom(
+  input: Record<string, unknown>,
+  name: 'entryCriteria' | 'exitCriteria',
+): components['schemas']['CriterionInput'][] | undefined {
+  const value = input[name];
+  if (value === undefined || value === null) return undefined;
+  if (!Array.isArray(value)) throw new InputError(`'${name}' must be an array of criteria.`);
+
+  return value.map((entry, index) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new InputError(`'${name}[${index}]' must be an object with 'metric', 'op' and 'value'.`);
+    }
+    return entry as components['schemas']['CriterionInput'];
+  });
+}
+
+/** The plan's document body, the same six on `create` and on `edit`. */
+async function planDocumentFrom(
+  session: Session,
+  projectId: string,
+  input: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  return present({
+    scopeText: nullableStr(input, 'scopeText'),
+    outOfScopeText: nullableStr(input, 'outOfScopeText'),
+    entryCriteria: criteriaFrom(input, 'entryCriteria'),
+    exitCriteria: criteriaFrom(input, 'exitCriteria'),
+    sections: await sectionsFrom(session, projectId, input['sections']),
+    tags: strings(input, 'tags'),
+  });
+}
 
 const writePlan: ToolDefinition = {
   name: 'tcms_write_plan',
@@ -764,6 +1076,13 @@ const writePlan: ToolDefinition = {
       milestoneDate: { type: ['string', 'null'], description: 'YYYY-MM-DD.' },
       suites: { type: 'array', items: { type: 'string' }, description: 'COMPLETE set of suite keys.' },
       cases: { type: 'array', items: { type: 'string' }, description: 'COMPLETE set of case keys.' },
+      /*
+        The plan's *written for a specification* half, rendered from the catalogue for
+        `MARKDOWN_PROPERTY`'s reason — and unreachable from either adapter until 022, which
+        `core/rewrite.ts` records the cost of: with no argument to carry them, `scopeText` and
+        `outOfScopeText` were emptied by every plan edit this server ever made.
+      */
+      ...PLAN_DOCUMENT_PROPERTIES,
       status: { type: 'string', description: 'For `status`: DRAFT or IN_REVIEW.' },
       lockVersion: LOCK_VERSION_PROPERTY,
     },
@@ -783,6 +1102,7 @@ const writePlan: ToolDefinition = {
           milestoneDate: nullableStr(input, 'milestoneDate'),
           suiteIds: await resolveMany(session, projectId, strings(input, 'suites'), 'SUITE'),
           caseIds: await resolveMany(session, projectId, strings(input, 'cases'), 'CASE'),
+          ...await planDocumentFrom(session, projectId, input),
         }) as components['schemas']['TestPlanInput'],
         tcms: { ...tcms, ...createIntent({ key: session.callId }) },
       });
@@ -831,6 +1151,7 @@ const writePlan: ToolDefinition = {
       milestoneDate: nullableStr(input, 'milestoneDate'),
       suiteIds: await resolveMany(session, projectId, strings(input, 'suites'), 'SUITE'),
       caseIds: await resolveMany(session, projectId, strings(input, 'cases'), 'CASE'),
+      ...await planDocumentFrom(session, projectId, input),
     });
     if (Object.keys(delta).length === 0) {
       throw new InputError('Nothing to change. Name at least one field.');

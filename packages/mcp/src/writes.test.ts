@@ -341,7 +341,12 @@ describe('tcms_write_case', () => {
 
 describe('tcms_write_doc_page', () => {
   it('demands the caller\'s own lockVersion when replacing blocks', async () => {
-    const stub = api(agentRoutes({ '/doc-pages': { status: 200, body: [PAGE_ROW] } }));
+    const stub = api(agentRoutes({
+      '/doc-pages': { status: 200, body: [PAGE_ROW] },
+      // Read for the TITLE, which `DocPageInput` requires of a body edit — not for the version.
+      // That distinction is the assertion below: the read happens and the write is still refused.
+      'GET /doc-pages/d-1': { status: 200, body: PAGE },
+    }));
 
     /*
       The one place §139's rule bites on this surface: a `blocks` array is the whole page and a
@@ -392,6 +397,228 @@ describe('tcms_write_doc_page', () => {
 
     await expect(run(stub, 'tcms_write_doc_page', { action: 'link', page: 'DOC-1', block: 'b-1' }))
       .rejects.toThrow(/exactly one/);
+  });
+});
+
+describe('tcms_write_doc_page — TCMS spec markdown, anchors and adoption (022)', () => {
+  it('converts markdown to blocks and answers with the label → block id map', async () => {
+    const written = docPage({
+      id: 'd-1', key: 'DOC-1', title: 'Payments spec', slug: 'payments-spec', lockVersion: 1,
+      blocks: [
+        docBlock({ id: 'b-h', blockType: 'heading', text: 'Charging', level: 1 }),
+        docBlock({ id: 'b-1', text: 'The system charges the card at capture.' }),
+      ],
+    });
+    const stub = api(agentRoutes({ 'POST /doc-pages': { status: 201, body: written } }));
+
+    const answer = await run(stub, 'tcms_write_doc_page', {
+      action: 'create',
+      title: 'Payments spec',
+      markdown: '# Charging\n\nThe system charges the card at capture. {#charges}\n',
+    }) as { anchors: Record<string, string> };
+
+    expect(JSON.parse(stub.write('/doc-pages').body ?? '{}')).toEqual({
+      title: 'Payments spec',
+      blocks: [
+        { blockType: 'heading', text: 'Charging', level: 1 },
+        { blockType: 'paragraph', text: 'The system charges the card at capture.' },
+      ],
+    });
+    /*
+      The whole reason a label exists: it is never stored, so this is the ONLY place the id a
+      `{#charges}` was given can be read — and `verifies` on the next proposal is written against
+      it. Resolved by index, because the response is the page in the order the blocks were sent.
+    */
+    expect(answer.anchors).toEqual({ charges: 'b-1' });
+  });
+
+  it('refuses a body sent as both markdown and blocks', async () => {
+    const stub = api(agentRoutes());
+
+    await expect(run(stub, 'tcms_write_doc_page', {
+      action: 'create', title: 'Spec', markdown: 'One statement. {#one}\n',
+      blocks: [{ blockType: 'paragraph', text: 'One statement.' }],
+    })).rejects.toThrow(/not both/);
+  });
+
+  it('refuses an edit that would delete a block a case claims, naming the case', async () => {
+    const claimed = docPage({
+      ...PAGE,
+      blocks: [docBlock({
+        id: 'b-1',
+        text: 'The system charges the card at capture.',
+        links: [{
+          id: 'l-1', sourceType: 'TEST_CASE', sourceId: 'c-1', sourceKey: 'TC-42',
+          sourceTitle: 'Charge at capture', relationship: 'VERIFIES',
+        }],
+      })],
+    });
+    const stub = api(agentRoutes({
+      '/doc-pages': { status: 200, body: [PAGE_ROW] },
+      'GET /doc-pages/d-1': { status: 200, body: claimed },
+    }));
+
+    await expect(run(stub, 'tcms_write_doc_page', {
+      action: 'edit', page: 'DOC-1', lockVersion: 5,
+      markdown: 'Something else entirely. {#other}\n',
+    })).rejects.toThrow(/TC-42/);
+  });
+
+  it('proceeds when the caller consents to losing those claims', async () => {
+    const claimed = docPage({
+      ...PAGE,
+      blocks: [docBlock({
+        id: 'b-1',
+        text: 'The system charges the card at capture.',
+        links: [{
+          id: 'l-1', sourceType: 'TEST_CASE', sourceId: 'c-1', sourceKey: 'TC-42',
+          sourceTitle: 'Charge at capture', relationship: 'VERIFIES',
+        }],
+      })],
+    });
+    const stub = api(agentRoutes({
+      '/doc-pages': { status: 200, body: [PAGE_ROW] },
+      'GET /doc-pages/d-1': { status: 200, body: claimed },
+      'PATCH /doc-pages/d-1': {
+        status: 200,
+        body: docPage({ ...PAGE, blocks: [docBlock({ id: 'b-2', text: 'Something else entirely.' })] }),
+      },
+    }));
+
+    const answer = await run(stub, 'tcms_write_doc_page', {
+      action: 'edit', page: 'DOC-1', lockVersion: 5, dropLinked: true,
+      markdown: 'Something else entirely. {#other}\n',
+    }) as { anchors: Record<string, string>; warnings?: string[] };
+
+    // The version is still the caller's own: the read this arm makes for the link check says
+    // which claims would go, and nothing about what the text was composed against.
+    expect(stub.write('/doc-pages/d-1').headers.get('If-Match')).toBe('5');
+    expect(answer.anchors).toEqual({ other: 'b-2' });
+    expect(answer.warnings?.join(' ')).toMatch(/TC-42/);
+  });
+
+  it('adopts the page as a plan\'s document, which is a doc:edit act on the plan\'s endpoint', async () => {
+    const stub = api(agentRoutes({
+      '/doc-pages': { status: 200, body: [PAGE_ROW] },
+      '/plans': { status: 200, body: [PLAN_ROW] },
+      'PUT /plans/tp-1/document': { status: 200, body: { ...PAGE, subjectType: 'TEST_PLAN', subjectId: 'tp-1' } },
+    }));
+
+    await run(stub, 'tcms_write_doc_page', { action: 'adopt', page: 'DOC-1', plan: 'TP-1' });
+
+    expect(JSON.parse(stub.write('/plans/tp-1/document').body ?? '{}')).toEqual({ pageId: 'd-1' });
+  });
+
+  it('unlinks by resolving the plan off the page rather than taking a second identifier', async () => {
+    const stub = api(agentRoutes({
+      '/doc-pages': { status: 200, body: [PAGE_ROW] },
+      'GET /doc-pages/d-1': { status: 200, body: { ...PAGE, subjectType: 'TEST_PLAN', subjectId: 'tp-1' } },
+      'DELETE /plans/tp-1/document': { status: 204 },
+    }));
+
+    const answer = await run(stub, 'tcms_write_doc_page', {
+      action: 'adopt', page: 'DOC-1', plan: null,
+    }) as { adoptedBy: null };
+
+    expect(answer.adoptedBy).toBeNull();
+  });
+
+  it('refuses to unlink a page no plan has adopted', async () => {
+    const stub = api(agentRoutes({
+      '/doc-pages': { status: 200, body: [PAGE_ROW] },
+      'GET /doc-pages/d-1': { status: 200, body: PAGE },
+    }));
+
+    await expect(run(stub, 'tcms_write_doc_page', { action: 'adopt', page: 'DOC-1', plan: null }))
+      .rejects.toThrow(/nothing to unlink/);
+  });
+});
+
+describe('tcms_write_case propose — the requirements a case claims (022)', () => {
+  it('resolves each page key and sends the block ids as the contract takes them', async () => {
+    const stub = api(agentRoutes({
+      '/doc-pages': { status: 200, body: [PAGE_ROW] },
+      'POST /ai-proposals': { status: 201, body: proposal() },
+    }));
+
+    await run(stub, 'tcms_write_case', {
+      action: 'propose',
+      testCase: PROPOSABLE,
+      verifies: [{ page: 'DOC-1', block: 'b-1' }, { page: 'DOC-1', block: 'b-2', relationship: 'DERIVED_FROM' }],
+    });
+
+    expect(JSON.parse(stub.write('/ai-proposals').body ?? '{}')['verifies']).toEqual([
+      // The contract's own default, stated rather than omitted — `doc link`'s rule.
+      { pageId: 'd-1', blockId: 'b-1', relationship: 'VERIFIES' },
+      { pageId: 'd-1', blockId: 'b-2', relationship: 'DERIVED_FROM' },
+    ]);
+  });
+
+  it('refuses a relationship outside the three, naming the index and the vocabulary', async () => {
+    /*
+      The half of a claim that CAN be judged with no knowledge of the project's state — which is
+      why the server validates it at file time rather than at accept, and why the client can too.
+      Lower-casing it would hide a typo; sending it would compose a body the contract does not
+      admit; defaulting it would invent a claim nobody made.
+    */
+    const stub = api(agentRoutes({ '/doc-pages': { status: 200, body: [PAGE_ROW] } }));
+
+    await expect(run(stub, 'tcms_write_case', {
+      action: 'propose', testCase: PROPOSABLE,
+      verifies: [{ page: 'DOC-1', block: 'b-1', relationship: 'verifies' }],
+    })).rejects.toThrow(/verifies\[0\].relationship/);
+
+    expect(stub.sent.filter((request) => request.method !== 'GET')).toHaveLength(0);
+  });
+});
+
+describe('tcms_write_plan — the document body (022)', () => {
+  it('sends all six of the fields no argument reached before, sections resolved by key', async () => {
+    const stub = api(agentRoutes({
+      '/cases': { status: 200, body: casePage([CASE_ROW], { size: 1 }) },
+      '/suites': { status: 200, body: [SUITE_ROW] },
+      'POST /plans': { status: 201, body: PLAN_ROW },
+    }));
+
+    await run(stub, 'tcms_write_plan', {
+      action: 'create',
+      name: 'Payments',
+      scopeText: 'Charging, capture, refunds.',
+      outOfScopeText: 'Anything behind the beta flag.',
+      entryCriteria: [{ metric: 'cases_approved', op: '>=', value: 90 }],
+      exitCriteria: [{ metric: 'pass_rate', op: '>=', value: 95, label: 'Green enough to ship' }],
+      sections: [{ name: 'Charging', cases: ['TC-42'], suites: ['TS-7'], tags: ['spec:payments'] }],
+      tags: ['spec:payments'],
+    });
+
+    expect(JSON.parse(stub.write('/plans').body ?? '{}')).toEqual({
+      name: 'Payments',
+      scopeText: 'Charging, capture, refunds.',
+      outOfScopeText: 'Anything behind the beta flag.',
+      entryCriteria: [{ metric: 'cases_approved', op: '>=', value: 90 }],
+      exitCriteria: [{ metric: 'pass_rate', op: '>=', value: 95, label: 'Green enough to ship' }],
+      // A section's members are display keys resolved per section, the way the plan's own are —
+      // one noun with two spellings on one tool would be the alternative.
+      sections: [{ name: 'Charging', caseIds: ['c-1'], suiteIds: ['s-1'], tags: ['spec:payments'] }],
+      tags: ['spec:payments'],
+    });
+  });
+
+  it('lays the document body over the read on an edit, so nothing unnamed is emptied', async () => {
+    const stub = api(agentRoutes({
+      '/plans': { status: 200, body: [PLAN_ROW] },
+      'GET /plans/tp-1': { status: 200, body: PLAN_ROW },
+      'PATCH /plans/tp-1': { status: 200, body: PLAN_ROW },
+    }));
+
+    await run(stub, 'tcms_write_plan', {
+      action: 'edit', plan: 'TP-1', outOfScopeText: 'The beta flag, and FI-5622.',
+    });
+
+    expect(JSON.parse(stub.write('/plans/tp-1').body ?? '{}')).toEqual({
+      ...PLAN_ECHO,
+      outOfScopeText: 'The beta flag, and FI-5622.',
+    });
   });
 });
 
@@ -1066,7 +1293,7 @@ describe('registry declarations', () => {
 });
 
 describe('the surface as a whole — surface spec §2 and §4.1', () => {
-  it('is 44 tools', () => {
+  it('is 45 tools', () => {
     // The count is an OUTCOME of "a tool never spans two permissions on its write path", not a
     // target. It is asserted so that a merge or a split has to be a decision somebody records.
     // ~~21~~ → 23 with audit C10: `tcms_list_artifacts` and `tcms_write_artifact`, which arrived
@@ -1142,7 +1369,15 @@ describe('the surface as a whole — surface spec §2 and §4.1', () => {
     // also the first tool since the release verbs to add NO permission key — `report:view` already
     // exists and is held by every project-scoped role that renders a rail at all, which is why M9
     // leaves the three permission-matrix copies untouched.
-    expect(TOOLS).toHaveLength(44);
+    //
+    // 44 -> 45 with the process catalogue (022 T3b): `tcms_process`, the second tool on this
+    // surface that reads NOTHING. `tcms_shape` answers what one object looks like and this
+    // answers the order they are written in, which is the question a model actually gets wrong —
+    // a page is written, cases are proposed against blocks whose ids only that write's response
+    // carries, a plan adopts the page. It is a fourth carrier beside the resource, the MCP
+    // prompts and `tcms process`, and it exists for the host that surfaces neither of the middle
+    // two: those are optional client capabilities and `tools/list` is not.
+    expect(TOOLS).toHaveLength(45);
   });
 
   it('names every tool in the tcms_ namespace', () => {
@@ -1256,38 +1491,6 @@ describe('the shape catalogue against the tools that declare it', () => {
     return names;
   }
 
-  /**
-   * Catalogue fields whose tool argument is one task behind, each with what it costs.
-   *
-   * The same device as `shapesContract.test.ts`'s `UNOFFERED` and `CREATE_WITHOUT_A_KEY`, aimed at
-   * the other seam: a shortfall is **named with its cost and pinned both ways**, so it cannot be
-   * forgotten and a stale entry fails as loudly as a new gap. 022 splits the catalogue (T3a) from
-   * the adapters (T3b) precisely so neither session reads the other's files, and the price of that
-   * split is exactly this list — for one commit the shape catalogue describes fields
-   * `tcms_shape` will name and these tools do not yet take.
-   *
-   * **T3b empties this map and deletes it.** An entry outliving its gap is a failure below.
-   */
-  const PENDING_ON_THE_SURFACE: Readonly<Record<string, string>> = {
-    "tcms_write_case (propose) does not accept 'verifies'":
-      'The requirements a proposed case claims. T3b adds the argument and resolves each page key '
-      + 'to its id before sending; until then a model reading tcms_shape is told about a field '
-      + 'this tool would refuse under additionalProperties: false.',
-    "tcms_write_doc_page (create) does not accept 'markdown'":
-      'The page as TCMS spec markdown, converted by core/markdown.ts. T3b accepts it instead of '
-      + '`blocks` and answers with `anchors`.',
-    "tcms_write_doc_page (edit) does not accept 'markdown'":
-      'The same, on the edit arm, where it also carries the linked-block refusal and `dropLinked`.',
-    ...Object.fromEntries(['create', 'edit'].flatMap((arm) =>
-      ['scopeText', 'outOfScopeText', 'entryCriteria', 'exitCriteria', 'sections', 'tags']
-        .map((field) => [
-          `tcms_write_plan (${arm}) does not accept '${field}'`,
-          'The plan document body — the half of a plan that is written FOR a specification. T3b '
-          + 'adds all six through core/rewrite.ts\'s scalar/list split.',
-        ])),
-    ),
-  };
-
   it('declares every field the catalogue offers, for every body-carrying arm', () => {
     const gaps: string[] = [];
 
@@ -1314,9 +1517,7 @@ describe('the shape catalogue against the tools that declare it', () => {
       check exists to turn silence into a list, the same way question four of
       `shapesContract.test.ts` did.
     */
-    expect(gaps.filter((gap) => !(gap in PENDING_ON_THE_SURFACE))).toEqual([]);
-    expect(Object.keys(PENDING_ON_THE_SURFACE).filter((entry) => !gaps.includes(entry)))
-      .toEqual([]);
+    expect(gaps).toEqual([]);
   });
 
   it('maps every entity in the catalogue, so a ninth cannot arrive unpinned', () => {

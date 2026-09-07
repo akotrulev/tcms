@@ -665,6 +665,16 @@ const INVOCATIONS: Record<string, Invocation> = {
     path: '/links/l-1',
     routes: { ...PAGES, 'DELETE /links/l-1': { status: 204 } },
   },
+  'tcms_write_doc_page.adopt': {
+    tool: 'tcms_write_doc_page',
+    input: { action: 'adopt', page: 'DOC-1', plan: 'TP-1' },
+    path: '/plans/tp-1/document',
+    routes: {
+      ...PAGES,
+      ...PLANS,
+      'PUT /plans/tp-1/document': { status: 200, body: PAGE },
+    },
+  },
   'tcms_write_doc_page.publish': {
     tool: 'tcms_write_doc_page',
     input: { action: 'publish', page: 'DOC-1', status: 'PUBLISHED' },

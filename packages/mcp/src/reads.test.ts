@@ -26,6 +26,9 @@ import {
   boardIssueCard,
   boardLane,
   boardSummary,
+  docBlock,
+  docPage,
+  docPageSummary,
   label,
   userRef,
   wipBreach,
@@ -230,6 +233,42 @@ describe('tcms_open_case', () => {
     const raised = READ_TOOLS.filter((candidate) => candidate.meta?.['anthropic/maxResultSizeChars']);
     expect(raised.map((candidate) => candidate.name).sort())
       .toEqual(['tcms_open_case', 'tcms_open_doc_page']);
+  });
+});
+
+describe('tcms_open_doc_page — the page as markdown (022)', () => {
+  const PAGE_ROW = docPageSummary({ id: 'd-1', key: 'DOC-1', title: 'Spec', slug: 'spec' });
+  const PAGE = docPage({
+    id: 'd-1', key: 'DOC-1', title: 'Spec', slug: 'spec', lockVersion: 5,
+    blocks: [
+      docBlock({ id: 'b-h', blockType: 'heading', level: 1, text: 'Charging' }),
+      docBlock({ id: 'b-1', text: 'The system charges the card at capture.' }),
+    ],
+  });
+  const routes = { '/doc-pages': { status: 200, body: [PAGE_ROW] }, 'GET /doc-pages/d-1': { status: 200, body: PAGE } };
+
+  it('serves the JSON blocks by default, so nothing existing changed', async () => {
+    const answer = await run(api(agentRoutes(routes)), 'tcms_open_doc_page', { page: 'DOC-1' });
+
+    expect(answer['blocks']).toHaveLength(2);
+    expect(answer['markdown']).toBeUndefined();
+  });
+
+  it('renders every block with its id as the anchor an edit starts from', async () => {
+    const answer = await run(api(agentRoutes(routes)), 'tcms_open_doc_page', {
+      page: 'DOC-1', as: 'markdown',
+    });
+
+    expect(answer['markdown']).toBe(
+      '# Charging {#b-h}\n\nThe system charges the card at capture. {#b-1}\n',
+    );
+    /*
+      Not both in one answer, and this is the assertion rather than a note: a page is bounded at
+      200K characters, the two are the same content in two media, and serving both spends the §4.6
+      ceiling twice for one read. The lockVersion an edit needs is still here.
+    */
+    expect(answer['blocks']).toBeUndefined();
+    expect(answer['lockVersion']).toBe(5);
   });
 });
 

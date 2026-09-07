@@ -187,6 +187,25 @@ export function readJsonFile(path: string): unknown {
 }
 
 /**
+ * A text file read whole, for `--from`.
+ *
+ * {@link readJsonFile} without the parse, rather than a flag on it: what a caller needs when the
+ * file is wrong is different in each case. A page of Markdown has no syntax this side can check —
+ * the grammar is `core/markdown.ts`'s and its refusal names the line — so all this owes the caller
+ * is the failure to open the file, in the words they typed.
+ */
+export function readTextFile(path: string): string {
+  try {
+    return readFileSync(path === '-' ? 0 : path, 'utf8');
+  } catch (error) {
+    throw new UsageError(
+      `Could not read ${path === '-' ? 'stdin' : `'${path}'`}: `
+        + (error instanceof Error ? error.message : String(error)),
+    );
+  }
+}
+
+/**
  * A body from `--file`, checked to be an object.
  *
  * An array or a bare string parses as JSON and would go to the server as a body it rejects with a

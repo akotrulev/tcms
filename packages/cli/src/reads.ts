@@ -11,9 +11,13 @@
  */
 import {
   DEFAULT_PAGE_SIZE,
+  PROCESSES,
   SHAPES,
   clampPageSize,
   guideFor,
+  markdownFromBlocks,
+  processGuideFor,
+  processNamed,
   resolveId,
   resolveProject,
   shapeOf,
@@ -458,9 +462,14 @@ const docList: Command = {
 const docShow: Command = {
   name: 'doc show',
   summary: 'One documentation page, with its blocks',
-  usage: 'tcms doc show DOC-1',
+  usage:
+    'tcms doc show DOC-1 [--markdown]\n\n'
+    + '  --markdown\n      The page as TCMS spec markdown, every block ending with its `{#<id>}`.\n'
+    + '      That is what `tcms doc edit --from` starts from: keep the anchor and the block\n'
+    + '      keeps its links however much you rewrite the words.',
+  options: { markdown: { type: 'boolean' } },
   run: async (context) => {
-    const { client, out, json, request } = context;
+    const { client, out, json, options, request } = context;
     const projectId = await projectOf(context);
     const pageId = await resolveId({
       client, projectId, value: requireArg(context, 'page'), entity: 'DOC_PAGE',
@@ -470,6 +479,19 @@ const docShow: Command = {
       params: { path: { projectId, pageId } },
       tcms: request,
     });
+
+    if (flag(options['markdown'])) {
+      /*
+        The text alone, on stdout and nothing else — `tcms doc show DOC-1 --markdown > spec.md`
+        is the whole point of it, and a heading row above the document would be in the file. The
+        key and the lockVersion an edit needs are one `tcms doc show DOC-1` away, and `--json`
+        still answers the resource.
+      */
+      const markdown = markdownFromBlocks(page.blocks);
+      if (json) return out.json({ ...page, blocks: undefined, markdown });
+      out.line(markdown);
+      return;
+    }
 
     if (json) return out.json(page);
 
@@ -572,6 +594,63 @@ const format: Command = {
 
     out.line('Template for --file:');
     out.line(JSON.stringify(templateFor(shape, authored[0]?.name ?? shape.actions[0]!.name), null, 2));
+  },
+};
+
+/**
+ * `tcms process` — the sequence at a terminal, beside `tcms format`.
+ *
+ * The same relationship the two have on the other surface: `format` answers *what does one of
+ * these look like* and this answers *in what order are they written*. Offline for `format`'s
+ * reason and more sharply — the person who most needs to read `ingest-spec` is the one deciding
+ * whether this product can do the job at all, and they have no token yet.
+ *
+ * A step whose `cli` the catalogue leaves absent is one the CLI genuinely cannot reach, and
+ * `processGuideFor` prints that rather than leaving the step looking complete. Two exist today
+ * (`tcms_orient` and `tcms_report` have no command), which is a recorded gap and not a rendering
+ * choice — surface spec §6's `report` and `triage` asymmetry, arriving in a third place.
+ */
+const process: Command = {
+  name: 'process',
+  summary: 'The ordered steps for a job this surface is meant to do',
+  offline: true,
+  usage:
+    'tcms process [NAME]\n\n'
+    + '  --json\n      The catalogue as data — name, title, summary and step count.',
+  run: async ({ out, json, args }) => {
+    const requested = args[0];
+
+    if (!requested) {
+      if (json) {
+        out.json(PROCESSES.map((candidate) => ({
+          process: candidate.name,
+          title: candidate.title,
+          summary: candidate.summary,
+          steps: candidate.steps.length,
+        })));
+        return;
+      }
+      for (const candidate of PROCESSES) {
+        out.line(`${candidate.name.padEnd(14)} ${candidate.title}`);
+      }
+      out.line('');
+      out.line('tcms process NAME for its steps, tcms format ENTITY for what each object looks like.');
+      return;
+    }
+
+    const found = processNamed(requested);
+    if (!found) {
+      throw new UsageError(
+        `No process named '${requested}'. There is: `
+          + `${PROCESSES.map((candidate) => candidate.name).join(', ')}.`,
+      );
+    }
+
+    if (json) {
+      out.json({ ...found, guide: processGuideFor(found) });
+      return;
+    }
+    out.line(processGuideFor(found));
   },
 };
 
@@ -2739,6 +2818,7 @@ function numericOption<T extends number>(
 export const READS: readonly Command[] = [
   whoami,
   format,
+  process,
   projectList,
   caseList,
   caseShow,

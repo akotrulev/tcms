@@ -24,7 +24,13 @@
  * keeps the result under the 25K-token cap, which is what the budget is for, and it buys the
  * server nothing. Saying so beats implying a pagination the contract does not have.
  */
-import { READ_ENUMS, clampPageSize, resolveId, type components } from '@tcms/client';
+import {
+  READ_ENUMS,
+  clampPageSize,
+  markdownFromBlocks,
+  resolveId,
+  type components,
+} from '@tcms/client';
 
 import { PAGING_PROPERTIES, bool, idProperty, num, requireStr, str, strings } from './input.js';
 import type { Session } from './session.js';
@@ -445,13 +451,25 @@ const openDocPage: ToolDefinition = {
   description:
     'A page with its ordered blocks, each carrying the id you cite when linking a case to it, and '
     + 'the page lockVersion needed to edit it. **A block omitted from an edit is deleted**, so '
-    + 'read the whole page before writing any of it.',
+    + 'read the whole page before writing any of it. Pass `as: "markdown"` to read it as TCMS '
+    + 'spec markdown instead — every block ends with `{#<its id>}`, which is what an edit through '
+    + 'tcms_write_doc_page\'s `markdown` argument starts from. See the revise-spec process.',
   gate: { mode: 'all', permissions: ['doc:read'] },
   inputSchema: {
     type: 'object',
     additionalProperties: false,
     required: ['page'],
-    properties: { page: idProperty('documentation page', 'DOC-1') },
+    properties: {
+      page: idProperty('documentation page', 'DOC-1'),
+      as: {
+        type: 'string',
+        enum: ['blocks', 'markdown'],
+        description:
+          'How to render the body. `blocks` (the default) is the JSON the API serves; `markdown` '
+          + 'is the text you edit and send back. Not both in one answer: a page is bounded at '
+          + '200K characters and two copies of it is the budget spent twice.',
+      },
+    },
   },
   // The second of the two raised ceilings (§4.6): a page is one authored specification, and
   // grounding a generated case in a truncated one is the failure this surface exists to avoid.
@@ -461,9 +479,20 @@ const openDocPage: ToolDefinition = {
     const pageId = await resolveId({
       client: session.client, projectId, value: requireStr(input, 'page'), entity: 'DOC_PAGE',
     });
-    return session.client.GET('/projects/{projectId}/doc-pages/{pageId}', {
+    const page = await session.client.GET('/projects/{projectId}/doc-pages/{pageId}', {
       params: { path: { projectId, pageId } }, tcms: session.request,
     });
+
+    if (str(input, 'as') !== 'markdown') return page;
+
+    /*
+      The blocks are dropped rather than served beside the text, which is the whole point of the
+      argument: the two are the same content in two media and a page is bounded at 200K, so
+      answering with both spends the §4.6 ceiling twice for one read. Everything a caller needs to
+      write the page back — the key, the lockVersion, the status — is still here.
+    */
+    const { blocks: _blocks, ...rest } = page;
+    return { ...rest, markdown: markdownFromBlocks(page.blocks) };
   },
 };
 
