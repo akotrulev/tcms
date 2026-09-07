@@ -425,6 +425,11 @@ export type AiProposalSummary = S['AiProposalSummary'];
 export type AiProposal = S['AiProposal'];
 export type ProposalStatus = S['ProposalStatus'];
 export type ProposalVerdict = S['ProposalVerdict'];
+/**
+ * One claim in `AiProposal.verifies` — the input shape in both directions, because a proposal
+ * serves back exactly the three fields it was filed with and nothing resolves them on the way out.
+ */
+export type ProposalLink = S['ProposalLinkInput'];
 export type VerdictSource = S['VerdictSource'];
 
 // history & reporting

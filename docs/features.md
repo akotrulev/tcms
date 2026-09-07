@@ -368,6 +368,24 @@ the product does.
   shows which pages cite it
 - A document can act as the spine of a coverage report
 
+### A page as a specification
+
+- A page can be written as **Markdown** instead of block by block — headings for structure, one
+  testable statement per paragraph or list item — and read back the same way
+- A statement is written with a **label** (`{#refund-window}`); the write answers with the **anchor
+  table** mapping each label to the block id it was given, so whatever is written next can name the
+  statement it is about rather than a heading that will be reworded
+- The round trip is *read as Markdown → edit the text → write it back*, and every block comes back
+  carrying its own id, so rewriting the prose does not silently void the links into it
+- **An edit that drops a block some case claims is refused**, naming the block and the cases that
+  claim it. Losing a link is a decision, so it has to be asked for explicitly
+- A proposed test case **names the requirements it verifies**, the review screen shows each claim as
+  its page and its statement — including one whose block has since been deleted, which is what
+  accepting will be refused for — and the links are written onto the specification at the moment a
+  person accepts, never when an agent files
+- **The writing side of this has never been run against a running instance.** It is checked against
+  the API contract, which is the contract's shape and not a handler's answer
+
 ## Artifacts
 
 - Upload, list, download, edit and delete project artifacts

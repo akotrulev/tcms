@@ -1,5 +1,11 @@
 /** The documentation space and the artifact register. */
-import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+  type UseQueryResult,
+} from '@tanstack/react-query';
 import { useRef } from 'react';
 import { ApiError, api, fetchArtifact, newIntentKey, qs } from '../client';
 import type {
@@ -17,7 +23,10 @@ import type {
   DocPageStatus,
   DocPageSummary,
   LinkRelationship,
+  ProposalLink,
 } from '../types';
+import type { DataRegionState } from '../../components/DataRegion';
+import { describeError } from '../../lib/describeError';
 import { base, keys } from './keys';
 
 export function useDocPages(projectId: string): UseQueryResult<DocPageSummary[]> {
@@ -52,11 +61,83 @@ export function useDocPageSearch(
   });
 }
 
+function docPageQueryOptions(projectId: string, pageId: string) {
+  return {
+    queryKey: keys.docPage(projectId, pageId),
+    queryFn: ({ signal }: { signal: AbortSignal }) =>
+      api.get<DocPage>(`${base(projectId)}/doc-pages/${pageId}`, { signal }),
+  };
+}
+
 export function useDocPage(projectId: string, pageId: string | undefined): UseQueryResult<DocPage> {
   return useQuery({
-    queryKey: keys.docPage(projectId, pageId ?? ''),
-    queryFn: ({ signal }) => api.get<DocPage>(`${base(projectId)}/doc-pages/${pageId}`, { signal }),
+    ...docPageQueryOptions(projectId, pageId ?? ''),
     enabled: !!pageId,
+  });
+}
+
+/** One claim of a proposal's `verifies`, resolved against the page it names. */
+export interface VerifiedRequirement {
+  blockId: string;
+  relationship: LinkRelationship;
+  /** The page, or null when the page itself no longer exists. */
+  page: { id: string; key: string; title: string } | null;
+  /** The statement, or null when nothing on the page carries that block id. */
+  text: string | null;
+}
+
+/**
+ * Resolves a proposal's `verifies` into pages and statements — one read per distinct page.
+ *
+ * `AiProposal.verifies` is served **as stored and unresolved**, so a target whose block was deleted
+ * after the proposal was filed is still listed, and is precisely the claim accept answers 400 for.
+ * An unresolvable target is therefore **data** rather than a failed read: a 404 resolves to a page
+ * that is gone, while any other failure fails the region, because a read that could not be made is
+ * no evidence that the block is missing.
+ *
+ * Combined pessimistically, the way a run's step detail is: a half-arrived answer renders as a
+ * shorter list of claims with nothing on screen saying so, and the reviewer is deciding on the
+ * strength of exactly that list.
+ */
+export function useVerifiedRequirements(
+  projectId: string,
+  verifies: readonly ProposalLink[],
+): DataRegionState<VerifiedRequirement[]> {
+  const pageIds = [...new Set(verifies.map((claim) => claim.pageId))];
+  return useQueries({
+    queries: pageIds.map((pageId) => docPageQueryOptions(projectId, pageId)),
+    combine: (results): DataRegionState<VerifiedRequirement[]> => {
+      const pages = new Map(pageIds.map((pageId, index) => [pageId, results[index]]));
+      const failed = results.find(
+        (result) => result.isError && !describeError(result.error).isAddressWrong,
+      );
+      const settled = results.every((result) => result.data !== undefined || result.isError);
+      const oldest = results.reduce(
+        (soFar, result) => Math.min(soFar, result.dataUpdatedAt || Infinity),
+        Infinity,
+      );
+
+      return {
+        data:
+          failed === undefined && settled
+            ? verifies.map((claim) => {
+                const page = pages.get(claim.pageId)?.data;
+                return {
+                  blockId: claim.blockId,
+                  relationship: claim.relationship,
+                  page: page ? { id: page.id, key: page.key, title: page.title } : null,
+                  text: page?.blocks.find((block) => block.id === claim.blockId)?.text ?? null,
+                };
+              })
+            : undefined,
+        isPending: results.some((result) => result.isPending),
+        isError: failed !== undefined,
+        error: failed?.error,
+        isFetching: results.some((result) => result.isFetching),
+        dataUpdatedAt: Number.isFinite(oldest) ? oldest : undefined,
+        refetch: () => results.forEach((result) => void result.refetch()),
+      };
+    },
   });
 }
 

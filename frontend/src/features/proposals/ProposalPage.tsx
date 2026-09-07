@@ -2,7 +2,13 @@ import { useEffect, useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { useAnnounce } from '../../a11y/useAnnounce';
 import { ApiError } from '../../api/client';
-import { useAcceptProposal, useAiProposal, useRejectProposal } from '../../api/queries';
+import {
+  useAcceptProposal,
+  useAiProposal,
+  useRejectProposal,
+  useVerifiedRequirements,
+  type VerifiedRequirement,
+} from '../../api/queries';
 import type { AiProposal } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
@@ -16,9 +22,10 @@ import {
 import { PermissionGate } from '../../components/PermissionGate';
 import { ScrollX } from '../../components/ScrollX';
 import { Button, Textarea } from '../../components/ui';
+import { cn } from '../../lib/cn';
 import { describeError } from '../../lib/describeError';
 import { formatDateTime } from '../../lib/format';
-import { proposalStatusLabels } from '../../lib/labels';
+import { linkRelationshipLabels, proposalStatusLabels } from '../../lib/labels';
 import { VerdictChip } from './VerdictChip';
 
 /** `.sec h3` from `renders/tcms.css` — the rail's section heading, one spelling on this screen. */
@@ -157,6 +164,16 @@ export function ProposalPage() {
             </DocumentSurface>
 
             <aside className="w-full shrink-0 border-line bg-panel lg:w-[340px] lg:border-l">
+              {/*
+                Above the grounding, because it is the narrower question and the one accept can
+                refuse: the evidence is somebody else's report about the case, and this is what the
+                case says about the specification.
+              */}
+              <section className="border-b border-line px-4 py-4" data-testid="Proposal.VerifiesPanel">
+                <h2 className={SECTION_HEADING}>Claimed requirements</h2>
+                <ClaimedRequirements projectId={projectId} verifies={row.verifies} />
+              </section>
+
               <section className="border-b border-line px-4 py-4" data-testid="Proposal.GroundingPanel">
                 <h2 className={SECTION_HEADING}>Grounding evidence</h2>
                 {row.grounding ? (
@@ -300,6 +317,114 @@ export function ProposalPage() {
           </div>
         )}
       </DataRegion>
+    </div>
+  );
+}
+
+/**
+ * The requirements the proposal says this case verifies, resolved against the pages they name.
+ *
+ * **The *no longer exists* row is the point of this panel, not its edge case.** `verifies` is served
+ * as filed and unresolved, and accept validates every target against the project as it is now — so a
+ * block deleted since the proposal was written is a 400 the reviewer would otherwise meet only by
+ * pressing Accept, on a screen whose whole job is to let them decide before they press it.
+ */
+function ClaimedRequirements({
+  projectId,
+  verifies,
+}: {
+  projectId: string;
+  verifies: AiProposal['verifies'];
+}) {
+  const requirements = useVerifiedRequirements(projectId, verifies);
+
+  return (
+    <DataRegion
+      testId="Proposal.Verifies"
+      state={requirements}
+      isEmpty={(rows) => rows.length === 0}
+      empty={{
+        kind: 'by-design',
+        title: 'It claims nothing',
+        body:
+          'This proposal names no requirement, so accepting it links the case to no specification. '
+          + 'Read it against the page yourself before deciding.',
+      }}
+    >
+      {(rows) => (
+        <div className="flex flex-col gap-2">
+          <p className="mt-0 mb-1 text-[12.5px] leading-[1.55] text-ink-3">
+            Written when the case was proposed and linked to the specification the moment you
+            accept. Only what it <em>verifies</em> counts as coverage.
+          </p>
+          {rows.map((requirement) => (
+            <ClaimedRequirementCard
+              key={`${requirement.blockId}:${requirement.relationship}`}
+              projectId={projectId}
+              requirement={requirement}
+            />
+          ))}
+        </div>
+      )}
+    </DataRegion>
+  );
+}
+
+function ClaimedRequirementCard({
+  projectId,
+  requirement,
+}: {
+  projectId: string;
+  requirement: VerifiedRequirement;
+}) {
+  const gone = requirement.text === null;
+
+  return (
+    <div
+      data-testid="Proposal.Verifies.Item"
+      className={cn(
+        'flex flex-col gap-1.5 rounded-[6px] border p-2.5',
+        gone
+          ? 'border-[color:color-mix(in_oklab,var(--color-blocked)_34%,transparent)]'
+          : 'border-line',
+      )}
+    >
+      <div className="flex flex-wrap items-center gap-1.5">
+        {requirement.page ? (
+          <RouterLink
+            // The block as a query parameter, the page as the path segment — the spelling the
+            // documentation screen reads to open at one block, shared with the issue's spec panel.
+            to={`/projects/${projectId}/docs/${requirement.page.id}?block=${requirement.blockId}`}
+            data-testid="Proposal.Verifies.Item.Page"
+            className="text-[12.5px] font-semibold text-ink no-underline hover:text-steel hover:underline"
+          >
+            {requirement.page.title}
+          </RouterLink>
+        ) : (
+          <span className="text-[12.5px] font-semibold text-ink">The page it named</span>
+        )}
+        {requirement.page && <Identifier variant="muted">{requirement.page.key}</Identifier>}
+        <Badge tone="plain">{linkRelationshipLabels[requirement.relationship]}</Badge>
+      </div>
+
+      {gone ? (
+        <p
+          data-testid="Proposal.Verifies.Item.Gone"
+          className="m-0 text-[12.5px] leading-[1.55] text-ink-3"
+        >
+          {requirement.page
+            ? 'This statement is no longer on that page. '
+            : 'That page no longer exists. '}
+          Accepting will be refused until the claim is filed again against something that exists.
+        </p>
+      ) : (
+        <p
+          data-testid="Proposal.Verifies.Item.Text"
+          className="m-0 border-l-2 border-line pl-2.5 text-[13px] leading-[1.55] text-ink-2"
+        >
+          {requirement.text}
+        </p>
+      )}
     </div>
   );
 }

@@ -3,13 +3,13 @@ import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../../api/client'
-import type { AiProposal, PermissionKey } from '../../api/types'
+import type { AiProposal, DocPage, PermissionKey } from '../../api/types'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
 import { aCase, aProject } from '../../test/fixtures'
 import { ProposalPage } from './ProposalPage'
-import { drivingAFailedWrite } from '../../test/renderFailures'
+import { drivingAFailedRead, drivingAFailedWrite } from '../../test/renderFailures'
 
 /**
  * The decision screen — where §6w.6's boundary is actually enforced by a person clicking.
@@ -62,10 +62,46 @@ const PENDING: AiProposal = {
   acceptedCase: null,
 }
 
-function mockApi(proposal: AiProposal = PENDING, permissions: PermissionKey[] = ['case:read', 'case:create']) {
+/** The specification the proposals below claim, with one labelled statement on it. */
+const SPEC_PAGE: DocPage = {
+  id: 'page-1',
+  key: 'DOC-7',
+  title: 'Refunds',
+  slug: 'refunds',
+  status: 'PUBLISHED',
+  updatedAt: '2026-08-07T09:00:00Z',
+  blocks: [
+    {
+      id: 'block-1',
+      position: 1,
+      blockType: 'paragraph',
+      text: 'A settled payment can be refunded in full within thirty days.',
+      links: [],
+      coverage: null,
+    },
+  ],
+  attachments: [],
+  currentVersionNo: 1,
+  lockVersion: 1,
+}
+
+function claiming(blockId: string): AiProposal {
+  return { ...PENDING, verifies: [{ pageId: 'page-1', blockId, relationship: 'VERIFIES' }] }
+}
+
+function mockApi(
+  proposal: AiProposal = PENDING,
+  permissions: PermissionKey[] = ['case:read', 'case:create'],
+  specPage: DocPage | null = SPEC_PAGE,
+) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) return heldPermissions(permissions)
     if (path.includes('/ai-proposals/')) return proposal
+    // Before the project arm, which is a prefix of this path and would otherwise answer it.
+    if (path.includes('/doc-pages/')) {
+      if (specPage === null) throw new ApiError(404, 'No such documentation page')
+      return specPage
+    }
     if (path.startsWith('/projects/p1')) return aProject({ id: 'p1', key: 'OLB', name: 'Banking' })
     throw new Error(`unmocked read: ${path}`)
   }) as never)
@@ -233,6 +269,54 @@ describe('ProposalPage', () => {
 
     expect(await screen.findByTestId('Proposal.Accepted')).toHaveTextContent(
       'has since been deleted',
+    )
+  })
+
+  it('lists what the proposal claims to verify, with the statement in full', async () => {
+    // The reviewer is reading the case against the specification, so the claim is the page and the
+    // sentence — not a block id they would have to go and look up.
+    mockApi(claiming('block-1'))
+    renderPage()
+
+    const claim = await screen.findByTestId('Proposal.Verifies.Item')
+    expect(claim).toHaveTextContent('Refunds')
+    expect(claim).toHaveTextContent('DOC-7')
+    expect(claim).toHaveTextContent('Verifies')
+    expect(screen.getByTestId('Proposal.Verifies.Item.Text')).toHaveTextContent(
+      'A settled payment can be refunded in full within thirty days.',
+    )
+  })
+
+  it('SAYS A CLAIMED STATEMENT IS GONE when the page no longer carries the block', async () => {
+    // THE HEADLINE of this panel. `verifies` is served as filed and unresolved, and accept
+    // validates every target against the project as it is now — so this is the reviewer seeing the
+    // 400 before they press Accept rather than after.
+    mockApi(claiming('block-deleted'))
+    renderPage()
+
+    expect(await screen.findByTestId('Proposal.Verifies.Item.Gone')).toHaveTextContent(
+      'no longer on that page',
+    )
+  })
+
+  it('says the page itself is gone when the read cannot resolve it', async () => {
+    // The subject is a read that 404s: a page deleted after the proposal was filed is the same
+    // dead claim as a deleted block, and rendering it as a broken panel would hide that.
+    drivingAFailedRead()
+    mockApi(claiming('block-1'), ['case:read', 'case:create'], null)
+    renderPage()
+
+    expect(await screen.findByTestId('Proposal.Verifies.Item.Gone')).toHaveTextContent(
+      'That page no longer exists',
+    )
+  })
+
+  it('says a proposal claiming nothing links nothing, rather than showing an empty panel', async () => {
+    mockApi()
+    renderPage()
+
+    expect(await screen.findByTestId('Proposal.Verifies.Empty')).toHaveTextContent(
+      'no specification',
     )
   })
 

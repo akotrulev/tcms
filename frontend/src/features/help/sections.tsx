@@ -898,7 +898,8 @@ tcms review comment    # a remark on an open review`}</Terminal>
   {
     id: 'mcp',
     title: 'AI agent access (MCP)',
-    summary: 'Connecting an AI assistant, the 45 tools, and the limits that make it safe.',
+    summary:
+      'Connecting an AI assistant, the 45 tools, the five processes, and the limits that make it safe.',
     body: (
       <>
         <P>
@@ -949,6 +950,58 @@ tcms review comment    # a remark on an open review`}</Terminal>
           paths. Tool definitions cost the model context, so a mirror of the API would be a surface
           only the largest hosts could afford to load.
         </P>
+
+        <H>The five processes</H>
+        <P>
+          A tool call is one step; the work is a sequence. So the server carries five procedures —
+          each step in order, the tool it uses, what to read in the answer before taking the next
+          one, and the way that step is got wrong. An agent reads the procedure rather than
+          inventing one, and every procedure stops where a person&rsquo;s act begins: none of them
+          publishes a page, accepts a proposal or approves a plan.
+        </P>
+        <Definitions
+          items={[
+            {
+              term: 'ingest-spec',
+              detail:
+                'Rewrite a specification of any shape into TCMS spec markdown — one testable statement per block, each labelled — write it as a page, and report what was dropped, reworded and left open. It stops before publishing: that is a person’s signal.',
+            },
+            {
+              term: 'cover-spec',
+              detail:
+                'Read a specification page, and file one proposal per labelled statement naming the block it verifies. Nothing here becomes a test case: a person accepts, and the links are written at that moment.',
+            },
+            {
+              term: 'plan-spec',
+              detail:
+                'Turn a page into a plan: scope and out-of-scope from its own sections, one plan section per top-level heading, machine-evaluable entry and exit criteria, and the page adopted as the plan’s document.',
+            },
+            {
+              term: 'revise-spec',
+              detail:
+                'Read the page back as Markdown with every block carrying its id, edit the text, and write it back. A block that cases claim and this edit drops is refused, naming them.',
+            },
+            {
+              term: 'report-spec',
+              detail:
+                'Answer what of this specification is tested — from the page for the in-conversation answer, and as a generated coverage report for the artifact somebody keeps.',
+            },
+          ]}
+        />
+        <P>
+          <strong>Four ways to reach them, and the one a person uses is the prompts.</strong> An MCP
+          host lists them as slash commands, so handing an assistant a client specification is
+          picking <Code>ingest-spec</Code> and pasting the text. An agent working on its own asks{' '}
+          <Code>tcms_process</Code>, or reads the long form at{' '}
+          <Code>tcms://process/ingest-spec</Code>; at a terminal it is{' '}
+          <Code>tcms process ingest-spec</Code>. The four print the same steps, because they read the
+          same catalogue.
+        </P>
+        <Note>
+          Two steps reach no CLI command at all — orienting on a project&rsquo;s vocabulary, and
+          generating a report — and the printed procedure says so rather than leaving a step looking
+          complete. Those two steps are an assistant&rsquo;s to take, not a script&rsquo;s.
+        </Note>
 
         <H>What makes it safe to point at real data</H>
         <List

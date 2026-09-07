@@ -1,6 +1,6 @@
 # Agent-Facing Processes and the Specification Formatter
 
-**Date:** 2026-09-07 · **Status:** design, no code changes · **Stacks touched when built:** contract → `be` → `ts` → `fe`
+**Date:** 2026-09-07 · **Status:** ~~design, no code changes~~ → **built**, all five tasks landed 2026-09-07 (§7) · **Stacks touched:** contract → `be` → `ts` → `fe`
 
 **The ask.** The MCP server and the CLI exist. What does not exist is a description of the *processes*
 an agent is expected to run over them — a specification becomes a documentation page, test cases link
@@ -431,17 +431,42 @@ text, with a *no longer exists* state for a target the read cannot resolve, so t
 One stack, one agent, one session per task. Contract first, then backend, then the shared
 packages, then the frontend with the close-out riding on it.
 
-| # | Stack | Agent | Deliverable | Depends on | Budget |
-|---|---|---|---|---|---|
-| T1 | contract | `be-java` | `openapi.yaml`: `AiProposalInput.verifies`, `AiProposal.verifies`, the accept path's `400` on `verifies[n]` documented; both generated copies; `contractPairing` green | — | ~60k: the proposal and link regions of the contract, both regen outputs, fixture updates |
-| T2 | `be` | `be-java` | `V14` adds `ai_proposal.verifies`; `verifies` stored, served, validated at accept by native-SQL facts, written by `documentation` on the event; ERD row; `SchemaConventionTest` + ArchUnit green; a test that accepts a proposal and reads the link off the block | T1 | ~120k: `repository` proposal service + accept, `documentation.BlockLinkService`, the facts pattern, event plumbing, the migration, tests |
-| T3a | `ts` | `tooling-engineer` | `@tcms/client` core: `core/markdown.ts` (both directions, anchors, the linked-block refusal, round-trip test), `core/processes.ts` (the five, rendered like `guideFor`), the plan shape's six fields; `npm run build` in order, lint 0, tests | T1 | ~110k: `shapes.ts` (1.5k lines), `rewrite.ts`, `proposal.ts`, the new files and their tests |
-| T3b | `ts` | `tooling-engineer` | The adapters: `tcms_write_doc_page` markdown/anchors/adopt/dropLinked, `tcms_open_doc_page as`, `tcms_write_case verifies`, `tcms_write_plan` fields, `tcms_process`, prompts + `tcms://process/*`; CLI `doc create/edit --from`, `doc show --markdown`, `doc adopt`, `case file --verifies`, `plan` flags, `tcms process`, `tcms spec import`; surface spec §3/§6 rows | T3a | ~140k: `mcp/writes.ts`, `mcp/reads.ts`, `server.ts`, `cli/writes.ts`, `cli/reads.ts`, `commands.ts` and their conformance tests — the largest, and split from T3a so neither reads the other's files |
-| T4 | `fe` + docs | `fe-react` | `ProposalPage` shows the claimed requirements; help guide names the 45 tools and the five processes; `features.md` Documentation section; this document's §7 closed out | T3b | ~80k |
+| # | Stack | Agent | Deliverable | Depends on | Budget | Landed |
+|---|---|---|---|---|---|---|
+| T1 | contract | `be-java` | `openapi.yaml`: `AiProposalInput.verifies`, `AiProposal.verifies`, the accept path's `400` on `verifies[n]` documented; both generated copies; `contractPairing` green | — | ~60k: the proposal and link regions of the contract, both regen outputs, fixture updates | `7e49c48c` |
+| T2 | `be` | `be-java` | `V14` adds `ai_proposal.verifies`; `verifies` stored, served, validated at accept by native-SQL facts, written by `documentation` on the event; ERD row; `SchemaConventionTest` + ArchUnit green; a test that accepts a proposal and reads the link off the block | T1 | ~120k: `repository` proposal service + accept, `documentation.BlockLinkService`, the facts pattern, event plumbing, the migration, tests | `58f972b3` |
+| T3a | `ts` | `tooling-engineer` | `@tcms/client` core: `core/markdown.ts` (both directions, anchors, the linked-block refusal, round-trip test), `core/processes.ts` (the five, rendered like `guideFor`), the plan shape's six fields; `npm run build` in order, lint 0, tests | T1 | ~110k: `shapes.ts` (1.5k lines), `rewrite.ts`, `proposal.ts`, the new files and their tests | `22f118b9` |
+| T3b | `ts` | `tooling-engineer` | The adapters: `tcms_write_doc_page` markdown/anchors/adopt/dropLinked, `tcms_open_doc_page as`, `tcms_write_case verifies`, `tcms_write_plan` fields, `tcms_process`, prompts + `tcms://process/*`; CLI `doc create/edit --from`, `doc show --markdown`, `doc adopt`, `case file --verifies`, `plan` flags, `tcms process`, `tcms spec import`; surface spec §3/§6 rows | T3a | ~140k: `mcp/writes.ts`, `mcp/reads.ts`, `server.ts`, `cli/writes.ts`, `cli/reads.ts`, `commands.ts` and their conformance tests — the largest, and split from T3a so neither reads the other's files | `e784e811` |
+| T4 | `fe` + docs | `fe-react` | `ProposalPage` shows the claimed requirements; help guide names the 45 tools and the five processes; `features.md` Documentation section; this document's §7 closed out | T3b | ~80k | this commit |
 
 The capability is end-to-end after T3b; T4 is the reviewer's view of it and the words. Between T2
 and T3b a proposal can carry `verifies` that no client sends — the backend returns the ordinary
 shape, never a fake success, and the plan says so.
+
+**Closed out 2026-09-07. What is built, and what is built and unverified.**
+
+All five tasks landed as designed, with four departures worth carrying forward:
+
+- **T2 found no `ai_proposal` row in the ERD to extend.** That document is the 2026-07-30 revision
+  and predates the generation slice, so §4 gained a whole `### ai_proposal` subsection rather than a
+  cell.
+- **T3b's surface count is 45 tools and 94 CLI commands**, and the new surface is recorded in
+  `2026-08-08-mcp-tool-and-command-surface.md` §3.0b and §6 — which outrank §3 and §4 here from now
+  on. It also found `DocPageInput.title` missing from every whole-body page edit either adapter had
+  ever made, a 400 older than this slice.
+- **The processes have four carriers, not three.** MCP prompts are the one a *person* reaches, and
+  the help guide leads with that rather than with `tcms_process`.
+- **T4 reused `linkRelationshipLabels`** rather than adding a proposal-specific label map: the three
+  values are the same three, and the review screen must not spell them differently from the page
+  that will carry the link.
+
+**Nothing in `packages/` has been exercised against a live instance.** Every gate there is a double
+compared to `openapi.yaml`, so `tcms_process`, the prompts, `tcms spec import`, the Markdown
+converter and the adapters' `verifies` arm are *built and unverified* in the sense `CLAUDE.md` means:
+the shape of the contract is proven, a handler's answer is not. The backend half (T1–T2) is covered
+by `AiProposalEndpointTest` against a real Postgres, and the reviewer's screen (T4) by RTL against a
+double — so the one path with an end-to-end proof is *file → accept → link*, and only from the
+server's side of the wire.
 
 ---
 

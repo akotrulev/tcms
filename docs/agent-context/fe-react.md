@@ -1,6 +1,12 @@
 # fe-react — orientation cache
 
-**Baseline commit:** `b8d1c317` · **Last verified:** 2026-09-05 · **Verdict this run (018 T4):** DELTA
+**Baseline commit:** `91ed85e1` · **Last verified:** 2026-09-07 · **Verdict this run (022 T4):** DELTA
+(019–022 moved `openapi.yaml`, `schema.d.ts`, `api/types.ts`, the shell files, the board, the search
+and `help/sections.tsx`; `frontend/tsconfig.app.json` gained one exclusion entry and nothing else in
+the fingerprint set moved, so **the version lane held** — React 19.2, Vite 8, TS ~6.0, React Router 7,
+npm. Two seams added below for the proposal screen's claimed requirements.)
+
+~~**Baseline commit:** `b8d1c317` · **Last verified:** 2026-09-05 · **Verdict (018 T4):** DELTA~~
 (T1–T3 of plan 018 moved `openapi.yaml`, both `schema.d.ts`/`schema.ts`, `api/types.ts`,
 `test/fixtures.ts` and `settingsUpdate.ts`; no `package.json` / lockfile / `tsconfig` /
 `vite.config.ts` change, so the version lane held. T4 is the first task to add a fault arm that
@@ -8,6 +14,10 @@ fabricates a **population rather than a failure**, and the first to gate a Compa
 non-credential key.)
 
 **Session log**
+- 2026-09-07 — 022 T4: `ProposalPage`'s *Claimed requirements* panel and its four tests,
+  `useVerifiedRequirements` + `docPageQueryOptions` in `api/queries/documentation.ts`, the
+  `ProposalLink` type, the help guide's five processes and four carriers, `features.md`'s *A page as
+  a specification*, and plan 022 closed out in the design spec's §7.
 - 2026-09-05 — 018 T4: `features/clients/` (`ClientsPage`, `ClientPage`, `ClientCreateDialog`,
   `ClientContactsPanel`, `BillingSlot`), `api/queries/clients.ts` and its keys, the `clients` fault
   arm, the two client status label maps, `/clients` + `/clients/:clientId`, and the gated Clients
@@ -192,6 +202,8 @@ CLAUDE.md. Targeted tests may run locally for debugging.
 | **A second module's `DataRegion` nests INSIDE another module's panel** (017 D-m) | The capacity figure is `staffing`'s, the hours beside it are `time`'s, so each of the two screens makes two reads and the second gets its own region — `Timesheet.Kpi.Capacity.Region` inside the KPI grid, `MyWork.Period.Capacity.Region` inside the This-period panel. One region over both would let a staffing outage blank a number `time` served correctly. The **window is the LOADED period's `startsOn`/`endsOn`**, never `periods.ts`' arithmetic (016 D-a), and `GET /staffing/capacity/me` makes both bounds required, so there is no defaulted answer behind a dropped one |
 | My Work's meter is data-driven, not region-wrapped | `PeriodMeter` renders only when the capacity payload carries a number, which covers the failed read, the in-flight read and the no-profile person in one condition. It is under the whole `g2` row where `my-work.html` draws it, so it could not sit inside the region that owns the right-hand cell. `.meter.tall` on the app's tokens: 9px, `bg-wash-3` track, `--color-success` fill, `--color-danger` above 100%, clamped and captioned rather than overflowing |
 | **A test that renders either of those screens MUST answer `/staffing/capacity/me`** | `MyWorkPage.test.tsx`'s `mockBoard` returns `items` from its default branch, so an unanswered capacity read hands a `BoardCard[]` to a region expecting a `SelfCapacity` — a drifted body, which trips the boundary and fails **every** test in the file through `renderFailures` for a read none of them is about. `TimesheetPage.test.tsx`'s mock throws instead, which is the same failure with a clearer message. Both now take the capacity as a parameter, `aSelfCapacity()` by default, and accept an `Error` for the failed-read arm |
+| **A proposal's `verifies` is served UNRESOLVED, and resolving it is the SPA's job** (022 T4) | `api/queries/documentation.ts::useVerifiedRequirements(projectId, verifies)` — `useQueries` over the **distinct** `pageId`s through `docPageQueryOptions` (shared with `useDocPage`, so the two cannot diverge and a page already open is a cache hit), combined into one `DataRegionState` the way `runs.ts::useExecutionSteps` is. **A 404 on the page resolves to `page: null` rather than failing the region** — accept validates every target against the project as it is *now*, so a dead claim is data the reviewer must see, not a broken panel. Any other failure does fail the region: a read that could not be made is no evidence the block is gone |
+| The reviewer sees the accept-time 400 before pressing Accept | `features/proposals/ProposalPage.tsx::ClaimedRequirements` — the aside's **first** section, above Grounding, `Proposal.Verifies*`. Reuses **`linkRelationshipLabels`**; there is deliberately no proposal-specific label map, because the three values become the same `doc_link` row the page will carry. Only `VERIFIES` is coverage and the panel's own sentence says so |
 | `openapi-typescript` types a **defaulted** property as REQUIRED | Not the contract's `required` array. `IssueInput.agentEligible` and `ProjectSettingsUpdate.reviewEnabledIssue` both carry `default: false` and are absent from `required`, and both came out non-optional — which is why `IssueNewPage` sends `agentEligible: false` on a form that offers no such control. Three call sites were left red by T1 and fixed in T5 |
 
 ## Test-harness rules the suites enforce

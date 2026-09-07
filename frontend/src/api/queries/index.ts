@@ -184,6 +184,8 @@ export {
   useUnlinkBlock,
   useUnlinkPlanDocument,
   useUpdateDocPage,
+  useVerifiedRequirements,
+  type VerifiedRequirement,
 } from './documentation';
 export {
   useConnectTracker,
