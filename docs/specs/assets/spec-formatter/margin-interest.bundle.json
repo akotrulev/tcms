@@ -1,0 +1,87 @@
+{
+  "page": { "title": "Margin interest", "markdown": "<contents of margin-interest.page.md>" },
+  "cases": [
+    {
+      "title": "Account markup precedence: account, then account group, then default",
+      "stepFormat": "STRUCTURED", "priority": "HIGH", "automationStatus": "TO_BE_AUTOMATED",
+      "objective": "The most specific account markup plan applies, and each less specific level is used only when the more specific one is absent.",
+      "steps": [
+        { "action": "Configure a default USD markup of 2%, an account-group markup of 1.5% for group G, and an account markup of 1% for account A in G.", "expectedResult": "All three plans are saved." },
+        { "action": "Run the EOD accrual for account A with a $50,000 USD loan.", "expectedResult": "The account markup of 1% is used." },
+        { "action": "Remove the account markup and run the accrual again.", "expectedResult": "The group markup of 1.5% is used." },
+        { "action": "Remove the group markup and run the accrual again.", "expectedResult": "The default markup of 2% is used." }
+      ],
+      "tags": ["spec:margin-interest"],
+      "verifies": ["account-markup-precedence", "account-markup-default", "account-markup-group", "account-markup-account"]
+    },
+    {
+      "title": "Instrument markup precedence falls through to 0%",
+      "stepFormat": "STRUCTURED", "priority": "HIGH", "automationStatus": "TO_BE_AUTOMATED",
+      "steps": [
+        { "action": "Define a 5% markup on instrument US1, a 2% instrument-group markup on a group containing US1 and US2, and nothing for US3.", "expectedResult": "Saved." },
+        { "action": "Run the EOD accrual with $10,000 loaned on each of US1, US2 and US3 (USD, 360 days).", "expectedResult": "Instrument markup is $1.39 for US1 (5%), $0.56 for US2 (2%) and $0.00 for US3." }
+      ],
+      "tags": ["spec:margin-interest"],
+      "verifies": ["instrument-markup-precedence", "instrument-markup-instrument", "instrument-markup-group"]
+    },
+    {
+      "title": "Daily accrual, Day 1 of the source example: USD $40.12 and GBP £3.16",
+      "stepFormat": "STRUCTURED", "priority": "CRITICAL", "automationStatus": "TO_BE_AUTOMATED",
+      "objective": "Reproduce the source's Day 1 figures. The source's own arithmetic gives $27.62 where the formula yields $27.61 and £0.83 where it yields £0.82; the rounding rule is an open question on the page and the expected values below are the source's.",
+      "steps": [
+        { "action": "Set USD base 5.1% / 360 days, GBP base 5.5% / 365 days, USD account tiers 2.5% up to $100k and 2% above, GBP account markup 3%, instrument markups US1 5%, US2 0%, GB1 3%.", "expectedResult": "Saved." },
+        { "action": "Open positions with utilized margin US1 $90,000, US2 $50,000, GB1 £10,000, then run EOD.", "expectedResult": "USD accrual $40.12 (base and account $27.62 at Tier 2, instrument $12.50); GBP accrual £3.16 (£2.33 + £0.83). Both are added to the account's ledger in their currency." }
+      ],
+      "tags": ["spec:margin-interest"],
+      "verifies": ["accrual-base-formula", "accrual-instrument-formula", "accrual-total", "accrual-ledger", "accrual-trigger"]
+    },
+    {
+      "title": "Loan amount for a day is start-of-day plus opened, and ignores intra-day reductions",
+      "stepFormat": "STRUCTURED", "priority": "HIGH", "automationStatus": "TO_BE_AUTOMATED",
+      "steps": [
+        { "action": "Day 1: open a position with a $10,000 loan; run EOD.", "expectedResult": "Loan amount for the day is $10,000." },
+        { "action": "Day 3: close part of the position, reducing the loan to $7,000, and open $5,000 more on the same instrument; run EOD.", "expectedResult": "Loan amount for the day is $15,000 ($10,000 SOD + $5,000 opened)." },
+        { "action": "Day 4: close the whole position; run EOD.", "expectedResult": "Loan amount for the day is $15,000; Day 5 is $0." }
+      ],
+      "tags": ["spec:margin-interest"],
+      "verifies": ["loan-amount-per-day"]
+    },
+    {
+      "title": "Monthly posting sums unprocessed accruals into one debit and marks them processed",
+      "stepFormat": "STRUCTURED", "priority": "CRITICAL", "automationStatus": "TO_BE_AUTOMATED",
+      "steps": [
+        { "action": "Accrue $40.12, $42.09 and $12.67 USD and £3.16 × 3 GBP across a month.", "expectedResult": "Six unprocessed accruals exist." },
+        { "action": "Advance to 00:00:00 on the first trading day of the next month.", "expectedResult": "A debit of $94.88 impacts Available Cash on the USD wallet and a debit of £9.48 on the GBP wallet." },
+        { "action": "Run the posting again.", "expectedResult": "Nothing is posted; all six accruals are marked processed." }
+      ],
+      "tags": ["spec:margin-interest"],
+      "verifies": ["posting-trigger", "posting-sum", "posting-debit", "posting-mark-processed", "post-monthly"]
+    },
+    {
+      "title": "Withdrawal triggers an immediate accrual and posting",
+      "stepFormat": "STRUCTURED", "priority": "HIGH", "automationStatus": "TO_BE_AUTOMATED",
+      "steps": [
+        { "action": "Mid-month, with unprocessed accruals and an open $60,000 USD loan, the client withdraws money.", "expectedResult": "An accrual for today is computed on the current margin loan amount, posted as a debit to Available Cash together with the unprocessed accruals, and all of them are marked processed." }
+      ],
+      "tags": ["spec:margin-interest"],
+      "verifies": ["event-trigger", "event-accrue-today", "event-debit", "event-mark-processed", "event-key-events"]
+    }
+  ],
+  "plan": {
+    "name": "Margin interest",
+    "description": "Verifies the margin interest calculation, accrual and posting against the Margin interest specification.",
+    "scopeText": "Base rate and day count per currency; account markup levels and precedence; instrument markup precedence; daily accrual formula and ledger; loan amount per day; monthly posting; event-driven posting.",
+    "outOfScopeText": "The base rate feeds themselves (SOFR, ESTR, SONIA are marked unconfirmed in the source); rounding policy until answered; loan amounts above the top configured tier.",
+    "entryCriteria": [ { "metric": "build_available", "op": "=", "value": 1 } ],
+    "exitCriteria": [
+      { "metric": "coverage", "op": ">=", "value": 100, "label": "Every labelled requirement has a verifying case" },
+      { "metric": "pass_rate", "op": ">=", "value": 100 },
+      { "metric": "open_critical", "op": "=", "value": 0 }
+    ],
+    "sections": [
+      { "name": "Configurable parameters and levels", "tags": ["spec:margin-interest"] },
+      { "name": "Calculation engine logic", "tags": ["spec:margin-interest"] }
+    ],
+    "tags": ["spec:margin-interest"]
+  }
+}

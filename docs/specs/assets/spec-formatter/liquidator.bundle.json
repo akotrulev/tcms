@@ -1,0 +1,83 @@
+{
+  "page": { "title": "How the liquidator works", "markdown": "<contents of liquidator.page.md>" },
+  "cases": [
+    {
+      "title": "Each band produces exactly its stated effect",
+      "stepFormat": "GHERKIN", "priority": "CRITICAL", "automationStatus": "TO_BE_AUTOMATED",
+      "steps": [
+        { "keyword": "GIVEN", "action": "an account whose margin level is 160%" },
+        { "keyword": "WHEN", "action": "a cycle runs" },
+        { "keyword": "THEN", "action": "no email is sent and no restriction is applied" },
+        { "keyword": "WHEN", "action": "the level falls to 130%" },
+        { "keyword": "THEN", "action": "the account is visible to operators in Warning, is not restricted and is not emailed" },
+        { "keyword": "WHEN", "action": "the level falls to 110%" },
+        { "keyword": "THEN", "action": "the customer is emailed and withdrawals, transfers and new buys are frozen, and nothing is sold" },
+        { "keyword": "WHEN", "action": "the level falls to 95%" },
+        { "keyword": "THEN", "action": "part of the largest position is sold and selling stops once the level reaches 105%" }
+      ],
+      "tags": ["spec:liquidator"],
+      "verifies": ["band-healthy", "band-warning", "band-critical", "band-liquidation", "bands-before-selling"]
+    },
+    {
+      "title": "Sells the biggest position, one per cycle, only to 105%",
+      "stepFormat": "STRUCTURED", "priority": "CRITICAL", "automationStatus": "TO_BE_AUTOMATED",
+      "steps": [
+        { "action": "Hold three marginable positions worth 5,000, 3,000 and 1,000 in the account currency and drive the level to 90%.", "expectedResult": "The first cycle places one sell order, on the 5,000 position, for the quantity that brings the level to 105% and no more." },
+        { "action": "Observe the next cycle after the sale fills.", "expectedResult": "The level is re-measured before any further sale; at or above 105% nothing else is sold." }
+      ],
+      "tags": ["spec:liquidator"],
+      "verifies": ["sell-biggest-first", "sell-one-per-cycle", "sell-to-target", "sells-partially", "guard-stop-above-line"]
+    },
+    {
+      "title": "Refuses to sell into a closed market or on stale data, and resumes later",
+      "stepFormat": "STRUCTURED", "priority": "HIGH", "automationStatus": "TO_BE_AUTOMATED",
+      "steps": [
+        { "action": "Drive an account below 100% while its instrument's exchange is closed.", "expectedResult": "No sell order; the account stays flagged." },
+        { "action": "Open the market with prices more than a few hours stale.", "expectedResult": "Still no sell order; the position is treated as un-sellable." },
+        { "action": "Refresh prices and rates.", "expectedResult": "Selling resumes on the next cycle." }
+      ],
+      "tags": ["spec:liquidator"],
+      "verifies": ["guard-closed-market", "guard-untrusted-data"]
+    },
+    {
+      "title": "An account with no maintenance requirement shows a blank margin level and is never liquidated",
+      "stepFormat": "STRUCTURED", "priority": "CRITICAL", "automationStatus": "TO_BE_AUTOMATED",
+      "steps": [
+        { "action": "Fund a margin-enabled account and hold only instruments that are not marginable.", "expectedResult": "The margin level reads blank on every screen and export, never 0%." },
+        { "action": "Run several cycles.", "expectedResult": "No band change, no margin call, no sale." }
+      ],
+      "tags": ["spec:liquidator"],
+      "verifies": ["guard-no-requirement-blank", "guard-cash-account", "sell-skip-no-requirement"]
+    },
+    {
+      "title": "Broken band configuration is refused with the consequence stated",
+      "stepFormat": "STRUCTURED", "priority": "HIGH", "automationStatus": "MANUAL",
+      "steps": [
+        { "action": "As an operator, delete the auto-liquidation band.", "expectedResult": "Refused; the message says selling could never trigger." },
+        { "action": "Delete the warning band.", "expectedResult": "Refused; the message says customers would not be warned." },
+        { "action": "Set the cushion so liquidation would end above the margin-call threshold.", "expectedResult": "Refused; the message names the threshold it would cross." },
+        { "action": "Make a valid change.", "expectedResult": "Applied on the next cycle without a restart." }
+      ],
+      "tags": ["spec:liquidator"],
+      "verifies": ["guard-config-validation", "control-change-bands", "control-change-bands-safeguard", "bands-configurable"]
+    }
+  ],
+  "plan": {
+    "name": "Auto-liquidation",
+    "scopeText": "Margin level and bands, the ten-second cycle, position selection and quantity, the twelve guards, operator controls.",
+    "outOfScopeText": "The formulas on the parent page (a separate specification); multi-currency offset (FI-5622) and the trade-recording defect (FI-5629), both open in the source.",
+    "entryCriteria": [ { "metric": "build_available", "op": "=", "value": 1 } ],
+    "exitCriteria": [
+      { "metric": "coverage", "op": ">=", "value": 100 },
+      { "metric": "pass_rate", "op": ">=", "value": 100 },
+      { "metric": "open_critical", "op": "=", "value": 0 }
+    ],
+    "sections": [
+      { "name": "Bands and the cycle", "tags": ["spec:liquidator"] },
+      { "name": "Selling", "tags": ["spec:liquidator"] },
+      { "name": "Guards", "tags": ["spec:liquidator"] },
+      { "name": "Operator controls", "tags": ["spec:liquidator"] }
+    ],
+    "tags": ["spec:liquidator"]
+  }
+}

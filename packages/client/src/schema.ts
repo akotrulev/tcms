@@ -4163,7 +4163,12 @@ export interface paths {
          *     **400 is reachable and is the interesting one.** The payload was stored unvalidated, so a
          *     suite that has since been deleted, a retired shared step, or a vocabulary value that no
          *     longer exists lands here as ordinary field errors on `TestCaseInput`'s own field names — the
-         *     reviewer sees exactly what an author would see, and can reject instead.
+         *     reviewer sees exactly what an author would see, and can reject instead. `verifies` is
+         *     checked in the same breath and answers in the same shape: a target whose block has been
+         *     deleted, or belongs to a page of another project, is a field error keyed
+         *     `verifies[n].blockId` — indexed, because a proposal may claim twelve requirements and "one
+         *     of them is gone" is not something a reviewer can act on. The check runs **before** the case
+         *     is created, so a proposal either becomes a case with all of its links or stays a proposal.
          *
          *     Accepting an already-accepted proposal answers **200 with the case**, not a conflict: the
          *     state asked for is the state it is in. Accepting a rejected one is a 409.
@@ -14318,6 +14323,47 @@ export interface components {
          * @enum {string}
          */
         VerdictSource: "NONE" | "EXTERNAL";
+        /**
+         * @description One requirement a proposed case claims to verify — a `doc_block`, named by the page it sits
+         *     on and by its own permanent id.
+         *
+         *     **Stored with the proposal, validated at accept, written through the ordinary link path.**
+         *     A `doc_link` takes `sourceType: TEST_CASE` and a case id, and a proposal has no case until a
+         *     person accepts it — so the claim cannot be a link yet, and an agent that comes back
+         *     afterwards to make one is an agent waiting for an event nothing sends it. The claim
+         *     therefore travels *with* the proposal: stored unvalidated like the payload beside it, since
+         *     whether a block still exists is a question about the project's state at accept time and that
+         *     may be a week later; shown to the reviewer as the requirements this case says it covers; and
+         *     on acceptance written by the same path a person's link takes, so the resulting rows are
+         *     indistinguishable from ones somebody made by hand — exactly as the accepted case is
+         *     indistinguishable from one somebody authored.
+         */
+        ProposalLinkInput: {
+            /**
+             * Format: uuid
+             * @description The documentation page the block sits on, **of this project**. Named as well as the
+             *     block so a reviewer's screen resolves the claims with one read per page rather than a
+             *     search for a loose block id, and so a target whose page is wrong is a mismatch somebody
+             *     can see instead of a silent resolution.
+             */
+            pageId: string;
+            /**
+             * Format: uuid
+             * @description The block itself — the statement being verified. A block keeps its id however much its
+             *     text is edited, which is what makes the claim worth storing at all; a heading anchor or
+             *     a line number would not survive the next revision of the specification.
+             */
+            blockId: string;
+            /**
+             * @description The same three claims `BlockLinkInput` takes, defaulting the same way, because the row
+             *     this becomes is the same row. **Only `VERIFIES` is coverage**: `DERIVED_FROM` and
+             *     `REFERENCES` are relationships somebody deliberately chose not to state as proof, and
+             *     the coverage matrix ignores them.
+             * @default VERIFIES
+             * @enum {string}
+             */
+            relationship: "VERIFIES" | "DERIVED_FROM" | "REFERENCES";
+        };
         AiProposalInput: {
             /**
              * @description The proposed case, in the shape `POST /cases` takes — because accepting hands exactly
@@ -14330,6 +14376,21 @@ export interface components {
              *     agent claiming it had not checked. The reviewer sees a different sentence for each.
              */
             verdict?: components["schemas"]["ProposalVerdict"];
+            /**
+             * @description The requirements this case claims to verify. **Optional, and absent means `[]`** — an
+             *     agent claiming nothing, which is what every proposal filed before this field existed
+             *     claimed.
+             *
+             *     **Not a key inside `testCase`**: that is the body `POST /cases` takes and the create
+             *     path accepts no such key. **Not a key inside `grounding`** either — grounding is
+             *     displayed and never interpreted, and reading a link target out of a free-form object is
+             *     a second interpretation nobody can validate.
+             *
+             *     Stored as sent. The targets are resolved when a person accepts, and a `verifies[n]`
+             *     whose block has gone is a field error there rather than a refusal here — the same
+             *     bargain the payload itself is stored under.
+             */
+            verifies?: components["schemas"]["ProposalLinkInput"][];
             /**
              * @description Per-step findings, including rejections and unverified claims. Free-form on purpose, and
              *     displayed rather than interpreted — never as HTML.
@@ -14389,6 +14450,18 @@ export interface components {
             testCase?: components["schemas"]["TestCaseInput"] | null;
             verdict: components["schemas"]["ProposalVerdict"];
             verdictSource: components["schemas"]["VerdictSource"];
+            /**
+             * @description The requirements this case claims to verify, as they were filed. **Required and never
+             *     null**: a proposal filed before the field existed serves `[]`, so a reader renders an
+             *     empty region rather than branching on absence — the same reason `ProposalRejection.note`
+             *     is required and nullable rather than absent-when-unknown.
+             *
+             *     Served **as stored, unresolved**. A target whose block has since been deleted is still
+             *     listed, because that is precisely the claim a reviewer needs to see before pressing
+             *     Accept and getting the 400. Turning a target into a page key and the block's text is the
+             *     reader's own read of the page.
+             */
+            verifies: components["schemas"]["ProposalLinkInput"][];
             grounding?: {
                 [key: string]: unknown;
             } | null;

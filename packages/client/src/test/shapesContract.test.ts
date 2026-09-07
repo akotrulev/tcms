@@ -99,6 +99,14 @@ const UNOFFERED: Readonly<Record<string, string>> = {
   'AiProposalInput.testCase':
     'The wrapper itself. The catalogue flattens it — every field of the case is a field of the '
     + 'proposal here, which is the shape both adapters already accept.',
+  // Removed by 022 T3a, which puts `verifies` on the case shape scoped to `propose` — the entry a
+  // contract field gets while its clients are still one task behind, exactly as the struck-through
+  // `agentEligible` line below carried `IssueInput` until 015 T4 closed it.
+  'AiProposalInput.verifies':
+    'The requirements a proposed case claims to verify, landed by 022 T1 with the contract and no '
+    + 'client. It is wrapper-level rather than a field of the case, so it needs the `propose`-scoped '
+    + 'shape T3a adds; until then neither adapter can send one and the backend reads an absent '
+    + 'array as the empty claim.',
 
   /* ---- artifact ---- */
   'ArtifactInput.kind':

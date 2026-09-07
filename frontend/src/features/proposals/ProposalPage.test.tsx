@@ -51,6 +51,7 @@ const PENDING: AiProposal = {
   verdict: 'PARTIAL',
   verdictSource: 'EXTERNAL',
   grounding: { unverified_claims: ['the refund window is 30 days'] },
+  verifies: [],
   status: 'PENDING',
   createdAt: '2026-08-08T09:00:00Z',
   createdBy: { id: 'user-2', displayName: 'A. Author', email: 'a@acme.test', avatarUrl: null },

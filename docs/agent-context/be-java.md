@@ -1,6 +1,6 @@
 # be-java — orientation cache
 
-Baseline: 016 T3, refreshed 2026-09-04.
+Baseline: 022 T1, refreshed 2026-09-07 (`f9b0b01b`).
 Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
 
 ## Version lane
@@ -20,7 +20,9 @@ Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
   `V2__pm_foundation.sql`, `V3__tracker_core.sql`, `V4__retire_work_item.sql`,
   `V5__tracker_board.sql`, `V6__release.sql`, `V7__import.sql`, `V8__agent.sql`,
   `V9__time.sql`. ~~head `V71` (B2)~~ ~~the next number is `V2`~~ ~~→ `V5`~~ ~~→ `V6`~~ ~~→ `V7`~~
-  ~~→ `V8`~~ ~~→ `V9`~~ → the next number is **`V10`**. `out-of-order` is unset, so a lower number arriving after a higher one is silently not
+  ~~→ `V8`~~ ~~→ `V9`~~ ~~→ `V10`~~ → `V10__staffing.sql`, `V11__crm_clients.sql`,
+  `V12__billing.sql` and `V13__three_boards_and_blocking.sql` have since landed, so **the next
+  number is `V14`**. `out-of-order` is unset, so a lower number arriving after a higher one is silently not
   applied — `ls` the directory before writing.
 
 ## Seams to reuse
@@ -222,6 +224,18 @@ Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
   endpoints answer 400 on a blank name, which the contract does not list — invisible to every gate.
 
 ## Session log
+
+- 2026-09-07 022 T1: `contract`. `ProposalLinkInput` (`pageId`/`blockId`/`relationship`, the
+  `BlockLinkInput` enum and its `VERIFIES` default), `AiProposalInput.verifies` (optional, absent
+  is `[]`) and `AiProposal.verifies` (**required and never null**), plus the accept path's `400` on
+  `verifies[n].blockId` documented in the paragraph that already explained a deleted suite. Both
+  generated copies regenerated; `packages/client/src/test/fixtures.ts`'s `proposal()` and the SPA's
+  typed `PENDING` literal in `ProposalPage.test.tsx` gained `verifies: []`; one `UNOFFERED` entry in
+  `shapesContract.test.ts` that T3a removes. **No Java, and the backend is knowingly red until
+  T2** on exactly two `ContractConventionTest` checks — `everyObjectSchemaIsPairedOrExempt`
+  (`ProposalLinkInput` has no record) and `pairedSchemasAndRecordsNameTheSameMembers`
+  (`AiProposalInput`/`AiProposalView` do not declare `verifies`). Gates on shanks: packages build
+  clean, 563 tests green across the three workspaces, frontend build clean, 1495 smoke tests green.
 
 - 2026-09-04 016 T3: `be`. `com.tcms.time` — 25 files: three entities, three repositories,
   `IssueFacts` (the one crossing), `Periods`/`PeriodBounds`, `TimeAccess`, three services

@@ -422,6 +422,7 @@ export function proposal(overrides: Partial<Schemas['AiProposal']> = {}): Schema
     title: 'Login works',
     verdict: 'UNVERIFIED',
     verdictSource: 'NONE',
+    verifies: [],
     status: 'PENDING',
     createdAt: NOW,
     filedByAgent: true,
