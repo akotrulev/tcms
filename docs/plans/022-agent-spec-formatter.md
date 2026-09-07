@@ -264,7 +264,7 @@ the resource.
 
 Stack: `fe` + docs. Skill: `fe-react` (`fe-react-data-fetching`, `fe-react-component-testing`).
 
-Read: T3b's commit; `frontend/src/features/proposals/ProposalPage.tsx` and its test;
+Read: T3b's commit (`e784e811`); `frontend/src/features/proposals/ProposalPage.tsx` and its test;
 `frontend/src/api/queries/` (the doc-page read hook, and `keys.ts` — never add a second factory);
 `frontend/src/features/help/sections.tsx` (the MCP section T3b touched minimally);
 `docs/features.md` §Documentation; design §7.
@@ -275,6 +275,34 @@ exists* state below is the point of the region rather than an edge case. The lin
 a projection later (an outbox handler in `documentation`), not in the accept response, so a screen
 that reads `relatedDocuments` straight after Accept legitimately sees nothing yet.
 
+**What T3b landed, and the four things it corrected.** Surface: **45 tools** and **94 CLI
+commands**, both pinned (`mcp/src/writes.test.ts`'s `is 45 tools`; `guideCopies.test.ts` in both
+packages against `sections.tsx`). The new surface is §3.0b of
+`docs/specs/2026-08-08-mcp-tool-and-command-surface.md` and §6's *three commands 022 T3b adds*
+block — read those two rather than the design, which they now outrank.
+
+1. **`sections.tsx` is already minimally correct and you are writing the prose, not the counts.**
+   T3b set `45 tools` (twice), `Orientation — 4` with a `tcms_process` sentence, and added
+   `tcms process`, `doc adopt`, `spec import` and `doc show --markdown` to the two terminal blocks.
+   It also fixed `Writing — 19` → `20`, which had been wrong over its own list since some slice
+   between 016 and 022. **Those three group headings are pinned by nothing** — `guideCopies` compares
+   the names and the total only — so if you touch a list, count it by hand. Note the guide's groups
+   are not the registry's split: `READ_TOOLS.length` is 22 while the guide's Reading list is 21,
+   because `tcms_report` sits under Writing and `tcms_triage` under Reading.
+2. **The five processes have four carriers, not three.** `tcms_process`, `tcms://process/{name}`,
+   **MCP prompts** (`prompts/list` · `prompts/get`, advertised without `listChanged`) and
+   `tcms process`. The prompts are the one a *person* reaches — a host lists them as slash commands
+   — and that is the sentence worth writing in the guide, because it is the answer to *how do I
+   actually start this*. `processCatalogue()` renders the one-line-each list and `PROCESSES[].summary`
+   is the sentence to copy; do not paraphrase them into a third copy.
+3. **Two process steps reach no CLI command at all** (`tcms_orient`, `tcms_report`) and the renderer
+   says so in as many words. That is surface spec §6's `report`/`triage` asymmetry arriving in a
+   third place; if the guide describes the processes, it should not imply the CLI can drive all of
+   one.
+4. **`tcms doc adopt` and `tcms spec import` are the two new CLI verbs worth a line each** — the
+   second is the composite that writes a page, its proposals, its plan and the adoption from one
+   bundle, is deliberately CLI-only, and replays rather than duplicates on an unchanged re-run.
+
 1. `ProposalPage`: a *Verifies* region listing each `verifies` entry as page key + block text
    (read the page through the existing query hook; one read per distinct page), `relationship` as a
    label from `lib/labels.ts`, and a *no longer exists* state for a block the page does not contain —
@@ -282,16 +310,26 @@ that reads `relatedDocuments` straight after Accept legitimately sees nothing ye
    empty when `verifies` is `[]`. RTL test with a contract-conformant fixture — the SPA has no
    `AiProposal` fixture in `src/test/fixtures.ts`, so the one to extend is the typed `PENDING`
    literal at the top of `ProposalPage.test.tsx`, which T1 already gave `verifies: []`.
+   **`relationship` is one of three and only `VERIFIES` is coverage** — `DERIVED_FROM` and
+   `REFERENCES` are relationships somebody deliberately chose not to state as proof, and the
+   coverage matrix ignores them, so the label must not read as coverage. `lib/labels.ts` entries
+   `satisfies Record<Union, string>`, so a fourth member would be a compile error.
 2. Help guide: the MCP section describes the five processes (one line each, from the catalogue's
-   summaries — do not paraphrase them into a third copy; T3a's `processCatalogue()` renders exactly
-   that list, and `PROCESSES[].summary` is the sentence to copy), `tcms_process` and the prompts,
-   and the count T3b set.
-3. `docs/features.md` §Documentation: the page as a specification, labels, the round trip, and that a
-   proposal names the requirements it verifies and is linked on acceptance.
-4. Design spec §7: mark each task landed with its commit hash; note anything built but unverified.
+   summaries), the four carriers including the prompts, and `tcms_process`. The **counts are already
+   right** — change them only if you change a list.
+3. `docs/features.md` §Documentation: the page as a specification, labels and the anchors a write
+   answers with, the round trip (`doc show --markdown` → edit → `doc edit --from`), the refusal that
+   protects a claimed block, and that a proposal names the requirements it verifies and is linked on
+   acceptance.
+4. Design spec §7: mark each task landed with its commit hash — T1 `7e49c48c`, T2 `58f972b3`,
+   T3a `22f118b9`, T3b `e784e811` — and note anything built but unverified. **Nothing in
+   `packages/` has been run against a live instance**; every gate there is a double compared to
+   `openapi.yaml`, so the whole agent-facing half of this slice is *built and unverified* in the
+   sense CLAUDE.md means. Say so rather than implying it has been exercised.
 5. Gates: `~/bin/tcms-remote frontend 'npm run build'`, `'npm run lint'`, `'npm run test:run'`,
    and `~/bin/tcms-remote packages 'npm run test:run --workspaces'` (the guide pin).
 6. Commit: `feat(proposals): the requirements a proposal claims, on the reviewer's screen; docs close-out`.
 
 Traps: never build a `QueryClient` in a test; a test that trips an error boundary must say so. Filter
-state lives in the URL. No `sx`, no second stylesheet.
+state lives in the URL. No `sx`, no second stylesheet. A path named in a comment must exist —
+`citedFiles.test.ts` scans `frontend/src/**` and reddens the **packages** job.
