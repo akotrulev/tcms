@@ -1,6 +1,6 @@
 # tooling-engineer — orientation cache
 
-Baseline: `6a8db463` (022 T3a), refreshed 2026-09-07.
+Baseline: `e784e811` (022 T3b), refreshed 2026-09-07.
 Trust this as a lead, not evidence; `CLAUDE.md`, `docs/specs/openapi.yaml` and
 `docs/specs/2026-08-08-mcp-tool-and-command-surface.md` outrank it.
 
@@ -30,16 +30,22 @@ Trust this as a lead, not evidence; `CLAUDE.md`, `docs/specs/openapi.yaml` and
 - The **core** is `client/src/core/`: one file per concern, no folders under it. 022 T3a added
   `markdown.ts` (TCMS spec markdown, both directions) and `processes.ts` (the five processes),
   both pure and both exported from `client/src/index.ts`.
+- `mcp/src/process.ts` is the `tcms_process` tool, built exactly like `shape.ts`; `mcp/src/server.ts`
+  holds the `prompts` capability, `ListPrompts`/`GetPrompt`, and the `tcms://process/{name}`
+  resources beside `tcms://shape/{entity}`.
 - Registries: `mcp/src/tools.ts` (`whoami` + `shape` + `READ_TOOLS` + `WRITE_TOOLS`) and
   `cli/src/commands.ts` (`READS` + `WRITES`). Everything else derives from those two lists — **and
   that is load-bearing rather than tidy**: 012 T5 added 8 commands and 2 tools, and neither
   `commands.ts` nor `server.ts` needed a line, consent prompt for the new delete arm included.
-- Sizes as of 016 T1: **34 tools** (16 read + 15 write + whoami + shape) and **64 CLI commands**.
-  Three places carry a count and all three are pinned: `writes.test.ts`'s `is 34 tools`,
-  `sections.tsx`'s `34 tools` prose, and §6/§3 of the surface document. `sections.tsx` also carries
-  two GROUP headings (`Reading — 16`, `Writing — 15`) that **nothing pins** — the test compares the
-  names and the total, so a heading contradicting its own list ships green. 012 did exactly that;
-  count the list items by hand every time. **§3's TABLE is not pinned either**: 013 T4 moved the
+- Sizes as of 022 T3b: **45 tools** (21 read + 20 write + whoami + shape + **process**) and **94
+  CLI commands**. Three places carry a count and all three are pinned: `writes.test.ts`'s
+  `is 45 tools`, `sections.tsx`'s `45 tools` prose, and §6/§3 of the surface document. `sections.tsx` also carries
+  three GROUP headings (`Orientation — 4`, `Reading — 21`, `Writing — 20`) that **nothing pins** —
+  the test compares the names and the total, so a heading contradicting its own list ships green.
+  012 did it and so did some slice between 016 and 022: `Writing` said 19 over a list of 20 until
+  022 T3b counted them. **Count the list items by hand every time**; note also that the guide's
+  three groups are NOT the registry's split (`tcms_report` is under Writing, `tcms_triage` under
+  Reading), so `READ_TOOLS.length` is 22 while the guide's Reading list is 21. **§3's TABLE is not pinned either**: 013 T4 moved the
   heading's count to 30 and never added rows 29 and 30, and it sat wrong for two slices; 016 T1
   added them.
 - **`findCommand` tries three words, two, then one.** `issue cases set` is the only three-word name
@@ -68,6 +74,22 @@ Trust this as a lead, not evidence; `CLAUDE.md`, `docs/specs/openapi.yaml` and
 - **Envelope**: reads answer `{items, page, size, total, hasMore, truncated}` (`reads.ts`'s `window`
   / `paged`); writes answer the contract resource; refusals are composed once in
   `client/src/core/outcome.ts` + `refusal.ts` and rendered by `mcp/src/result.ts`.
+- **The markdown route through both adapters** — MCP `tcms_write_doc_page {markdown}` and CLI
+  `doc create/edit --from`. The MCP argument takes the TEXT and the CLI flag takes a **PATH**
+  (`-` is stdin, `readTextFile` in `cli/src/context.ts`); that asymmetry is the medium, not an
+  inconsistency. Both refuse `markdown` + `blocks` together, both answer/print **`anchors`**
+  (label → block id, the only place a label's id exists), and both read the page first on an edit
+  — for the linked-block refusal **and** for `DocPageInput.title`, which the contract requires of
+  any body edit (`core/rewrite.ts`'s `docPageInputFrom`, added by 022 T3b). **The version still
+  does not come from that read**; `--lock-version` / `lockVersion` is still demanded.
+- **`verifies` on a proposal**: MCP takes `[{page, block, relationship?}]` and resolves `page`;
+  the CLI takes `--verifies DOC-7:<blockId>`, repeatable, and files `VERIFIES` only. The block id
+  is **not** checked client-side (it is checked at accept); `relationship` **is**, against the
+  catalogue's enum, because a fixed three-word vocabulary needs no project state to judge.
+- **`spec import`** (`cli/src/writes.ts`) is the surface's only composite write and is CLI-only by
+  decision (design §6). Its `Idempotency-Key`s are `sha256(bundle)[0..32]` + `-page` / `-case-<i>`
+  / `-plan`, so an unchanged re-run replays; a refusal prints the ledger of what landed to stderr
+  and rethrows so `main` maps the exit code.
 - **Write mechanics** are declared, never inferred: `ToolArm.kind` / `Command.write.kind` ∈
   create · edit · state · delete, and `client/src/core/mutation.ts` (`createIntent` / `editIntent`)
   is the only place a header is generated.
@@ -106,10 +128,14 @@ Trust this as a lead, not evidence; `CLAUDE.md`, `docs/specs/openapi.yaml` and
 - **The catalogue↔surface pins are what a catalogue-before-adapter task collides with.**
   `mcp/src/writes.test.ts` ("declares every field the catalogue offers") and
   `cli/src/format.test.ts` ("gives every field a flag the command actually takes") both go red the
-  moment a `FieldSpec` has no argument behind it. 022 T3a landed the catalogue a task ahead of the
-  adapters, so each of those two tests carries a `PENDING_ON_THE_SURFACE` map — the gap, its cost,
-  pinned both ways — which 022 T3b empties and deletes. **A field added to `shapes.ts` reddens both
-  adapters' suites in the same run**; budget for it or record it there.
+  moment a `FieldSpec` has no argument behind it. ~~022 T3a's `PENDING_ON_THE_SURFACE` maps~~ →
+  **both deleted by 022 T3b**; the two checks are now bare `expect(gaps).toEqual([])`. **A field
+  added to `shapes.ts` reddens both adapters' suites in the same run**; budget for it.
+- **`contractExchange` checks the body a command SENT, not only the one a stub served**, and it is
+  the check that finds an adapter composing something the contract refuses. 022 T3b hit it twice on
+  its first run: `DocPageInput.title` missing from a whole-body page edit (a defect predating the
+  slice, on both surfaces, invisible because no test drove such an edit to the `PATCH`), and a
+  `relationship` outside the enum being forwarded rather than refused.
 - A shortfall is recorded in a named map with what it costs (`CREATE_WITHOUT_A_KEY`, `UNOFFERED`),
   and each map is pinned both ways so a stale entry fails too. **`UNOFFERED` is the one that finds
   a contract amendment nobody wired**: `shapesContract.test.ts` fails when a property of a shape's
@@ -164,6 +190,23 @@ Trust this as a lead, not evidence; `CLAUDE.md`, `docs/specs/openapi.yaml` and
   double compared to the contract.
 
 ## Session log
+- 2026-09-07 · delta (baseline `6a8db463` had been amended to `22f118b9`; the only tree difference
+  was this file, so effectively TRUST) · 022 T3b: the adapters. **45 tools** (`tcms_process`),
+  **94 CLI commands** (`process`, `doc adopt`, `spec import`), the `prompts` capability with
+  `tcms://process/*` beside the shapes, `markdown`/`anchors`/`dropLinked`/`adopt` on
+  `tcms_write_doc_page`, `as: 'markdown'` on `tcms_open_doc_page`, `verifies` on `case propose`,
+  and the plan's six document fields on both surfaces. Both `PENDING_ON_THE_SURFACE` maps deleted.
+  Arrived **green** (595: cli 182 · client 170 · mcp 243); left green at **642** (cli 203 ·
+  client 170 · mcp 269). Four things the plan did not predict, three found by an existing check:
+  `ProposalLinkInput.relationship` is **required** in the generated type (`openapi-typescript`
+  reads a default as always-present), so it is sent explicitly rather than omitted — `doc link`'s
+  precedent; `contractExchange` then refused a value outside the enum, so the client **validates
+  `relationship` locally** rather than forwarding a typo; the same check found
+  `DocPageInput.title` missing from every whole-body page edit either adapter has ever made, which
+  is a defect older than this slice and is repaired by a fourth projection in `core/rewrite.ts`
+  (`docPageInputFrom` — the one `packages/client` core change this task made, and it is the shared
+  rule rather than an adapter's); and `writes.test.ts`'s existing lockVersion test needed a page
+  read stubbed because that repair added one. Nothing here has been run against a live instance.
 - 2026-09-07 · delta (contract doc, `openapi.yaml`, generated schema, both adapters' `writes.ts` /
   `reads.ts`, fixtures and `shapesContract.test.ts` had moved under 017–022 T2; `core/shapes.ts`
   had not) · 022 T3a: `core/markdown.ts`, `core/processes.ts`, `CASE_SHAPE.verifies`, the plan
