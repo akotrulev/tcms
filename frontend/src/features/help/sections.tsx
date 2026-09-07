@@ -81,25 +81,52 @@ export const helpSections: HelpSection[] = [
         </P>
 
         <H>Finding your way around</H>
+        <P>
+          The left rail has <strong>three zones</strong>: what is yours, the project you are in, and
+          the company. Inside a zone it is a flat list, ordered by how often a screen gets opened —
+          so <strong>Work</strong>, where the boards are, is first in the project zone, and{' '}
+          <strong>Overview</strong> is seventh, because it is the project&apos;s dashboard rather
+          than a place you work in.
+        </P>
         <Definitions
           items={[
             {
               term: 'The project switcher',
               detail:
-                'In the header, at the top of every screen. Everything in the left rail is scoped to the project you picked — switching projects changes what those screens show.',
+                'The Project zone’s own header in the left rail. Everything below it is scoped to the project you picked — switching projects changes what those screens show. With the rail collapsed to its narrow form, the zone header becomes the project’s key and still opens the switcher.',
             },
             {
-              term: 'The search field',
+              term: 'Search — ⌘K',
               detail:
-                'Beside the switcher, and deliberately not scoped by it. Type and press Enter to find a case across every project you can open, for when you do not know which project holds it.',
+                'In the header, and also opened by pressing / anywhere outside a text field. One control over issues, cases, doc pages, places in the product and projects. Issues and cases are searched across every project you can open; doc pages are searched inside the project you are in, and the palette tells you so rather than quietly returning nothing. Typing a key jumps straight to it: ACME-118 opens the issue, TC-118 the case.',
+            },
+            {
+              term: 'Places',
+              detail:
+                'The palette indexes the rail, every tab, every settings section and the user menu by name — which is how you reach a screen that is a tab on another screen, and therefore invisible until you are already there. It hides exactly what the rail hides: a place you lack the permission for is not offered.',
+            },
+            {
+              term: 'Breadcrumbs',
+              detail:
+                'In the header, built from the address rather than by each page, so the trail cannot disagree with the rail — and a screen whose data failed to load still shows you the way back up.',
+            },
+            {
+              term: 'Your name (top right)',
+              detail:
+                'Your own things, and nothing that belongs to a project: your account, your security and sign-in identities, your API tokens, your notification preferences, your timesheets — a timesheet is your own fortnight, not a place in the product — and Your access, which explains which entries are hidden from you and what would show them.',
             },
             {
               term: 'My work',
               detail:
-                'First in the rail\u2019s You zone, above the project frame, so it is not scoped by the switcher: every issue, execution and review assigned to you, across every project you can see.',
+                'First in the rail\u2019s You zone, above the project frame, so it is not scoped by the switcher: every issue, execution and review assigned to you, across every project you can see. It is also where you land after signing in, and it opens with an Awaiting you strip — reviews assigned to you, the boards with work waiting at their door, your blocked cards and any proposals waiting.',
             },
           ]}
         />
+        <Note>
+          A number beside a rail entry or a board is always an <em>awaiting-you</em> count and never
+          a total. A board&apos;s badge is what is sitting in its first column — what is waiting at
+          its door.
+        </Note>
         <Note>
           Controls you do not have permission to use are <strong>visible but disabled</strong>, with
           a tooltip naming what you would need. That is deliberate: the product never hides that a
@@ -464,14 +491,34 @@ export const helpSections: HelpSection[] = [
                 'Live pass/fail/blocked counts and progress, plus a What Failed panel putting the run’s failures and their steps on one screen.',
             },
             {
-              term: 'Board',
+              term: 'The three boards',
               detail:
-                'ONE project’s board — its open issues in columns named by that project’s own workflow, alongside the work the repository already knows about: executions assigned to you, reviews you have been asked for, cases the health computation flagged, and tests somebody quarantined. Drag a card, or use the keyboard twin the footer shows while a card is lifted. A move the workflow forbids is refused and the card says why.',
+                'A new project is seeded with a PM board, a Dev board and a QA board over one eleven-status workflow — three teams’ folds of the same work, not three workflows. The hand-offs are shared columns: drag a story into Ready for test on the Dev board and it is on the QA board, with no second action, because the move changed the issue’s status and every board is a mapping of statuses. Find them all under Work, as the first segments of its view switcher.',
             },
             {
-              term: 'Project boards',
+              term: 'Blocked, and where a card came from',
               detail:
-                'A project can carry several boards over the same statuses — a per-status one for the team, a three-column one for a stakeholder — because a board is a view and owns no issue. Move a card on one and it is in the matching column on the other. Swimlanes group by epic, assignee, label or priority; a WIP limit reports a breach rather than refusing the drop; and the columns, their claims and the project’s labels are defined on Project settings → Boards, where a status × board table shows every status claimed by exactly one column before a save is attempted.',
+                'Every board has a Blocked column. Block… in a card’s ⋮ menu records the status the card left, so the card face reads “⛔ from In test” and a blocked card sitting on somebody else’s board says whose problem it was; Unblock returns it to that status rather than to the front of the board.',
+            },
+            {
+              term: 'Done is the PM board’s',
+              detail:
+                'Tested is not shipped. Ready to deploy is the tester’s last word; the deploy confirmation is the product owner’s drag into Done, which only the PM board has — collapsed to a count strip that is still a drop target.',
+            },
+            {
+              term: 'Epics on a board',
+              detail:
+                'An epic has a status of its own and is a card you can move, in a column like any other. Its completion percentage is still derived from its stories. When every counted story under an epic is finished and the epic is not, the epic card says so — a nudge, not an automatic move: nothing ships without a person’s drag. A lane is an epic: one band with the epic’s card in it, one row per story, and that story’s tasks as the cards in the row.',
+            },
+            {
+              term: 'What a card face tells you',
+              detail:
+                'On a grooming board, whether a story is ready — acceptance criteria, an estimate, an epic, a task count — and which of those are missing. On a testing board, its linked cases: “4/6 passing”, “1 blocked”, and Run linked cases, which opens the issue where those cases and their results are. A card whose cases have never been run reads “0/6 run”, never “0/6 passing”; one with none reads “no cases linked”.',
+            },
+            {
+              term: 'Boards in general',
+              detail:
+                'A board is a view and owns no issue, so a project can carry as many as it likes over the same statuses, and deleting one loses nothing. A board claims a subset of the project’s statuses — its team’s part of the lifecycle — and the project’s boards together claim them all; Project settings → Boards draws a status × board table and names any status no board shows, as a warning rather than a refusal. Swimlanes group by epic, assignee, label or priority; a WIP limit reports a breach rather than refusing the drop; drag a card, or use the ⋮ Move to… list, which offers every column with the illegal ones disabled and the reason on them.',
             },
             {
               term: 'Backlog',
@@ -481,7 +528,7 @@ export const helpSections: HelpSection[] = [
             {
               term: 'My work',
               detail:
-                'Everything assigned to you, across every project you can see, as two tables over one read: your issues in one, your executions and reviews in the other. Not a board — two projects name their statuses separately, so columns there would be a grouping the data cannot support. You can also keep a private note and a personal due date on any card, which no teammate sees.',
+                'Everything assigned to you, across every project you can see, as two tables over one read: your issues in one, your executions and reviews in the other. Not a board — two projects name their statuses separately, so columns there would be a grouping the data cannot support. Above the tables, an Awaiting you strip: reviews assigned to you, the boards with work at their door that you can move, your blocked cards, proposals waiting, and a plain link to timesheet approvals, which deliberately carries no count. You can also keep a private note and a personal due date on any card, which no teammate sees.',
             },
             {
               term: 'Team board',

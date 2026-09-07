@@ -745,11 +745,33 @@ sentence needs `BoardLane` to carry the epic's `IssueStatusRef` and the boards c
 additive contract change and a `be` task. Recorded rather than guessed at, because a hard-coded
 "Dev board" would be correct only on the seeded project.
 
+### D-r — `Run linked cases` goes to the issue, not to a run-list filter (found building T8)
+
+§T8 named the action's target as `…/runs?issue=<key>`, *"the existing run-list filter"*. **There is
+no such filter.** `RunListPage` reads no search parameter at all, and `GET /projects/{id}/runs`
+takes an optional `planId` and nothing else — so a link carrying `?issue=` would be dropped and the
+reader would land on every run in the project, which is the swallowed-404 defect in its quietest
+form. The action therefore links to `/issues/{key}`, whose **Linked test cases** panel holds those
+cases, their latest results and the keys the five-number summary cannot carry.
+
+Closing this properly is a `be` task and then a `fe` one: an `issue` filter on `GET /runs` (or a
+`POST` that creates a run scoped to an issue's linked cases, which is what the words *Run linked
+cases* actually promise). Recorded rather than guessed at.
+
 ### D-n — The composite board retires in T8, after its halves have homes
 
 Its issue half is the Dev board; its executions/reviews half is the QA card face (T4/T8); flagged
 cases keep the case list's health filters and the Overview tiles. The route and `BoardPage`'s arm
 go in T8, once every link has somewhere to point.
+
+**Landed in T8.** The route, its `routeMeta` entry and `export function BoardPage` are gone;
+`export function Board` — the composite renderer — stays, because `/teams/:teamId/board` renders it
+and a team's board genuinely mixes all four card kinds across projects. **Nothing had to be
+re-pointed:** the only inbound references to `/projects/:id/board` were `router.tsx`,
+`routeMeta.ts` and three code comments; `app/nav.ts` never listed it (T6's rail leads with `Work`),
+and the Dashboard link the T8 prompt anticipated does not exist — 012 T7 had already removed the
+`M2` panel that carried it, and `WorkTablePage.test.tsx` records that removal. The comments now
+carry the strike-through instead.
 
 ---
 
@@ -1709,7 +1731,7 @@ settings page, under the `PageHeader`.
 Renames: the labels in `nav.ts`; `help/sections.tsx` lines 273, 343–346, 535; the `<title>`s of
 the renamed pages; `Help & documentation` → `User guide` in the menu and the footer.
 
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 4: Gate and commit**
 
 ```bash
 ~/bin/tcms-remote sync
@@ -1811,7 +1833,7 @@ argued; a built-but-unverified list appended to this plan.
 **Files:**
 - Modify: `app/CommandPalette.tsx`, `features/board/BoardCardFace.tsx`, `BoardPage.tsx`, `BoardPage.test.tsx`, `MyWorkPage.tsx`, `features/dashboard/DashboardPage.tsx`, `app/router.tsx`, `app/routeMeta.ts`, `docs/features.md`, `features/help/sections.tsx`, this plan
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 `CommandPalette.test.tsx`: "groups issues from /issues/search and docs from the active project's
 doc-page search, and omits the docs group with a sentence when no project is active".
@@ -1819,7 +1841,7 @@ doc-page search, and omits the docs group with a sentence when no project is act
 `BoardPage.test.tsx`: the composite cases removed; "the Work board view still renders at
 ?view=board". `MyWorkPage.test.tsx`: the strip's five items.
 
-- [ ] **Step 2: Implement**
+- [x] **Step 2: Implement**
 
 Palette: three queries in parallel, grouped **Issues · Cases · Docs · Places · Projects**;
 placeholder per §7 Phase 2. Card face: `linkedCases` line + `Run linked cases` (links to the
@@ -1830,7 +1852,7 @@ with `enabled: true`, counting cards whose `columnId` is the first column — sh
 segments once loaded. My work: the strip over reads the page already makes plus per-project
 board reads for projects in the caller's list.
 
-- [ ] **Step 3: Close-out**
+- [x] **Step 3: Close-out**
 
 `docs/features.md`: §Boards and the Backlog rewritten for three boards, the coverage read, epics
 that move, Blocked; a §Navigation paragraph (zones, tabs, palette, user menu). `help/sections.tsx`:
@@ -1838,30 +1860,7 @@ the same. Confirm every `→ superseded (021 R<n>)` strike-through exists where 
 argued (`grep -rn "021 R" frontend/src backend/src docs/specs/openapi.yaml` lists twelve). Append
 to this plan:
 
-```markdown
-## Built but unverified
-
-- [what no browser has shown: e.g. the sticky header inside the board scroller; the Done strip
-  expand; Block… on a touch device; the palette's `/` guard in contenteditable; the settings
-  landing's live facts against a project with zero imports; the three-board CLI resolver against
-  a real project]
-
-**From T6 (the shell), stated because the gates cannot see any of it:**
-
-- **The company slot is reserved and empty, and it will stay empty until the contract names a
-  company.** §3 asks for the company name as static text; nothing on the wire carries it. The
-  element, its locator and its place in the header are real; the text is not. This is the one
-  item of T6's deliverable that did not land, and it needs one field on `GET /me` from the backend
-  side before any frontend task can finish it.
-- Nothing in T6 has been seen in a browser: the collapsed rail's `Administration` flyout, the key
-  chip opening the switcher at 64px, the settings landing at eleven cards on a wide screen and at
-  one column on a phone, the three tab strips wrapping, and the mobile drawer — which renders the
-  three zones as the same flat lists the desktop rail does, **not** as §1's zone accordions. That
-  divergence is deliberate for now (the drawer shares `RailContent`, and splitting it is a second
-  component to keep in step) and is the smallest thing on this list.
-- The user menu is §4 minus two rows: `Your access` and `Keyboard shortcuts` are T7's, and a menu
-  entry pointing at a route that does not exist is worse than an absent one.
-```
+See **Built but unverified** at the end of this document.
 
 - [ ] **Step 4: Gate and commit**
 
@@ -1888,3 +1887,110 @@ git commit -m "feat(shell): grouped search, the QA card face, the composite boar
   build + lint + test:run.
 - `docs/features.md` describes the product as built; the twelve reversals are struck through where
   they were argued; the built-but-unverified list names what a browser has yet to show.
+
+---
+
+## Built but unverified
+
+Written by T8, the only session that saw what actually landed. Everything below **compiles, lints
+and passes its tests on `shanks`**; none of it has been operated in a browser, and the gates cannot
+see any of it. The list is deliberately long — the gates prove it compiles, not that it works, and
+this repo has shipped a no-op theme toggle, two contradictory percentages on one screen and a
+provider-ordering bug that rendered nothing but the error page, all typechecking and linting clean.
+
+### From T8 (this session)
+
+- **The palette's three groups have never been seen together.** The tests assert the groups, the
+  per-project docs read and the no-project sentence; nobody has watched five groups (`Issues ·
+  Cases · Docs in <project> · Places · Projects`) plus the `Jump to` row and the `Search` floor row
+  fit in a 560px dialog at `top-[12%]` without scrolling the first group off. If they do not, the
+  fix is a shorter `limit` per server group, not a scroll.
+- **The docs group's heading is the project's NAME**, taken from the project list. On a company
+  whose project names are long, `Docs in Payments Platform Modernisation` is a heading wider than
+  the dialog. Untested at that width.
+- **The linked-cases line has never been drawn on a real card.** The line adds a third row to a
+  card face that already carries a title, readiness signals and a wrapping chip strip; whether a QA
+  board column stays scannable with it is a judgement nobody has made with cards on screen.
+  `Run linked cases` is a plain link in that row and not a button — its hit area at touch size is
+  unmeasured.
+- **`0/6 run` on a real payload.** Every case in `linkedCases.test.ts` is a hand-built summary. No
+  card served by T4's projection has been looked at, so the assumption that the five counts sum to
+  `total` is the contract's word and not an observation.
+- **Door badges on every segment: the request volume is not measured.** `useBoardDoors` fires two
+  reads per board once the strip has a board list — six requests on a seeded three-board project,
+  on every Work view including Table, Timeline and Calendar. That is the design (the counts must be
+  readable *without* switching), and the cost has been reasoned about rather than watched in a
+  network panel.
+- **My work's *Awaiting you* strip has the largest fan-out in the app and has never been run
+  against a seeded instance.** For a reader with work in two projects with three boards each it is
+  2 board-list reads + 12 board reads + 2 proposal reads on top of the personal board. `seed-demo-data`
+  is the way to see it; nobody has.
+- **The strip's board tiles are drawn per board, where render 07 draws one.** §8.4's "boards where
+  you hold the moving key" is derived from `allowedTransitions` being non-empty on a card at the
+  door, because the contract carries **no board-scoped permission** — `issue:edit` is project-wide.
+  So a Test Engineer with `issue:edit` sees a tile per board of that project with work at its door,
+  and the render's single tile is not reproducible from any data the server sends. Recorded rather
+  than faked; it closes the day a board-scoped grant exists.
+- **The strip is bounded to the projects the reader has work in**, not `GET /projects`. A board
+  whose door has work waiting for the team, in a project this person currently has nothing assigned
+  in, is therefore **not** on the strip. This is a deliberate trade against N×M requests on the one
+  screen somebody keeps open all day, and it is the item on this list most likely to be argued
+  with once somebody uses it.
+- **The retirement of `/projects/:id/board` has not been walked.** `routeMeta.test.ts` proves the
+  key is gone and `BoardPage.test.tsx` proves the module no longer exports a page, but nobody has
+  typed the old URL into a running app to see what the router does with it (it falls through to the
+  catch-all, which is the intended answer and is unobserved).
+- **`Run linked cases` promises more than it delivers** — see **D-r**. It opens the issue's Linked
+  test cases panel; it does not start a run. The words are the render's and the destination is the
+  honest one available today.
+- **`docs/features.md`'s new §Navigation and the rewritten §Boards, and `help/sections.tsx`'s
+  rewritten navigation and board definitions, are prose about screens no browser has shown.** They
+  describe the code as written, which is not the same claim as describing the product as used.
+- **Two pre-existing failures in `CaseGrid.test.tsx`** (`select-all reaches the page…` and
+  `onSelectionChange` with a row not on this page) are red on `master` **without** any of this
+  task's changes, verified by stashing. They are not T8's and are not fixed here.
+
+### From T7, still true
+
+- The `⌘K` palette's `/` guard is covered for `<input>`; the `contenteditable` arm (the case
+  editor's document surface) is asserted through `isContentEditable` and has not been typed into.
+- `Your access` has not been read by somebody who was actually missing an entry.
+
+### From T6 (the shell), stated because the gates cannot see any of it
+
+- **The company slot is reserved and empty, and it will stay empty until the contract names a
+  company.** §3 asks for the company name as static text; nothing on the wire carries it. The
+  element, its locator and its place in the header are real; the text is not. This is the one
+  item of T6's deliverable that did not land, and it needs one field on `GET /me` from the backend
+  side before any frontend task can finish it.
+- Nothing in T6 has been seen in a browser: the collapsed rail's `Administration` flyout, the key
+  chip opening the switcher at 64px, the settings landing at eleven cards on a wide screen and at
+  one column on a phone, the three tab strips wrapping, and the mobile drawer — which renders the
+  three zones as the same flat lists the desktop rail does, **not** as §1's zone accordions. That
+  divergence is deliberate for now (the drawer shares `RailContent`, and splitting it is a second
+  component to keep in step) and is the smallest thing on this list.
+- ~~The user menu is §4 minus two rows: `Your access` and `Keyboard shortcuts` are T7's.~~ →
+  `Your access` landed in T7. `Keyboard shortcuts` still has no page and no menu row, and a menu
+  entry pointing at a route that does not exist is worse than an absent one.
+
+### From T5 (the boards), still unverified
+
+- The sticky column header inside the board's own scroller; the `Done` strip expanding; `Block…`
+  on a touch device; the coverage matrix at eleven statuses × three boards on a narrow screen.
+
+### Contract gaps recorded, not guessed at
+
+Three, each a `be` task and none of them a frontend one:
+
+- **D-p** — `BoardIssueCard` carries no target release, so the PM card draws **three** readiness
+  signals where §2.6 asks for four. The fourth chip's place on the card face is decided and empty.
+- **D-q** — `BoardLane` carries no epic status, so a lane bar reads `epic not on this board` and
+  cannot name which board it *is* on. The named link's place is decided and empty.
+- **D-r** — no issue filter on the run list, so `Run linked cases` opens the issue rather than a
+  filtered runner.
+
+Two more, outside this plan's stacks:
+
+- `tcms issue search "<q>"` (surface doc §6 — **singular noun**, not the plan's `issues search`)
+  and the MCP's `tcms_read_issue {q}` beside it are **not built**. They are a `ts` task of their
+  own; T8 is `fe` and did not open `packages/`.

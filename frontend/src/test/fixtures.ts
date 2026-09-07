@@ -123,6 +123,7 @@ import type {
   BoardSummary,
   CardElsewhere,
   CardMoveResult,
+  LinkedCasesSummary,
   IssueCompletion,
   IssueLabel,
   RankResult,
@@ -680,6 +681,23 @@ export function aBoardClaim(overrides: Partial<BoardClaim> = {}): BoardClaim {
 /** The descendants a board does not show, and the board that does (021 §2.5). */
 export function aCardElsewhere(overrides: Partial<CardElsewhere> = {}): CardElsewhere {
   return { boardId: 'b2', boardName: 'QA board', count: 1, ...overrides }
+}
+
+/**
+ * A card's linked-case roll-up (021 D-k).
+ *
+ * The five counts **sum to `total`**, and this factory keeps them summing: a caller overriding
+ * `failing` alone would produce a summary the server cannot serve, and a test built on one would
+ * pass against arithmetic the screen will never see. Override the whole set together.
+ *
+ * The default is a **mixed** card rather than a clean one — four passing, one failing, one blocked
+ * — because a factory whose default is all-green makes every test drive the one branch where the
+ * distinctions this summary exists for do not matter.
+ */
+export function aLinkedCasesSummary(
+  overrides: Partial<LinkedCasesSummary> = {},
+): LinkedCasesSummary {
+  return { total: 6, passing: 4, failing: 1, blocked: 1, notRun: 0, ...overrides }
 }
 
 /** A palette row for an issue — the project is named because the search crosses projects (D-j). */

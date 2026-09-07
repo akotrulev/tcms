@@ -113,7 +113,6 @@ const ReportViewPage = lazy(() =>
 const ArtifactsPage = lazy(() =>
   import('../features/artifacts/ArtifactsPage').then((m) => ({ default: m.ArtifactsPage })),
 );
-const BoardPage = lazy(() => import('../features/board/BoardPage').then((m) => ({ default: m.BoardPage })));
 const WorkTablePage = lazy(() =>
   import('../features/tracker/WorkTablePage').then((m) => ({ default: m.WorkTablePage })),
 );
@@ -397,9 +396,11 @@ function AppRoutes() {
             rail's project switcher appear to change a board it cannot change. `/admin/teams` is
             the precedent: a screen whose subject is not a project does not live under one.
 
-            `/my-work` rather than `/board`, because `/projects/:projectId/board` already exists and
-            two routes with one name for two scopes is the IA defect the rail's own Company/Project
-            split was made to avoid.
+            `/my-work` rather than `/board`, because ~~`/projects/:projectId/board` already
+            exists and~~ two routes with one name for two scopes is the IA defect the rail's own
+            Company/Project split was made to avoid. The project-scoped composite board retired in
+            021 (R9), so the collision is historical — the name still is not taken, because
+            `/teams/:teamId/board` makes the same claim at a different scope.
           */}
           {/*
             The caller's own sign-in identities (V58) — a session-level screen like `/my-work`:
@@ -568,9 +569,12 @@ function AppRoutes() {
             open, filed under a prefix that reads "administration", teaches the opposite of what is
             true.
 
-            `/teams/:teamId/board` mirrors `/projects/:projectId/board` deliberately. That is not
-            the collision `/my-work` refused: a bare `/board` would have been one name for two
-            scopes, while a board whose subject is named by its own segment is unambiguous at both.
+            `/teams/:teamId/board` ~~mirrors `/projects/:projectId/board` deliberately~~ mirrored
+            the project's composite board until 021 R9 retired that one; it outlives it because a
+            team's board is the one place executions, reviews and flagged cases still have to be
+            read together across projects. That is not the collision `/my-work` refused: a bare
+            `/board` would have been one name for two scopes, while a board whose subject is named
+            by its own segment is unambiguous at both.
           */}
           <Route
             path="/teams/:teamId/board"
@@ -771,20 +775,23 @@ function AppRoutes() {
               </Suspense>
             }
           />
-          <Route
-            path="/projects/:projectId/board"
-            element={
-              <Suspense fallback={<RouteFallback />}>
-                <BoardPage />
-              </Suspense>
-            }
-          />
           {/*
+            ~~`/projects/:projectId/board` — the **composite** board (`GET /board`, four card
+            kinds), which stayed reachable because a link that leads nowhere is worse than a tab
+            that explains itself.~~ → **retired (021 R9, D-n, T8).** It was one screen making two
+            statements: its issue half duplicated the Dev board card for card, and its QA half —
+            linked cases and their latest result — is what a tester wanted on the card rather than
+            on a screen of its own. Both halves now have homes (the Work board's segments; the card
+            face's linked-cases line), which is the condition D-n set for removing it, so the
+            route goes rather than lingering as a second answer to "where is the board".
+
+            **Only the project-scoped screen goes.** `Board`, the composite renderer, is still
+            `/teams/:teamId/board`'s — a team's board genuinely mixes executions, reviews and
+            flagged cases across projects, and there is no per-project board that could replace it.
+
             §5's Work screen (011 D34) — **one route for five views**, which switch on `?view=` so
             the filter travels between them in the query string rather than in a store the URL
-            cannot restore. Four of the five are not built in M1 and say which module builds them;
-            `/board` above is the board that exists today and stays reachable, because a link that
-            leads nowhere is worse than a tab that explains itself.
+            cannot restore. Four of the five are not built in M1 and say which module builds them.
 
             `new` is declared before nothing here — the sub-path is a literal segment with no
             sibling parameter to be mistaken for, unlike `/cases/new`. It is still a child route

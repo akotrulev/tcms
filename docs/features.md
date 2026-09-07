@@ -232,21 +232,59 @@ deleting one loses nothing. That single property is what the rest of this sectio
 of, and it is written on the settings screen itself because it is the answer to the only word on
 that screen anybody hesitates over.
 
+### Three boards over one workflow
+
+A new project is seeded with **eleven statuses, twenty-two legal moves and three boards** — a PM
+board, a Dev board and a QA board — over that one workflow. They are not three workflows and not
+three copies of the work: each is a different team's fold of the same statuses, so a card moved on
+one is in the matching column on the others the instant it lands, because the move changes the
+*issue's* status.
+
+- **The hand-offs are shared columns.** `Ready to develop` is the Dev board's first column and the
+  PM board's last-but-one; `Ready for test` is the QA board's door and the Dev board's exit. A
+  story dragged into `Ready for test` on the Dev board is on the QA board with no second action —
+  nobody re-files anything, because there is nothing to re-file
+- **`Blocked` is on every board**, and a blocked card remembers where it came from. `Block…` in the
+  card menu records the status it left; the card face reads `⛔ from In test`, so a blocked card
+  sitting on somebody else's board says whose problem it was; `Unblock` returns it to that status
+  rather than to the first column
+- **`Done` is the PM board's and nothing else's**, collapsed to a count strip that is still a drop
+  target. *Tested is not shipped* — `Ready to deploy` is the tester's last word, and the deploy
+  confirmation is the product owner's drag
+- **Epics move like stories.** An epic's *status* is stored and is a card in a column of its own;
+  its *completion* stays derived from its children. When every counted story under an epic is done
+  and the epic is not, the epic card says so — a nudge, not an automatic transition: "every story
+  is finished" and "this body of work is finished" are different claims, and nothing ships without
+  a person's drag
+- **A lane is an epic**, drawn as one band with the epic's own card in it, one sub-bar row per
+  story, and the story's tasks as the cards in that row. A card whose descendants this board does
+  not show says how many, and on which board they are
+- **The PM board's card face carries readiness signals** — acceptance criteria present, estimate
+  set, epic set, task count — from fields that already exist. A story in `Refining` with all of
+  them is what "ready" looks like, and the card says which are missing
+- **The QA board's card face carries the linked cases** — `4/6 passing`, `1 blocked`, and
+  `Run linked cases` opening the issue where those cases and their latest results are. A card whose
+  cases have never been executed reads **`0/6 run`**, never `0/6 passing`; a card with none reads
+  `no cases linked`; and a card the server has not yet computed a summary for shows nothing at all,
+  because a number nobody computed is not a zero
+
+### Boards in general
+
 - **Several boards per project, each a different fold of the same statuses.** A per-status board for
   the team and a three-column board for a stakeholder are two rows in the same table over one
-  workflow. Move a card on one and it is in the matching column on the other, because the move
-  changes the *issue's status* and every board is a mapping of statuses
-- **Every status is claimed by exactly one column, on every board** — refused when a status would be
-  claimed twice or left unclaimed, and the settings screen renders that check as a status × board
-  table so a person watches it hold, and sees it fail by name, before the save is attempted rather
-  than as an error afterwards
+  workflow
+- ~~**Every status is claimed by exactly one column, on every board** — refused when a status would
+  be claimed twice or left unclaimed.~~ → **superseded (021 R7).** A board now claims a **subset**;
+  the project's boards *together* claim every status. What the old rule protected — a card in a
+  status no board shows — is kept as a **reported warning** rather than a refusal: Settings → Boards
+  draws the status × board matrix, names any status no board claims, and the half of the rule that
+  is a real invariant (a status claimed *once per board*) is still a unique index. The old rule was
+  what forced one board to show the entire lifecycle, which is the thing three boards exist to stop
 - **A column claiming more than one status has a default**, and a card dropped into it takes that
   one. A coarser board never invents a status the workflow does not have
-- **A status added to the workflow after a board exists is claimed automatically**, into the column
-  holding the default status of the same kind, and shows up there so it can be moved. An unclaimed
-  status is not a state the data can be in
 - **Swimlanes by epic, assignee, label or priority**, collapsible, with a completion roll-up on the
-  lane header
+  lane header. The epic/story/task row structure above is specified for epic lanes; the other three
+  keep flat cards
 - **WIP limits report a breach, they do not refuse the drop.** A limit that blocked work is one
   people route around by not using the board, so the column header carries the count and the move
   still lands, saying so
@@ -254,7 +292,8 @@ that screen anybody hesitates over.
   illegal ones disabled and the reason on them; backlog rows carry `↑ ↓`. WCAG 2.2 *Dragging
   Movements*, and the standing rule that dragging is never the only way
 - **A ranked backlog** — one project-wide order over every story-level issue that is not done,
-  held as a fractional rank, so inserting a row between two others rewrites no other row
+  held as a fractional rank, so inserting a row between two others rewrites no other row. The board
+  says where a story *is*; the backlog says in what order the ready ones get pulled
 - **One filter, across every view.** Label, assignee, epic, level, priority and unparented live in
   the URL, so a filter set on the board is still applied after switching to the backlog or the
   table — and every view shows a chip for every filter its own endpoint applies, whether or not that
@@ -263,9 +302,48 @@ that screen anybody hesitates over.
   classification vocabulary, which is controlled and lives on its own screen
 
 Not yet, and named rather than implied: the backlog does not group by release and has no *Move to
-release* action, because releases arrive in a later module; there is no AI-eligibility tag and no
-pull-request badge on a card, for the same reason. **And none of this has been operated in a
-browser** — see the module plan's built-and-unverified list, which is deliberately long.
+release* action; there is no pull-request badge on a card. ~~And none of this has been operated in a
+browser.~~ → still largely true and still deliberately listed — see the module plan's
+built-but-unverified list.
+
+## Navigation
+
+The product is reached through **three zones** in one left rail: what is yours, the project you are
+in, and the company. Everything below is what 021 changed about finding things, as opposed to what
+the product does.
+
+- **The rail is flat inside a zone and ordered by how often a screen is opened.** The project zone
+  leads with **Work** — the boards and the backlog, where the day starts and ends — and puts
+  **Overview** seventh, because it is the project's dashboard: read at stand-up rather than worked
+  in. There are no subject headings inside a zone
+- **One entry per screen, at most twenty rows.** Five screens that were rail rows are now **tabs**
+  on the screen they extend (Suites under Test cases, Proposals under Test cases, CI results under
+  Test runs, and so on), and eleven settings rows are now **cards on one Settings landing** with a
+  subnav — so the rail names places, not every page
+- **The project switcher is the Project zone's header**, not a control in the top bar. Collapsed to
+  64px the zone header becomes the project's key chip and still opens the switcher
+- **Breadcrumbs are the shell's**, built from the route rather than passed up by each page, so the
+  trail cannot disagree with the rail — and a page whose read failed still has its way back up
+- **`⌘K` (or `/` outside a text field) opens a palette** over **issues, cases, docs, places and
+  projects**, plus a key jump: type `ACME-118` and go to the issue, `TC-118` and go to the case.
+  Issues and cases are searched across every project you can read; **doc pages are searched inside
+  the project you are in**, and the palette says so rather than quietly returning nothing. Places
+  are the rail, the tabs, the settings sections and the user menu — indexed by name, and filtered by
+  exactly the permissions the rail filters by, so the palette cannot offer a screen the rail hides
+- **The user menu is the person's own things** — your account, your security and identities, your
+  API tokens, your notifications, **your timesheets** (a timesheet is one person's fortnight, not a
+  place in the product), and `Your access`, a page that explains which entries are hidden from you
+  and which permission would show them
+- **Badges only where a read already exists**, and every one is an *awaiting-you* count rather than a
+  total: what is at each board's door, pending proposals, unmatched CI tests. Timesheet approvals
+  deliberately carry none
+- **`My work` is the post-sign-in landing** for anyone holding a project grant, and carries an
+  **Awaiting you** strip: reviews assigned to you, the boards with work at their door you can move,
+  your blocked cards, proposals waiting, and a plain link to timesheet approvals
+- ~~**A composite board at `/projects/{id}/board`** joining executions, reviews and flagged cases to
+  issues.~~ → **retired (021 R9).** Its issue half duplicated the Dev board and its QA half is now
+  the card face's linked-cases line. The **team** board (`/teams/{id}/board`) is unaffected and
+  still mixes all four card kinds, because a team's work genuinely spans projects
 
 ## Results From CI
 

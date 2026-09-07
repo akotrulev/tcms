@@ -1,5 +1,7 @@
 /**
- * The three boards — a project's, your own, a team's — and the viewer's private note on a card.
+ * ~~The three boards — a project's, your own, a team's~~ → **two** (021 R9, T8): your own and a
+ * team's, plus the viewer's private note on a card. The project-scoped composite board's screen is
+ * retired and its hook went with it — see below.
  *
  * ~~`workItems.ts`.~~ → **renamed with the endpoint** (011 D-a). `GET /work-items` named a table
  * that no longer exists: `work_item` is gone, a row-backed card is a `tracker` issue, and the
@@ -18,20 +20,25 @@ import { api, qs } from '../client';
 import type { BoardCard, CardAnnotation, CardAnnotationInput } from '../types';
 import { keys } from './keys';
 
-export function useBoard(projectId: string, mine: boolean): UseQueryResult<BoardCard[]> {
-  return useQuery({
-    queryKey: keys.compositeBoard(projectId, mine),
-    queryFn: ({ signal }) =>
-      api.get<BoardCard[]>(`/board${qs({ projectId, mine: mine ? 'true' : undefined })}`, { signal }),
-  });
-}
+/*
+  ~~`useBoard(projectId, mine)` — one PROJECT's composite board, `GET /board?projectId=…`.~~ →
+  **removed with its only caller (021 R9, D-n, T8).** The screen it fed is retired: its issue half
+  duplicated the Dev board and its QA half is the card face's linked-cases line. An exported hook
+  with no call site is the thing the next reader spends ten minutes deciding whether to use.
+
+  **The operation is still on the contract**, and deliberately: `GET /board` with a `projectId` is
+  what `tcms board`-adjacent tooling and the CLI read, and retiring an endpoint is a contract edit
+  in a `ts` task rather than a side effect of deleting a screen. `keys.compositeBoard` goes with
+  this hook; `keys.boardRoot` and the two hooks below keep the root, which is what every
+  invalidation on a card still targets.
+*/
 
 /**
  * §6l's cross-project **My Work** board (§83) — everything assigned to the caller, in every project
  * they can see.
  *
- * The same operation as {@link useBoard} with the project left off, which is why nothing but the
- * path changed: the project has always been a query parameter. `qs` drops an `undefined`, so there
+ * The same operation as ~~`useBoard`~~ (removed above in 021 T8) with the project left off, which
+ * is why nothing but the path changed: the project has always been a query parameter. `qs` drops an `undefined`, so there
  * is no `projectId=` on the wire to be read as an empty one.
  *
  * **`mine=true` is hard-coded rather than a parameter.** Omitting the project with `mine=false` is

@@ -20,6 +20,7 @@
  */
 import {
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
   type UseMutationResult,
@@ -61,6 +62,49 @@ export function useAiProposals(
       // the literal it reads. Every other query-carrying call in this module goes through the
       // helper for the same reason.
       api.get<ProposalPage>(`${base(projectId)}/ai-proposals${qs({ status })}`, { signal }),
+  });
+}
+
+/**
+ * How many proposals are **pending** in each of several projects — My work's *Awaiting you* strip
+ * (021 §8.4, T8).
+ *
+ * The queue is per project and there is no cross-project count on the contract, so the personal
+ * home asks each project the reader has work in. That set is bounded by what is already on screen
+ * (see `MyWorkPage`'s strip), not by the company's project list, and `enabled` holds the whole
+ * fan-out until it is.
+ *
+ * It reuses `keys.aiProposals` and the same request the Proposals tab makes, so opening that tab
+ * afterwards is a cache hit and the two can never report different numbers. `total`, not
+ * `items.length`: the endpoint pages, and counting the first page would under-report a queue of
+ * thirty as ten with nothing saying so.
+ *
+ * A project whose read has not answered has **no entry**, rather than a `0` — the strip draws only
+ * positive counts, and a defaulted zero is indistinguishable from an empty queue.
+ */
+export function usePendingProposalCounts(
+  projectIds: readonly string[],
+  enabled = true,
+): Record<string, number> {
+  return useQueries({
+    queries: projectIds.map((projectId) => ({
+      queryKey: keys.aiProposals(projectId, 'PENDING' as ProposalStatus),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        api.get<ProposalPage>(`${base(projectId)}/ai-proposals${qs({ status: 'PENDING' })}`, {
+          signal,
+        }),
+      enabled: enabled && projectId !== '',
+    })),
+    combine: (results) => {
+      const counts: Record<string, number> = {};
+      results.forEach((result, index) => {
+        const projectId = projectIds[index];
+        if (result.data !== undefined && projectId !== undefined) {
+          counts[projectId] = result.data.total;
+        }
+      });
+      return counts;
+    },
   });
 }
 

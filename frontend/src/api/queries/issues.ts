@@ -18,6 +18,7 @@ import type {
   IssueDocLink,
   IssueFilters,
   IssueInput,
+  IssueSearchHit,
   IssueSummary,
   IssueUpdate,
   ProjectWorkflow,
@@ -58,6 +59,39 @@ export function useIssues(
         timeoutMs: TIMEOUTS.interactive,
       }),
     enabled: projectId !== '',
+  });
+}
+
+/**
+ * Issues by key prefix or title, across every project the caller may read — the palette's issue
+ * group (021 D-j, T8).
+ *
+ * **Cross-project, so it is not `useIssues`.** That hook takes a `projectId` and answers the work
+ * table under the project's own filter; this one names no project because the palette has none to
+ * name — a reader looking for `ACME-118` from inside `MOB` is the case the group exists for.
+ *
+ * `TIMEOUTS.typeahead` for `useCaseSearch`' reason, stated there: the palette debounces, so a
+ * request still in flight at 3s is one whose answer the typist stopped waiting for. The caller
+ * passes the DEBOUNCED query — the key is the query, so an answer for a prefix the reader has
+ * already replaced lands under a key nothing is on.
+ *
+ * The `q >= 1` gate is `minLength: 1` on the wire, not a guess: an empty search is the palette at
+ * rest, and firing it would ask the server to rank every issue in the company on every open.
+ *
+ * `limit` is sent rather than defaulted here. The contract carries no `default:` — that would make
+ * the generated parameter required — so the server caps at 20 when it is absent, and a caller
+ * wanting fewer must say so.
+ */
+export function useIssueSearch(q: string, limit: number): UseQueryResult<IssueSearchHit[]> {
+  const trimmed = q.trim();
+  return useQuery({
+    queryKey: keys.issueSearch(trimmed, limit),
+    queryFn: ({ signal }) =>
+      api.get<IssueSearchHit[]>(`/issues/search${qs({ q: trimmed, limit })}`, {
+        signal,
+        timeoutMs: TIMEOUTS.typeahead,
+      }),
+    enabled: trimmed.length > 0,
   });
 }
 

@@ -1,14 +1,13 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, api } from '../../api/client'
 import type { BoardCard, IssueStatusRef } from '../../api/types'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
 import { TestProviders } from '../../test/TestProviders'
-import { aProject, anIssue } from '../../test/fixtures'
-import { Board, BoardPage } from './BoardPage'
+import { anIssue } from '../../test/fixtures'
+import { Board } from './BoardPage'
 import { drivingAFailedWrite } from '../../test/renderFailures'
 
 /**
@@ -394,25 +393,41 @@ describe('Card ordering', () => {
  * What must not regress is the half that was never about optimism: **the refusal persists and it
  * is the server's own sentence**, because the 409 the workflow answers with names the legal moves.
  */
+/**
+ * 021 R9 / D-n — the composite board's project-scoped screen is gone, and the renderer is not.
+ *
+ * Two facts, and neither is provable from the other: a module that still exported `BoardPage`
+ * would compile and route nowhere, and a module that had deleted `Board` would take
+ * `/teams/:teamId/board` with it. `routeMeta.test.ts` proves the route itself is gone by deriving
+ * the key set from `router.tsx`; this proves the module's own shape.
+ */
+describe('What retiring the composite board did and did not remove', () => {
+  it('no longer exports a project-scoped page, and still exports the renderer', async () => {
+    const module_ = (await import('./BoardPage')) as Record<string, unknown>
+
+    expect(module_.BoardPage).toBeUndefined()
+    expect(typeof module_.Board).toBe('function')
+  })
+})
+
 describe('Moving a card, and what a refusal says', () => {
   const READY_CARD = card({ id: 'PRJ-1', title: 'Reconcile the file' })
 
+  /*
+    ~~Rendered `<BoardPage />` at `/projects/p1/board` and answered `GET /board`.~~ →
+    **superseded (021 R9, T8): that page and that route are retired**, and the move machinery it
+    exercised is `Board`'s — still alive, still `/teams/:teamId/board`'s renderer. So the two
+    assertions below are made against the component that owns them rather than through a screen
+    that no longer exists. They are the same two assertions; nothing was dropped with the page.
+  */
   function renderPage() {
-    return render(
-      <TestProviders client={createTestQueryClient()} route="/projects/p1/board">
-        <Routes>
-          <Route path="/projects/:projectId/board" element={<BoardPage />} />
-        </Routes>
-      </TestProviders>,
-    )
+    return renderBoard([READY_CARD])
   }
 
   beforeEach(() => {
     vi.restoreAllMocks()
     vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
       if (path.startsWith('/me/permissions')) return heldPermissions(['project:read'])
-      if (path.startsWith('/board')) return [READY_CARD]
-      if (/^\/projects\/[^/]+$/.test(path)) return aProject({ id: 'p1', name: 'Banking' })
       return []
     }) as never)
   })

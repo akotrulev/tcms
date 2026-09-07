@@ -2,8 +2,17 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
-import type { BoardCard, SelfCapacity } from '../../api/types'
-import { aSelfCapacity, aTimesheetPeriod } from '../../test/fixtures'
+import type { BoardConfig, BoardContents, BoardCard, BoardSummary, SelfCapacity } from '../../api/types'
+import {
+  aBoardConfig,
+  boardContents,
+  aBoardIssueCard,
+  aBoardLane,
+  aBoardSummary,
+  aSelfCapacity,
+  aStatusRef,
+  aTimesheetPeriod,
+} from '../../test/fixtures'
 import { createTestQueryClient } from '../../test/queryClient'
 import { TestProviders } from '../../test/TestProviders'
 import { Board } from './BoardPage'
@@ -91,12 +100,34 @@ function mockBoard(
   paths: string[] = [],
   period = aTimesheetPeriod(),
   capacity: SelfCapacity | Error = aSelfCapacity(),
+  strip: {
+    boards?: BoardSummary[]
+    config?: BoardConfig
+    cards?: BoardContents
+    proposals?: number
+  } = {},
 ) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/timesheets/periods/current')) return period
     if (path.startsWith('/staffing/capacity/me')) {
       if (capacity instanceof Error) throw capacity
       return capacity
+    }
+    /*
+      021 T8's *Awaiting you* strip. Answered and **not recorded**, for the timesheet arm's reason
+      stated above: the assertion below is about the board — that it is asked for once, with `mine`
+      and no project — and folding another panel's reads into that list would make it an assertion
+      about the whole page.
+
+      Anchored, and `/boards/{id}` before `/boards/{id}/cards`: the two are one segment apart and
+      the loose arm would serve a `BoardConfig` where a `BoardContents` is expected. That collision
+      has cost this repo half an hour twice (`WorkTablePage.test.tsx` records it once).
+    */
+    if (/^\/projects\/[^/]+\/boards$/.test(path)) return strip.boards ?? []
+    if (/^\/boards\/[^/]+$/.test(path)) return strip.config ?? aBoardConfig()
+    if (/^\/boards\/[^/]+\/cards/.test(path)) return strip.cards ?? boardContents({ lanes: [] })
+    if (path.includes('/ai-proposals')) {
+      return { items: [], page: 0, size: 20, total: strip.proposals ?? 0 }
     }
     paths.push(path)
     return items
@@ -127,6 +158,13 @@ describe('What My Work asks the server for', () => {
       response, or the halves can disagree about who the caller is.
     */
     expect(paths).toEqual(['/board?mine=true'])
+    /*
+      021 T8 put the *Awaiting you* strip on this screen, and its reads are answered by the arms
+      above rather than recorded — see `mockBoard`. What must stay true is what this test has
+      always asserted: **the personal board itself is asked for exactly once**, because the two
+      tables are a client-side partition of one response. A strip that reached for its own
+      `GET /board` would put a second snapshot on the page and let the halves disagree.
+    */
   })
 
   it('never sends an empty projectId', async () => {
@@ -520,5 +558,158 @@ describe('This period (016 M6, completed by 017 M7)', () => {
     expect(screen.queryByTestId('MyWork.Period.Meter')).toBeNull()
     // Not the person-shaped sentence: what failed is the network, not somebody's profile.
     expect(screen.queryByText('no profile recorded')).toBeNull()
+  })
+})
+
+/**
+ * The *Awaiting you* strip (021 §8.4, T8) — five items, four of which count.
+ *
+ * The failures pinned here are the ones the strip is most likely to ship with, and each is
+ * invisible in a type:
+ *
+ * 1. **A zero draws no tile.** Four tiles reading `0` is a strip that trains the eye to skip the
+ *    place a real number appears — and it is what the page looks like for the majority of readers
+ *    on the majority of days.
+ * 2. **The board fan-out is over the projects the reader has work in.** Not `GET /projects`. The
+ *    bound is what keeps the personal home from becoming N×M requests.
+ * 3. **`Timesheet approvals` carries no count.** §8.3's table ends with *none — the recorded
+ *    decision stands*, and a badge appearing there later is exactly the kind of thing that lands
+ *    by accident.
+ * 4. **Blocked cards come from the board contents, not from the personal board.** `BoardCard` has
+ *    no `blockedFromStatus`; only `BoardIssueCard` does.
+ */
+describe('The Awaiting you strip', () => {
+  const DOOR = 'col-door'
+  const CONFIG = aBoardConfig({
+    id: 'b1',
+    columns: [
+      { id: DOOR, name: 'Ready for test', position: 0, wipLimit: null, statuses: [], defaultStatusId: 's1' },
+      { id: 'col-2', name: 'In test', position: 1, wipLimit: null, statuses: [], defaultStatusId: 's1' },
+    ],
+  })
+
+  it('draws only the link when nothing is waiting, and says so once', async () => {
+    mockBoard([card({ id: 'OLB-1', title: 'Anything' })], [], undefined, undefined, {
+      boards: [aBoardSummary({ id: 'b1', name: 'QA board' })],
+      config: CONFIG,
+      cards: boardContents({ lanes: [aBoardLane({ cards: [] })] }),
+    })
+    renderPage()
+
+    await screen.findByTestId('MyWork.Issues.Row')
+
+    // The link that does not count is always there; nothing else is.
+    expect(await screen.findByTestId('MyWork.Awaiting.Approvals')).toHaveAttribute(
+      'href',
+      '/timesheets/approvals',
+    )
+    expect(screen.queryByTestId('MyWork.Awaiting.Reviews')).toBeNull()
+    expect(screen.queryByTestId(`MyWork.Awaiting.Door.QA board`)).toBeNull()
+    expect(await screen.findByTestId('MyWork.Awaiting.None')).toBeInTheDocument()
+  })
+
+  it('counts the reviews out of the response the page already has', async () => {
+    mockBoard(
+      [
+        card({ id: 'OLB-1', title: 'A review', kind: 'REVIEW', derived: true }),
+        card({ id: 'OLB-2', title: 'Another review', kind: 'REVIEW', derived: true }),
+        card({ id: 'OLB-3', title: 'An issue' }),
+      ],
+      [],
+      undefined,
+      undefined,
+      { boards: [] },
+    )
+    renderPage()
+
+    const tile = await screen.findByTestId('MyWork.Awaiting.Reviews')
+    expect(tile).toHaveTextContent('2')
+    // The detail says WHERE, because a bare `2` on a screen that spans projects does not say
+    // whose afternoon it is.
+    expect(tile).toHaveTextContent('2 in OLB')
+  })
+
+  it('draws a tile per board with work at its door that this caller may move', async () => {
+    mockBoard([card({ id: 'OLB-1', title: 'Anything' })], [], undefined, undefined, {
+      boards: [aBoardSummary({ id: 'b1', name: 'QA board' })],
+      config: CONFIG,
+      cards: boardContents({
+        lanes: [
+          aBoardLane({
+            cards: [
+              aBoardIssueCard({ key: 'OLB-9', columnId: DOOR, allowedTransitions: [aStatusRef()] }),
+              aBoardIssueCard({ key: 'OLB-10', columnId: DOOR, allowedTransitions: [aStatusRef()] }),
+              // Not at the door: it is on the board and is not waiting at it.
+              aBoardIssueCard({ key: 'OLB-11', columnId: 'col-2', allowedTransitions: [] }),
+            ],
+          }),
+        ],
+      }),
+    })
+    renderPage()
+
+    const tile = await screen.findByTestId('MyWork.Awaiting.Door.QA board')
+    expect(tile).toHaveTextContent('2')
+    expect(tile).toHaveAttribute('href', expect.stringContaining('view=board&board=b1'))
+  })
+
+  it('draws no board tile when the caller cannot move anything at that door', async () => {
+    /*
+      §8.4 asks for the boards "where you hold the moving key". `allowedTransitions` is
+      caller-scoped on the wire, so an empty set on every card at the door is the contract saying
+      this reader cannot work it — which is the closest derivable reading, there being no
+      board-scoped permission (see `AwaitingYou`'s header).
+    */
+    mockBoard([card({ id: 'OLB-1', title: 'Anything' })], [], undefined, undefined, {
+      boards: [aBoardSummary({ id: 'b1', name: 'Dev board' })],
+      config: CONFIG,
+      cards: boardContents({
+        lanes: [
+          aBoardLane({
+            cards: [aBoardIssueCard({ key: 'OLB-9', columnId: DOOR, allowedTransitions: [] })],
+          }),
+        ],
+      }),
+    })
+    renderPage()
+
+    await screen.findByTestId('MyWork.Issues.Row')
+    await waitFor(() => expect(screen.getByTestId('MyWork.Awaiting.Approvals')).toBeInTheDocument())
+    expect(screen.queryByTestId('MyWork.Awaiting.Door.Dev board')).toBeNull()
+  })
+
+  it('reads your blocked cards off the board contents, not off the personal board', async () => {
+    // `BoardCard` — what `/board?mine=true` answers — carries no `blockedFromStatus` at all, so a
+    // strip that tried to derive this from the page's own rows would silently always read zero.
+    mockBoard([card({ id: 'OLB-1', title: 'Anything' })], [], undefined, undefined, {
+      boards: [aBoardSummary({ id: 'b1', name: 'QA board' })],
+      config: CONFIG,
+      cards: boardContents({
+        lanes: [
+          aBoardLane({
+            cards: [
+              aBoardIssueCard({
+                key: 'OLB-126',
+                columnId: 'col-2',
+                blockedFromStatus: aStatusRef({ name: 'In test' }),
+                assignee: { id: 'user-1', displayName: 'Dana', email: 'dana@acme.test' },
+              }),
+              // Somebody else's blocked card. Not yours, not on your strip.
+              aBoardIssueCard({
+                key: 'OLB-127',
+                columnId: 'col-2',
+                blockedFromStatus: aStatusRef({ name: 'In test' }),
+                assignee: { id: 'user-2', displayName: 'Sam', email: 'sam@acme.test' },
+              }),
+            ],
+          }),
+        ],
+      }),
+    })
+    renderPage()
+
+    const tile = await screen.findByTestId('MyWork.Awaiting.Blocked')
+    expect(tile).toHaveTextContent('1')
+    expect(tile).toHaveTextContent('OLB-126')
   })
 })

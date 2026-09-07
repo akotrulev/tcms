@@ -176,14 +176,12 @@ export const ROUTE_META: Record<string, CrumbsOf> = {
     { label: 'New issue' },
   ],
   /*
-    The composite board (brief §8's orphan). T8 retires the route; until it does, a screen that is
-    reachable needs a trail, and it files under `Work` because that is the entry it duplicates.
+    ~~The composite board (brief §8's orphan). T8 retires the route; until it does, a screen that is
+    reachable needs a trail, and it files under `Work` because that is the entry it duplicates.~~ →
+    **the route is gone (021 R9, T8)**, and so is its entry: `routeMeta.test.ts` derives the key set
+    from `router.tsx`, so a trail for a route nobody can reach is a stale entry the test will not
+    let stand. The board's trail is `Work`'s, which is where its two halves went.
   */
-  '/projects/:projectId/board': (q, ctx) => [
-    ...project(q.projectId, ctx),
-    { label: 'Work', to: `/projects/${q.projectId}/work` },
-    { label: 'Board' },
-  ],
 
   /* Test cases and its three tabs. A tab is a sibling of its strip's first tab, not a child of it
      — `Suites` files under `Test cases` because that is the rail row it extends (§2.6). */

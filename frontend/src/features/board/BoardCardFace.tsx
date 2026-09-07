@@ -8,6 +8,7 @@ import { cn } from '../../lib/cn';
 import { labelFill } from '../../lib/statusColors';
 import { AiEligibleMarker } from '../tracker/AiEligibleMarker';
 import { TypeIcon } from '../tracker/TypeIcon';
+import { describeLinkedCases } from './linkedCases';
 import { MoveToMenu } from './MoveToMenu';
 import { ReadinessSignals } from './ReadinessSignals';
 import type { ServerColumn } from './cardMove';
@@ -55,11 +56,19 @@ import type { ServerColumn } from './cardMove';
  * Four statements, each from a field the card already carries: the `⛔ from <status>` chip
  * (`blockedFromStatus`, so a blocked card sitting on somebody else's board says whose problem it
  * was), the `also on <board>` chip, §2.6's readiness signals on a grooming board, and the
- * `all stories done` nudge on an epic. ~~And a fifth.~~ **`linkedCases` is not rendered here and
- * that is T8's**, with the QA card face it belongs to: the key is always present and is **null**
- * until T4 serves it, so a face drawing it now would have to tell *not served* from *none linked*
- * for a payload that is only ever the first — and `?? 0` on either would read as "nothing failed",
- * which is the dishonest reading of the same zero the renders spend a paragraph on.
+ * `all stories done` nudge on an epic. ~~And a fifth. **`linkedCases` is not rendered here and that
+ * is T8's**, with the QA card face it belongs to: the key is always present and is **null** until
+ * T4 serves it.~~ → **landed (021 T8, §2.7).** The reasoning was right and survives as the shape of
+ * the code rather than as a refusal: {@link describeLinkedCases} answers `null` for a summary that
+ * is `null`, the line is not rendered at all in that case, and *not served* / *none linked* /
+ * *not run* are three different sentences. `?? 0` appears nowhere.
+ *
+ * The line is drawn on **every** board and not only on QA, and that is deliberate. `linkedCases`
+ * is a property of the issue, not of the board it happens to be shown on: a Dev-board card whose
+ * cases are all failing is exactly as worth knowing there, and gating the line on a board name
+ * would be the first place in this file where what a card says depends on where you are standing.
+ * A card with no linked cases and no summary shows nothing either way, so a PM board of epics is
+ * unchanged in practice.
  *
  * **`also on` is not `elsewhere`.** `BoardIssueCard.elsewhere` is the *descendants* a row header's
  * board does not show, which is the sub-bar's link; *this card is also drawn on that board* is a
@@ -105,6 +114,7 @@ export function BoardCardFace({
   testId: string;
 }) {
   const movable = card.allowedTransitions.length > 0 && canMove;
+  const cases = describeLinkedCases(card.linkedCases);
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: card.key,
     // An epic follows its stories and a caller without `issue:edit` may not move anything, so
@@ -181,6 +191,41 @@ export function BoardCardFace({
       </RouterLink>
 
       {readiness && <ReadinessSignals card={card} testId={`${testId}.Readiness`} />}
+
+      {/*
+        021 §2.7's linked-cases line — the QA half of the composite board, which retires in this
+        task (R9), landing on the card face where a tester was already looking.
+
+        **`Run linked cases` goes to the issue, not to `…/runs?issue=<key>`.** The plan named that
+        address as "the existing run-list filter"; it is not one. `RunListPage` reads no search
+        parameter and `GET /runs` takes a plan and no issue, so a link carrying `?issue=` would be
+        silently ignored and land the reader on every run in the project — the swallowed-404 defect
+        in its quietest form. The issue's own **Linked test cases** panel is where the cases, their
+        latest results and the keys this summary cannot carry actually are, so that is where the
+        action leads until an issue filter exists on the run list (recorded as a gap, not guessed).
+      */}
+      {cases && (
+        <div
+          data-testid={`${testId}.LinkedCases`}
+          className="mb-[7px] flex flex-wrap items-center gap-[7px] text-[11px] text-ink-3"
+        >
+          <Badge tone={cases.tone} data-testid={`${testId}.LinkedCases.Headline`}>
+            {cases.headline}
+          </Badge>
+          {cases.blocked > 0 && (
+            <Badge tone="blocked" data-testid={`${testId}.LinkedCases.Blocked`}>
+              {`${cases.blocked} blocked`}
+            </Badge>
+          )}
+          <RouterLink
+            to={`/issues/${encodeURIComponent(card.key)}`}
+            data-testid={`${testId}.LinkedCases.Run`}
+            className="text-ink-4 no-underline hover:text-steel hover:underline"
+          >
+            Run linked cases
+          </RouterLink>
+        </div>
+      )}
 
       {/*
         021 D-d's nudge, and it is a **sentence, not a control**: every counted story under this epic

@@ -1,8 +1,7 @@
 import { useMemo } from 'react';
 import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
 import {
-  useBoardCards,
-  useBoardConfig,
+  useBoardDoors,
   useBoards,
   useIssueTimeRollups,
   useIssues,
@@ -231,24 +230,23 @@ export function WorkTablePage() {
 
   /*
     §8.3's **door badge**: how many cards are sitting in the board's FIRST column — what is waiting
-    at this board's door, never a total. It is read out of the same two queries `ProjectBoardView`
-    makes under the same keys, so this is a cache hit rather than a second request, and it stays in
-    step with the board below it for free.
+    at this board's door, never a total.
 
-    **The ACTIVE segment only.** 021 T1 added no contract for the inactive boards' counts, on
-    purpose, and inventing one here would mean a `GET …/cards` per board on every visit to the Table
-    view. T8 badges the rest.
+    ~~**The ACTIVE segment only.** 021 T1 added no contract for the inactive boards' counts, on
+    purpose, and inventing one here would mean a `GET …/cards` per board on every visit to the
+    Table view. T8 badges the rest.~~ → **superseded (021 T8), and the objection is answered rather
+    than overruled.** The counts are still not on the contract and nothing was invented: `useBoardDoors`
+    runs the SAME two options objects `ProjectBoardView` uses, under the same two keys, so the
+    active board is a cache hit and only the inactive boards are new requests. The "on every visit
+    to the Table view" half was the real cost, and it is paid for by `enabled` — the fan-out fires
+    only once the strip has a board list to draw, and it is the strip that needs the numbers.
+
+    One `boards.length` fan-out and not one per view: the strip is the same strip on all seven
+    views, and a badge that appeared when you switched to Board would be a number the reader
+    learns to distrust.
   */
-  const activeConfig = useBoardConfig(activeBoardId);
-  const activeCards = useBoardCards(activeBoardId, work.board);
-  const doorCount = useMemo(() => {
-    const first = activeConfig.data?.columns[0];
-    if (!first || !activeCards.data) return null;
-    return activeCards.data.lanes.reduce(
-      (total, lane) => total + lane.cards.filter((card) => card.columnId === first.id).length,
-      0,
-    );
-  }, [activeConfig.data, activeCards.data]);
+  const boardIds = useMemo(() => (boards.data ?? []).map((board) => board.id), [boards.data]);
+  const doors = useBoardDoors(boardIds, work.board, boards.data !== undefined);
 
   const current = VIEWS.find((entry) => entry.id === view) ?? VIEWS[1];
 
@@ -320,8 +318,12 @@ export function WorkTablePage() {
                 The badge is an *awaiting you* count and never a total (§8.3), so it is drawn only
                 when there is something at the door: a `0` beside every board is five characters
                 that say nothing and train the eye to skip the place a real number will appear.
+
+                An unanswered board has **no entry** in `waiting` rather than a zero, so a board
+                still loading and a board with an empty door draw the same nothing — which is the
+                honest pair, because the alternative is a `0` that turns into a `7` a moment later.
               */}
-              {on && doorCount !== null && doorCount > 0 && (
+              {(doors.waiting[board.id] ?? 0) > 0 && (
                 <span
                   data-testid={`${TEST_ID}.View.Board.${board.name}.Badge`}
                   className={cn(
@@ -329,7 +331,7 @@ export function WorkTablePage() {
                     'font-mono text-[10px] font-semibold leading-[15px] text-rail',
                   )}
                 >
-                  {formatCount(doorCount)}
+                  {formatCount(doors.waiting[board.id] ?? 0)}
                 </span>
               )}
             </RouterLink>

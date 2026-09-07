@@ -221,6 +221,7 @@ export {
   useAcceptProposal,
   useAiProposal,
   useAiProposals,
+  usePendingProposalCounts,
   useRejectProposal,
 } from './proposals';
 export {
@@ -261,7 +262,7 @@ export {
   useUsers,
 } from './admin';
 export { type AuditPage, useCompanyAuditEvents, useProjectAuditEvents } from './audit';
-export { useBoard, useMyWork, usePutCardAnnotation, useTeamBoard } from './board';
+export { useMyWork, usePutCardAnnotation, useTeamBoard } from './board';
 /*
   The PROJECT board (012 M2). `board.ts` above is the composite board, and the two are a different
   endpoint, a different card shape and a different set of columns (D-a) — which is why this module
@@ -274,7 +275,9 @@ export {
   useBoardConfig,
   useBoardConfigs,
   useBoardCoverage,
+  useBoardDoors,
   useBoards,
+  useBoardsOf,
   useCreateBoard,
   useCreateLabel,
   useDeleteBoard,
@@ -285,6 +288,8 @@ export {
   useRankIssue,
   useUpdateBoard,
   useUpdateLabel,
+  type BoardDoors,
+  type ProjectBoard,
   type RankPlacement,
 } from './projectBoards';
 /*
@@ -328,6 +333,7 @@ export {
   useIssue,
   useIssueComments,
   useIssueDocLinks,
+  useIssueSearch,
   useIssues,
   useProjectWorkflow,
   useRemoveWorkflowStatus,

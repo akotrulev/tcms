@@ -65,6 +65,43 @@ export function useBoards(projectId: string): UseQueryResult<BoardSummary[]> {
 }
 
 /**
+ * Every board of **several** projects at once — My work's *Awaiting you* strip (021 §8.4, T8).
+ *
+ * `useBoards` under the same key, once per project, so a reader who then opens one of those
+ * projects finds its board list already cached. The strip is the only caller: no other screen
+ * spans projects and needs their boards, and a screen that did would want the same fan-out rather
+ * than a cross-project endpoint nobody has asked the backend for.
+ *
+ * Flat, and each row carries the project it came from, because board ids are unique but board
+ * NAMES are not — three projects all call one of their boards `QA board`, and a strip that grouped
+ * on the name would merge them into one tile with somebody else's count.
+ */
+export type ProjectBoard = { projectId: string; board: BoardSummary };
+
+export function useBoardsOf(
+  projectIds: readonly string[],
+  enabled = true,
+): readonly ProjectBoard[] {
+  return useQueries({
+    queries: projectIds.map((projectId) => ({
+      queryKey: keys.boards(projectId),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        api.get<BoardSummary[]>(`/projects/${projectId}/boards`, {
+          signal,
+          timeoutMs: TIMEOUTS.interactive,
+        }),
+      enabled: enabled && projectId !== '',
+    })),
+    combine: (results) =>
+      results.flatMap((result, index) => {
+        const projectId = projectIds[index];
+        if (result.data === undefined || projectId === undefined) return [];
+        return result.data.map((board) => ({ projectId, board }));
+      }),
+  });
+}
+
+/**
  * One board's **configuration** — its columns and its swimlane axis, and no cards.
  *
  * A read of its own rather than a member of the cards read, because the two have different
@@ -80,12 +117,12 @@ export function useBoardConfig(boardId: string): UseQueryResult<BoardConfig> {
  * The options object behind both readers, so the two share a cache entry rather than sitting beside
  * each other under one key with two shapes.
  */
-function boardConfigQuery(boardId: string) {
+function boardConfigQuery(boardId: string, enabled = true) {
   return {
     queryKey: keys.board(boardId),
     queryFn: ({ signal }: { signal: AbortSignal }) =>
       api.get<BoardConfig>(`/boards/${boardId}`, { signal, timeoutMs: TIMEOUTS.interactive }),
-    enabled: boardId !== '',
+    enabled: enabled && boardId !== '',
   };
 }
 
@@ -106,7 +143,12 @@ function boardConfigQuery(boardId: string) {
  */
 export function useBoardConfigs(boardIds: readonly string[]): DataRegionState<BoardConfig[]> {
   return useQueries({
-    queries: boardIds.map(boardConfigQuery),
+    /*
+      `(id) => …` and never point-free: `Array.prototype.map` passes the index as the second
+      argument, so `map(boardConfigQuery)` would hand `0` to `enabled` and disable the first board
+      in every list — a coverage table permanently one board short, with nothing failing.
+    */
+    queries: boardIds.map((boardId) => boardConfigQuery(boardId)),
     combine: (results) => ({
       data: results.every((result) => result.data !== undefined)
         ? results.map((result) => result.data as BoardConfig)
@@ -141,15 +183,94 @@ export function useBoardCards(
   boardId: string,
   filters: BoardFilters,
 ): UseQueryResult<BoardContents> {
-  return useQuery({
+  return useQuery(boardCardsQuery(boardId, filters));
+}
+
+/** The options object behind both readers, for {@link boardConfigQuery}'s reason. */
+function boardCardsQuery(boardId: string, filters: BoardFilters, enabled = true) {
+  return {
     queryKey: keys.boardCards(boardId, filters),
-    queryFn: ({ signal }) =>
+    queryFn: ({ signal }: { signal: AbortSignal }) =>
       api.get<BoardContents>(`/boards/${boardId}/cards${qs({ ...filters })}`, {
         signal,
         timeoutMs: TIMEOUTS.interactive,
       }),
-    enabled: boardId !== '',
+    enabled: enabled && boardId !== '',
+  };
+}
+
+/**
+ * What is waiting at each board's **door** — the cards in its first column — and the contents that
+ * answer came from (021 §8.3, T8).
+ *
+ * ## Why this exists rather than a count on the wire
+ *
+ * T5 badged the ACTIVE segment only, out of the two reads `ProjectBoardView` was already making,
+ * and recorded the rest as T8's. This is that: the same two options objects, under the same two
+ * keys, for every board in the list — so the active board's badge is a **cache hit** and the
+ * inactive ones are the requests that were never made before. No contract changed; T1 deliberately
+ * added no per-board count, because a count is a number that can disagree with the column under it
+ * and these cannot.
+ *
+ * **`enabled` is the caller's, and it is not a micro-optimisation.** The strip is drawn on every
+ * Work view including Table, Timeline and Calendar, and firing a `GET …/cards` per board there
+ * would put N requests behind a screen showing no board at all. The caller passes `false` until
+ * the strip is on screen and the board list has answered.
+ *
+ * **A board with no answer yet has no entry in `waiting`**, rather than a `0`. The badge is drawn
+ * only for a positive count, so a defaulted zero would be indistinguishable from an empty door —
+ * and the empty door is the one state a reader would act on.
+ *
+ * `contents` is returned beside the counts because the caller that needs a *second* fact about
+ * those cards — My work's blocked list — must read the same snapshot the counts came from. Two
+ * reads of the same cards is how two numbers on one strip come to disagree.
+ */
+export type BoardDoors = {
+  /** Cards in each answered board's first column, by board id. */
+  waiting: Record<string, number>;
+  /** Each answered board's cards, by board id — the same reads, nothing extra. */
+  contents: Record<string, BoardContents>;
+  /**
+   * Each answered board's **first column id** — the door itself, by board id.
+   *
+   * Returned rather than left implicit because a caller asking a second question about the cards
+   * at the door (My work's "can you move anything here") would otherwise have to re-derive
+   * `columns[0]` from a config read it does not hold, and a second derivation of *which column is
+   * the door* is how a count and a verdict come to be about different columns.
+   */
+  door: Record<string, string>;
+};
+
+export function useBoardDoors(
+  boardIds: readonly string[],
+  filters: BoardFilters,
+  enabled = true,
+): BoardDoors {
+  const configs = useQueries({
+    queries: boardIds.map((boardId) => boardConfigQuery(boardId, enabled)),
+    combine: (results) => results.map((result) => result.data),
   });
+  const cards = useQueries({
+    queries: boardIds.map((boardId) => boardCardsQuery(boardId, filters, enabled)),
+    combine: (results) => results.map((result) => result.data),
+  });
+
+  const waiting: Record<string, number> = {};
+  const contents: Record<string, BoardContents> = {};
+  const door: Record<string, string> = {};
+  boardIds.forEach((boardId, index) => {
+    const board = cards[index];
+    if (board !== undefined) contents[boardId] = board;
+    const first = configs[index]?.columns[0];
+    if (!first) return;
+    door[boardId] = first.id;
+    if (board === undefined) return;
+    waiting[boardId] = board.lanes.reduce(
+      (total, lane) => total + lane.cards.filter((card) => card.columnId === first.id).length,
+      0,
+    );
+  });
+  return { waiting, contents, door };
 }
 
 /**

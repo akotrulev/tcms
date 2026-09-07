@@ -458,14 +458,14 @@ export const keys = {
    * leave the other's cache alone.
    */
   emailDomains: ['identity-provider-email-domains'] as const,
-  /**
-   * The **composite** board — `GET /board`, the four-kind card, one project or the caller's own.
-   *
-   * ~~`workItems`.~~ → renamed in 012 T6, and the reason is a collision that had not happened yet:
-   * this module now holds three keys with `board` in the name, and the one still spelled after
-   * `work_item` named a table `V4` dropped. The root literal stays `'board'`, which is the path.
-   */
-  compositeBoard: (p: string, mine: boolean) => ['board', p, mine] as const,
+  /*
+    ~~`compositeBoard: (p, mine) => ['board', p, mine]` — the **composite** board, `GET /board`,
+    the four-kind card, one project or the caller's own. (~~`workItems`~~ → renamed in 012 T6 for a
+    collision that had not happened yet: this module holds three keys with `board` in the name.)~~
+    → **removed with `useBoard` (021 R9, T8)**, whose only caller was the retired project-scoped
+    composite screen. `myWork` and `teamBoard` below still spell the root literal; `boardRoot` is
+    still what every card write invalidates.
+  */
   /**
    * The prefix every board shares — invalidate this and all three refresh.
    *
@@ -668,6 +668,16 @@ export const keys = {
    * shown under a wider filter while the new request is in flight.
    */
   caseSearch: (filters: Record<string, unknown>) => ['case-search', filters] as const,
+
+  /**
+   * The cross-project **issue** search — the palette's issue group (021 D-j).
+   *
+   * Outside `['projects', …]` for `caseSearch`'s reason, and it is the same reason twice over here:
+   * this list spans every project the caller may read, so an invalidation aimed at one of them
+   * must not decide the fate of the other ten's hits. `limit` is in the key because it is in the
+   * request — a six-row answer must never be served under a twenty-row ask.
+   */
+  issueSearch: (q: string, limit: number) => ['issue-search', q, limit] as const,
 
   /*
     Imports (014 M4).

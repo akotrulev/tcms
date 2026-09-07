@@ -25,6 +25,7 @@ import { formatDate, formatHours, plural } from '../../lib/format';
 */
 import { issueStatusKindTones as STATUS_TONE } from '../../lib/labels';
 import { formatPeriodRange, todayIso } from '../time/periods';
+import { AwaitingYou } from './AwaitingYou';
 import { CardNoteDialog } from './CardNoteDialog';
 import { linkFor } from './cardLink';
 
@@ -84,6 +85,13 @@ function annotatable(card: BoardCard): card is Annotatable {
  * **Never 404s, and an empty list is not an error.** A member holding no project grants gets an
  * empty response — reachable and empty — which is the distinction the project board has to make
  * (`[]` vs 404) and this one, naming no project, cannot fail to make.
+ *
+ * ## The *Awaiting you* strip (021 §8.4, T8)
+ *
+ * {@link AwaitingYou}, above the tables. It is a separate file because it makes reads this screen
+ * does not — per-project board and proposal fan-outs — and its own header carries the two
+ * decisions worth arguing: which projects it fans out over, and what "a board where you hold the
+ * moving key" is actually derived from when the contract has no board-scoped permission.
  *
  * **Absent, with the module that lands each (D-f):** the `AI` tags and the "My assistant" panel
  * (M5). ~~the "This week" hours KPI (M6).~~ → **landed 2026-09-04 (plan 016, T5)** as
@@ -193,7 +201,15 @@ function MyWorkBody({
   const overdue = rows.filter((card) => card.overdue).length;
 
   return (
-    <div className="grid gap-3.5 lg:grid-cols-[minmax(0,1fr)_320px]">
+    <>
+      {/*
+        021 §8.4's **Awaiting you** strip, above the tables and not beside them: it is the reason
+        this screen is the post-sign-in landing, and a summary the reader has to scroll to is a
+        summary of a page they have already read.
+      */}
+      <AwaitingYou rows={rows} />
+
+      <div className="grid gap-3.5 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="flex flex-col gap-3.5">
         <Panel
           title="Assigned issues"
@@ -374,7 +390,8 @@ function MyWorkBody({
           {`${plural(rows.length, 'open item')}${overdue > 0 ? ` · ${overdue} overdue` : ''}`}
         </p>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Compass, FolderKanban, CornerDownLeft, Search, SquareCheckBig } from 'lucide-react';
+import { Compass, FileText, FolderKanban, CornerDownLeft, Search, SquareCheckBig, Ticket } from 'lucide-react';
 
 import {
   Command,
@@ -14,6 +14,8 @@ import {
   DialogTitle,
 } from '../components/ui';
 import { useCaseSearch } from '../api/queries/cases';
+import { useDocPageSearch } from '../api/queries/documentation';
+import { useIssueSearch } from '../api/queries/issues';
 import { useProjects } from '../api/queries/projects';
 import { useCan, useCanInCompany } from '../auth/useCan';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
@@ -22,7 +24,7 @@ import { PLACES, needsProject, type Place } from './places';
 /**
  * The ⌘K palette (021 §7) — one control over cases, places, projects and a key jump.
  *
- * ~~A cases-only search field in the header.~~ → **superseded (021 §7).** The field answered one
+ * ~~A cases-only search field in the header.~~ → **superseded (021 §7, R3).** The field answered one
  * question well and was the only global control in the shell, so every other "where is…" had to be
  * solved by hunting the rail — which got harder in T6, not easier: five screens became tabs and
  * eleven became settings cards, and a tab is invisible until you are already on the screen it
@@ -32,13 +34,26 @@ import { PLACES, needsProject, type Place } from './places';
  * you somewhere, the page is where you work through results with filters, paging and a URL you can
  * paste. `Enter` on a query that matches nothing here lands on that page with the query intact.
  *
- * ## Phase 1, and it says so
+ * ~~## Phase 1, and it says so — four groups, no contract change; the placeholder reads
+ * `Search cases, or jump to…`, which is honest, because issues and doc pages need
+ * `GET /issues/search` in `openapi.yaml` first (D-j).~~ → **superseded (021 §7 Phase 2, R3, T8).**
+ * T4 served that endpoint, so the placeholder is now the mockup's `Search issues, cases, docs` and
+ * the fan-out is three server reads plus two client-side indexes.
  *
- * Four groups, **no contract change**: cases (`/cases/search`, which already exists), places (a
- * client-side index of the rail, the tabs, the settings sections and the user menu — see
- * `places.ts`), projects, and the key jump. The placeholder reads `Search cases, or jump to…`,
- * which is honest — issues and doc pages need `GET /issues/search` in `openapi.yaml` first (D-j),
- * and T8 is where the placeholder becomes `Search issues, cases, docs`.
+ * ## The three searches, and why one of them is narrower than the others
+ *
+ * `GET /issues/search` and `GET /cases/search` are **cross-project by construction** — neither
+ * takes a project and both answer over everything the caller may read. `GET
+ * /projects/{id}/doc-pages/search` is **per project**, and this palette does not fan it out over
+ * the reader's project list: that would be one request per project on every keystroke, and the
+ * answer would then have to be merged and re-ranked by a client that cannot see the scores. So the
+ * docs group is the **active project's** and says so in its own heading; with no project in the
+ * frame the group is absent and the empty-state line says where docs are searched from. Widening
+ * it is a contract question (one cross-project doc search), not a loop.
+ *
+ * The three run **in parallel and independently** — three `useQuery`s, not a `Promise.all`. Each
+ * group is optional to the others: a docs search that fails costs its group and leaves the issue
+ * and case rows on screen, which is the composition rule stated as three hooks.
  *
  * ## Gating
  *
@@ -154,7 +169,13 @@ export function CommandPalette({ projectId }: { projectId: string | undefined })
   );
 }
 
-const PLACEHOLDER = 'Search cases, or jump to…';
+/**
+ * ~~`Search cases, or jump to…`~~ → **`Search issues, cases, docs`** (021 §7 Phase 2, render
+ * `06-palette.html`). The old text was accurate for a palette that could only find cases; keeping
+ * it now would understate the control by two of its three server reads, and the placeholder is the
+ * only place a reader is told what the field covers before they type into it.
+ */
+const PLACEHOLDER = 'Search issues, cases, docs';
 
 /**
  * A case key is `TC-118`; an issue key is `ACME-118` — the project's key, then the sequence.
@@ -194,6 +215,20 @@ function PaletteBody({
   const inCompany = useCanInCompany();
 
   const cases = useCaseSearch({ q: debounced, size: 6 });
+  /*
+    Six, like the cases: the palette is a jump, not a results page, and a group long enough to
+    scroll pushes `Places` and the floor row below the fold — which are the two rows a reader who
+    typed a word rather than a key most often wants. The server caps at 20 when `limit` is absent,
+    so asking for six is the client saying what it will draw rather than trimming an answer it paid
+    for.
+  */
+  const issues = useIssueSearch(debounced, 6);
+  /*
+    The docs group is the ACTIVE project's — see the header. `useDocPageSearch` takes a project and
+    gates itself on a non-empty query; `''` is the "no project in the frame" spelling and disables
+    it, which is why there is no second gate here.
+  */
+  const docs = useDocPageSearch(projectId ?? '', projectId === undefined ? '' : debounced);
 
   const places = useMemo(() => {
     const allowed = (place: Place) => {
@@ -206,6 +241,13 @@ function PaletteBody({
       (place) => allowed(place) && (projectId !== undefined || !needsProject(place)),
     ).filter((place) => matches(place.label, trimmed));
   }, [inCompany, inProject, projectId, trimmed]);
+
+  /*
+    The project's own name for the docs heading, out of the list this palette is already holding —
+    not a `useProject(projectId)` read, which would put a request behind opening the palette on
+    every screen for a name the switcher already fetched.
+  */
+  const activeProjectName = (projects.data ?? []).find((project) => project.id === projectId)?.name;
 
   const matchingProjects = useMemo(
     () =>
@@ -275,6 +317,27 @@ function PaletteBody({
           </CommandGroup>
         )}
 
+        {(issues.data?.length ?? 0) > 0 && (
+          <CommandGroup heading="Issues">
+            {issues.data?.map((hit) => (
+              <PaletteRow
+                key={hit.key}
+                icon={<Ticket aria-hidden className="size-3.5" />}
+                identifier={hit.key}
+                label={hit.title}
+                /*
+                  The PROJECT's name, not the status: the search crosses projects and two of them
+                  may hold a story with the same title, which is the whole reason `projectName` is
+                  on the hit at all (D-j). The status is on the issue's own page, one keystroke
+                  away, and a second fact in this slot would make the column unscannable.
+                */
+                where={hit.projectName}
+                onSelect={() => onGo(`/issues/${encodeURIComponent(hit.key)}`)}
+              />
+            ))}
+          </CommandGroup>
+        )}
+
         {(cases.data?.items.length ?? 0) > 0 && (
           <CommandGroup heading="Cases">
             {cases.data?.items.map((hit) => (
@@ -287,6 +350,42 @@ function PaletteBody({
                 onSelect={() => onGo(`/projects/${hit.projectId}/cases/${hit.id}`)}
               />
             ))}
+          </CommandGroup>
+        )}
+
+        {/*
+          **The docs group names its scope in its own heading**, because it is the one group whose
+          scope is narrower than the field above it. `Docs` alone over a per-project answer would
+          read as "there is no such page anywhere", which is a claim this request cannot make.
+        */}
+        {(docs.data?.length ?? 0) > 0 && (
+          <CommandGroup heading={`Docs in ${activeProjectName ?? 'this project'}`}>
+            {docs.data?.map((hit) => (
+              <PaletteRow
+                key={hit.id}
+                icon={<FileText aria-hidden className="size-3.5" />}
+                identifier={hit.key}
+                label={hit.title}
+                where="doc"
+                onSelect={() => onGo(`/projects/${projectId ?? ''}/docs/${hit.id}`)}
+              />
+            ))}
+          </CommandGroup>
+        )}
+
+        {/*
+          Said once, and only when it changes the answer: a reader outside a project who typed
+          something is told where doc pages ARE searched from, rather than left to conclude the
+          product has none. Not an empty group — an empty group with a heading claims a search ran.
+        */}
+        {trimmed.length > 0 && projectId === undefined && (
+          <CommandGroup heading="Docs">
+            <p
+              data-testid="Palette.NoProjectDocs"
+              className="m-0 px-2 py-1.5 text-[11.5px] leading-[1.45] text-ink-4"
+            >
+              Doc pages are searched inside one project. Open a project to search its documents.
+            </p>
           </CommandGroup>
         )}
 
@@ -341,7 +440,7 @@ function PaletteBody({
         <span>↑↓ move</span>
         <span>↵ open</span>
         <span>Esc close</span>
-        <span className="ml-auto">Cases · places · projects</span>
+        <span className="ml-auto">Issues · cases · docs · places · projects</span>
       </div>
     </Command>
   );

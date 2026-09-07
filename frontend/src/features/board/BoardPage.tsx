@@ -11,14 +11,12 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core';
 import { GripVertical, X } from 'lucide-react';
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
-import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import { useAnnounce } from '../../a11y/useAnnounce';
 import { ApiError } from '../../api/client';
-import { useBoard, useProject, useTransitionIssue } from '../../api/queries';
+import { useTransitionIssue } from '../../api/queries';
 import type { BoardCard } from '../../api/types';
-import { DataRegion } from '../../components/DataRegion';
-import { PermissionGate } from '../../components/PermissionGate';
 import { Badge, Banner } from '../../components/kit';
 import { Button, Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui';
 import { cn } from '../../lib/cn';
@@ -83,125 +81,24 @@ const kindLabels: Record<BoardCard['kind'], string> = {
   QUARANTINE: 'Quarantined',
 };
 
-export function BoardPage() {
-  const { projectId = '' } = useParams();
-  const navigate = useNavigate();
-  const [params, setParams] = useSearchParams();
-  const mine = params.get('mine') === 'true';
+/*
+  ~~`export function BoardPage()` — the composite board at `/projects/:projectId/board`, its
+  `Everyone / Assigned to me` lens, its `Add work` button and its own `DataRegion` over
+  `GET /board`.~~ → **retired (021 R9, D-n, T8).** The screen made two statements and both moved:
+  the issue half duplicated the Dev board card for card, and the QA half — linked cases and their
+  latest result — is now the card face's own line, where the tester who wanted it was already
+  looking. D-n's condition for removal was that every half had a home first, and this is that
+  commit; `router.tsx` carries the same note beside the deleted route.
 
-  const project = useProject(projectId);
-  const items = useBoard(projectId, mine);
-
-  /*
-    ~~`PageHeader` raised the arrival announcement and the tab title.~~ → superseded by 007 T13:
-    the top strip is the render's `.top`, so the announcement is raised here, the way `HelpPage`
-    does it. The sentence is the same one the shared header produced, because a screen-reader user
-    learning a new phrasing per screen is the cost of moving it.
-  */
-  const announce = useAnnounce();
-  useEffect(() => {
-    announce('Board page loaded');
-  }, [announce]);
-
-  return (
-    <div>
-      <title>{project.data ? `Board · ${project.data.name} · TCMS` : 'Board · TCMS'}</title>
-
-      <header
-        data-testid="Board.Header"
-        className="mb-3 flex flex-wrap items-start gap-3 border-b border-line pb-3"
-      >
-        <div className="min-w-0 flex-1">
-          <h1
-            data-testid="Board.Header.Title"
-            className="m-0 text-[19px] font-semibold tracking-[-.018em] text-ink"
-          >
-            Board
-          </h1>
-          <p className="m-0 mt-1 max-w-[74ch] text-[13px] text-ink-3">
-            Issues alongside the work the repository already knows about — assigned executions,
-            pending reviews, cases that need attention and tests somebody has quarantined.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {/*
-            `.lens` — the render's segmented scope switch, not two chips. The two options are one
-            choice with two states, and a pair of independent-looking chips says otherwise.
-          */}
-          <div className="inline-flex gap-0.5 rounded-[8px] bg-wash-1 p-0.5">
-            {[
-              { value: false, label: 'Everyone' },
-              { value: true, label: 'Assigned to me' },
-            ].map((option) => (
-              <button
-                key={String(option.value)}
-                type="button"
-                aria-pressed={mine === option.value}
-                data-testid={`Board.Filter.${option.value ? 'Mine' : 'Everyone'}`}
-                onClick={() => {
-                  const next = new URLSearchParams(params);
-                  if (option.value) next.set('mine', 'true');
-                  else next.delete('mine');
-                  setParams(next, { replace: true });
-                }}
-                className={cn(
-                  'flex cursor-pointer items-center gap-1.5 rounded-md border-0 px-[11px] py-1 text-[12px] font-medium',
-                  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
-                  mine === option.value
-                    ? 'bg-panel text-ink shadow-e1'
-                    : 'bg-transparent text-ink-3 hover:text-ink-2',
-                )}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-
-          {/*
-            Disable-don't-hide (§31): a Viewer sees the button greyed with a reason, which teaches
-            that the capability exists and is worth asking for. Hiding it would teach that the
-            product cannot do it, which is a lie.
-          */}
-          {/*
-            ~~A dialog on this page, gated on `workitem:manage`.~~ → **superseded by 011.** That
-            permission is retired, the create is `POST /issues`, and the form is a route of its own
-            (`/work/new`) because quick add is one field with a full form under it — more than a
-            dialog beside a board should carry, and the same form the work table links to.
-          */}
-          <PermissionGate projectId={projectId} permission="issue:create">
-            {({ allowed }) => (
-              <Button
-                variant="primary"
-                size="sm"
-                disabled={!allowed}
-                onClick={() => navigate(`/projects/${projectId}/work/new`)}
-                data-testid="Board.NewIssue"
-              >
-                Add work
-              </Button>
-            )}
-          </PermissionGate>
-        </div>
-      </header>
-
-      <DataRegion
-        testId="Board.Content"
-        state={{ ...items, refetch: () => void items.refetch() }}
-        isEmpty={(rows) => rows.length === 0}
-        empty={{
-          kind: 'no-records',
-          title: mine ? 'Nothing assigned to you' : 'Nothing on the board',
-          body: mine
-            ? 'No open executions, reviews or tasks are assigned to you right now.'
-            : 'No open work in this project.',
-        }}
-      >
-        {(rows) => <Board items={rows} />}
-      </DataRegion>
-    </div>
-  );
-}
+  **The file keeps its name and `Board` keeps living here.** `/teams/:teamId/board` renders this
+  component (§9: that route is not the collision `/my-work` refused), and a team's board genuinely
+  mixes executions, reviews and flagged cases across projects — there is no per-project board that
+  could replace it. Renaming the file — ~~`CompositeBoard.tsx`~~, which does not exist and is named
+  here only to say it was considered — would be a rename in the one task that is also rewriting the
+  documentation, and `citedFiles.test.ts` fails on every stale path in every comment in the repo;
+  the name is a smaller cost than the sweep, and this paragraph is what a reader who expected a
+  page here gets instead.
+*/
 
 /**
  * A card's reason, in the reader's words.

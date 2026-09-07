@@ -543,8 +543,10 @@ function Elsewhere({
 /**
  * A `Done` column, collapsed to one narrow strip spanning the lane (021 D-l, render note 28).
  *
- * *Tested is not shipped* — `Done` is the PM board's and nothing else's, and the PO's drag into it
- * is the deploy confirmation. So it is **still a drop target while collapsed**: the count is what is
+ * *Tested is not shipped* (021 **R12** — ~~`Done` is a Dev/QA column~~ → it is the PM board's,
+ * collapsed to a count) — `Done` is the PM board's and nothing else's, and the PO's drag into it
+ * is the deploy confirmation. `Ready to deploy` is the tester's last word; the deploy confirmation
+ * is the PO's, and it is the figure release readiness reads. So it is **still a drop target while collapsed**: the count is what is
  * hidden, not the gesture, and a column you cannot drop into would remove the one move this whole
  * arrangement exists to make deliberate.
  *

@@ -84,6 +84,15 @@ interface BoardDouble {
   summaries?: BoardSummary[]
   columns?: BoardColumnConfig[]
   cards?: BoardIssueCard[]
+  /**
+   * Per-board cards, by board id — 021 T8's door badges, which are drawn on **every** segment.
+   *
+   * `columns`/`cards` above answer every board with the same contents, which is right for a test
+   * about one board and is exactly wrong for a test about several: two segments would badge the
+   * same number and the assertion would pass however the counts were wired. A board named here
+   * overrides them; one that is not falls back to them.
+   */
+  byBoard?: Record<string, BoardIssueCard[]>
 }
 
 function mockReads(
@@ -138,6 +147,9 @@ function mockReads(
       return aBoardConfig(board.columns ? { id: 'b1', columns: board.columns } : { id: 'b1' })
     }
     if (/^\/boards\/[^/]+\/cards/.test(path)) {
+      const id = /^\/boards\/([^/]+)\/cards/.exec(path)?.[1] ?? ''
+      const named = board.byBoard?.[id]
+      if (named !== undefined) return boardContents({ lanes: [aBoardLane({ cards: named })] })
       return board.cards
         ? boardContents({ lanes: [aBoardLane({ cards: board.cards })] })
         : boardContents()
@@ -373,6 +385,62 @@ describe('The view switcher (D34)', () => {
     expect(
       await screen.findByTestId('WorkTable.View.Board.Dev board.Badge'),
     ).toHaveTextContent('2')
+  })
+
+  it('badges every board, not only the one being looked at (021 T8)', async () => {
+    /*
+      ~~The ACTIVE segment only.~~ → T8's half. The point of a door badge on a segment is to be
+      read **without** switching to it: a badge that only appears once you are already on the board
+      tells you what the columns in front of you already say.
+
+      Two boards with different contents, deliberately — a shared double would badge both with one
+      number and this assertion would hold however the counts were wired.
+    */
+    mockReads(undefined, {}, {
+      summaries: [
+        aBoardSummary({ id: 'b1', name: 'Dev board' }),
+        aBoardSummary({ id: 'b2', name: 'QA board' }),
+      ],
+      columns: [
+        { id: 'c1', name: 'Ready', position: 0, wipLimit: null, statuses: [READY], defaultStatusId: READY.id },
+        { id: 'c2', name: 'Doing', position: 1, wipLimit: null, statuses: [REVIEW], defaultStatusId: REVIEW.id },
+      ],
+      byBoard: {
+        b1: [aBoardIssueCard({ key: 'A-1', columnId: 'c1', status: READY })],
+        b2: [
+          aBoardIssueCard({ key: 'A-2', columnId: 'c1', status: READY }),
+          aBoardIssueCard({ key: 'A-3', columnId: 'c1', status: READY }),
+          aBoardIssueCard({ key: 'A-4', columnId: 'c2', status: REVIEW }),
+        ],
+      },
+    })
+    renderPage('/projects/p1/work?view=board')
+
+    expect(await screen.findByTestId('WorkTable.View.Board.Dev board.Badge')).toHaveTextContent('1')
+    // The INACTIVE segment, and its own number rather than the active board's.
+    expect(await screen.findByTestId('WorkTable.View.Board.QA board.Badge')).toHaveTextContent('2')
+  })
+
+  it('draws no badge for a board with an empty door, on any view', async () => {
+    /*
+      A `0` beside every board is five characters that say nothing and train the eye to skip the
+      place a real number appears. Asserted from the **Table** view, which is also where the strip
+      is drawn: the badges are the same badges on all seven views, and one that appeared only on
+      the board view would be a number the reader learns to distrust.
+    */
+    mockReads(undefined, {}, {
+      summaries: [aBoardSummary({ id: 'b1', name: 'Dev board' })],
+      columns: [
+        { id: 'c1', name: 'Ready', position: 0, wipLimit: null, statuses: [READY], defaultStatusId: READY.id },
+        { id: 'c2', name: 'Doing', position: 1, wipLimit: null, statuses: [REVIEW], defaultStatusId: REVIEW.id },
+      ],
+      byBoard: { b1: [aBoardIssueCard({ key: 'A-3', columnId: 'c2', status: REVIEW })] },
+    })
+    renderPage('/projects/p1/work')
+
+    expect(await screen.findByTestId('WorkTable.View.Board.Dev board')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByTestId('WorkTable.Table')).not.toBeNull())
+    expect(screen.queryByTestId('WorkTable.View.Board.Dev board.Badge')).toBeNull()
   })
 })
 
