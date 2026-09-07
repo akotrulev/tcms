@@ -186,6 +186,10 @@ const STEP_FORMAT = ['STRUCTURED', 'GHERKIN'] as const;
 const STEP_KEYWORD = ['GIVEN', 'WHEN', 'THEN', 'AND', 'BUT'] as const;
 const AUTOMATION_STATUS = ['MANUAL', 'TO_BE_AUTOMATED', 'AUTOMATED', 'NOT_AUTOMATABLE'] as const;
 const PROPOSAL_VERDICT = ['GROUNDED', 'PARTIAL', 'HALLUCINATED', 'UNVERIFIED'] as const;
+const PROPOSAL_LINK_RELATIONSHIP = ['VERIFIES', 'DERIVED_FROM', 'REFERENCES'] as const;
+const CRITERION_METRIC =
+  ['pass_rate', 'coverage', 'open_critical', 'cases_approved', 'build_available'] as const;
+const CRITERION_OP = ['>=', '>', '<=', '<', '=', '!='] as const;
 
 /**
  * The enums a caller **filters** by, as against the ones it writes.
@@ -317,6 +321,51 @@ const CONDITION_FIELDS: readonly FieldSpec[] = [
       + 'attached to it, with no prompt — that is the whole point of a condition and the reason '
       + 'it is not a step. An `inlineBody` is refused with a field error: nothing can render one, '
       + 'so accepting it would be a save whose content the author can never see again.',
+  },
+];
+
+/**
+ * One requirement a proposed case claims to verify.
+ *
+ * The page is named as well as the block, and both by the spelling this surface uses everywhere
+ * else: a display key for the page, the permanent id for the block. A block id is not guessable
+ * and not derivable — `tcms_open_doc_page` serves it — which is the point of the pair: a target
+ * whose page is wrong is a mismatch a reviewer can see rather than a silent resolution.
+ */
+const PROPOSAL_LINK_FIELDS: readonly FieldSpec[] = [
+  {
+    name: 'page',
+    type: 'string',
+    required: 'always',
+    contract: 'pageId',
+    keyExample: 'DOC-7',
+    describe: 'The documentation page the statement sits on, by display key.',
+  },
+  {
+    name: 'block',
+    type: 'string',
+    required: 'always',
+    contract: 'blockId',
+    example: '0f6a1c2e-7b41-4d90-9d1a-4c1f2b6e33aa',
+    describe: 'The block — the statement being verified, by the id tcms_open_doc_page serves.',
+    note:
+      'A block keeps its id however much its text is edited, which is what makes the claim worth '
+      + 'storing. A heading anchor or a line number would not survive the next revision of the '
+      + 'specification, and neither would the coverage built on it.',
+  },
+  {
+    name: 'relationship',
+    type: 'string',
+    enum: PROPOSAL_LINK_RELATIONSHIP,
+    enumOf: 'ProposalLinkInput.relationship',
+    describe: 'What the case claims about the block. Absent means VERIFIES.',
+    note:
+      'A CLOSED vocabulary of three, and unlike the block ids it is checked when the proposal is '
+      + 'FILED rather than when it is accepted — a fixed three-word vocabulary is exactly what can '
+      + 'be judged without the project\'s state, so a fourth value is a 400 on '
+      + '`verifies[n].relationship` here and now. **Only VERIFIES is coverage**: DERIVED_FROM and '
+      + 'REFERENCES are relationships somebody deliberately chose not to state as proof, and the '
+      + 'coverage matrix ignores them.',
   },
 ];
 
@@ -497,6 +546,24 @@ const CASE_FIELDS: readonly FieldSpec[] = [
       + 'never counted as verified, because TCMS cannot see that agent\'s critic or its prompt.',
   },
   {
+    name: 'verifies',
+    type: 'object[]',
+    fields: PROPOSAL_LINK_FIELDS,
+    itemsSchema: 'ProposalLinkInput',
+    contractSchema: 'AiProposalInput',
+    actions: ['propose'],
+    cli: { flag: 'verifies', multiple: true },
+    describe: 'The requirements this case claims to verify — a page and one of its blocks, each.',
+    note:
+      'Wrapper-level, beside `verdict` rather than inside the case: a `doc_link` takes a case id '
+      + 'and a proposal has no case until a person accepts it, so the claim travels WITH the '
+      + 'proposal and becomes a link at acceptance, written by the same path a person\'s link '
+      + 'takes. Stored as sent; a block that has gone by then is a field error on '
+      + '`verifies[n].blockId` at accept, on a reviewer\'s screen rather than yours — so name '
+      + 'blocks you have just read. The CLI spells one target per `--verifies DOC-7:<blockId>`, '
+      + 'repeatable, because argv has no object.',
+  },
+  {
     name: 'classificationValueIds',
     type: 'string[]',
     set: true,
@@ -641,6 +708,86 @@ const SUITE_SHAPE: EntityShape = {
 
 /* ------------------------------------------------------------------- plan ---- */
 
+/**
+ * One authored gate — machine-evaluable, so a plan page is a gate rather than prose.
+ *
+ * `metric` and `op` are **closed vocabularies validated on the way in**, and the contract states
+ * why in the one sentence worth repeating here: a plan gated on `pass_rte` renders exactly like
+ * one gated on `open_critical` — a criterion with no verdict — and a release meeting cannot tell
+ * "we cannot check this yet" from a typo that will never be checked at all.
+ */
+const CRITERION_FIELDS: readonly FieldSpec[] = [
+  {
+    name: 'metric',
+    type: 'string',
+    required: 'always',
+    enum: CRITERION_METRIC,
+    enumOf: 'CriterionInput.metric',
+    describe: 'What is measured.',
+  },
+  {
+    name: 'op',
+    type: 'string',
+    required: 'always',
+    enum: CRITERION_OP,
+    enumOf: 'CriterionInput.op',
+    describe: 'How the measurement is compared to the value.',
+  },
+  {
+    name: 'value',
+    type: 'number',
+    required: 'always',
+    example: '95',
+    describe: 'The threshold. A percentage is 0–100, not 0–1.',
+  },
+  {
+    name: 'label',
+    type: 'string',
+    nullable: true,
+    describe: 'How to state this gate to a reader. Absent lets the plan render it from the metric.',
+  },
+];
+
+/**
+ * A part of the plan, resolving its own members.
+ *
+ * Sections have **no ids**, so `sections` is replaced whole when it is present — there is nothing
+ * to match a partial update against. A section with no members at all is legal and is kept: an
+ * author names the sub-feature before filling it, and dropping the empty ones on save would delete
+ * the heading they just typed.
+ */
+const PLAN_SECTION_FIELDS: readonly FieldSpec[] = [
+  {
+    name: 'name',
+    type: 'string',
+    required: 'always',
+    describe: 'What this part of the plan covers — one per top-level heading of the specification.',
+  },
+  {
+    name: 'cases',
+    type: 'string[]',
+    contract: 'caseIds',
+    keyExample: 'TC-42',
+    describe: 'Cases in this section, by display key.',
+  },
+  {
+    name: 'suites',
+    type: 'string[]',
+    contract: 'suiteIds',
+    keyExample: 'TS-7',
+    describe: 'Suites in this section, by display key.',
+  },
+  {
+    name: 'tags',
+    type: 'string[]',
+    describe: 'Tags whose cases this section resolves — how a section fills itself as work lands.',
+    note:
+      'This is the one that makes a plan written FOR a specification work at all: a proposal is '
+      + 'not a case and cannot be put in a plan, so a section built from cases would be empty the '
+      + 'day it is written and would stay empty as proposals are accepted. A tag resolves.',
+  },
+];
+
 const PLAN_SHAPE: EntityShape = {
   entity: 'plan',
   keyExample: 'TP-3',
@@ -684,6 +831,67 @@ const PLAN_SHAPE: EntityShape = {
       cli: { flag: 'case', multiple: true },
       describe: 'Individual cases in scope, beyond whole suites — the COMPLETE set.',
     },
+    /*
+      The six below are the plan's *written for a specification* half, and every one of them was
+      unreachable from either adapter until 022. `core/rewrite.ts` records what that cost: with no
+      argument to carry them, `scopeText` and `outOfScopeText` were emptied by EVERY plan edit this
+      surface ever made, silently, because the `PATCH` writes each scalar straight through.
+    */
+    {
+      name: 'scopeText',
+      type: 'string',
+      nullable: true,
+      describe: 'What this plan covers, in prose — the specification\'s purpose, in one paragraph.',
+    },
+    {
+      name: 'outOfScopeText',
+      type: 'string',
+      nullable: true,
+      describe: 'What it deliberately does not cover.',
+      note:
+        'This is where "not in this release" is stated, and it is the home for the things a '
+        + 'specification carries that are not requirements: another tracker\'s keys, the open '
+        + 'items, the sections the source marked as future work. None of those belong on the page.',
+    },
+    {
+      name: 'entryCriteria',
+      type: 'object[]',
+      set: true,
+      fields: CRITERION_FIELDS,
+      itemsSchema: 'CriterionInput',
+      cli: { flag: 'entry-criterion', multiple: true },
+      describe: 'What must hold before testing starts — the COMPLETE list.',
+    },
+    {
+      name: 'exitCriteria',
+      type: 'object[]',
+      set: true,
+      fields: CRITERION_FIELDS,
+      itemsSchema: 'CriterionInput',
+      cli: { flag: 'exit-criterion', multiple: true },
+      describe: 'What must hold before this plan is done — the COMPLETE list.',
+    },
+    {
+      name: 'sections',
+      type: 'object[]',
+      set: true,
+      fields: PLAN_SECTION_FIELDS,
+      itemsSchema: 'PlanSectionInput',
+      describe: 'The plan\'s own structure — the COMPLETE list, replaced whole when sent.',
+      note:
+        'Sections carry no ids, so there is no partial update: absent leaves them alone, `[]` '
+        + 'removes them all. Ordering is the array\'s.',
+    },
+    {
+      name: 'tags',
+      type: 'string[]',
+      set: true,
+      cli: { flag: 'tag', multiple: true },
+      describe: 'The COMPLETE tag set on the plan itself, not on its sections.',
+      note:
+        'The plan\'s own labels. A section\'s `tags` are membership rules that resolve cases into '
+        + 'that section; these are not — they say what kind of plan this is.',
+    },
   ],
 };
 
@@ -714,6 +922,30 @@ const DOC_PAGE_SHAPE: EntityShape = {
       // spelling until the catalogue↔surface pin asked for the first.
       cli: { negate: 'root' },
       describe: 'The page this one sits under. Null puts it at the root.',
+    },
+    {
+      name: 'markdown',
+      type: 'string',
+      cli: { flag: 'from' },
+      surfaceOnly:
+        'The page as TCMS spec markdown, converted to `blocks` by `core/markdown.ts` before the '
+        + 'request. There is no such contract property and there is deliberately no endpoint '
+        + 'behind it: the medium a model writes in is text and the medium the API takes is an '
+        + 'id-carrying array, and this is the one place that gap is closed.',
+      describe: 'The page as TCMS spec markdown, INSTEAD OF `blocks`. Sending both is refused.',
+      note:
+        'The grammar, in one paragraph: `#`…`######` are headings; a blank-line-separated block of '
+        + 'text is one paragraph and one testable statement; `- item` nested two spaces at a time '
+        + 'is one list block per item, at that depth; a fenced block is `code` and its language is '
+        + 'dropped; a `Table: <caption>` line immediately above a GFM pipe table is a `table` whose '
+        + 'caption is the statement coverage reads; `![alt](attachment:<uuid>)` is an image, on an '
+        + 'edit only. **`{#…}` at the end of a block is its anchor** — a UUID is an existing '
+        + 'block\'s id and keeps that block, anything else is a label naming a NEW block, and the '
+        + 'write answers with `anchors` mapping each label to the id it was given. Blockquotes, '
+        + 'HTML and `---` are refused naming the line; inline `**bold**` is stored and rendered as '
+        + 'typed. Read the `ingest-spec` process for what to put in it — the grammar is the easy '
+        + 'half.\n\n'
+        + 'The CLI flag is `--from`, and it takes the PATH of the file rather than the text.',
     },
     {
       name: 'blocks',
@@ -1295,10 +1527,15 @@ export function usageFor(shape: EntityShape, action: string): string {
       + (!asFile && field.cli?.negate ? `\n      --${field.cli.negate} clears it.` : '');
   });
 
+  /*
+    The indent belongs to the line, not to each name. It was on each name until the plan gained
+    three unspellable fields at once and the help screen read `entryCriteria,   exitCriteria` —
+    invisible while every shape here had at most one.
+  */
   const excluded = asFile
     ? ''
-    : `\n\n${fieldsFor(shape, action).filter((field) => !spellableInArgv(field))
-      .map((field) => `  ${field.name}`).join(', ')} cannot be spelled in argv. `
+    : `\n\n  ${fieldsFor(shape, action).filter((field) => !spellableInArgv(field))
+      .map((field) => field.name).join(', ')} cannot be spelled in argv. `
       + 'Pass them in the --file body.';
 
   const objects = fieldsFor(shape, action).some((field) => !spellableInArgv(field));

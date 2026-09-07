@@ -99,14 +99,9 @@ const UNOFFERED: Readonly<Record<string, string>> = {
   'AiProposalInput.testCase':
     'The wrapper itself. The catalogue flattens it — every field of the case is a field of the '
     + 'proposal here, which is the shape both adapters already accept.',
-  // Removed by 022 T3a, which puts `verifies` on the case shape scoped to `propose` — the entry a
-  // contract field gets while its clients are still one task behind, exactly as the struck-through
-  // `agentEligible` line below carried `IssueInput` until 015 T4 closed it.
-  'AiProposalInput.verifies':
-    'The requirements a proposed case claims to verify, landed by 022 T1 with the contract and no '
-    + 'client. It is wrapper-level rather than a field of the case, so it needs the `propose`-scoped '
-    + 'shape T3a adds; until then neither adapter can send one and the backend reads an absent '
-    + 'array as the empty claim.',
+  // ~~'AiProposalInput.verifies' — landed by 022 T1 with the contract and no client.~~ → CLOSED by
+  // T3a: it is `case.verifies` in the catalogue, scoped to `propose` and wrapper-level like
+  // `verdict`, so both adapters spell it.
 
   /* ---- artifact ---- */
   'ArtifactInput.kind':
@@ -117,20 +112,11 @@ const UNOFFERED: Readonly<Record<string, string>> = {
     + 'sent. This was the first thing the catalogue check found.',
 
   /* ---- plan ---- */
-  'TestPlanInput.tags':
-    'A plan carries tags on the wire and neither adapter offers them. Not a decision — an '
-    + 'omission this check now records rather than hides. It is a follow-up, not this slice.',
-  'TestPlanInput.sections':
-    'The plan document body (§6, the plan-detail rework). It is a nested structure with its own '
-    + 'ordering rules, and neither machine surface writes one yet.',
-  'TestPlanInput.scopeText':
-    'Part of the plan document body, with `sections`.',
-  'TestPlanInput.outOfScopeText':
-    'Part of the plan document body, with `sections`.',
-  'TestPlanInput.entryCriteria':
-    'Part of the plan document body, with `sections`.',
-  'TestPlanInput.exitCriteria':
-    'Part of the plan document body, with `sections`.',
+  // ~~The six fields of the plan document body — `tags`, `sections`, `scopeText`,
+  // `outOfScopeText`, `entryCriteria`, `exitCriteria` — offered by neither adapter.~~ → CLOSED by
+  // 022 T3a, which is what the follow-up the longest of those entries asked for turned into. The
+  // omission was not free while it lasted: with no argument carrying them, every plan edit this
+  // surface made emptied `scopeText` and `outOfScopeText` (`core/rewrite.ts`).
 
   /* ---- run ---- */
   'TestRunInput.assigneeId':
@@ -292,16 +278,25 @@ describe('the shape catalogue against openapi.yaml', () => {
         const properties = Object.keys((schema(field.itemsSchema!)['properties'] as Node) ?? {});
         const required = (schema(field.itemsSchema!)['required'] as string[] | undefined) ?? [];
 
+        /*
+          Read through `contract` on both sides, for the reason `contractSiteOf` reads it at the
+          top level: a nested field is spelled the way this surface spells things and renders to
+          the contract's own name — `verifies[].page` is a display key where `ProposalLinkInput`
+          takes `pageId`. Comparing the surface name to the contract's would have refused the one
+          convention this catalogue is built on.
+        */
+        const siteOf = (inner: FieldSpec): string => inner.contract ?? inner.name;
+
         for (const inner of field.fields ?? []) {
           expect(properties, `${shape.entity}.${field.name}[].${inner.name} renders to `
-            + `${field.itemsSchema}.${inner.name}, which the contract does not declare.`)
-            .toContain(inner.name);
+            + `${field.itemsSchema}.${siteOf(inner)}, which the contract does not declare.`)
+            .toContain(siteOf(inner));
         }
 
         for (const property of required) {
           expect(
             (field.fields ?? []).some(
-              (inner) => inner.name === property && inner.required === 'always',
+              (inner) => siteOf(inner) === property && inner.required === 'always',
             ),
             `${field.itemsSchema}.${property} is required and ${shape.entity}.${field.name} does `
               + 'not say so — a caller would be told it is optional and get a 400.',

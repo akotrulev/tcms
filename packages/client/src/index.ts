@@ -51,6 +51,22 @@ export { caseInputFrom, planInputFrom, suiteInputFrom } from './core/rewrite.js'
 export { REQUIRED_CASE_FIELDS, requireProposableCase } from './core/proposal.js';
 
 export {
+  MarkdownError,
+  anchorsFor,
+  blocksFromMarkdown,
+  markdownFromBlocks,
+} from './core/markdown.js';
+export type { MarkdownOptions, MarkdownPage } from './core/markdown.js';
+
+export {
+  PROCESSES,
+  processCatalogue,
+  processGuideFor,
+  processNamed,
+} from './core/processes.js';
+export type { ProcessArgument, ProcessSpec, ProcessStep } from './core/processes.js';
+
+export {
   CASE_SHAPE,
   ISSUE_SHAPE,
   READ_ENUMS,

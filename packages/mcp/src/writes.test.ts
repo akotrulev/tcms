@@ -1256,6 +1256,38 @@ describe('the shape catalogue against the tools that declare it', () => {
     return names;
   }
 
+  /**
+   * Catalogue fields whose tool argument is one task behind, each with what it costs.
+   *
+   * The same device as `shapesContract.test.ts`'s `UNOFFERED` and `CREATE_WITHOUT_A_KEY`, aimed at
+   * the other seam: a shortfall is **named with its cost and pinned both ways**, so it cannot be
+   * forgotten and a stale entry fails as loudly as a new gap. 022 splits the catalogue (T3a) from
+   * the adapters (T3b) precisely so neither session reads the other's files, and the price of that
+   * split is exactly this list — for one commit the shape catalogue describes fields
+   * `tcms_shape` will name and these tools do not yet take.
+   *
+   * **T3b empties this map and deletes it.** An entry outliving its gap is a failure below.
+   */
+  const PENDING_ON_THE_SURFACE: Readonly<Record<string, string>> = {
+    "tcms_write_case (propose) does not accept 'verifies'":
+      'The requirements a proposed case claims. T3b adds the argument and resolves each page key '
+      + 'to its id before sending; until then a model reading tcms_shape is told about a field '
+      + 'this tool would refuse under additionalProperties: false.',
+    "tcms_write_doc_page (create) does not accept 'markdown'":
+      'The page as TCMS spec markdown, converted by core/markdown.ts. T3b accepts it instead of '
+      + '`blocks` and answers with `anchors`.',
+    "tcms_write_doc_page (edit) does not accept 'markdown'":
+      'The same, on the edit arm, where it also carries the linked-block refusal and `dropLinked`.',
+    ...Object.fromEntries(['create', 'edit'].flatMap((arm) =>
+      ['scopeText', 'outOfScopeText', 'entryCriteria', 'exitCriteria', 'sections', 'tags']
+        .map((field) => [
+          `tcms_write_plan (${arm}) does not accept '${field}'`,
+          'The plan document body — the half of a plan that is written FOR a specification. T3b '
+          + 'adds all six through core/rewrite.ts\'s scalar/list split.',
+        ])),
+    ),
+  };
+
   it('declares every field the catalogue offers, for every body-carrying arm', () => {
     const gaps: string[] = [];
 
@@ -1282,7 +1314,9 @@ describe('the shape catalogue against the tools that declare it', () => {
       check exists to turn silence into a list, the same way question four of
       `shapesContract.test.ts` did.
     */
-    expect(gaps).toEqual([]);
+    expect(gaps.filter((gap) => !(gap in PENDING_ON_THE_SURFACE))).toEqual([]);
+    expect(Object.keys(PENDING_ON_THE_SURFACE).filter((entry) => !gaps.includes(entry)))
+      .toEqual([]);
   });
 
   it('maps every entity in the catalogue, so a ninth cannot arrive unpinned', () => {

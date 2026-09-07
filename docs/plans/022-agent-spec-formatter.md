@@ -177,9 +177,46 @@ Stack: `ts`. Skill: `tooling-engineer` (`tool-mcp-builder`, `tool-cli-builder`).
 Read: T3a's commit; `packages/mcp/src/writes.ts` (`tcms_write_doc_page`, `tcms_write_case`,
 `tcms_write_plan`), `reads.ts` (`tcms_open_doc_page`), `shape.ts`, `server.ts` (capabilities,
 resources), `tool.ts`, `tools.ts`; `packages/cli/src/commands.ts`, `writes.ts` (`doc create`,
-`case file`, `plan create/edit`), `reads.ts` (`doc show`, `format`); the conformance tests
+`case propose`, `plan create/edit`), `reads.ts` (`doc show`, `format`); the conformance tests
 (`writeConformance.test.ts`, `guideCopies.test.ts`, `server.test.ts`) in both;
 `docs/specs/2026-08-08-mcp-tool-and-command-surface.md` §3.0a, §3.3, §6.
+
+**What T3a landed, and the four things it corrected.** The core is
+`packages/client/src/core/markdown.ts` and `core/processes.ts`, both exported from the barrel:
+
+```ts
+blocksFromMarkdown(text: string, options: { mode: 'create' | 'edit'; current?: readonly DocBlock[]; dropLinked?: boolean })
+  : { blocks: DocBlockInput[]; labels: Map<string, number>; warnings: string[] }   // throws MarkdownError
+markdownFromBlocks(blocks: readonly DocBlock[]): string                            // throws MarkdownError
+anchorsFor(labels: ReadonlyMap<string, number>, page: { blocks: readonly { id: string }[] }): Record<string, string>
+class MarkdownError extends TcmsClientError { readonly line: number }              // → invalid_input, not retryable
+
+PROCESSES: readonly ProcessSpec[]        // five, in order
+processNamed(name): ProcessSpec | undefined
+processGuideFor(process): string         // the long form, like guideFor
+processCatalogue(): string               // one line each, for a list carrier
+```
+
+1. **The command is `tcms case propose`, not `tcms case file`** — `--file` is its flag. This
+   prompt and design §4.3 both said `case file`; the registry has said `case propose` since §137.
+2. **`tcms_orient` and `tcms_report` reach no CLI command at all.** The processes leave `cli`
+   absent on those steps and `processGuideFor` prints *"no command reaches this step; it is
+   MCP-only"*. Do not invent `tcms orient` / `tcms report` here — that is a separate slice.
+3. **The catalogue↔surface pins go red the moment a catalogue field has no argument**, and T3a
+   could not wire the arguments without doing this task. So each adapter's test carries a
+   `PENDING_ON_THE_SURFACE` map naming every gap with what it costs, pinned **both ways** — in
+   `mcp/src/writes.test.ts` (`declares every field the catalogue offers`) and
+   `cli/src/format.test.ts` (`gives every field a flag the command actually takes`). **Wiring an
+   argument makes its entry stale and the test red: delete each entry as you land it, and delete
+   both maps and their headers when they are empty.**
+4. **Spellings the catalogue now fixes**, so do not choose them again: `verifies[]` items are
+   `{page, block, relationship?}` (rendering to `pageId`/`blockId`), `page` is a display key you
+   resolve; the doc page's field is `markdown` on MCP and **`--from` on the CLI, taking a PATH
+   rather than the text**; the plan's argv-spellable three are `--scope-text`,
+   `--out-of-scope-text` and `--tag` (repeatable), while `entryCriteria`, `exitCriteria` and
+   `sections` are object arrays that travel in `--file`; `sections[].cases` and `sections[].suites`
+   are **display keys**, so the plan write resolves them per section the way it already resolves
+   the plan's own `cases`/`suites`.
 
 MCP:
 1. `tcms_write_doc_page`: `markdown` accepted instead of `blocks` on `create`/`edit` (both → refuse);
@@ -200,21 +237,23 @@ MCP:
 CLI:
 7. `tcms doc create --title T [--parent DOC-1] --from spec.md`, `tcms doc edit DOC-7 --from spec.md [--drop-linked]`
    (prints the anchors table), `tcms doc show DOC-7 --markdown`, `tcms doc adopt DOC-7 --plan TP-3 | --none`,
-   `tcms case file … --verifies DOC-7:<blockId>` (repeatable), the six plan flags, `tcms process [name]`,
+   `tcms case propose … --verifies DOC-7:<blockId>` (repeatable), the plan flags, `tcms process [name]`,
    `tcms spec import bundle.json` (page → anchors → proposals with labels resolved → plan → adopt; an
    `Idempotency-Key` per create derived from the bundle's content hash and the item's index through the
    core's generator; a step's refusal stops the run and prints what landed).
 8. Surface spec: add §3.0b (`tcms_process` and prompts), the new arms under their tools' sections, the
    CLI rows in §6, and the count edits (44 → 45 in prose that states it).
-9. **The one cross-stack edit, allowed here because a packages test pins it:** `guideCopies.test.ts`
+9. Delete both `PENDING_ON_THE_SURFACE` maps once every entry is wired — see the reading note
+   above; a stale entry fails as loudly as a new gap.
+10. **The one cross-stack edit, allowed here because a packages test pins it:** `guideCopies.test.ts`
    reads `frontend/src/features/help/sections.tsx` and will fail on the count and the missing
    `tcms_process`. Make the **minimal** text edit there — the number and the tool name in the
    Orientation list — and nothing else; T4 writes the prose. Then
    `~/bin/tcms-remote frontend 'npm run lint'` and `'npm run build'` must still pass.
-10. Gates: `~/bin/tcms-remote packages 'npm run build'`, `'npm run lint --workspaces'`,
+11. Gates: `~/bin/tcms-remote packages 'npm run build'`, `'npm run lint --workspaces'`,
     `'npm run test:run --workspaces'`, `'npm run pack:release -- --version 0.0.0 --out /tmp/rel'`,
     plus the two frontend gates above.
-11. Commit: `feat(agent-surface): markdown pages, verifies on propose, adopt, the process catalogue, spec import`.
+12. Commit: `feat(agent-surface): markdown pages, verifies on propose, adopt, the process catalogue, spec import`.
 
 Traps: surface spec §2 — no arm spans a gate its tool's reachable roles do not all hold; `adopt` is
 `doc:edit` and lives on the doc tool for that reason. Every create arm sends `Idempotency-Key`;
@@ -244,8 +283,9 @@ that reads `relatedDocuments` straight after Accept legitimately sees nothing ye
    `AiProposal` fixture in `src/test/fixtures.ts`, so the one to extend is the typed `PENDING`
    literal at the top of `ProposalPage.test.tsx`, which T1 already gave `verifies: []`.
 2. Help guide: the MCP section describes the five processes (one line each, from the catalogue's
-   summaries — do not paraphrase them into a third copy), `tcms_process` and the prompts, and the
-   count T3b set.
+   summaries — do not paraphrase them into a third copy; T3a's `processCatalogue()` renders exactly
+   that list, and `PROCESSES[].summary` is the sentence to copy), `tcms_process` and the prompts,
+   and the count T3b set.
 3. `docs/features.md` §Documentation: the page as a specification, labels, the round trip, and that a
    proposal names the requirements it verifies and is linked on acceptance.
 4. Design spec §7: mark each task landed with its commit hash; note anything built but unverified.

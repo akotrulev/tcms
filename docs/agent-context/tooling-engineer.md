@@ -1,6 +1,6 @@
 # tooling-engineer — orientation cache
 
-Baseline: `99370dd1` (016 plan), refreshed 2026-09-04.
+Baseline: `6a8db463` (022 T3a), refreshed 2026-09-07.
 Trust this as a lead, not evidence; `CLAUDE.md`, `docs/specs/openapi.yaml` and
 `docs/specs/2026-08-08-mcp-tool-and-command-surface.md` outrank it.
 
@@ -27,6 +27,9 @@ Trust this as a lead, not evidence; `CLAUDE.md`, `docs/specs/openapi.yaml` and
 - The contract document for this surface is
   `docs/specs/2026-08-08-mcp-tool-and-command-surface.md` — §3 is the tool table, §3.4 the issue
   verbs, §6 the CLI, §8 what the checks are.
+- The **core** is `client/src/core/`: one file per concern, no folders under it. 022 T3a added
+  `markdown.ts` (TCMS spec markdown, both directions) and `processes.ts` (the five processes),
+  both pure and both exported from `client/src/index.ts`.
 - Registries: `mcp/src/tools.ts` (`whoami` + `shape` + `READ_TOOLS` + `WRITE_TOOLS`) and
   `cli/src/commands.ts` (`READS` + `WRITES`). Everything else derives from those two lists — **and
   that is load-bearing rather than tidy**: 012 T5 added 8 commands and 2 tools, and neither
@@ -44,6 +47,20 @@ Trust this as a lead, not evidence; `CLAUDE.md`, `docs/specs/openapi.yaml` and
   `set` as the issue key. `guideCopies.test.ts`'s parse has the same ceiling and had to move with it.
 
 ## Seams to reuse
+- **TCMS spec markdown** — `client/src/core/markdown.ts`, the only text↔`DocBlockInput[]`
+  converter and deliberately not an endpoint. `blocksFromMarkdown(text, {mode, current?,
+  dropLinked?})` → `{blocks, labels, warnings}` or throws `MarkdownError` (extends
+  `TcmsClientError`, so `describeFailure` maps it to `invalid_input`) naming the line;
+  `markdownFromBlocks(blocks)`; `anchorsFor(labels, page)` resolves a label to a block id **by
+  index**, because the response is the page in the order the blocks were sent. The `{#…}` anchor is
+  a UUID (an existing block's id, kept) or a label (a new block); the UUID test runs first and that
+  order is the rule. The linked-block refusal lives here, not behind a prompt: an edit that drops a
+  block cases claim is refused naming the block and the `sourceKey`s, unless `dropLinked`.
+- **The process catalogue** — `client/src/core/processes.ts`: `PROCESSES` (five), `processNamed`,
+  `processGuideFor` (long form, rendered like `guideFor`), `processCatalogue` (one line each).
+  A step carries `does · tool? · cli? · permission? · check · trap?`; `cli` absent means **the CLI
+  genuinely has no such command** — `tcms_orient` and `tcms_report` have none — and the renderer
+  says so rather than leaving the step looking complete.
 - **One shape catalogue, five renderers**: `client/src/core/shapes.ts`. `jsonSchemaFor` (MCP),
   `optionSpecFor` / `usageFor` / `flagOf` (CLI), `templateFor`, `guideFor`. A field added there
   reaches both adapters; a field hand-written on one is what `writes.test.ts` and `format.test.ts`
@@ -86,6 +103,13 @@ Trust this as a lead, not evidence; `CLAUDE.md`, `docs/specs/openapi.yaml` and
 - Every tool description ≤ 2 KB; `additionalProperties: false` on every input schema.
 - A conformance table with no entry for a registry row **fails**, never skips —
   `INVOCATIONS` in both `writeConformance.test.ts` files, `TOOL_FOR` / `COMMAND_FOR`.
+- **The catalogue↔surface pins are what a catalogue-before-adapter task collides with.**
+  `mcp/src/writes.test.ts` ("declares every field the catalogue offers") and
+  `cli/src/format.test.ts` ("gives every field a flag the command actually takes") both go red the
+  moment a `FieldSpec` has no argument behind it. 022 T3a landed the catalogue a task ahead of the
+  adapters, so each of those two tests carries a `PENDING_ON_THE_SURFACE` map — the gap, its cost,
+  pinned both ways — which 022 T3b empties and deletes. **A field added to `shapes.ts` reddens both
+  adapters' suites in the same run**; budget for it or record it there.
 - A shortfall is recorded in a named map with what it costs (`CREATE_WITHOUT_A_KEY`, `UNOFFERED`),
   and each map is pinned both ways so a stale entry fails too. **`UNOFFERED` is the one that finds
   a contract amendment nobody wired**: `shapesContract.test.ts` fails when a property of a shape's
@@ -140,6 +164,23 @@ Trust this as a lead, not evidence; `CLAUDE.md`, `docs/specs/openapi.yaml` and
   double compared to the contract.
 
 ## Session log
+- 2026-09-07 · delta (contract doc, `openapi.yaml`, generated schema, both adapters' `writes.ts` /
+  `reads.ts`, fixtures and `shapesContract.test.ts` had moved under 017–022 T2; `core/shapes.ts`
+  had not) · 022 T3a: `core/markdown.ts`, `core/processes.ts`, `CASE_SHAPE.verifies`, the plan
+  shape's six document-body fields, `DOC_PAGE_SHAPE.markdown`. Arrived **green** (563 packages
+  tests: cli 182 · client 138 · mcp 243); left green at **595** (client 170). Four things the plan
+  did not predict, three of them found by an existing check: the two catalogue↔surface pins cannot
+  stay green while the catalogue leads the adapters, so both gained a
+  `PENDING_ON_THE_SURFACE` map (T3b deletes them); `shapesContract`'s **nested** pin compared the
+  surface name to the contract's and had to learn `FieldSpec.contract` the way `contractSiteOf`
+  already had, or `verifies[].page` could not render to `pageId`; the CLI command is `case propose`
+  and both the plan and design §4.3 called it `case file`; and `tcms_orient` / `tcms_report` reach
+  **no** CLI command, so two process steps are MCP-only. `usageFor`'s "cannot be spelled in argv"
+  line indented each name rather than the line, which was invisible until the plan had three such
+  fields. Verified by hand as well as by suite: both worked examples in
+  `docs/specs/assets/spec-formatter/` parse to exactly the labelled-block counts their README
+  claims (52 and 32) and round-trip identically. **Nothing here is reachable from either adapter
+  until T3b** — the catalogue describes fields no tool yet accepts, which is what the two maps say.
 - 2026-09-04 · delta (contract doc, `openapi.yaml`, generated schema, `shapes.ts`, both registries
   and `sections.tsx` had all moved under 014 and 015; the cache's baseline predated both) · 016 T1:
   the time verbs. **Six** CLI commands (`time list|queue|rollup|log|submit|approve` — the plan said

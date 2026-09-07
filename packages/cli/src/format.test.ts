@@ -142,6 +142,32 @@ describe('the shape catalogue against the commands that declare it', () => {
     'suite.edit': 'suite edit',
   };
 
+  /**
+   * Catalogue fields whose flag is one task behind, each with what it costs.
+   *
+   * The CLI half of the map `mcp/src/writes.test.ts` carries, and the same rule: a shortfall is
+   * named with its cost and pinned both ways, so a stale entry fails as loudly as a new gap. 022
+   * splits the catalogue (T3a) from the adapters (T3b); this is what that split costs for one
+   * commit. **T3b empties this map and deletes it.**
+   *
+   * The object arrays are absent from it because argv cannot carry one at all — the criteria and
+   * the plan's sections travel in `--file`, and `spellableInArgv` skips them above.
+   */
+  const PENDING_ON_THE_SURFACE: Readonly<Record<string, string>> = {
+    'doc create does not take --from':
+      'The page as TCMS spec markdown. The flag takes the PATH of the file, unlike the MCP '
+      + 'argument, which takes the text; T3b reads it and converts it through core/markdown.ts.',
+    'doc edit does not take --from':
+      'The same, on the edit, where it also carries --drop-linked.',
+    ...Object.fromEntries(['create', 'edit'].flatMap((arm) =>
+      ['scope-text', 'out-of-scope-text', 'tag'].map((flag) => [
+        `plan ${arm} does not take --${flag}`,
+        'The plan document body. T3b adds the three flags argv can carry; the criteria and the '
+        + 'sections go in --file.',
+      ])),
+    ),
+  };
+
   it('gives every field a flag the command actually takes', () => {
     const gaps: string[] = [];
 
@@ -171,7 +197,9 @@ describe('the shape catalogue against the commands that declare it', () => {
       }
     }
 
-    expect(gaps).toEqual([]);
+    expect(gaps.filter((gap) => !(gap in PENDING_ON_THE_SURFACE))).toEqual([]);
+    expect(Object.keys(PENDING_ON_THE_SURFACE).filter((entry) => !gaps.includes(entry)))
+      .toEqual([]);
   });
 
   it('maps every body-carrying action the catalogue says this surface has', () => {
