@@ -237,6 +237,28 @@ public final class OutboxEvents {
      */
     public static final String ISSUES_CHANGED = "tracker.issues_changed";
 
+    /**
+     * A person accepted a generated proposal, and the case it became claims these blocks (022 §5).
+     *
+     * <p>An occurrence with a payload, for {@link #RUN_COMPLETED}'s reason — and the first name in
+     * this file whose consumer acts on <em>the list</em> the payload carries rather than rendering
+     * it. Coalescing would be unusable rather than merely lossy: "a proposal in this company was
+     * accepted" names no case, and its handler's whole job is to write one link per claimed block.
+     *
+     * <p><strong>Why an event and not a call.</strong> A proposal lives in {@code repository} and a
+     * link is {@code documentation}'s row; neither module may import the other, so the write cannot
+     * happen inside the accepting transaction however much one would like it to. What the accept
+     * does synchronously is <em>validate</em> — a target that no longer exists is a 400 on
+     * {@code verifies[n]} before the case is created — so what crosses here is a list already
+     * checked against the project, and the asynchrony costs the reviewer a projection's delay before
+     * the links appear rather than any chance of a wrong one.
+     *
+     * <p>Its handler is idempotent by leaning on the write it performs: linking a case to a block it
+     * is already linked to answers with the existing row and writes nothing, which is the ordinary
+     * link path's own contract rather than a promise this event's consumer has to keep separately.
+     */
+    public static final String PROPOSAL_ACCEPTED = "repository.proposal_accepted";
+
     private OutboxEvents() {
     }
 }

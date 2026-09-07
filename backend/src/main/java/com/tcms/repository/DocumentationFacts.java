@@ -1,6 +1,11 @@
 package com.tcms.repository;
 
 import jakarta.persistence.EntityManager;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import org.springframework.stereotype.Component;
 
 /**
@@ -71,6 +76,64 @@ class DocumentationFacts {
 
     DocumentationFacts(EntityManager entities) {
         this.entities = entities;
+    }
+
+    /**
+     * Which page each of these blocks is on, among the live pages of this project — the resolution
+     * behind a proposal's {@code verifies}, asked once at accept time.
+     *
+     * <h2>It answers a question, and deliberately fetches nothing</h2>
+     *
+     * <p>Two columns of ids, and the caller compares them to what it was told. That is what keeps
+     * this inside the seam's rule rather than beside it: the header above forbids the
+     * value-returning helper ("just fetch the links for these forty case ids"), and it would forbid
+     * a {@code blockTextsFor} just as squarely — the reviewer's screen resolves a claim into a page
+     * key and a block's text by <em>reading the page</em>, through {@code documentation}'s own
+     * endpoints, and nothing on the request path here may do it for them.
+     *
+     * <p>A {@link Map} keyed on the block rather than a set of pairs, because the caller has three
+     * distinct answers to give and only this shape carries them: the block is unknown (deleted, or
+     * another project's), the block is real but sits on a different page than the claim named, and
+     * the claim resolves. Collapsing the first two loses the sentence a reviewer needs.
+     *
+     * <h2>The project predicate, and why RLS is not enough</h2>
+     *
+     * <p>{@code CatalogueFacts}' rule read from this end: RLS bounds the statement to the company,
+     * and a sibling project's page <em>is</em> this company's — so without {@code p.project_id} a
+     * proposal could claim a block on a page belonging to a project the reviewer holds no grant on,
+     * and accepting it would write that project's page into this one's coverage matrix.
+     *
+     * <p>{@code p.deleted_at IS NULL} for the other half: a page in the recycle bin renders nowhere,
+     * so a link into it would be a claim with no destination — the state {@code BlockLinks} drops
+     * rather than draws.
+     *
+     * @param blockIds the claimed blocks. Empty is answered without a statement: {@code IN ()} is a
+     *                 syntax error in Postgres and Hibernate's rendering of an empty collection
+     *                 parameter is not something to rely on either way.
+     */
+    Map<UUID, UUID> pagesOfBlocks(UUID projectId, Collection<UUID> blockIds) {
+        if (blockIds.isEmpty()) {
+            return Map.of();
+        }
+
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = entities.createNativeQuery("""
+                SELECT b.id, p.id
+                  FROM doc_block b
+                  JOIN doc_page p ON p.id = b.page_id
+                 WHERE b.id IN (:blockIds)
+                   AND p.project_id = :projectId
+                   AND p.deleted_at IS NULL
+                """)
+                .setParameter("blockIds", blockIds)
+                .setParameter("projectId", projectId)
+                .getResultList();
+
+        Map<UUID, UUID> pageByBlock = new HashMap<>();
+        for (Object[] row : rows) {
+            pageByBlock.put((UUID) row[0], (UUID) row[1]);
+        }
+        return pageByBlock;
     }
 
     /**

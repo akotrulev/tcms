@@ -3,6 +3,7 @@ package com.tcms.repository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.tcms.api.UserRef;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -16,6 +17,18 @@ import java.util.UUID;
  * render a case being written.
  *
  * @param verdict       what the proposer claimed
+ * @param verifies      the requirements this case claims to verify, as they were filed —
+ *                      <strong>never null</strong>, {@code []} for a proposal that claimed nothing
+ *                      and for every proposal filed before {@code V14} existed. The contract has it
+ *                      in {@code AiProposal}'s required array, so a null here is a body no
+ *                      generated client type admits, and every reader would have to branch on
+ *                      absence to render an empty region.
+ *                      <p>Served <em>unresolved</em>: a target whose block has since been deleted is
+ *                      still listed, because that is precisely the claim a reviewer needs to see
+ *                      before pressing Accept and meeting the 400. Turning a target into a page key
+ *                      and the block's text is the reader's own read of the page — and it could not
+ *                      be done here in any case, since this module may not name a
+ *                      {@code documentation} table outside {@code DocumentationFacts}.
  * @param verdictSource who claimed it — {@code NONE} or {@code EXTERNAL}, never anything TCMS has
  *                      checked itself. Served beside the verdict rather than folded into it,
  *                      because a client that shows "grounded" without showing who says so is the
@@ -43,6 +56,7 @@ public record AiProposalView(
         CaseUpdateRequest testCase,
         ProposalVerdict verdict,
         VerdictSource verdictSource,
+        List<ProposalLink> verifies,
         JsonNode grounding,
         ProposalStatus status,
         Instant createdAt,

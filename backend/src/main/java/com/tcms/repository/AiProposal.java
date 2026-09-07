@@ -119,6 +119,20 @@ public class AiProposal {
     @Column(name = "grounding", updatable = false)
     private String grounding;
 
+    /**
+     * The blocks this case claims to verify, as JSON — {@code V14}'s column, and {@link #payload}'s
+     * treatment applied to a second free-standing claim.
+     *
+     * <p>A {@code String} for {@link #payload}'s reason, {@code @JdbcTypeCode(JSON)} because the
+     * column is {@code JSONB}, and not updatable because there is no {@code PATCH} on a proposal.
+     * Null when nothing was claimed, which is what every proposal filed before {@code V14} claimed;
+     * {@link AiProposalService} serves that as {@code []} rather than as an absent field, because
+     * the contract has {@code verifies} in {@code AiProposal}'s required array.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "verifies", updatable = false)
+    private String verifies;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
     private ProposalStatus status;
@@ -171,6 +185,7 @@ public class AiProposal {
             String title,
             ProposalVerdict claimed,
             String grounding,
+            String verifies,
             UUID authorId,
             UUID tokenId,
             String idempotencyKey,
@@ -189,6 +204,7 @@ public class AiProposal {
         // gets EXTERNAL. TCMS_VERIFIED is unreachable from here and from the CHECK in V43.
         proposal.verdictSource = claimed == null ? VerdictSource.NONE : VerdictSource.EXTERNAL;
         proposal.grounding = grounding;
+        proposal.verifies = verifies;
         proposal.status = ProposalStatus.PENDING;
         proposal.createdAt = now;
         proposal.createdBy = authorId;
@@ -253,6 +269,10 @@ public class AiProposal {
 
     public String getGrounding() {
         return grounding;
+    }
+
+    public String getVerifies() {
+        return verifies;
     }
 
     public ProposalStatus getStatus() {

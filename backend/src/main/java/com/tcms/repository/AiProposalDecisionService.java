@@ -1,16 +1,22 @@
 package com.tcms.repository;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tcms.project.GateResult;
 import com.tcms.project.ProjectService;
 import com.tcms.tenancy.AuditEvent;
 import com.tcms.tenancy.AuditEventRepository;
+import com.tcms.tenancy.Outbox;
+import com.tcms.tenancy.OutboxEvents;
 import com.tcms.tenancy.TokenContext;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import org.springframework.stereotype.Service;
@@ -52,6 +58,21 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Rejecting is gated identically. A credential that could clear the queue could hide its own bad
  * proposals, which is the same defeat with a quieter shape.
  *
+ * <h2>{@code verifies} is checked here and written elsewhere, and the split is forced</h2>
+ *
+ * <p>A proposal carries the blocks its case claims to verify (022 §5). Those claims were stored
+ * unvalidated a week ago and this is the moment they become real, so this class resolves every one
+ * of them against the project — through {@link DocumentationFacts}, before the case is created, as
+ * ordinary field errors on {@code verifies[n].blockId} — and then <strong>does not write the
+ * links</strong>, because a {@code doc_link} is {@code documentation}'s row and this module may not
+ * reach it. It records {@link OutboxEvents#PROPOSAL_ACCEPTED} instead, in this transaction, and that
+ * module's handler writes each link through the same path a person's link takes.
+ *
+ * <p>The order is the design and not an ordering of convenience: validating <em>after</em> the
+ * create would leave a case that exists, claims twelve requirements and is linked to eleven, and the
+ * reviewer would read the 400 as "nothing happened". Validating here means a proposal either becomes
+ * a case with all of its links or stays a proposal.
+ *
  * <h2>The accept is idempotent through the create path's own key</h2>
  *
  * <p>{@link CaseCreateService} is handed a synthetic {@code Idempotency-Key} derived from the
@@ -78,6 +99,22 @@ public class AiProposalDecisionService {
     private final AiProposalService rendering;
     private final CaseCreateService creation;
     private final AuditEventRepository auditEvents;
+
+    /**
+     * The one file in this module permitted to name a {@code documentation} table — here to answer
+     * whether every block a proposal claims is still a live statement of this project.
+     */
+    private final DocumentationFacts documentation;
+
+    /**
+     * How {@code documentation} is told to write the links, since it may not be called.
+     *
+     * <p>See {@link OutboxEvents#PROPOSAL_ACCEPTED}. The event is recorded inside this transaction,
+     * so the notice and the decision commit together; what it carries is the list this class has
+     * just resolved, so the consumer never has to ask a question it is not allowed to ask.
+     */
+    private final Outbox outbox;
+
     private final ObjectMapper json;
     private final Clock clock;
 
@@ -88,6 +125,8 @@ public class AiProposalDecisionService {
             AiProposalService rendering,
             CaseCreateService creation,
             AuditEventRepository auditEvents,
+            DocumentationFacts documentation,
+            Outbox outbox,
             ObjectMapper json,
             Clock clock) {
 
@@ -96,6 +135,8 @@ public class AiProposalDecisionService {
         this.rendering = rendering;
         this.creation = creation;
         this.auditEvents = auditEvents;
+        this.documentation = documentation;
+        this.outbox = outbox;
         this.json = json;
         this.clock = clock;
     }
@@ -181,6 +222,16 @@ public class AiProposalDecisionService {
                     "This proposal can no longer be read as a test case. Reject it.")));
         }
 
+        List<ProposalLink> claims = verifies(proposal);
+        Map<String, List<String>> claimErrors = resolveClaims(proposal.getProjectId(), claims);
+        if (!claimErrors.isEmpty()) {
+            // BEFORE the create, so a proposal either becomes a case with all of its links or stays
+            // a proposal. Afterwards would leave a case that exists, claims twelve requirements and
+            // is linked to eleven — and the only signal would be a 400 the reviewer reads as
+            // "nothing happened".
+            return new Outcome.Invalid(claimErrors);
+        }
+
         CaseCreateService.Outcome created = creation.create(
                 userId,
                 proposal.getProjectId(),
@@ -200,14 +251,19 @@ public class AiProposalDecisionService {
                 // The create path had already seen this key: a previous accept created the case and
                 // the decision columns did not commit with it, which the shared transaction should
                 // make impossible. Recorded as accepted now rather than left half-decided.
-                yield new Outcome.Accepted(record(userId, proposal, replayed.view()));
+                yield new Outcome.Accepted(record(userId, proposal, claims, replayed.view()));
             }
             case CaseCreateService.Outcome.Created fresh ->
-                    new Outcome.Accepted(record(userId, proposal, fresh.view()));
+                    new Outcome.Accepted(record(userId, proposal, claims, fresh.view()));
         };
     }
 
-    private TestCaseDetailView record(UUID userId, AiProposal proposal, TestCaseDetailView view) {
+    private TestCaseDetailView record(
+            UUID userId,
+            AiProposal proposal,
+            List<ProposalLink> claims,
+            TestCaseDetailView view) {
+
         Instant now = clock.instant();
         proposal.accepted(view.id(), userId, now);
         proposals.save(proposal);
@@ -222,10 +278,100 @@ public class AiProposalDecisionService {
                 // a case like any other and its history must say so. What this line adds is the
                 // provenance: which case, and what the proposer had claimed about it.
                 "{\"caseKey\":\"" + view.key() + "\",\"verdictSource\":\""
-                        + proposal.getVerdictSource() + "\"}",
+                        + proposal.getVerdictSource() + "\",\"verifies\":" + claims.size() + "}",
                 now));
 
+        if (!claims.isEmpty()) {
+            // Inside this transaction, which Outbox.record refuses to be called outside of: the
+            // event and the decision it describes commit together, so there is no window where a
+            // case exists claiming twelve requirements and the notice to link them was lost.
+            //
+            // Nothing when nothing was claimed. An event whose handler would iterate an empty list
+            // is a whole delivery cycle to do nothing, and — worse for whoever is reading the table
+            // — a row per accepted proposal that says something happened.
+            outbox.record(
+                    ProposalAcceptedEvent.AGGREGATE,
+                    proposal.getId(),
+                    OutboxEvents.PROPOSAL_ACCEPTED,
+                    new ProposalAcceptedEvent(
+                            proposal.getId(),
+                            proposal.getProjectId(),
+                            view.id(),
+                            userId,
+                            claims));
+        }
+
         return view;
+    }
+
+    /**
+     * Resolves every claimed target against the project, and answers the field errors for the
+     * misses.
+     *
+     * <h2>Here, at accept, and nowhere else</h2>
+     *
+     * <p>The claim was stored unvalidated with the payload beside it, on {@link AiProposalService}'s
+     * argument: whether a block exists is a question about the project's <em>current</em>
+     * documentation, and a proposal may sit in the queue for a week. This is the one moment it
+     * becomes real, so it is the one moment it is asked — and the answer arrives as ordinary field
+     * errors on the reviewer's screen rather than as an agent's batch refused a week earlier.
+     *
+     * <p>Keyed {@code verifies[n].blockId}, indexed, because a proposal may claim twelve
+     * requirements and <em>one of them is gone</em> is not something a reviewer can act on. The page
+     * mismatch is reported on the same key rather than on {@code pageId}: what the reviewer is being
+     * told is that this claim does not name a statement of this project's documentation, and which
+     * half of the pair is wrong is a distinction only the filing agent could act on.
+     *
+     * <p>Through {@link DocumentationFacts}, which is the one file in this module permitted to name
+     * a {@code documentation} table — a JPA association or a repository of its own would be the
+     * second, and the module rule is that a reviewer finds every crossing by opening one class.
+     */
+    private Map<String, List<String>> resolveClaims(UUID projectId, List<ProposalLink> claims) {
+        if (claims.isEmpty()) {
+            return Map.of();
+        }
+
+        Set<UUID> blockIds = new LinkedHashSet<>();
+        for (ProposalLink claim : claims) {
+            blockIds.add(claim.blockId());
+        }
+        Map<UUID, UUID> pageByBlock = documentation.pagesOfBlocks(projectId, blockIds);
+
+        Map<String, List<String>> errors = new LinkedHashMap<>();
+        for (int index = 0; index < claims.size(); index++) {
+            ProposalLink claim = claims.get(index);
+            UUID actualPage = pageByBlock.get(claim.blockId());
+            if (actualPage == null) {
+                errors.put("verifies[" + index + "].blockId", List.of(
+                        "This requirement is no longer in this project's documentation. Remove the "
+                                + "claim, or reject the proposal."));
+            } else if (!actualPage.equals(claim.pageId())) {
+                errors.put("verifies[" + index + "].blockId", List.of(
+                        "This block is not on the page the proposal named. Remove the claim, or "
+                                + "reject the proposal."));
+            }
+        }
+        return errors;
+    }
+
+    /**
+     * What the proposal claimed, out of its column — empty for a row that claimed nothing, and for
+     * an unreadable one.
+     *
+     * <p>{@link #deserialize}'s reason applied to the second JSON column: a claim list that cannot
+     * be parsed must not stop the reviewer accepting or rejecting the proposal. What it costs is the
+     * links, which is visible on the case, rather than a 500 on a decision.
+     */
+    private List<ProposalLink> verifies(AiProposal proposal) {
+        if (proposal.getVerifies() == null) {
+            return List.of();
+        }
+        try {
+            return json.readValue(
+                    proposal.getVerifies(), new TypeReference<List<ProposalLink>>() { });
+        } catch (JsonProcessingException unreadable) {
+            return List.of();
+        }
     }
 
     /**

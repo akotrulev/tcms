@@ -468,6 +468,12 @@ class ContractConventionTest {
             Map.entry("IssueLink", List.of(com.tcms.documentation.IssueLinkView.class)),
             Map.entry("IssueLinkInput", List.of(com.tcms.documentation.IssueLinkInput.class)),
             Map.entry("AiProposalInput", List.of(com.tcms.repository.AiProposalInput.class)),
+            // ONE record for both directions, unlike every other input/view pair in this map. The
+            // contract points AiProposalInput.verifies and AiProposal.verifies at the same schema
+            // because the claim is served exactly as it was stored — nothing is resolved,
+            // defaulted or derived between the two — so a second record would be two declarations
+            // of one shape with no member that could ever differ. See ProposalLink's header.
+            Map.entry("ProposalLinkInput", List.of(com.tcms.repository.ProposalLink.class)),
             Map.entry("AiProposalSummary",
                     List.of(com.tcms.repository.AiProposalSummaryView.class)),
             Map.entry("ApiToken", List.of(com.tcms.identity.ApiTokenView.class)),

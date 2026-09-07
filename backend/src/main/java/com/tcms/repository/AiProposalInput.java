@@ -1,6 +1,7 @@
 package com.tcms.repository;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import java.util.List;
 
 /**
  * {@code AiProposalInput} in {@code docs/specs/openapi.yaml} — a generated case being filed for
@@ -29,13 +30,24 @@ import com.fasterxml.jackson.databind.JsonNode;
  *                  same as {@code UNVERIFIED}: both store the verdict {@code UNVERIFIED}, and they
  *                  differ in the source column — nobody claimed anything, versus an agent claimed
  *                  it had not checked. The reviewer sees a different sentence for each.
+ * @param verifies  the requirements this case claims to verify, or absent — which means {@code []},
+ *                  and is what every proposal filed before {@code V14} claimed. Stored as sent and
+ *                  resolved at accept, for the same reason {@link #testCase()} is: whether a block
+ *                  still exists is a question about the project a week from now, not today. What is
+ *                  judged here is only what can be judged without the project's state — that each
+ *                  entry names both ids — which is {@link ProposalLink}'s two required members and
+ *                  nothing else.
  * @param grounding per-step findings, including rejections and unverified claims (§6w.6). Free-form
  *                  on purpose: it is evidence produced by somebody else's critic, and a schema here
  *                  would refuse the parts this product has not thought of. It is displayed, never
- *                  interpreted — and never as HTML.
+ *                  interpreted — and never as HTML. <strong>Not where a {@code verifies} claim may
+ *                  travel</strong>: a target read out of an object this product promises never to
+ *                  interpret is a second interpretation nobody can validate, which is why the field
+ *                  above exists rather than a convention about a key in here.
  */
 public record AiProposalInput(
         CaseUpdateRequest testCase,
         ProposalVerdict verdict,
+        List<ProposalLink> verifies,
         JsonNode grounding) {
 }

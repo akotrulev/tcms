@@ -1,6 +1,6 @@
 # be-java — orientation cache
 
-Baseline: 022 T1, refreshed 2026-09-07 (`f9b0b01b`).
+Baseline: 022 T2, refreshed 2026-09-07 (`7e49c48c`).
 Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
 
 ## Version lane
@@ -21,8 +21,8 @@ Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
   `V5__tracker_board.sql`, `V6__release.sql`, `V7__import.sql`, `V8__agent.sql`,
   `V9__time.sql`. ~~head `V71` (B2)~~ ~~the next number is `V2`~~ ~~→ `V5`~~ ~~→ `V6`~~ ~~→ `V7`~~
   ~~→ `V8`~~ ~~→ `V9`~~ ~~→ `V10`~~ → `V10__staffing.sql`, `V11__crm_clients.sql`,
-  `V12__billing.sql` and `V13__three_boards_and_blocking.sql` have since landed, so **the next
-  number is `V14`**. `out-of-order` is unset, so a lower number arriving after a higher one is silently not
+  `V12__billing.sql`, `V13__three_boards_and_blocking.sql` and `V14__proposal_verifies.sql` have
+  since landed, so **the next number is `V15`**. `out-of-order` is unset, so a lower number arriving after a higher one is silently not
   applied — `ls` the directory before writing.
 
 ## Seams to reuse
@@ -63,6 +63,17 @@ Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
   `stripTrailingZeros()`ed value so a whole number reads as scale ≤ 0.
 - `project.PeopleDirectory` is the display-name seam reachable from a `tracker` sub-package;
   `tracker.TrackerPeople` is package-private and is not.
+- **A `@Transactional` on a package-private method is SILENTLY IGNORED** — Spring's proxy is
+  `publicMethodsOnly`. Two ungated package-private seams rely on this being known:
+  `identity.ApiTokenService.mintOwned`/`revokeOwned` (caller is already in a transaction) and
+  `documentation.BlockLinkService.linkAccepted` (022 T2 — the boundary is on the public
+  `LinkAcceptedProposal.handle` instead). Writing the annotation there compiles, reads correctly and
+  removes the boundary.
+- **The outbox is drivable from a test**: `dispatcher.dispatchDue()` inside
+  `CompanyContext.open(companyId)` and **outside any transaction** (it refuses one). A `PENDING` row
+  is due immediately; a re-delivery is `UPDATE outbox SET status='PENDING', next_attempt_at = now()
+  - interval '1 hour'` — there is no lease column. `AiProposalEndpointTest$Verifies` and
+  `NotificationDeliveryTest` are the two users.
 
 - `tracker.release` (013 T3) — the release module, and **`ReleaseFacts` is the ONE file in
   `tracker` naming `test_case`, `case_health`, `execution_fact` or `test_run`.**
@@ -224,6 +235,38 @@ Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
   endpoints answer 400 on a blank name, which the contract does not list — invisible to every gate.
 
 ## Session log
+
+- 2026-09-07 022 T2: `be`. `verifies` on a proposal, end to end. `V14__proposal_verifies.sql`
+  (one nullable JSONB column, no policy — a policy is per table and `ai_proposal` has one);
+  `ProposalLink` (**one record for both directions**, paired to `ProposalLinkInput` in
+  `RESPONSE_RECORDS`); `AiProposal.verifies` + the `file` parameter; the field on `AiProposalInput`
+  and `AiProposalView`; `DocumentationFacts.pagesOfBlocks` (the seam's second method, and it returns
+  **ids only** — no text, or it becomes the value-returning helper its header forbids);
+  `ProposalAcceptedEvent` / `OutboxEvents.PROPOSAL_ACCEPTED` / `documentation`'s
+  `ProposalAcceptedPayload` + `LinkAcceptedProposal`; `BlockLinkService.linkAccepted`. ERD §4 gained
+  a whole `### ai_proposal` subsection. **Gate on shanks: 4075 tests, BUILD SUCCESSFUL**, both
+  `ContractConventionTest` checks T1 left red now green; frontend build clean.
+  Four things worth carrying:
+  - **`@Transactional` on a package-private method is silently ignored** (`publicMethodsOnly`), so
+    `BlockLinkService.linkAccepted` deliberately carries none and the boundary is on
+    `LinkAcceptedProposal.handle`, which is public. The cache already recorded this for
+    `ApiTokenService.mintOwned`; this is the second instance and the first where the annotation had
+    been written before the rule was remembered.
+  - **The ungated seam beside a gated service**, `mintOwned`'s shape: an outbox handler has no
+    session, and re-asking for `doc:edit` there could only fail *after* the case exists — dropping
+    the links silently on a thread with nowhere to report it. Every role that can accept holds
+    `doc:edit` anyway (Automation Service is the one holder of `case:create` without it, and a
+    credential may not accept at all), but that is the corroborating half, not the reason.
+  - **The relationship vocabulary is checked at FILE time**, unlike everything else about a
+    proposal: three fixed words cannot have moved by accept, and the alternative was a silently
+    invented `VERIFIES` or a `DEAD` outbox row a week later. `AiProposalService.RELATIONSHIPS` is a
+    documented copy of `documentation.LinkRelationship` — the modules may not see each other and
+    `api` is not where a second module's vocabulary goes (`EXCERPT_LIMIT`'s precedent).
+  - **The ERD (`2026-07-30`) predates `ai_proposal` entirely** — the plan's "the `ai_proposal` row
+    gains `verifies`" named a row that does not exist. Anything assuming that document covers a
+    post-July table should `grep` before believing it.
+  **No screen renders any of this**: `ProposalPage` shows the claimed requirements in T4, and the
+  links reach `TestCase.relatedDocuments` a projection later, never in the accept response.
 
 - 2026-09-07 022 T1: `contract`. `ProposalLinkInput` (`pageId`/`blockId`/`relationship`, the
   `BlockLinkInput` enum and its `VERIFIES` default), `AiProposalInput.verifies` (optional, absent

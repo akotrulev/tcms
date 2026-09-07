@@ -213,6 +213,92 @@ public class BlockLinkService {
         }));
     }
 
+    /**
+     * Records the link a person consented to when they accepted a generated proposal (022 §5).
+     *
+     * <h2>Ungated, and the gate is not missing — it was passed elsewhere</h2>
+     *
+     * <p>{@code ApiTokenService.mintOwned}'s shape: a package-private seam beside a gated public
+     * one, for a caller that has already cleared its own gate. Here the caller is
+     * {@code LinkAcceptedProposal}, running on an outbox thread with no request and no session, and
+     * what it is delivering is a decision a <em>person</em> made minutes ago under
+     * {@code case:create} — plus the credential refusal that makes accepting a human act at all.
+     *
+     * <p>Re-asking for {@code doc:edit} here would be a second gate on a decision already taken, and
+     * it could only ever fail <em>after</em> the case exists: the links would be dropped, silently,
+     * on a thread with nowhere to report it, and the reviewer would see an accepted case claiming
+     * twelve requirements and linked to none. The roles say the check would also decide nothing —
+     * every role that can accept holds {@code doc:edit} (roles spec §A3; Automation Service is the
+     * one holder of {@code case:create} without it, and a credential may not accept). That is the
+     * weaker half of the argument and is stated second on purpose: the reason is the shape of the
+     * consent, not the current contents of a matrix somebody may edit.
+     *
+     * <p>What is <strong>not</strong> relaxed is the target check. The page must still be a live page
+     * of this project and the block must still be on it — {@link #link}'s two predicates, run again
+     * here, because minutes pass between the accept and the delivery and the accept's own validation
+     * cannot see them.
+     *
+     * <h2>NO {@code @Transactional} HERE, and that is not an omission</h2>
+     *
+     * <p>The method is package-private, and Spring's proxy-based transaction management is
+     * {@code publicMethodsOnly} — an annotation on a non-public method is <strong>silently
+     * ignored</strong>, which is a missing boundary with no symptom until two writes that had to
+     * commit together do not. {@code ApiTokenService}'s two ungated seams carry the same rule for
+     * the same reason. The boundary is on {@link LinkAcceptedProposal#handle}, which is public and
+     * is the only caller.
+     *
+     * @return whether a row was written. False means the target has gone since the accept, which is
+     *         a delivery rather than a failure ({@code TrackerDefectLinkBackstop}'s rule: retrying
+     *         cannot make a deleted block exist), or that the link was already there — the
+     *         idempotent case the handler leans on rather than keys itself.
+     */
+    boolean linkAccepted(
+            UUID projectId,
+            UUID pageId,
+            UUID blockId,
+            UUID caseId,
+            LinkRelationship relationship,
+            UUID acceptedBy) {
+
+        Optional<DocPage> page = pages.findLiveInProject(projectId, pageId);
+        if (page.isEmpty()) {
+            return false;
+        }
+        boolean onThisPage = blocks.findForPage(page.get().getId()).stream()
+                .anyMatch(block -> block.getId().equals(blockId));
+        if (!onThisPage) {
+            return false;
+        }
+
+        Optional<CatalogueFacts.CatalogueRef> source =
+                catalogue.find(projectId, LinkSourceType.TEST_CASE, caseId);
+        if (source.isEmpty()) {
+            // The accepted case was deleted between the decision and this delivery. Nothing to link
+            // from, and no retry makes it come back.
+            return false;
+        }
+
+        if (links.findForSource(blockId, LinkSourceType.TEST_CASE, caseId).isPresent()) {
+            // The re-delivery arm, and the whole of this handler's idempotency: at-least-once
+            // means this runs again for links it already wrote, and the create path's own "two
+            // people recording the same coverage is agreement, not conflict" answers it. No row,
+            // no audit line, no outbox notice — see the Existing arm above.
+            return false;
+        }
+
+        Instant now = clock.instant();
+        DocLink created = links.save(DocLink.toBlock(
+                LinkSourceType.TEST_CASE, caseId, blockId, relationship, acceptedBy, now));
+
+        // The same audit action a person's link writes, deliberately: the row IS a person's link —
+        // made on their instruction, attributed to them, indistinguishable from one they clicked.
+        // A separate action would put the distinction §5 spent its argument removing back into the
+        // audit trail.
+        audit(projectId, acceptedBy, "doc_link.created", created, source.get(), now);
+        outbox.recordCoalesced(OutboxEvents.DOC_LINKS_CHANGED);
+        return true;
+    }
+
     /** Removes a link. */
     @Transactional
     public Outcome unlink(UUID userId, UUID projectId, UUID pageId, UUID linkId) {

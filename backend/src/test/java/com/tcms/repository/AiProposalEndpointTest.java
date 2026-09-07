@@ -125,6 +125,14 @@ class AiProposalEndpointTest extends IntegrationTestBase {
     @Autowired
     private TransactionTemplate tx;
 
+    /**
+     * Driven by hand, because the links a proposal's {@code verifies} becomes are written by an
+     * outbox handler in {@code documentation} and the scheduler's floor is about a minute.
+     * {@code NotificationDeliveryTest}'s shape.
+     */
+    @Autowired
+    private com.tcms.tenancy.OutboxDispatcher dispatcher;
+
     @BeforeEach
     void seed() throws SQLException {
         Instant now = Instant.now();
@@ -174,6 +182,14 @@ class AiProposalEndpointTest extends IntegrationTestBase {
                 execute(connection, "DELETE FROM audit_event");
                 execute(connection, "DELETE FROM api_token_lookup");
                 execute(connection, "DELETE FROM api_token");
+                // The `verifies` slice's four. `outbox` first, so a proposal_accepted notice one
+                // test recorded is never delivered inside another — the dispatcher is driven by
+                // hand here and would otherwise link a case that test knows nothing about.
+                // Then the link before the block before the page, which is the FK order.
+                execute(connection, "DELETE FROM outbox");
+                execute(connection, "DELETE FROM doc_link");
+                execute(connection, "DELETE FROM doc_block");
+                execute(connection, "DELETE FROM doc_page");
                 execute(connection, "DELETE FROM ai_proposal");
                 execute(connection, "DELETE FROM test_case");
                 execute(connection, "DELETE FROM suite");
@@ -814,6 +830,222 @@ class AiProposalEndpointTest extends IntegrationTestBase {
         }
     }
 
+    @Nested
+    @DisplayName("Verifies — the requirements a proposal claims, and the links they become")
+    class Verifies {
+
+        @Test
+        @DisplayName("a proposal carries its claims back exactly as filed")
+        void theClaimsRoundTrip() throws Exception {
+            Page spec = page("Refunds", "A refund lands within 30 days", "Nothing is charged");
+
+            UUID id = idOf(file(ENGINEER, ACME, ACME_BANKING, null,
+                    fullProposalVerifying("Refund a payment", spec.id(), spec.block(0), null)));
+
+            JsonNode filed = bodyOf(findOne(ENGINEER, ACME, ACME_BANKING, id));
+            assertThat(filed.get("verifies")).hasSize(1);
+            assertThat(filed.get("verifies").get(0).get("pageId").asText())
+                    .isEqualTo(spec.id().toString());
+            assertThat(filed.get("verifies").get(0).get("blockId").asText())
+                    .isEqualTo(spec.block(0).toString());
+            assertThat(filed.get("verifies").get(0).get("relationship").isNull())
+                    .as("stored as sent — the default is the link path's, applied when the row is "
+                            + "written, not a value this endpoint invents on the way in")
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("a proposal that claimed nothing serves [], never an absent field")
+        void nothingClaimedIsTheEmptyArray() throws Exception {
+            JsonNode body = bodyOf(file(ENGINEER, ACME, ACME_BANKING, null, proposal("Refund")));
+
+            assertThat(body.get("verifies").isArray())
+                    .as("AiProposal.verifies is in the contract's required array, so an absent key "
+                            + "is a body no generated client type admits")
+                    .isTrue();
+            assertThat(body.get("verifies")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("A CLAIM NAMING A BLOCK THAT IS GONE IS FILED, and refused at accept")
+        void anUnknownBlockIsFiledAndRefusedAtAccept() throws Exception {
+            // The same bargain the payload is stored under, one field over: whether a block exists
+            // is a question about the project's documentation AT ACCEPT TIME. Filing must succeed
+            // — otherwise an agent's whole batch is lost to a page somebody tidied — and the
+            // reviewer meets the failure with the index of the claim in hand.
+            Page spec = page("Refunds", "A refund lands within 30 days");
+            UUID id = idOf(file(ENGINEER, ACME, ACME_BANKING, null, fullProposalVerifying(
+                    "Refund a payment", spec.id(), UUID.randomUUID(), null)));
+
+            MvcResult refused = accept(ENGINEER, ACME, ACME_BANKING, id);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(refused.getResponse().getContentAsString())
+                    .as("indexed, because 'one of twelve is gone' is not something a reviewer can "
+                            + "act on")
+                    .contains("verifies[0].blockId");
+            assertThat(storedStatus(ACME, id))
+                    .as("a failed accept decides nothing")
+                    .isEqualTo("PENDING");
+            assertThat(countCases(ACME))
+                    .as("the check runs BEFORE the create, so a proposal either becomes a case "
+                            + "with all its links or stays a proposal")
+                    .isZero();
+        }
+
+        @Test
+        @DisplayName("a block of ANOTHER page of this project is refused too")
+        void theBlockMustBeOnThePageTheProposalNamed() throws Exception {
+            Page refunds = page("Refunds", "A refund lands within 30 days");
+            Page charges = page("Charges", "A charge is authorised before capture");
+
+            UUID id = idOf(file(ENGINEER, ACME, ACME_BANKING, null, fullProposalVerifying(
+                    "Refund a payment", refunds.id(), charges.block(0), null)));
+
+            MvcResult refused = accept(ENGINEER, ACME, ACME_BANKING, id);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(refused.getResponse().getContentAsString())
+                    .as("a block resolves against the page it belongs to and nothing else, so "
+                            + "without the pair check the link would render on a document nobody "
+                            + "meant")
+                    .contains("verifies[0].blockId");
+        }
+
+        @Test
+        @DisplayName("a relationship outside the three is refused AT FILE TIME")
+        void anUnknownRelationshipIsRefusedOnTheWayIn() throws Exception {
+            Page spec = page("Refunds", "A refund lands within 30 days");
+
+            MvcResult refused = file(ENGINEER, ACME, ACME_BANKING, null, fullProposalVerifying(
+                    "Refund a payment", spec.id(), spec.block(0), "COVERS"));
+
+            // Not "waits for accept" like everything else: a vocabulary of three fixed words is
+            // exactly what can be judged without the project's state, and leaving it would mean
+            // either a silently invented VERIFIES or a dead outbox row a week later.
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(refused.getResponse().getContentAsString())
+                    .contains("verifies[0].relationship");
+            assertThat(countProposals(ACME)).isZero();
+        }
+
+        @Test
+        @DisplayName("a claim with no block id is refused at file time — the only shape check")
+        void bothIdsAreRequired() throws Exception {
+            String body = """
+                    {"testCase": {"title": "Refund"},
+                     "verifies": [{"pageId": "%s"}]}
+                    """.formatted(UUID.randomUUID());
+
+            MvcResult refused = file(ENGINEER, ACME, ACME_BANKING, null, body);
+
+            assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+            assertThat(refused.getResponse().getContentAsString())
+                    .contains("verifies[0].blockId");
+        }
+
+        @Test
+        @DisplayName("ACCEPTING WRITES THE LINK, through the ordinary link path")
+        void acceptLinksTheCaseToEveryClaimedBlock() throws Exception {
+            // THE test of this slice. An agent that generates a case FOR a requirement can say so,
+            // and a person accepting is what turns the claim into coverage — with the resulting
+            // doc_link indistinguishable from one somebody made by hand, exactly as the accepted
+            // case is indistinguishable from one somebody authored.
+            Page spec = page("Refunds", "A refund lands within 30 days", "Nothing is charged");
+            UUID id = idOf(file(ENGINEER, ACME, ACME_BANKING, null, fullProposalVerifying(
+                    "Refund a payment", spec.id(), spec.block(0), null)));
+
+            String caseKey = bodyOf(accept(ENGINEER, ACME, ACME_BANKING, id)).get("key").asText();
+            deliver(ACME);
+
+            JsonNode links = linksOn(spec, 0);
+            assertThat(links).hasSize(1);
+            assertThat(links.get(0).get("sourceType").asText()).isEqualTo("TEST_CASE");
+            assertThat(links.get(0).get("sourceKey").asText()).isEqualTo(caseKey);
+            assertThat(links.get(0).get("relationship").asText())
+                    .as("absent means VERIFIES, which is the contract's default and the column's")
+                    .isEqualTo("VERIFIES");
+            assertThat(linksOn(spec, 1))
+                    .as("only the block that was claimed — a page-wide link would make every "
+                            + "statement on the page read as covered")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("two claims become two links, and the relationship sent is the one written")
+        void everyClaimIsWritten() throws Exception {
+            Page spec = page("Refunds", "A refund lands within 30 days", "Nothing is charged");
+            String body = """
+                    {"testCase": {"title": "Refund a payment", "suiteId": "%s",
+                                  "stepFormat": "STRUCTURED", "priority": "MEDIUM",
+                                  "automationStatus": "MANUAL",
+                                  "steps": [{"action": "Open", "expectedResult": "It opens"}]},
+                     "verifies": [{"pageId": "%s", "blockId": "%s"},
+                                  {"pageId": "%s", "blockId": "%s", "relationship": "REFERENCES"}]}
+                    """.formatted(PAYMENTS, spec.id(), spec.block(0), spec.id(), spec.block(1));
+
+            UUID id = idOf(file(ENGINEER, ACME, ACME_BANKING, null, body));
+            accept(ENGINEER, ACME, ACME_BANKING, id);
+            deliver(ACME);
+
+            assertThat(linksOn(spec, 0).get(0).get("relationship").asText()).isEqualTo("VERIFIES");
+            assertThat(linksOn(spec, 1).get(0).get("relationship").asText())
+                    .as("only VERIFIES is coverage; the other two are claims somebody chose not to "
+                            + "state as proof, and the handler must not flatten them")
+                    .isEqualTo("REFERENCES");
+        }
+
+        @Test
+        @DisplayName("delivering twice writes one link — the handler leans on the link path")
+        void deliveryIsIdempotent() throws Exception {
+            Page spec = page("Refunds", "A refund lands within 30 days");
+            UUID id = idOf(file(ENGINEER, ACME, ACME_BANKING, null, fullProposalVerifying(
+                    "Refund a payment", spec.id(), spec.block(0), null)));
+            accept(ENGINEER, ACME, ACME_BANKING, id);
+
+            deliver(ACME);
+            redeliver(ACME);
+
+            // Outbox delivery is at least once. Nothing here keys on the delivery having happened;
+            // what answers a repeat is BlockLinkService's own rule that re-asserting a recorded
+            // fact is not an error — and a second row would double every count over this table.
+            assertThat(linksOn(spec, 0)).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("a proposal claiming nothing records no event at all")
+        void nothingClaimedIsNoNotice() throws Exception {
+            UUID id = idOf(file(ENGINEER, ACME, ACME_BANKING, null, fullProposal("Refund")));
+
+            accept(ENGINEER, ACME, ACME_BANKING, id);
+
+            assertThat(outboxEventTypes(ACME))
+                    .as("an event whose handler would iterate an empty list is a delivery cycle to "
+                            + "do nothing, and a row per accepted proposal saying something "
+                            + "happened")
+                    .doesNotContain("repository.proposal_accepted");
+        }
+
+        @Test
+        @DisplayName("a page deleted between the accept and the delivery loses the link, not the case")
+        void aVanishedPageIsADeliveryRatherThanAFailure() throws Exception {
+            Page spec = page("Refunds", "A refund lands within 30 days");
+            UUID id = idOf(file(ENGINEER, ACME, ACME_BANKING, null, fullProposalVerifying(
+                    "Refund a payment", spec.id(), spec.block(0), null)));
+            accept(ENGINEER, ACME, ACME_BANKING, id);
+            softDeletePage(ACME, spec.id());
+
+            deliver(ACME);
+
+            // Retrying cannot make a deleted page exist, so throwing would exhaust the row into a
+            // DEAD state meaning "this event was fine". The case stays; the claim it made is
+            // visible on the proposal, which is where a reviewer would look for it.
+            assertThat(outboxStatuses(ACME, "repository.proposal_accepted"))
+                    .containsExactly("SENT");
+            assertThat(countCases(ACME)).isEqualTo(1);
+        }
+    }
+
     // =====================================================================
     // Fixture plumbing
     // =====================================================================
@@ -843,6 +1075,162 @@ class AiProposalEndpointTest extends IntegrationTestBase {
                               "steps": [{"action": "Open the order",
                                          "expectedResult": "It opens"}]}}
                 """.formatted(title, PAYMENTS);
+    }
+
+    /**
+     * {@link #fullProposal} plus one claim, so the two helpers differ in exactly the field under
+     * test.
+     *
+     * @param relationship null to send no key at all — the ordinary case, and the one that proves
+     *                     the default is applied where the row is written rather than here
+     */
+    private static String fullProposalVerifying(
+            String title, UUID pageId, UUID blockId, String relationship) {
+
+        String claim = relationship == null
+                ? "{\"pageId\": \"%s\", \"blockId\": \"%s\"}".formatted(pageId, blockId)
+                : "{\"pageId\": \"%s\", \"blockId\": \"%s\", \"relationship\": \"%s\"}"
+                        .formatted(pageId, blockId, relationship);
+
+        return """
+                {"testCase": {"title": "%s",
+                              "suiteId": "%s",
+                              "stepFormat": "STRUCTURED",
+                              "priority": "MEDIUM",
+                              "automationStatus": "MANUAL",
+                              "steps": [{"action": "Open the order",
+                                         "expectedResult": "It opens"}]},
+                 "verifies": [%s]}
+                """.formatted(title, PAYMENTS, claim);
+    }
+
+    /** A documentation page in {@link #ACME_BANKING}, and the ids of the blocks on it. */
+    private record Page(UUID id, List<UUID> blocks) {
+
+        UUID block(int index) {
+            return blocks.get(index);
+        }
+    }
+
+    /**
+     * Creates a page through the ordinary endpoint rather than by INSERT.
+     *
+     * <p>Block ids are server-generated and are the thing under test here — a fixture that chose
+     * them would be asserting against ids the product never issued, and would not notice the day
+     * the create path stopped returning them.
+     */
+    private Page page(String title, String... paragraphs) throws Exception {
+        StringBuilder blocks = new StringBuilder();
+        for (String paragraph : paragraphs) {
+            if (!blocks.isEmpty()) {
+                blocks.append(",");
+            }
+            blocks.append("{\"blockType\": \"paragraph\", \"text\": \"")
+                    .append(paragraph)
+                    .append("\"}");
+        }
+
+        MvcResult created = mvc.perform(MockMvcRequestBuilders
+                        .post("/api/v1/projects/" + ACME_BANKING + "/doc-pages")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(ENGINEER, ACME))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\": \"" + title + "\", \"blocks\": [" + blocks + "]}"))
+                .andReturn();
+
+        assertThat(created.getResponse().getStatus())
+                .as("the fixture itself must land, or every assertion below is about nothing")
+                .isEqualTo(201);
+
+        JsonNode body = bodyOf(created);
+        List<UUID> blockIds = new ArrayList<>();
+        for (JsonNode block : body.get("blocks")) {
+            blockIds.add(UUID.fromString(block.get("id").asText()));
+        }
+        return new Page(UUID.fromString(body.get("id").asText()), blockIds);
+    }
+
+    /** The links a page's nth block currently carries, read back through the page endpoint. */
+    private JsonNode linksOn(Page page, int blockIndex) throws Exception {
+        MvcResult read = mvc.perform(MockMvcRequestBuilders
+                        .get("/api/v1/projects/" + ACME_BANKING + "/doc-pages/" + page.id())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(ENGINEER, ACME)))
+                .andReturn();
+
+        assertThat(read.getResponse().getStatus()).isEqualTo(200);
+        return bodyOf(read).get("blocks").get(blockIndex).get("links");
+    }
+
+    /**
+     * Runs the outbox by hand, in the company scope and outside any transaction — the dispatcher
+     * refuses to run inside one, and RLS answers zero rows without the scope.
+     *
+     * <p>The scheduler's own floor is about a minute, which no test can wait for.
+     */
+    private void deliver(UUID companyId) {
+        inCompany(companyId, () -> assertThat(dispatcher.dispatchDue())
+                .as("nothing was delivered, so every assertion after this is about the state "
+                        + "before the handler ran")
+                .isPositive());
+    }
+
+    /**
+     * A second delivery of the same event — the at-least-once case.
+     *
+     * <p>The row is {@code SENT} after {@link #deliver}, so the dispatcher will not pick it up
+     * again — its due-ness test is {@code PENDING} and a schedule in the past. Putting both back is
+     * the redelivery a crashed settle produces, and {@code NotificationDeliveryTest} moves the same
+     * columns for the same reason.
+     */
+    private void redeliver(UUID companyId) throws SQLException {
+        try (Connection connection = appConnection(companyId);
+                var statement = connection.prepareStatement("""
+                        UPDATE outbox
+                           SET status = 'PENDING', next_attempt_at = now() - interval '1 hour'
+                         WHERE event_type = 'repository.proposal_accepted'
+                        """)) {
+            statement.executeUpdate();
+        }
+        inCompany(companyId, () -> assertThat(dispatcher.dispatchDue())
+                .as("the redelivery did not happen, so the idempotency below is untested")
+                .isPositive());
+    }
+
+    private List<String> outboxEventTypes(UUID companyId) throws SQLException {
+        try (Connection connection = appConnection(companyId);
+                var statement = connection.prepareStatement("SELECT event_type FROM outbox")) {
+            try (ResultSet rows = statement.executeQuery()) {
+                List<String> types = new ArrayList<>();
+                while (rows.next()) {
+                    types.add(rows.getString(1));
+                }
+                return types;
+            }
+        }
+    }
+
+    private List<String> outboxStatuses(UUID companyId, String eventType) throws SQLException {
+        try (Connection connection = appConnection(companyId);
+                var statement = connection.prepareStatement(
+                        "SELECT status FROM outbox WHERE event_type = ?")) {
+            statement.setString(1, eventType);
+            try (ResultSet rows = statement.executeQuery()) {
+                List<String> statuses = new ArrayList<>();
+                while (rows.next()) {
+                    statuses.add(rows.getString(1));
+                }
+                return statuses;
+            }
+        }
+    }
+
+    /** As the delete endpoint does it — the page stops being live without its blocks going away. */
+    private void softDeletePage(UUID companyId, UUID pageId) throws SQLException {
+        try (Connection connection = appConnection(companyId);
+                var statement = connection.prepareStatement(
+                        "UPDATE doc_page SET deleted_at = now() WHERE id = CAST(? AS uuid)")) {
+            statement.setString(1, pageId.toString());
+            statement.executeUpdate();
+        }
     }
 
     private MvcResult file(

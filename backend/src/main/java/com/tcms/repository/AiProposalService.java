@@ -1,6 +1,7 @@
 package com.tcms.repository;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tcms.api.UserRef;
@@ -17,6 +18,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -87,6 +89,30 @@ public class AiProposalService {
 
     /** {@code PageMeta}'s ceiling, as everywhere else. */
     private static final int MAX_PAGE_SIZE = 200;
+
+    /**
+     * The three claims a link may make — <strong>a copy of {@code documentation.LinkRelationship},
+     * and it cannot be anything else</strong>.
+     *
+     * <p>{@code repository} may not import {@code documentation} (plan §3) and a shared enum would
+     * have to live in {@code api}, whose charter is wire shapes and which a second module's
+     * vocabulary would widen — {@code DocumentationFacts.EXCERPT_LIMIT} records the same refusal
+     * about the same pair of modules. Nothing checks that the two agree; what makes the drift
+     * survivable is that the <em>contract</em> declares these three values on both
+     * {@code BlockLinkInput} and {@code ProposalLinkInput}, and a value that got past here would be
+     * refused by {@code LinkRelationship.parse} on the other side rather than written.
+     *
+     * <h2>Why this one thing IS judged at file time</h2>
+     *
+     * <p>The class header says this endpoint refuses only what it can judge without the project's
+     * state, and a vocabulary of three fixed words is exactly that: unlike the block a claim names,
+     * the set cannot have moved by accept time. Leaving it would mean a proposal that files happily
+     * and then produces either a silent {@code VERIFIES} — the product inventing a coverage claim,
+     * which {@code BlockLinkService.relabel} refuses in the same words — or a dead outbox row a week
+     * later, with the reviewer told nothing.
+     */
+    private static final Set<String> RELATIONSHIPS =
+            Set.of("VERIFIES", "DERIVED_FROM", "REFERENCES");
 
     private final ProjectService projects;
     private final AiProposalRepository proposals;
@@ -225,6 +251,7 @@ public class AiProposalService {
                 // one place §6w.1a's rule is expressible. See VerdictSource.
                 request.verdict(),
                 request.grounding() == null ? null : request.grounding().toString(),
+                serializeVerifies(request.verifies()),
                 userId,
                 token == null ? null : token.tokenId(),
                 idempotencyKey,
@@ -260,6 +287,31 @@ public class AiProposalService {
             errors.put("testCase", List.of("Send the proposed test case."));
             return errors;
         }
+        List<ProposalLink> verifies = request.verifies();
+        for (int index = 0; verifies != null && index < verifies.size(); index++) {
+            // The ONLY thing about a claim that can be judged without the project's state: whether
+            // it names a page and a block at all. Whether that block exists, is on that page, and
+            // belongs to this project is AiProposalDecisionService's question, asked once, at the
+            // moment the claim becomes a row — the same bargain the payload beside it is stored
+            // under, and the reason a proposal claiming a since-deleted requirement is still a
+            // proposal a reviewer can look at and reject.
+            ProposalLink target = verifies.get(index);
+            if (target == null || target.pageId() == null) {
+                errors.put("verifies[" + index + "].pageId",
+                        List.of("Name the documentation page the block is on."));
+            }
+            if (target == null || target.blockId() == null) {
+                errors.put("verifies[" + index + "].blockId",
+                        List.of("Name the block this case verifies."));
+            }
+            if (target != null && target.relationship() != null
+                    && !RELATIONSHIPS.contains(
+                            target.relationship().trim().toUpperCase(Locale.ROOT))) {
+                errors.put("verifies[" + index + "].relationship",
+                        List.of("Choose a relationship: VERIFIES, DERIVED_FROM or REFERENCES."));
+            }
+        }
+
         String title = request.testCase().title();
         if (title == null || title.isBlank()) {
             // Checked here as well as in CaseEdit, and this is not the duplicate validation the
@@ -403,6 +455,7 @@ public class AiProposalService {
                 deserialize(row.getPayload()),
                 row.getVerdict(),
                 row.getVerdictSource(),
+                verifies(row),
                 grounding(row),
                 row.getStatus(),
                 row.getCreatedAt(),
@@ -412,6 +465,47 @@ public class AiProposalService {
                 row.getDecidedBy() == null ? null : resolved.get(row.getDecidedBy()),
                 row.getDecisionNote(),
                 accepted);
+    }
+
+    /**
+     * The claims this proposal filed — <strong>never null, and {@code []} for a proposal that made
+     * none</strong>.
+     *
+     * <p>{@code AiProposal.verifies} is in the contract's required array, so an absent key is a body
+     * the generated client types do not admit and every reader would have to branch on. Empty is
+     * also the true answer for the two rows that reach here with a null column: one filed before
+     * {@code V14}, and one filed since that claimed nothing.
+     *
+     * <p>An unparseable column is empty rather than a 500, for {@link #grounding}'s reason one field
+     * over: a reviewer who cannot see what a proposal claimed must still be able to reject it.
+     */
+    private List<ProposalLink> verifies(AiProposal row) {
+        if (row.getVerifies() == null) {
+            return List.of();
+        }
+        try {
+            return json.readValue(row.getVerifies(), new TypeReference<List<ProposalLink>>() { });
+        } catch (JsonProcessingException e) {
+            return List.of();
+        }
+    }
+
+    /**
+     * The claims, as the column stores them — null when nothing was claimed, so that
+     * {@link #verifies} has one shape to answer {@code []} for rather than two.
+     */
+    private String serializeVerifies(List<ProposalLink> claims) {
+        if (claims == null || claims.isEmpty()) {
+            return null;
+        }
+        try {
+            return json.writeValueAsString(claims);
+        } catch (JsonProcessingException e) {
+            // Unreachable for the same reason serialize(CaseUpdateRequest) is: the list came in as
+            // JSON. Unchecked rather than swallowed — a silently dropped claim is a proposal that
+            // says it verifies nothing.
+            throw new IllegalStateException("A proposal's verifies failed to serialize", e);
+        }
     }
 
     private JsonNode grounding(AiProposal row) {

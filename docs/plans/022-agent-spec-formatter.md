@@ -103,8 +103,10 @@ red in those two suites is yours.
 5. `documentation`: an `OutboxHandler` (`LinkAcceptedProposal`) that calls `BlockLinkService` once per
    target with `sourceType = TEST_CASE`. `BlockLinkService` already raises `links_changed`, which
    refreshes the case's `relatedDocuments` mirror — do not add a second path.
-6. ERD (`docs/specs/2026-07-30-tcms-erd.md`): the `ai_proposal` row gains `verifies`, with the
-   reason.
+6. ERD (`docs/specs/2026-07-30-tcms-erd.md`): ~~the `ai_proposal` row gains `verifies`, with the
+   reason.~~ **There is no `ai_proposal` row** — that document is the 2026-07-30 revision and
+   predates the generation slice entirely, so §4 gained a whole `### ai_proposal` subsection
+   (columns, then `verifies`' own argument) rather than a cell.
 7. Tests: extend `AiProposalEndpointTest` — file with `verifies`, read it back, accept, then read the
    block and assert the link is there with `sourceType TEST_CASE` and the case key; file with a
    foreign block id and assert `400` on `verifies[0].blockId`; a proposal filed with no `verifies`
@@ -149,7 +151,10 @@ barrel that exports the core, `packages/client/src/test/shapesContract.test.ts`,
    renders Markdown like `guideFor`; a test pins that every tool name a step mentions exists in a
    list the test imports from `@tcms/mcp`'s registry **by name only** — if that import is circular,
    pin against a string list here and let T3b add the cross-check in `mcp`.
-3. Shapes: `PLAN_SHAPE` gains `scopeText`, `outOfScopeText`, `tags` (set), `entryCriteria` /
+3. Shapes: **`CASE_SHAPE.verifies.relationship` is a closed three-value enum** (`VERIFIES` ·
+   `DERIVED_FROM` · `REFERENCES`, absent means `VERIFIES`) — T2 made a fourth value a `400` at file
+   time, so a shape that offered it as a free string would let a proposal be refused for a field the
+   guide said was open. `PLAN_SHAPE` gains `scopeText`, `outOfScopeText`, `tags` (set), `entryCriteria` /
    `exitCriteria` (`object[]` with `metric` enum, `op` enum, `value`, `label`), `sections`
    (`object[]`: `name`, `cases`, `suites`, `tags`). `CASE_SHAPE` gains `verifies` (`object[]`:
    `page` key, `block` uuid, `relationship`) scoped to the `propose` action — it is wrapper-level, not
@@ -183,6 +188,11 @@ MCP:
    `{page, plan}` → `PUT /projects/{projectId}/plans/{planId}/document`, `{page, plan: null}` → `DELETE`.
 2. `tcms_open_doc_page`: `as: 'blocks' | 'markdown'`, default `blocks`.
 3. `tcms_write_case propose`: `verifies` → resolve each `page` key to its id, send `AiProposalInput.verifies`.
+   **T2 landed one check the design did not predict:** `relationship` is validated **at file time**,
+   not at accept — a value outside `VERIFIES | DERIVED_FROM | REFERENCES` is a `400` on
+   `verifies[n].relationship` from `POST …/ai-proposals`, because a fixed three-word vocabulary is
+   exactly what can be judged without the project's state. Send the wire spelling or omit the key;
+   do not lower-case it. The block ids are still checked only at accept.
 4. `tcms_write_plan`: the six fields on `create`/`edit`, through `core/rewrite.ts`'s split.
 5. `tcms_process` — no gate, no project, same construction as `tcms_shape`; the registry count goes to 45.
 6. `server.ts`: `prompts: {}` capability (no `listChanged`), `ListPrompts`/`GetPrompt` handlers
@@ -219,6 +229,12 @@ Read: T3b's commit; `frontend/src/features/proposals/ProposalPage.tsx` and its t
 `frontend/src/api/queries/` (the doc-page read hook, and `keys.ts` — never add a second factory);
 `frontend/src/features/help/sections.tsx` (the MCP section T3b touched minimally);
 `docs/features.md` §Documentation; design §7.
+
+**What T2 landed that this task renders.** `AiProposal.verifies` is served **as stored and
+unresolved** — a target whose block was deleted is still listed, which is exactly why the *no longer
+exists* state below is the point of the region rather than an edge case. The links appear on the case
+a projection later (an outbox handler in `documentation`), not in the accept response, so a screen
+that reads `relatedDocuments` straight after Accept legitimately sees nothing yet.
 
 1. `ProposalPage`: a *Verifies* region listing each `verifies` entry as page key + block text
    (read the page through the existing query hook; one read per distinct page), `relationship` as a

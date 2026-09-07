@@ -487,7 +487,10 @@ public class DemoProjectSeeder {
                 null, null, List.of(), List.of(), List.of());
 
         AiProposalService.Outcome outcome = proposals.file(cast.engineer(), projectId,
-                new AiProposalInput(proposed, ProposalVerdict.GROUNDED, null),
+                // No `verifies`: the demo's proposal is filed before any documentation page has
+                // blocks a claim could name, and a claim naming a block that does not exist is a
+                // 400 at accept — so the seeded proposal would be one nobody could accept.
+                new AiProposalInput(proposed, ProposalVerdict.GROUNDED, null, null),
                 idempotencyKey(projectId, "proposal", proposed.title()));
         if (outcome instanceof AiProposalService.Outcome.Filed) {
             report.line(label, "1 AI proposal awaiting a decision");
