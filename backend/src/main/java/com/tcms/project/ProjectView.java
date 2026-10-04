@@ -25,6 +25,7 @@ import java.util.UUID;
  * @param description nullable, per the contract
  * @param caseCount   live cases, excluding soft-deleted ones — see
  *                    {@link ProjectRepository#countLiveCasesByProject}
+ * @param color       the design-token name the project's key chip is drawn in; never null (023 D17)
  * @param myRole      the caller's PROJECT-scope role name, or {@code null} when they reach
  *                    this project through a COMPANY-scope grant instead. Display only:
  *                    nothing may branch on it (plan §6b).
@@ -43,6 +44,7 @@ public record ProjectView(
         String description,
         boolean archived,
         long caseCount,
+        String color,
         String myRole,
         ClientRef client) {
 }

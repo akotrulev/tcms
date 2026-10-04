@@ -182,7 +182,7 @@ public class DemoDataSeeder {
                       a company with no clients, where nothing client-shaped renders.
                     */
                     new ProjectWriteRequest(
-                            project.key(), project.name(), project.description(), null));
+                            project.key(), project.name(), project.description(), null, null));
             switch (outcome) {
                 case ProjectCreateService.Outcome.Created created -> {
                     ids.put(project.key(), created.view().id());

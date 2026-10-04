@@ -48,7 +48,7 @@ class RoleScopeShapeTest extends IntegrationTestBase {
         connection = appConnection(COMPANY);
         execute("INSERT INTO company (id, slug, display_name) VALUES ('%s', 'scopeshapeco', 'Scope Shape Co')"
                 .formatted(COMPANY));
-        execute("INSERT INTO project (id, company_id, key, name) VALUES ('%s', '%s', 'SCP', 'Scope Shapes')"
+        execute("INSERT INTO project (id, company_id, key, name, color) VALUES ('%s', '%s', 'SCP', 'Scope Shapes', 'project-1')"
                 .formatted(PROJECT, COMPANY));
         execute("INSERT INTO app_user (id, email, canonical_name) VALUES ('%s', 'scope-shape@example.test', 'Scope Shape')"
                 .formatted(USER));

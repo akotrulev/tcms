@@ -7,7 +7,9 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.IntStream;
 import org.hibernate.annotations.Filter;
 
 /**
@@ -73,6 +75,14 @@ public class Project {
     @Column(name = "client_id")
     private UUID clientId;
 
+    /**
+     * The design-token name ({@code project-1} … {@code project-8}) of the colour this project's key
+     * chip is drawn in — a token and not a hex, so the palette can be re-tuned without a migration
+     * (023 D17).
+     */
+    @Column(name = "color", nullable = false)
+    private String color;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -108,6 +118,10 @@ public class Project {
     @Column(name = "lock_version", nullable = false)
     private long lockVersion;
 
+    public static final List<String> COLORS = IntStream.rangeClosed(1, 8)
+            .mapToObj(n -> "project-" + n)
+            .toList();
+
     /** JPA only. */
     protected Project() {
     }
@@ -124,8 +138,18 @@ public class Project {
         project.key = key;
         project.name = name;
         project.description = description;
+        project.color = defaultColorFor(key);
         project.createdAt = now;
         return project;
+    }
+
+    /** Deterministic from the key, so a create that does not choose still gets a colour. */
+    static String defaultColorFor(String key) {
+        return COLORS.get(Math.floorMod(key.hashCode(), COLORS.size()));
+    }
+
+    public void recolor(String newColor) {
+        this.color = newColor;
     }
 
     public void rename(String newName) {
@@ -184,6 +208,10 @@ public class Project {
 
     public String getDescription() {
         return description;
+    }
+
+    public String getColor() {
+        return color;
     }
 
     public UUID getClientId() {

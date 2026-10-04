@@ -32,7 +32,7 @@ import java.util.regex.Pattern;
  * The check is a lookup and the constraint is still the guarantee — see
  * {@link ProjectCreateService} for the race between them and what answers it.
  */
-record ProjectEdit(String key, String name, String description, UUID clientId) {
+record ProjectEdit(String key, String name, String description, UUID clientId, String color) {
 
     /**
      * {@code ck_project_key_format} in V1, and {@code Project.key}'s {@code pattern} in the
@@ -125,8 +125,13 @@ record ProjectEdit(String key, String name, String description, UUID clientId) {
             error(errors, "clientId", "That client does not exist.");
         }
 
+        String color = request.color();
+        if (color != null && !Project.COLORS.contains(color)) {
+            error(errors, "color", "Choose one of the project colours.");
+        }
+
         return errors.isEmpty()
-                ? new Outcome.Valid(new ProjectEdit(key, name, description, clientId))
+                ? new Outcome.Valid(new ProjectEdit(key, name, description, clientId, color))
                 : new Outcome.Invalid(errors);
     }
 

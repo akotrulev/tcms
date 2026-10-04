@@ -674,6 +674,7 @@ public class ProjectService {
                 // A project with no cases has no GROUP BY row at all, so this default is the
                 // normal path for a new project rather than a fallback for a broken query.
                 caseCounts.getOrDefault(project.getId(), 0L),
+                project.getColor(),
                 // null when the caller reaches this project through a COMPANY-scope grant —
                 // the contract's stated meaning of myRole, not a lookup that failed. The §A1.1
                 // precedence that used to be applied here (a grant naming the project wins,

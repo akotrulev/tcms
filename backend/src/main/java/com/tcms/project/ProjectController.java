@@ -64,6 +64,7 @@ public class ProjectController {
     private final ProjectConfigurationService configuration;
     private final ProjectCreateService creates;
     private final ProjectArchiveService archives;
+    private final ProjectColorService colors;
     private final ClassificationValueWriteService classificationValues;
 
     public ProjectController(
@@ -71,12 +72,14 @@ public class ProjectController {
             ProjectConfigurationService configuration,
             ProjectCreateService creates,
             ProjectArchiveService archives,
+            ProjectColorService colors,
             ClassificationValueWriteService classificationValues) {
 
         this.projects = projects;
         this.configuration = configuration;
         this.creates = creates;
         this.archives = archives;
+        this.colors = colors;
         this.classificationValues = classificationValues;
     }
 
@@ -164,6 +167,31 @@ public class ProjectController {
             case ProjectArchiveService.Outcome.Forbidden ignored ->
                     ResponseEntity.status(HttpStatus.FORBIDDEN).body(archiveForbiddenProblem());
             case ProjectArchiveService.Outcome.NotFound ignored ->
+                    ResponseEntity.notFound().build();
+        };
+    }
+
+    /**
+     * Sets the colour this project's key chip is drawn in. Needs {@code project:settings} on it.
+     * Its own endpoint, for the reason {@code PUT /projects/{projectId}/client} is (018 D-d, 023 D17).
+     */
+    @PutMapping("/{projectId}/color")
+    public ResponseEntity<Object> setColor(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @RequestBody ProjectColorRequest request) {
+
+        return switch (colors.set(UUID.fromString(jwt.getSubject()), projectId, request)) {
+            case ProjectColorService.Outcome.Updated updated -> ResponseEntity.ok(updated.view());
+            case ProjectColorService.Outcome.Invalid invalid ->
+                    ResponseEntity.badRequest().body(validationProblem(invalid.errors()));
+            case ProjectColorService.Outcome.Forbidden ignored -> ResponseEntity
+                    .status(HttpStatus.FORBIDDEN)
+                    .body(Problem.forbiddenDetail(
+                            "You do not have permission to change this project's colour.",
+                            "project:settings",
+                            Problem.Scope.PROJECT));
+            case ProjectColorService.Outcome.NotFound ignored ->
                     ResponseEntity.notFound().build();
         };
     }

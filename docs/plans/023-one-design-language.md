@@ -7,9 +7,10 @@ panels of cards whose face leads with identity and ends with the card's test res
 a colour, which its key chip carries; it never fills a canvas. No route moves. The project colour is
 the plan's one contract change (§3a).
 
-**Status:** A1 built 2026-10-04 (contract, both generated copies, both fixture factories; nothing run, per
-the plan's single gate). Next: A2. The server still serves no `color` and answers `404` on `PUT …/color`
-until A2. The design was approved on 2026-10-04 on a canvas:
+**Status:** A1 and A2 built 2026-10-04 (nothing run, per the plan's single gate). A1: the contract, both
+generated copies, both fixture factories. A2: `V15__project_color.sql`, `Project.color`, the create
+default, `PUT /projects/{projectId}/color`, and their tests. Next: K1. The server now serves `color`
+and answers the colour endpoint; both are unverified until C1. The design was approved on 2026-10-04 on a canvas:
 <https://claude.ai/artifact/5LuW51YtnVNKWHZ4mV6Xbj>. `Main` is the board screen with the new shell,
 and `CardStates` is the card in six states, in both themes. The canvas is the user's private artifact,
 so §2–§6 restate every value a task needs. All three open questions were answered on 2026-10-04
@@ -68,57 +69,9 @@ Run them in order, one session each. Each block is complete on its own. Every ga
 only C1 runs one. No prompt pushes, and none starts the local stack. C1 may *use* a stack that is
 already running and must not start one.
 
-A1 has landed; every block below is live.
+A1 and A2 have landed; every block below is live.
 
 ---
-
-### A2 — the backend: the column, the default, the endpoint (be-java, be)
-
-````
-You are `be-java`. Task A2 of docs/plans/023-one-design-language.md: give `project` a colour column,
-backfill it for every existing project, assign one on create when none is sent, and serve
-`PUT /projects/{projectId}/color`.
-
-Deliverable: `V15__project_color.sql` adds and backfills `project.color`; a create assigns one when
-none is sent; `PUT …/color` sets it under the client endpoint's permission; tests cover all three.
-
-House rules for this plan: current branch only, never create one; no subagents; stage only your
-files; do not push. **Gate: none** — this plan gates once, in C1. Do not run `./gradlew build`,
-`./gradlew test` or any targeted test, locally or on shanks.
-
-Read, in this order:
-1. CLAUDE.md — "Tenancy", "Backend", "Working agreement" (a required Spring property has no colon);
-   then docs/specs/tenancy-invariants.md, the two silent RLS traps.
-2. The plan: §3a, D17, task A2, and "Close-out — every task".
-3. A1's "As built" note, and the `ProjectColor` / `PUT /projects/{projectId}/color` text it landed in
-   docs/specs/openapi.yaml.
-4. `ls backend/src/main/resources/db/migration/`. The next version is V15 unless something has
-   landed since; take the next free number and record it. Then V13__three_boards_and_blocking.sql:
-   how it wrote rows for every existing company under FORCE ROW LEVEL SECURITY.
-5. backend/src/main/java/com/tcms/project/: `Project.java`, `ProjectCreateService.java`,
-   `ProjectController.java`, and the class serving `PUT /projects/{projectId}/client`
-   (grep `"/client"`), with its service and its test — the pattern you copy.
-6. docs/specs/2026-07-30-tcms-erd.md — the `project` table's section.
-7. docs/specs/2026-07-30-tcms-roles-permissions-naming.md §A3 — the permission the client endpoint
-   checks. Use the same key; never a role name.
-
-Build (the bullets of task A2, in order).
-
-Traps:
-- Under FORCE ROW LEVEL SECURITY, a backfill `UPDATE project …` with no company set updates zero rows,
-  fail-closed and silent, and the `SET NOT NULL` after it then fails on a non-empty database. Do it
-  the way V13 did for existing companies, and test it against a database that already holds two
-  companies' projects.
-- `hibernate.ddl-auto: validate`: the entity's column name, type and nullability must match the
-  migration exactly, or the context will not boot.
-- An unknown colour is a `400` with a field error on `color`, raised before the database's CHECK
-  constraint could answer `500`.
-- A repository interface carries `@Transactional(readOnly = true)`, or its derived reads return zero
-  rows.
-
-Commit: `feat(project): a project has a colour (023 A2)`.
-Close out per the plan's "Close-out — every task" before you stop.
-````
 
 ### K1 — the surface ladder and the radius scale (fe-react, fe)
 
@@ -1313,6 +1266,14 @@ session (A1, A2) for a 22px chip, plus a second write path beside General settin
 | Nullable field, neutral chip until set | rejected | Every existing project would stay grey until somebody visits Settings, which is the state the field exists to end |
 | **Required token name, server default, single-field endpoint** | chosen | Every project is coloured from day one, the palette stays retunable, and the write has no ambiguous absence |
 
+**D18 — The colour default is assigned in `Project.create`, not in `ProjectCreateService` (A2).** The
+plan put `"project-" + floorMod(key.hashCode(), 8) + 1` in the create service. Built instead in the
+entity factory, with the create service only overriding it when `ProjectInput.color` is sent. Reason:
+`Project.create` has about forty callers (provisioning's first project, and test fixtures), and the
+column is `NOT NULL`, so a default only in the service would have left every one of them failing the
+insert. The formula is the plan's. Cost: the entity knows the palette's size (eight), which it must
+share with the CHECK and `openapi.yaml` anyway.
+
 ## Answered questions (2026-10-04)
 
 **O1 — Should My work carry a count in the top bar?** No. An icon link only (D13).
@@ -1394,6 +1355,27 @@ targeted test.
 - `docs/specs/2026-07-30-tcms-erd.md`: the `project` table gains `color text NOT NULL CHECK …`, with
   one line of why (023 D17).
 - **Not in A2:** the frontend (K1, N1, P3, P4).
+- **As built (2026-10-04):** `V15__project_color.sql` (next free number was V15: `ls` showed V1–V14):
+  `ADD COLUMN color TEXT`, a per-company `set_config` loop in V13's shape that asserts the GUC took and
+  that no project of the company is left uncoloured, then `SET NOT NULL`, `ck_project_color`, and a
+  column comment. `Project.color` (`@Column(name = "color", nullable = false)`), `Project.COLORS`,
+  `Project.recolor`; `ProjectView.color` (after `caseCount`); `ProjectWriteRequest.color` and
+  `ProjectEdit.color`, validated in `ProjectEdit.validateCreate` as a `400` on `color`;
+  `ProjectColorRequest` + `ProjectColorService` (`project:settings` via `writeGranted`, the key
+  `PUT …/client` checks; no-op and no audit row when unchanged; `project.recolored` audit action
+  otherwise) + `ProjectController.setColor` (`403` names `project:settings`, scope PROJECT). ERD
+  `project` table row added. Tests: `ProjectEndpointTest.Colouring` (200 / no-op / 400 / 403 / 404 /
+  401), `ProjectCreateEndpointTest.Colour` (default, kept, 400), `schema/ProjectColorMigrationTest`
+  (V14 → seed two companies' projects as superuser → V15 as `tcms_owner`; every row coloured, same
+  key same colour, CHECK refuses `project-9`). Raw `INSERT INTO project` fixtures in five existing
+  tests (`PrivilegeSplitTest`, `SearchVectorTest`, `RoleScopeShapeTest`, `CompanyVocabularySeedTest`,
+  `IntegrityTriggerTest`) gained `color` — the column is NOT NULL with no default — and the two
+  `new ProjectWriteRequest(...)` callers (`DemoDataSeeder`, `ProjectKeySequenceSchemaTest`) pass a
+  trailing `null`. Differed from the plan: the default is assigned inside `Project.create` (see D18).
+  Built but unverified: nothing compiled or run, per the gate — C1 should watch `-Werror`, context
+  boot (`validate` against `color`), and the five edited fixtures. Evidence:
+  `backend/src/main/resources/db/migration/V15__project_color.sql`,
+  `backend/src/main/java/com/tcms/project/ProjectController.java` (`@PutMapping("/{projectId}/color")`).
 
 ### K1 — the surface ladder, the radius scale and the project palette
 

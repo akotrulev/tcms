@@ -630,6 +630,52 @@ class ProjectCreateEndpointTest extends IntegrationTestBase {
         }
     }
 
+    @Nested
+    @DisplayName("Colour — assigned when none is sent, kept when one is, 400 when unknown")
+    class Colour {
+
+        @Test
+        @DisplayName("a create that sends no colour is given one of the eight")
+        void defaultIsAssigned() throws Exception {
+            MvcResult created = post(ADMIN, WEST, body("CLR", "Colourless", null));
+
+            assertThat(idOf(created)).isNotNull();
+            assertThat(json.readTree(created.getResponse().getContentAsString()).get("color").asText())
+                    .isIn(Project.COLORS);
+        }
+
+        @Test
+        @DisplayName("the default is deterministic from the key")
+        void defaultIsDeterministic() {
+            assertThat(Project.defaultColorFor("CLR")).isEqualTo(Project.defaultColorFor("CLR"));
+            assertThat(Project.COLORS).contains(Project.defaultColorFor("OLB"));
+        }
+
+        @Test
+        @DisplayName("a colour that is sent is the colour that is stored")
+        void sentColourIsKept() throws Exception {
+            String raw = body("CLS", "Coloured", null);
+            MvcResult created = post(ADMIN, WEST, raw.substring(0, raw.length() - 1)
+                    + ",\"color\":\"project-7\"}");
+
+            assertThat(json.readTree(created.getResponse().getContentAsString()).get("color").asText())
+                    .isEqualTo("project-7");
+        }
+
+        @Test
+        @DisplayName("an unknown colour is a 400 on color, and nothing is created")
+        void unknownColourIsAFieldError() throws Exception {
+            long before = liveProjectCount(WEST);
+            String raw = body("CLB", "Badly coloured", null);
+            MvcResult refused = post(ADMIN, WEST, raw.substring(0, raw.length() - 1)
+                    + ",\"color\":\"#ff0000\"}");
+
+            assertThat(statusOf(refused)).isEqualTo(400);
+            assertThat(errorsOn(refused, "color")).isNotEmpty();
+            assertThat(liveProjectCount(WEST)).isEqualTo(before);
+        }
+    }
+
     // =====================================================================
     // helpers
     // =====================================================================

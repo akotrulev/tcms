@@ -24,6 +24,10 @@ import java.util.UUID;
  *                    {@link ClientDirectory#existsInCompany}, which is the check that does not
  *                    (018 D-l). This is the one field here that is not server-owned and still needs
  *                    validating against something outside the request.
+ * @param color       optional design-token name; absent means the server assigns one. An unknown
+ *                    value is a {@code 400} on this field, raised before the database's CHECK
+ *                    constraint could answer {@code 500} (023 D17).
  */
-public record ProjectWriteRequest(String key, String name, String description, UUID clientId) {
+public record ProjectWriteRequest(
+        String key, String name, String description, UUID clientId, String color) {
 }

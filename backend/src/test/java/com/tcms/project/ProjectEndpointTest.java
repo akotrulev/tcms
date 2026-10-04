@@ -216,6 +216,13 @@ class ProjectEndpointTest extends IntegrationTestBase {
                 statement.executeUpdate();
             }
             try (var statement = connection.prepareStatement(
+                    "UPDATE project SET color = 'project-1' WHERE id IN (?, ?, ?)")) {
+                statement.setObject(1, NORTH_BANKING);
+                statement.setObject(2, NORTH_MOBILE);
+                statement.setObject(3, NORTH_ARCHIVED);
+                statement.executeUpdate();
+            }
+            try (var statement = connection.prepareStatement(
                     "DELETE FROM audit_event WHERE project_id IN (?, ?, ?)")) {
                 statement.setObject(1, NORTH_BANKING);
                 statement.setObject(2, NORTH_MOBILE);
@@ -381,7 +388,7 @@ class ProjectEndpointTest extends IntegrationTestBase {
 
             // The contract's required list for Project. A missing one typechecks on this side
             // and breaks the SPA, which cannot null-check a field declared always present.
-            assertThat(List.of("id", "key", "name", "archived", "caseCount", "myRole"))
+            assertThat(List.of("id", "key", "name", "archived", "caseCount", "color", "myRole"))
                     .allSatisfy(field -> assertThat(project.has(field))
                             .as("Project.%s is required by openapi.yaml", field)
                             .isTrue());
@@ -654,6 +661,104 @@ class ProjectEndpointTest extends IntegrationTestBase {
                             .content("{\"archived\": true}"))
                     .andReturn().getResponse().getStatus())
                     .isEqualTo(401);
+        }
+    }
+
+    // =====================================================================
+    // Colour — 023 A2
+    // =====================================================================
+
+    /** {@code PUT /projects/{projectId}/color}, on the same hostile fixture as archiving. */
+    @Nested
+    @DisplayName("Colour — project:settings, a token name, idempotent")
+    class Colouring {
+
+        @Test
+        @DisplayName("a Test Lead sets their project's colour, and the column holds it")
+        void leadSetsColour() throws Exception {
+            Response response = colourAs(LEAD, NORTH, NORTH_BANKING, "project-5");
+
+            assertThat(response.status()).isEqualTo(200);
+            assertThat(json.readTree(response.body()).get("color").asText()).isEqualTo("project-5");
+            assertThat(colourOf(NORTH_BANKING)).isEqualTo("project-5");
+            assertThat(detailAs(LEAD, NORTH, NORTH_BANKING).get("color").asText())
+                    .isEqualTo("project-5");
+        }
+
+        @Test
+        @DisplayName("sending the colour the project already has is a 200 that writes nothing")
+        void idempotent() throws Exception {
+            colourAs(LEAD, NORTH, NORTH_BANKING, "project-5");
+            int auditBefore = auditActionsFor(NORTH_BANKING).size();
+
+            assertThat(colourAs(LEAD, NORTH, NORTH_BANKING, "project-5").status()).isEqualTo(200);
+            assertThat(auditActionsFor(NORTH_BANKING)).hasSize(auditBefore);
+        }
+
+        @Test
+        @DisplayName("a colour outside the eight is a 400 on color, and the column is untouched")
+        void unknownColourIs400() throws Exception {
+            Response response = colourAs(LEAD, NORTH, NORTH_BANKING, "#ff0000");
+
+            assertThat(response.status()).isEqualTo(400);
+            assertThat(json.readTree(response.body()).get("errors").has("color")).isTrue();
+            assertThat(colourAs(LEAD, NORTH, NORTH_BANKING, null).status()).isEqualTo(400);
+            assertThat(colourOf(NORTH_BANKING)).isEqualTo("project-1");
+        }
+
+        @Test
+        @DisplayName("a Test Engineer is refused with 403 and nothing moves")
+        void engineerIsRefused() throws Exception {
+            Response response = colourAs(TEAM_MEMBER, NORTH, NORTH_MOBILE, "project-5");
+
+            assertThat(response.status()).isEqualTo(403);
+            assertThat(response.body()).contains("\"permission\":\"project:settings\"");
+            assertThat(colourOf(NORTH_MOBILE)).isEqualTo("project-1");
+        }
+
+        @Test
+        @DisplayName("a project the caller cannot see is 404, never 403")
+        void unreachableIs404() throws Exception {
+            assertThat(colourAs(NO_GRANT, NORTH, NORTH_BANKING, "project-5").status()).isEqualTo(404);
+            assertThat(colourAs(SOUTHERNER, SOUTH, NORTH_BANKING, "project-5").status()).isEqualTo(404);
+            assertThat(colourOf(NORTH_BANKING)).isEqualTo("project-1");
+        }
+
+        @Test
+        @DisplayName("an anonymous caller is 401")
+        void anonymousIsRefused() throws Exception {
+            assertThat(mvc.perform(MockMvcRequestBuilders
+                            .put("/api/v1/projects/" + NORTH_BANKING + "/color")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"color\": \"project-5\"}"))
+                    .andReturn().getResponse().getStatus())
+                    .isEqualTo(401);
+        }
+    }
+
+    private Response colourAs(UUID userId, UUID companyId, UUID projectId, String color)
+            throws Exception {
+
+        var result = mvc.perform(MockMvcRequestBuilders
+                        .put("/api/v1/projects/" + projectId + "/color")
+                        .header("Authorization", "Bearer " + tokenFor(userId, companyId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(color == null ? "{}" : "{\"color\": \"" + color + "\"}")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andReturn().getResponse();
+
+        return new Response(result.getStatus(), result.getContentAsString());
+    }
+
+    private String colourOf(UUID projectId) throws SQLException {
+        try (var connection = superuserConnection();
+                var statement = connection.prepareStatement(
+                        "SELECT color FROM project WHERE id = ?")) {
+            statement.setObject(1, projectId);
+            try (var rows = statement.executeQuery()) {
+                assertThat(rows.next()).as("the project must exist").isTrue();
+                return rows.getString("color");
+            }
         }
     }
 

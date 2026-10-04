@@ -62,7 +62,7 @@ class CompanyVocabularySeedTest extends IntegrationTestBase {
         execute(acme, "INSERT INTO company (id, slug, display_name) VALUES ('%s', 'seedglobex', 'Globex')"
                 .formatted(GLOBEX));
         execute(acme, """
-                INSERT INTO project (id, company_id, key, name) VALUES ('%s', '%s', 'OLB', 'Banking')
+                INSERT INTO project (id, company_id, key, name, color) VALUES ('%s', '%s', 'OLB', 'Banking', 'project-1')
                 """.formatted(ACME_PROJECT, ACME));
         execute(acme, "SELECT tcms_seed_company_defaults('%s')".formatted(ACME));
         execute(acme, "SELECT tcms_seed_project_defaults('%s', '%s')".formatted(ACME, ACME_PROJECT));

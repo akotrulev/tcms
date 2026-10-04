@@ -78,8 +78,8 @@ class PrivilegeSplitTest extends IntegrationTestBase {
                 statement.execute();
             }
             try (var statement = connection.prepareStatement("""
-                    INSERT INTO project (id, company_id, key, name)
-                    VALUES (?, ?, 'SPLIT', 'Split Probe Project')
+                    INSERT INTO project (id, company_id, key, name, color)
+                    VALUES (?, ?, 'SPLIT', 'Split Probe Project', 'project-1')
                     ON CONFLICT (id) DO NOTHING
                     """)) {
                 statement.setObject(1, PROJECT);

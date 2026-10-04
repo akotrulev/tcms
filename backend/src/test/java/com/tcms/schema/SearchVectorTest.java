@@ -68,8 +68,8 @@ class SearchVectorTest extends IntegrationTestBase {
                 VALUES ('%s', 'searchco', 'Search Co') ON CONFLICT DO NOTHING
                 """.formatted(COMPANY));
         execute("""
-                INSERT INTO project (id, company_id, key, name)
-                VALUES ('%s', '%s', 'SRCH', 'Search Fixture') ON CONFLICT DO NOTHING
+                INSERT INTO project (id, company_id, key, name, color)
+                VALUES ('%s', '%s', 'SRCH', 'Search Fixture', 'project-1') ON CONFLICT DO NOTHING
                 """.formatted(PROJECT, COMPANY));
         execute("""
                 INSERT INTO suite (id, company_id, project_id, key, key_seq, name)

@@ -22,10 +22,11 @@ Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
   `V9__time.sql`. ~~head `V71` (B2)~~ ~~the next number is `V2`~~ ~~→ `V5`~~ ~~→ `V6`~~ ~~→ `V7`~~
   ~~→ `V8`~~ ~~→ `V9`~~ ~~→ `V10`~~ → `V10__staffing.sql`, `V11__crm_clients.sql`,
   `V12__billing.sql`, `V13__three_boards_and_blocking.sql` and `V14__proposal_verifies.sql` have
-  since landed, so **the next number is `V15`**. `out-of-order` is unset, so a lower number arriving after a higher one is silently not
+  since landed, so `V15__project_color.sql` landed 2026-10-04 (023 A2: `project.color`, per-company RLS back-fill loop), so **the next number is `V16`**. `out-of-order` is unset, so a lower number arriving after a higher one is silently not
   applied — `ls` the directory before writing.
 
 ## Seams to reuse
+- `project.ProjectColorService` (023 A2): single-field `PUT /projects/{id}/color`, `project:settings` via `writeGranted`; `Project.create` assigns the default colour, `Project.COLORS` is the palette.
 - `ProjectService.readVisible / readGranted / writeGranted` → `GateResult` (Unreachable/Denied/Allowed).
 - Error envelope: `api.Problem` (record, NON_NULL) and Spring `ProblemDetail`; both announced
   `application/problem+json` by `api.ProblemEnvelope`. 403s: `Problem.forbidden(detail, key, scope)`

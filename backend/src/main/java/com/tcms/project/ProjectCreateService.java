@@ -219,6 +219,9 @@ public class ProjectCreateService {
         // Before the flush, so the row is inserted with its client rather than updated a statement
         // later — and so `fk_project_client` is checked by the same insert the RLS WITH CHECK is.
         project.attachClient(edit.clientId());
+        if (edit.color() != null) {
+            project.recolor(edit.color());
+        }
         repository.saveAndFlush(project);
 
         seedDefaults(companyId, projectId);
