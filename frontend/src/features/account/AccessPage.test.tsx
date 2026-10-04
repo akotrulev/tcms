@@ -18,7 +18,7 @@ import { AccessPage } from './AccessPage'
  * 2. **It lists a hidden entry only where the caller actually lacks the key**, and never while the
  *    answer is still in flight. An in-flight project contributes no verdict at all — the failure
  *    it would otherwise have is telling somebody an entry is hidden from them a moment before it
- *    appears in their rail, which is the exact confusion the page exists to end.
+ *    appears in their launcher (⊞) or the project tabs, which is the exact confusion the page exists to end.
  * 3. **It names roles and not the screens' contents.** The nine stay hidden; what this adds is
  *    their names and who holds the key, and a test that let a reason drift into describing the
  *    protected thing would have let the page defeat all nine decisions at once.

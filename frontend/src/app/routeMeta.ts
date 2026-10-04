@@ -14,7 +14,7 @@ import { matchPath } from 'react-router-dom';
  * So the metadata lives here, keyed by the same path pattern the route declares, and is resolved
  * with `matchPath` against the location — the same match the router itself performs, from the same
  * strings. The outcome is identical: **no page passes a `crumbs` prop**, one file holds every
- * trail, and `ShellBreadcrumbs` renders it in the header. `routeMeta.test.ts` asserts the key set
+ * trail, and `PageStrip` renders it. `routeMeta.test.ts` asserts the key set
  * equals `router.tsx`'s path set, both ways, so a route added without a trail is a red test rather
  * than a screen that quietly loses its breadcrumb.
  *

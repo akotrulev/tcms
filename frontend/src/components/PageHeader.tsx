@@ -31,8 +31,8 @@ import { PageStrip } from './PageStrip';
  * `aria-current="page"` — which the MUI version never did.~~ → **superseded (021 R2).** The markup
  * was right and its address was not: forty-six screens each composed their own trail, which is
  * forty-six places a rename has to reach, and the audit found two of them it had not. The trail is
- * `app/ShellBreadcrumbs.tsx` now, fed by `app/routeMeta.ts`, drawn in the header once for every
- * route — and it survives a page's failed read, which a trail rendered inside the page could not.
+ * `PageStrip`'s now (023 D3), fed by `app/routeMeta.ts` through `crumbsFor` and drawn once for every
+ * route.
  *
  * **`crumbs` is gone from this component and from every caller.** A page that wants a different
  * trail changes `routeMeta.ts`, where the whole trail is visible beside its siblings.

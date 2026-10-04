@@ -29,12 +29,6 @@ export function TopStripProvider({ children }: { children: ReactNode }) {
   return <TopStripContext.Provider value={value}>{children}</TopStripContext.Provider>;
 }
 
-/** The region inside the shell's `<header>`. Empty, and invisible, until a page fills it. */
-export function TopStripTarget({ className }: { className?: string }) {
-  const strip = use(TopStripContext);
-  return <div ref={strip?.register} data-testid="Nav.TopStrip" className={className} />;
-}
-
 export function TopStripSlot({ children }: { children: ReactNode }) {
   const strip = use(TopStripContext);
   if (!strip?.target) return <>{children}</>;

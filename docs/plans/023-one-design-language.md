@@ -7,11 +7,11 @@ panels of cards whose face leads with identity and ends with the card's test res
 a colour, which its key chip carries; it never fills a canvas. No route moves. The project colour is
 the plan's one contract change (§3a).
 
-**Status:** A1, A2, K1 and K2 built 2026-10-04 (nothing run, per the plan's single gate). A1: the contract, both
+**Status:** A1, A2, K1, K2 and N1 built 2026-10-04 (nothing run, per the plan's single gate). A1: the contract, both
 generated copies, both fixture factories. A2: `V15__project_color.sql`, `Project.color`, the create
 default, `PUT /projects/{projectId}/color`, and their tests. K1: the surface ladder (`bg-bar`,
 `bg-raised`), the radius codemod (106 files) and its check, the overlay primitives on the ladder, and
-the project palette with `projectColorFill` and its contrast check. K2: `PageStrip`, `PageHeader` on it, `Segmented`, `TabStrip` on its helpers, `FilterStrip`'s popover and `openFilters`; every consumer test of a `FilterStrip` picker is still red until B2, P2, P3 and P4. Next: N1. The server now serves
+the project palette with `projectColorFill` and its contrast check. K2: `PageStrip`, `PageHeader` on it, `Segmented`, `TabStrip` on its helpers, `FilterStrip`'s popover and `openFilters`; every consumer test of a `FilterStrip` picker is still red until B2, P2, P3 and P4. N1: the 48px `TopBar` (launcher, switcher with coloured key chips, project tabs and More, search, Create, My work, theme, user menu with the version) replaced the rail, drawer and footer, and `AppShell.test.tsx` is rewritten against it; the four `TopStripSlot` pages render in place until P1. Next: B1. The server now serves
 `color` and answers the colour endpoint; all of it is unverified until C1. The design was approved on 2026-10-04 on a canvas:
 <https://claude.ai/artifact/5LuW51YtnVNKWHZ4mV6Xbj>. `Main` is the board screen with the new shell,
 and `CardStates` is the card in six states, in both themes. The canvas is the user's private artifact,
@@ -71,60 +71,9 @@ Run them in order, one session each. Each block is complete on its own. Every ga
 only C1 runs one. No prompt pushes, and none starts the local stack. C1 may *use* a stack that is
 already running and must not start one.
 
-A1, A2, K1 and K2 have landed; every block below is live.
+A1, A2, K1, K2 and N1 have landed; every block below is live.
 
 ---
-
-### N1 — the shell (fe-react, fe)
-
-````
-You are `fe-react`. Task N1 of docs/plans/023-one-design-language.md: replace the rail, the drawer,
-the 52px header and the footer with one 48px top bar. The bar holds the launcher, the project
-switcher, the project tabs with More, search, Create, My work, theme and the user menu.
-
-Deliverable: no rail, drawer, hamburger, collapse toggle or footer remains. Every authenticated
-route has one 48px top bar per §3. The switcher's chips carry each project's colour.
-`AppShell.test.tsx` asserts the launcher's gates, the tabs and More, Create's disabled-with-reason
-items, the user menu with the version, and the switcher.
-
-House rules for this plan: current branch only, never create one; no subagents; stage only your
-files; do not push. **Gate: none** — this plan gates once, in C1. Do not run `npm run build`, `lint`,
-`test:run`, `test:smoke`, `tsc` or any targeted test, locally or on shanks.
-
-Read, in this order:
-1. CLAUDE.md — "Frontend", "Test-harness rules".
-2. The plan: §2 (A1, A6, A7), §3 (all of it), §3a, D1, D13, D14, D17, task N1, and "Close-out —
-   every task".
-3. K2's "As built" note (the `shellFrame` export and the `PageStrip` trail), and K1's
-   (`lib/projectColors.ts`'s `projectColorFill`).
-4. frontend/src/app/AppShell.tsx — whole file. Keep `useNavGates`, `visibleEntries` and
-   `useActiveProject` as they are; they are the gate behaviour that must not drift.
-5. frontend/src/app/nav.ts — the interfaces and `NAV`.
-6. frontend/src/app/AppShell.test.tsx — what it asserts, so the rewrite keeps every gate assertion.
-7. frontend/src/app/CommandPalette.tsx — the trigger only. Then the `TopBar.` and `Nav.` references
-   in frontend/src/app/CommandPalette.test.tsx.
-8. frontend/src/features/account/AccessPage.tsx — its copy that says "rail" or "sidebar".
-
-Build (the bullets of task N1, in order).
-
-Traps:
-- `nav.ts`'s zones stay the data model. `places.ts` (the palette's Places) and `AccessPage` read them
-  unchanged; you add `placement` and `hint` and change no existing field.
-- A gated entry is ABSENT in the launcher exactly as it was absent in the rail, and an ungated one is
-  listed for everybody. The nine recorded exceptions do not change.
-- The project tabs, More and Create render only when a project is resolved — the same rule as the old
-  project zone (`useActiveProject`).
-- Use the app's breakpoint contract (`sm` 600, `md` 900, `lg` 1200), never an arbitrary one.
-- Deleting `app/ShellBreadcrumbs.tsx` (and later files) reddens `citedFiles.test.ts` if any comment
-  still names it: `grep -rn "ShellBreadcrumbs" frontend/src docs/specs/*.yaml backend/src`.
-- `TopStripProvider` stays mounted and `TopStripTarget` goes. The four pages that use `TopStripSlot`
-  then render their content in place until P1 moves them, which is expected.
-- The key chip's text is white on `projectColorFill[project.color]`. K1's check holds that contrast,
-  so do not tint the text by scheme.
-
-Commit: `feat(shell): one top bar instead of the rail (023 N1)`.
-Close out per the plan's "Close-out — every task" before you stop.
-````
 
 ### B1 — the card face (fe-react, fe)
 
@@ -283,7 +232,8 @@ files; do not push. **Gate: none** — this plan gates once, in C1. Do not run `
 Read, in this order:
 1. CLAUDE.md — "Test-harness rules" (the cited-files rule bites here).
 2. The plan: §2 (A2, A4), §4, §7.1, D2, task P1, and "Close-out — every task".
-3. K2's and N1's "As built" notes.
+3. K2's and N1's "As built" notes. N1 already deleted `TopStripTarget` and rewrote `AppShell.test.tsx`'s
+   slot tests to assert `TopStripSlot` renders in place inside `main`; delete those two tests with the slot.
 4. frontend/src/components/PageStrip.tsx and frontend/src/app/HeaderActions.tsx.
 5. For each page in §7.1's table, the region the table names (line numbers drift, so locate by
    content). Then each page's test, searching for `Nav.TopStrip`, `TopStripSlot` and heading
@@ -1171,6 +1121,14 @@ bordered outline and the default, so K2 used it rather than add a variant for on
 add `secondary`. Also, §5.5 puts `summary` in the popover as a footnote; with no `pickers` there is
 no popover, so the summary renders inline as before rather than vanishing.
 
+**D21 — The shell's gate hooks live in `app/shellNav.ts`, not `AppShell.tsx` (N1).** The plan said
+`AppShell` keeps `useNavGates`, `visibleEntries` and `useActiveProject`. Built instead in their own
+module with the bodies unchanged, because the launcher, the tabs, the switcher and the bar all read
+them and `AppShell` imports the bar, so keeping them in `AppShell.tsx` makes an import cycle (and a
+component file exporting plain hooks loses Fast Refresh, which this lint gate warns on). Reading
+two: keep them in `AppShell.tsx` and pass `allows` down as a prop, rejected as threading one value
+through four components. Cost: none for behaviour; the file the gate reasoning lived in changed.
+
 ## Answered questions (2026-10-04)
 
 **O1 — Should My work carry a count in the top bar?** No. An icon link only (D13).
@@ -1411,6 +1369,30 @@ them together.
 - `app/AppShell.test.tsx` rewritten against §3, keeping every gate assertion it had.
 - **Not in N1:** the trail (K2 drew it); the help guide's copy (C1); moving the four `TopStripSlot`
   pages (P1).
+- **As built (2026-10-04):** `app/TopBar.tsx`, `LauncherMenu.tsx`, `ProjectSwitcher.tsx`,
+  `ProjectTabs.tsx`, `CreateMenu.tsx` and `UserMenu.tsx` exist per §3's table, with its testids
+  (`Nav.Launcher`, `Nav.Wordmark`, `Nav.ProjectSwitcher`, `Nav.ProjectTabs`, `Nav.More`,
+  `TopBar.Create` / `TopBar.Create.Issue|Testcase|Release`, `TopBar.MyWork`, `TopBar.ThemeToggle`,
+  `TopBar.UserMenuButton`). `AppShell.tsx` is 59 lines: root `flex min-h-full flex-col bg-paper`,
+  `ShellFrameProvider`, `TopBar`, `main` per §3, `SkipToContentLink`, `useRouteFocus`,
+  `RouteErrorBoundary`, `TopStripProvider`. `app/ShellBreadcrumbs.tsx` is deleted and the two
+  comments that cited it (`routeMeta.ts`, `PageHeader.tsx`) now name `PageStrip`; `--rail-width`
+  is gone and `--header-height` is 48px (`index.css`). `nav.ts` gained `placement` and `hint` on the
+  entries §3 lists and nothing else. The palette trigger is `h-[34px] md:w-[280px] rounded-lg
+  bg-field`, an icon below `md`, accessible name and visible text "Search or jump to…"; the
+  dialog's input keeps "Search issues, cases, docs" (`CommandPalette.test.tsx`'s placeholder test now
+  asserts both). `AccessPage.tsx` only said "rail" in comments, so only those changed. Differences
+  from the plan, both small: (1) `useNavGates`, `visibleEntries` and `useActiveProject` moved,
+  **bodies unchanged**, from `AppShell.tsx` to `app/shellNav.ts`, because five bar parts read them
+  and importing them from `AppShell` would be a cycle (D21); `shellNav.ts` also exports `navTestId`.
+  (2) `ProjectKeyChip` is `<ProjectKeyChip project={{ key, color }} />` (testid `ProjectKeyChip`,
+  `data-color`, inline `backgroundColor: projectColorFill[color]`, `text-white`) exported from
+  `app/ProjectSwitcher.tsx`. Created-but-unrun risks for C1: `AppShell.test.tsx` was rewritten
+  blind — watch the launcher's two-line label query (`span > span`), the Radix menu-item
+  `aria-disabled` assertion in Create, and `toHaveStyle` on a `var(...)` background, which jsdom may
+  not resolve; the disabled reason's tooltip text is not asserted (`PermissionGate`'s own tests own
+  it). `release:manage` is the key Releases' New button gates on and `case:create` Test cases'; `issue:create` is Work's `+ Add`. Evidence: `ls frontend/src/app/{TopBar,LauncherMenu,ProjectSwitcher,ProjectTabs,CreateMenu,UserMenu,shellNav}.ts*`;
+  `grep -rn "ShellBreadcrumbs\|Nav.Rail\|AppFooter" frontend/src` matches only the "gone" list in `AppShell.test.tsx`.
 
 ### B1 — the card face
 

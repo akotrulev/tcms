@@ -14,6 +14,7 @@ fabricates a **population rather than a failure**, and the first to gate a Compa
 non-credential key.)
 
 **Session log**
+- 2026-10-04 — 023 N1: the rail, drawer, 52px header and footer are gone; `app/TopBar.tsx` (48px) with `LauncherMenu`, `ProjectSwitcher` (+ `ProjectKeyChip`), `ProjectTabs`, `CreateMenu`, `UserMenu`; gate hooks `useNavGates`/`visibleEntries`/`useActiveProject` now in `app/shellNav.ts`; `nav.ts` entries carry `placement`/`hint`; `ShellBreadcrumbs` and `TopStripTarget` deleted (`TopStripProvider`/`TopStripSlot` stay until P1). Nothing run (plan gates in C1). Rail-era rows below are stale.
 - 2026-10-04 — 023 K2: new seams `app/shellFrame.tsx`, `components/PageStrip.tsx` (trail = ancestors only), `components/kit/Segmented.tsx` (+ class helpers used by `TabStrip`), `FilterStrip` pickers behind a popover (`${testid}.Open`, `.Popover`), `test/filters.ts` `openFilters`. Nothing run (plan gates in C1).
 - 2026-09-07 — 022 T4: `ProposalPage`'s *Claimed requirements* panel and its four tests,
   `useVerifiedRequirements` + `docPageQueryOptions` in `api/queries/documentation.ts`, the

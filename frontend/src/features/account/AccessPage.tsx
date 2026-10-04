@@ -9,7 +9,7 @@ import { NAV, SETTINGS_SECTIONS, isFolder, type NavGate } from '../../app/nav';
 import { askableHoldersOf, listOfRoles, permissionLabels } from '../../lib/permissions';
 
 /**
- * `/account/access` — **the answer to "why is your rail different from mine?"** (021 §4, brief 15).
+ * `/account/access` — **the answer to "why is your navigation different from mine?"** (021 §4, brief 15).
  *
  * Nine entries in this shell are **hidden** rather than disabled, each for a reason recorded at the
  * entry that carries it (`nav.ts`, `NavGate.why`), and until this page nothing on screen said so.
@@ -34,7 +34,7 @@ import { askableHoldersOf, listOfRoles, permissionLabels } from '../../lib/permi
  * ## Where it reads from
  *
  * **No new contract.** `GET /projects` carries `myRole` per project and `GET /me/permissions`
- * answers each scope — the two reads the shell already makes to decide the rail, rendered as prose
+ * answers each scope — the two reads the shell already makes to decide the launcher (⊞) and the project tabs, rendered as prose
  * instead of as an absence. The per-project permissions are one request per visible project
  * (`useMyPermissionsAcross`), every one of which is normally already in the cache, because a hidden
  * settings card is hidden per project and one project's answer cannot state that.
@@ -49,7 +49,7 @@ interface GatedEntry {
 }
 
 /**
- * The nine, derived from the same data the rail and the settings landing render.
+ * The nine, derived from the same data the launcher (⊞), the project tabs and the settings landing render.
  *
  * Derived rather than listed, for `lib/permissions.ts`' own rule: a catalogue-wide claim needs a
  * computed check and not a careful reading. A tenth gate added to `nav.ts` appears here the same

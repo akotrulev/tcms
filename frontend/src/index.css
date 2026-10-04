@@ -378,8 +378,7 @@
   --color-action-glow: rgb(43 104 131 / 28%);
 
   /* --- layout --- */
-  --rail-width: 232px;
-  --header-height: 52px;
+  --header-height: 48px;
 }
 
 /*

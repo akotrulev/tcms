@@ -101,7 +101,7 @@ export function CommandPalette({ projectId }: { projectId: string | undefined })
       */}
       <form
         role="search"
-        className="flex min-w-0 flex-1 items-center justify-end md:justify-start"
+        className="flex shrink-0 items-center"
         onSubmit={(event) => {
           event.preventDefault();
           setOpen(true);
@@ -110,15 +110,17 @@ export function CommandPalette({ projectId }: { projectId: string | undefined })
         <button
           ref={triggerRef}
           type="submit"
+          aria-label={TRIGGER_LABEL}
           data-testid="TopBar.Search"
           className={
-            'flex h-8 w-full max-w-[320px] min-w-0 items-center gap-2 rounded-md border border-line ' +
-            'bg-wash px-2.5 text-[12.5px] text-ink-4 hover:text-ink-3 ' +
+            'flex h-[34px] items-center gap-2 rounded-lg border border-line bg-field text-[12.5px] ' +
+            'text-ink-4 hover:text-ink-3 max-md:size-8 max-md:justify-center max-md:border-0 ' +
+            'max-md:bg-transparent md:w-[280px] md:px-2.5 ' +
             'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[color:var(--color-given)]'
           }
         >
           <Search aria-hidden className="size-4 shrink-0" />
-          <span className="min-w-0 truncate">{PLACEHOLDER}</span>
+          <span className="min-w-0 truncate max-md:hidden">{TRIGGER_LABEL}</span>
           {/*
             The hint is decoration for a mouse user and noise for a screen reader, which already
             heard the accessible name. `⌘K` is drawn on every platform deliberately — the control
@@ -127,7 +129,7 @@ export function CommandPalette({ projectId }: { projectId: string | undefined })
           */}
           <kbd
             aria-hidden
-            className="ml-auto hidden shrink-0 rounded-sm border border-line px-1 font-mono text-[10px] lg:inline"
+            className="ml-auto hidden shrink-0 rounded-sm border border-line px-1 font-mono text-[10px] md:inline"
           >
             ⌘K
           </kbd>
@@ -176,6 +178,7 @@ export function CommandPalette({ projectId }: { projectId: string | undefined })
  * only place a reader is told what the field covers before they type into it.
  */
 const PLACEHOLDER = 'Search issues, cases, docs';
+const TRIGGER_LABEL = 'Search or jump to…';
 
 /**
  * A case key is `TC-118`; an issue key is `ACME-118` — the project's key, then the sequence.

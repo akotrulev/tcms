@@ -84,12 +84,17 @@ beforeEach(() => {
 })
 
 describe('The palette, searching issues, cases and docs', () => {
-  it('names all three in the placeholder rather than only the one it started with', () => {
+  it('labels the trigger as a jump, and the dialog names all three kinds it searches', async () => {
+    const user = userEvent.setup()
     mockReads()
     renderPalette(OLB)
 
-    // ~~`Search cases, or jump to…`~~ → the mockup's, now that two of the three reads exist.
-    expect(screen.getByTestId('TopBar.Search')).toHaveTextContent('Search issues, cases, docs')
+    // The bar's trigger (023 §3 row 7) says what the control does; the dialog's input still names
+    // the three reads it searches.
+    expect(screen.getByTestId('TopBar.Search')).toHaveTextContent('Search or jump to…')
+    expect(screen.getByTestId('TopBar.Search')).toHaveAccessibleName('Search or jump to…')
+    await user.click(screen.getByTestId('TopBar.Search'))
+    expect(await screen.findByTestId('Palette.Input')).toHaveAttribute('placeholder', 'Search issues, cases, docs')
   })
 
   it('groups issues, cases and the active project’s docs, each under its own heading', async () => {

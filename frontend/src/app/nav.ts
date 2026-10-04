@@ -26,9 +26,15 @@ import {
 import type { PermissionKey } from '../api/types';
 
 /**
- * The rail, the tab strips and the settings sections — as **data**, in one file (021 D-h).
+ * The shell's places, the tab strips and the settings sections — as **data**, in one file (021 D-h).
  *
- * `AppShell` renders it, `AppShell.test.tsx` asserts against it, and T7's palette generates its
+ * The zones are now drawn as launcher sections and project tabs (023 D1): `You` and `Company` are
+ * the launcher's columns, the project zone is the tab row plus More, and the rail-specific
+ * arguments below are ~~about a rail~~ → superseded (023 D1) and kept for the gate reasoning they
+ * also carry. `placement` and `hint` are the only fields 023 added; the zones, gates and `why`
+ * clauses are unchanged, so the palette's Places and Your access still read them as they were.
+ *
+ * `TopBar` renders it, `AppShell.test.tsx` asserts against it, and T7's palette generates its
  * "places" index from it. A label therefore lives in exactly one place, which is what the twelve
  * §8.1 renames needed: before this, `All projects` was a string in a component and `Staffing` was
  * the same string twice, at two scopes, meaning two different screens.
@@ -101,6 +107,10 @@ export interface NavItem {
   gate?: NavGate;
   /** Marks the item active for descendant routes too, not just an exact match. */
   end?: boolean;
+  /** Project zone only: a top-bar tab, or an entry under More (023 §3). */
+  placement?: 'tab' | 'more';
+  /** The launcher's second line for the entry (023 §3). */
+  hint?: string;
 }
 
 export interface NavFolder {
@@ -146,7 +156,7 @@ export const NAV: NavZone[] = [
         It is also the only row that renders when NO project is resolved, which is exactly the
         state a member holding no project grants at all is in.
       */
-      { label: 'My work', to: () => '/my-work', icon: UserCheck, end: true },
+      { label: 'My work', to: () => '/my-work', icon: UserCheck, end: true, hint: 'Assigned to you, every project' },
       /*
         The picker. ~~`All projects`~~ → **`Projects`** (§8.1) — the mockup's word, and the one the
         breadcrumb's first segment uses, so the rail and the trail now agree.
@@ -157,7 +167,7 @@ export const NAV: NavZone[] = [
         relying on a special case in the router to make a nav item behave is a worse reason than
         saying what you meant.
       */
-      { label: 'Projects', to: () => '/', icon: LayoutGrid, end: true },
+      { label: 'Projects', to: () => '/', icon: LayoutGrid, end: true, hint: 'Every project you can open' },
       /*
         ~~`Timesheets`, third in this block, because a period is personal and spans projects.~~ →
         **superseded (021 R11): it left the rail and is in the user menu**, with `Timesheet
@@ -201,13 +211,13 @@ export const NAV: NavZone[] = [
         the filter travels between them in the query string rather than in a store the URL cannot
         restore.
       */
-      { label: 'Work', to: (p) => `/projects/${p}/work`, icon: Kanban },
+      { label: 'Work', to: (p) => `/projects/${p}/work`, icon: Kanban, placement: 'tab' },
       /* Three tabs — Cases · Suites · Proposals (see {@link TABS}). */
-      { label: 'Test cases', to: (p) => `/projects/${p}/cases`, icon: Folder },
-      { label: 'Test plans', to: (p) => `/projects/${p}/plans`, icon: ClipboardList },
+      { label: 'Test cases', to: (p) => `/projects/${p}/cases`, icon: Folder, placement: 'tab' },
+      { label: 'Test plans', to: (p) => `/projects/${p}/plans`, icon: ClipboardList, placement: 'tab' },
       /* Three tabs — Runs · Schedules · CI results. */
-      { label: 'Test runs', to: (p) => `/projects/${p}/runs`, icon: ListChecks },
-      { label: 'Releases', to: (p) => `/projects/${p}/releases`, icon: Rocket },
+      { label: 'Test runs', to: (p) => `/projects/${p}/runs`, icon: ListChecks, placement: 'tab' },
+      { label: 'Releases', to: (p) => `/projects/${p}/releases`, icon: Rocket, placement: 'tab' },
       /*
         ~~`Documentation`~~ → **`Documents`** (§8.1). The old label collided with the user menu's
         `Help & documentation`, so one shell named two destinations the same thing and a reader had
@@ -216,14 +226,14 @@ export const NAV: NavZone[] = [
 
         Two tabs — Pages · Artifacts.
       */
-      { label: 'Documents', to: (p) => `/projects/${p}/docs`, icon: FileText },
+      { label: 'Documents', to: (p) => `/projects/${p}/docs`, icon: FileText, placement: 'tab' },
       /*
         **Seventh, and that is the decision** (R8). ~~First, because it is the project's front
         door.~~ → **superseded:** it is the project's *dashboard* — read at stand-up, not the place
         work is done — and the six rows above it are where the day is spent. A screen's position in
         this list is a claim about how often it is opened, and this one was wrong.
       */
-      { label: 'Overview', to: (p) => `/projects/${p}`, icon: LayoutDashboard, end: true },
+      { label: 'Overview', to: (p) => `/projects/${p}`, icon: LayoutDashboard, end: true, placement: 'more' },
       /*
         Delivery analytics (020 M9). ~~Filed under `Project` where `Reports` is under `Execution`,
         because what a report is *of* is execution results and what this is *of* is whether the
@@ -232,20 +242,20 @@ export const NAV: NavZone[] = [
         carried by the two labels — `Analytics` and `Test reports` — instead of by a heading, which
         is what R5 chose over merging them (020 D-l, closed by naming).
       */
-      { label: 'Analytics', to: (p) => `/projects/${p}/analytics`, icon: TrendingUp },
+      { label: 'Analytics', to: (p) => `/projects/${p}/analytics`, icon: TrendingUp, placement: 'more' },
       /*
         ~~`Reports`~~ → **`Test reports`** (§8.1, R5). Two entries were kept and one was renamed:
         the pair reads "reports of what?" beside `Analytics` otherwise, which is 020 D-l's recorded
         divergence closed by naming rather than by merging two screens that answer different
         questions.
       */
-      { label: 'Test reports', to: (p) => `/projects/${p}/reports`, icon: ChartColumn },
+      { label: 'Test reports', to: (p) => `/projects/${p}/reports`, icon: ChartColumn, placement: 'more' },
       /*
         ~~`Staffing`, under `Execution`.~~ → **`Team`** (§8.1). The rail carried the word twice, at
         two scopes, for two screens — this one and the company's — which is the duplicate-label
         defect the brief found. The route does not move: it is still `…/staffing`.
       */
-      { label: 'Team', to: (p) => `/projects/${p}/staffing`, icon: Users2 },
+      { label: 'Team', to: (p) => `/projects/${p}/staffing`, icon: Users2, placement: 'more' },
       /*
         **One row where eleven stood** (§5). `General`, `Workflow`, `Boards`, `Repositories`,
         `Imports`, `Classification`, `Review`, `Notifications`, `Issue tracker`, `Access & roles`
@@ -254,7 +264,7 @@ export const NAV: NavZone[] = [
         every pasted `/settings/*`, `/access`, `/imports` and `/audit` link still lands where it
         always did.
       */
-      { label: 'Settings', to: (p) => `/projects/${p}/settings`, icon: Settings, end: true },
+      { label: 'Settings', to: (p) => `/projects/${p}/settings`, icon: Settings, end: true, placement: 'more' },
     ],
   },
   {
@@ -265,8 +275,8 @@ export const NAV: NavZone[] = [
         The org chart (§6k), first because it is the one screen here every member can use — and it
         is gated on nothing at all, so the entry is not a promise the page has to walk back.
       */
-      { label: 'Org chart', to: () => '/org-chart', icon: Network },
-      { label: 'Directory', to: () => '/directory', icon: UserRoundSearch },
+      { label: 'Org chart', to: () => '/org-chart', icon: Network, hint: 'Who reports to whom' },
+      { label: 'Directory', to: () => '/directory', icon: UserRoundSearch, hint: 'Find a colleague' },
       /*
         ~~`Staffing`~~ → **`Capacity`** (§8.1), the other half of the duplicate-label repair. This
         is the company-wide question — who is free next month, across every project a person is on
@@ -278,8 +288,8 @@ export const NAV: NavZone[] = [
         screen that answers *their* question — their own project's `Team` — and that refusal is
         only reachable if the entry is shown.
       */
-      { label: 'Capacity', to: () => '/staffing', icon: Users2 },
-      { label: 'Teams & roles', to: () => '/admin/teams', icon: Users },
+      { label: 'Capacity', to: () => '/staffing', icon: Users2, hint: 'Who is free, across projects' },
+      { label: 'Teams & roles', to: () => '/admin/teams', icon: Users, hint: 'Teams and what they hold' },
       /*
         GATED (018 Mc). `ApiTokenService`'s argument: the read is **refused rather than narrowed**,
         because an empty array would be a claim about the company told to somebody who may not ask
@@ -288,6 +298,7 @@ export const NAV: NavZone[] = [
       */
       {
         label: 'Clients',
+        hint: 'Companies you deliver for',
         to: () => '/clients',
         icon: Building2,
         gate: {
@@ -305,6 +316,7 @@ export const NAV: NavZone[] = [
       */
       {
         label: 'Billing',
+        hint: 'Invoices and rates',
         to: () => '/billing',
         icon: Receipt,
         gate: {
@@ -330,6 +342,7 @@ export const NAV: NavZone[] = [
           */
           {
             label: 'API tokens',
+            hint: 'CI and agent credentials',
             to: () => '/admin/tokens',
             icon: Key,
             gate: {
@@ -345,6 +358,7 @@ export const NAV: NavZone[] = [
           */
           {
             label: 'Single sign-on',
+            hint: 'Identity providers',
             to: () => '/admin/sso',
             icon: LogIn,
             gate: {
@@ -365,6 +379,7 @@ export const NAV: NavZone[] = [
           */
           {
             label: 'Company audit',
+            hint: 'Who changed what',
             to: () => '/admin/audit',
             icon: ScrollText,
             gate: {
