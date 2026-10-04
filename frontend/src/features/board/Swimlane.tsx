@@ -1,5 +1,5 @@
 import { useDroppable } from '@dnd-kit/core';
-import { ChevronDown, ChevronRight, Maximize2 } from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { type CSSProperties } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import type { BoardIssueCard, BoardLane, CardElsewhere, SwimlaneBy } from '../../api/types';
@@ -69,7 +69,6 @@ export function Swimlane({
   collapsedRows,
   onToggleRow,
   doneOpen,
-  onToggleDone,
   projectId,
   onMove,
   onBlock,
@@ -93,9 +92,8 @@ export function Swimlane({
   /** Story keys whose sub-bar is collapsed, within this lane. */
   collapsedRows: ReadonlySet<string>;
   onToggleRow: (storyKey: string) => void;
-  /** Whether this lane's `Done` strip is expanded — per lane, like collapse (D-l). */
+  /** Whether `Done` is open — one answer for the whole board, owned by the column's header (D12). */
   doneOpen: boolean;
-  onToggleDone: () => void;
   projectId: string;
   onMove: (card: BoardIssueCard, toColumnId: string) => void;
   onBlock: (card: BoardIssueCard) => void;
@@ -136,7 +134,7 @@ export function Swimlane({
         <div
           data-testid={`${testId}.Head`}
           className={cn(
-            'mb-2 flex flex-wrap items-center gap-[9px] rounded-md border border-line',
+            'mb-2 flex flex-wrap items-center gap-[9px] rounded-xl border border-line',
             'bg-panel px-3 py-2',
           )}
         >
@@ -256,10 +254,8 @@ export function Swimlane({
                 key={column.id}
                 id={cellId(laneId, column.id)}
                 count={lane.cards.filter((card) => card.columnId === column.id).length}
-                name={column.name}
-                laneLabel={lane.label}
                 index={index}
-                onExpand={onToggleDone}
+                joined={!banded}
                 testId={`${testId}.Done.${column.name}`}
               />
             ) : (
@@ -271,12 +267,12 @@ export function Swimlane({
                     ? lane.cards.filter((card) => card.columnId === column.id)
                     : shape.band.filter((card) => card.columnId === column.id)
                 }
+                joined={!banded}
                 place={
                   column.done
                     ? { gridColumn: index + 1, gridRow: '1 / -1', alignSelf: 'stretch' }
                     : { gridColumn: index + 1, gridRow: 1 }
                 }
-                onCollapseDone={column.done ? onToggleDone : undefined}
                 testId={`${testId}.Cell.${column.name}`}
                 {...cellProps}
               />
@@ -366,7 +362,7 @@ function StoryRow({
         data-testid={testId}
         style={{ gridColumn: '1 / -1', ...(gridRow === undefined ? {} : { gridRow }) }}
         className={cn(
-          'ml-[18px] flex flex-wrap items-center gap-[7px] rounded-md border border-line',
+          'ml-[18px] flex flex-wrap items-center gap-[7px] rounded-lg border border-line',
           'bg-wash-1 px-2.5 py-1.5',
         )}
       >
@@ -457,6 +453,7 @@ function StoryRow({
                 ...(gridRow === undefined ? {} : { gridRow: gridRow + 1 }),
               }}
               columns={columns}
+              joined={false}
               onMove={onMove}
               onBlock={onBlock}
               onUnblock={onUnblock}
@@ -541,7 +538,7 @@ function Elsewhere({
 }
 
 /**
- * A `Done` column, collapsed to one narrow strip spanning the lane (021 D-l, render note 28).
+ * A `Done` column, collapsed to one cell spanning the lane (021 D-l, render note 28; 023 D12).
  *
  * *Tested is not shipped* (021 **R12** — ~~`Done` is a Dev/QA column~~ → it is the PM board's,
  * collapsed to a count) — `Done` is the PM board's and nothing else's, and the PO's drag into it
@@ -550,24 +547,23 @@ function Elsewhere({
  * hidden, not the gesture, and a column you cannot drop into would remove the one move this whole
  * arrangement exists to make deliberate.
  *
- * One strip for the lane rather than a cell per row, `align-self: stretch` because the lane grid is
+ * It says `n done` and nothing else: opening Done is a question about the whole board, so the only
+ * toggle is the column's own header (D12).
+ *
+ * One cell for the lane rather than one per row, `align-self: stretch` because the lane grid is
  * `align-items: start`.
  */
 function DoneStrip({
   id,
   count,
-  name,
-  laneLabel,
   index,
-  onExpand,
+  joined,
   testId,
 }: {
   id: string;
   count: number;
-  name: string;
-  laneLabel: string;
   index: number;
-  onExpand: () => void;
+  joined: boolean;
   testId: string;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id });
@@ -579,28 +575,28 @@ function DoneStrip({
       data-over={isOver ? 'true' : undefined}
       style={{ gridColumn: index + 1, gridRow: '1 / -1', alignSelf: 'stretch' }}
       className={cn(
-        'flex min-h-[64px] flex-col items-center gap-2 rounded-lg border border-line bg-wash-1 p-2',
-        'transition-colors duration-150 motion-reduce:transition-none',
-        isOver && 'border-[color:var(--color-steel)] bg-wash-2',
+        cellSurface(joined, isOver),
+        'flex flex-col items-center gap-2 transition-colors duration-150 motion-reduce:transition-none',
       )}
     >
-      <span data-testid={`${testId}.Count`} className="font-mono text-[13px] font-semibold text-ink-2">
-        {count}
+      <span data-testid={`${testId}.Count`} className="font-mono text-[12px] text-ink-3">
+        {`${count} done`}
       </span>
-      <button
-        type="button"
-        onClick={onExpand}
-        aria-label={`Expand the ${name} column of the ${laneLabel} lane`}
-        data-testid={`${testId}.Expand`}
-        className={cn(
-          'flex size-5 flex-none items-center justify-center rounded-sm border-0 bg-transparent',
-          'cursor-pointer p-0 text-ink-4 hover:text-ink-2',
-          'focus-visible:outline-2 focus-visible:outline-[color:var(--color-given)]',
-        )}
-      >
-        <Maximize2 aria-hidden className="size-3.5" />
-      </button>
     </div>
+  );
+}
+
+/**
+ * A cell's panel classes (023 §6.3).
+ *
+ * Under a header with no lane band the cell is the lower half of the column's one panel — square
+ * top, no top border, no gap above it. In a swimlane board every cell is its own panel.
+ */
+function cellSurface(joined: boolean, isOver: boolean): string {
+  return cn(
+    'border p-2',
+    joined ? 'min-h-[120px] rounded-b-xl border-t-0' : 'min-h-[64px] rounded-xl',
+    isOver ? 'border-[color:var(--color-steel)] bg-wash-1' : 'border-line bg-panel',
   );
 }
 
@@ -620,12 +616,12 @@ function LaneCell({
   cards,
   place,
   columns,
+  joined,
   onMove,
   onBlock,
   onUnblock,
   alsoOn,
   readiness,
-  onCollapseDone,
   canMove,
   moveRefusal,
   testId,
@@ -634,13 +630,12 @@ function LaneCell({
   cards: readonly BoardIssueCard[];
   place: CSSProperties;
   columns: readonly ServerColumn[];
+  joined: boolean;
   onMove: (card: BoardIssueCard, toColumnId: string) => void;
   onBlock: (card: BoardIssueCard) => void;
   onUnblock: (card: BoardIssueCard, statusId: string) => void;
   alsoOn: (card: BoardIssueCard) => readonly Pick<CardElsewhere, 'boardId' | 'boardName'>[];
   readiness: boolean;
-  /** Present on an **expanded** `Done` column, so the reader can put it back. */
-  onCollapseDone?: () => void;
   canMove: boolean;
   moveRefusal: string | undefined;
   testId: string;
@@ -654,24 +649,10 @@ function LaneCell({
       data-over={isOver ? 'true' : undefined}
       style={place}
       className={cn(
-        'flex min-h-[64px] flex-col gap-2 rounded-lg border p-2 transition-colors duration-150',
-        'motion-reduce:transition-none',
-        isOver ? 'border-[color:var(--color-steel)] bg-wash-1' : 'border-line bg-paper',
+        cellSurface(joined, isOver),
+        'flex flex-col gap-2 transition-colors duration-150 motion-reduce:transition-none',
       )}
     >
-      {onCollapseDone && (
-        <button
-          type="button"
-          onClick={onCollapseDone}
-          data-testid={`${testId}.Collapse`}
-          className={cn(
-            'cursor-pointer self-end rounded-sm border-0 bg-transparent p-0 text-[10.5px] text-ink-4',
-            'hover:text-ink-2 focus-visible:outline-2 focus-visible:outline-[color:var(--color-given)]',
-          )}
-        >
-          collapse
-        </button>
-      )}
       {sorted(cards).map((card) => (
         <BoardCardFace
           key={card.key}

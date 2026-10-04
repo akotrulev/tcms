@@ -21,6 +21,7 @@ import {
   useLabels,
   useMoveCard,
   useProjectMembers,
+  useProjectWorkflow,
   useTransitionIssue,
 } from '../../api/queries';
 import type {
@@ -40,6 +41,7 @@ import { BoardCardFace } from './BoardCardFace';
 import { ColumnHeader } from './ColumnHeader';
 import { GroupMenu } from './GroupMenu';
 import { Swimlane } from './Swimlane';
+import { sumLinkedCases } from './linkedCases';
 import { boardKeyboardCoordinates } from './boardKeyboard';
 import { blockingTargetOf, groomsWork, resolveColumnMove, serverColumnsOf } from './cardMove';
 import { epicCardsByLane, laneRowsOf, type LaneShape } from './laneRows';
@@ -179,8 +181,8 @@ export function ProjectBoardView({ projectId }: { projectId: string }) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   /** Sub-bars that are shut, keyed `<laneId>#<storyKey>` — a story key is unique per lane, not board-wide. */
   const [collapsedRows, setCollapsedRows] = useState<ReadonlySet<string>>(new Set());
-  /** Lanes whose `Done` strip the reader has opened. Collapsed is the default (D-l). */
-  const [doneOpen, setDoneOpen] = useState<ReadonlySet<string>>(new Set());
+  /** Whether `Done` is open, for every lane at once. Collapsed is the default (D-l, 023 D12). */
+  const [doneOpen, setDoneOpen] = useState(false);
   const [dragging, setDragging] = useState<BoardIssueCard | null>(null);
   const [rejected, setRejected] = useState<string | null>(null);
   const [blocking, setBlocking] = useState<BoardIssueCard | null>(null);
@@ -195,6 +197,19 @@ export function ProjectBoardView({ projectId }: { projectId: string }) {
     sensor mid-drag, which drops the lift.
   */
   const columns = useMemo(() => serverColumnsOf(config.data?.columns ?? []), [config.data]);
+
+  /*
+    The door `+` (023 D10): a create enters the project's first status by position, so only the
+    column claiming that status may offer one. The read is optional — a failed workflow costs the
+    `+` and nothing else, and a board with no such column has no `+` at all.
+  */
+  const workflow = useProjectWorkflow(projectId);
+  const doorColumnId = useMemo(() => {
+    const first = [...(workflow.data?.statuses ?? [])].sort((a, b) => a.position - b.position)[0];
+    return first === undefined
+      ? undefined
+      : columns.find((column) => column.statusIds.includes(first.id))?.id;
+  }, [workflow.data, columns]);
 
   const lanes = useMemo(() => {
     const contents = cards.data;
@@ -545,7 +560,12 @@ export function ProjectBoardView({ projectId }: { projectId: string }) {
                         className="min-w-max"
                         style={{ '--board-columns': columns.length } as CSSProperties}
                       >
-                        <div className="mb-2 grid gap-3 [grid-template-columns:repeat(var(--board-columns),272px)]">
+                        <div
+                          className={cn(
+                            'grid gap-3 [grid-template-columns:repeat(var(--board-columns),272px)]',
+                            contents.swimlaneBy !== 'NONE' && 'mb-2',
+                          )}
+                        >
                           {columns.map((column) => (
                             <ColumnHeader
                               key={column.id}
@@ -556,6 +576,13 @@ export function ProjectBoardView({ projectId }: { projectId: string }) {
                               breach={contents.breaches.find(
                                 (breach) => breach.columnId === column.id,
                               )}
+                              health={sumLinkedCases(
+                                healthCardsIn(column.id, open).map((card) => card.linkedCases),
+                              )}
+                              joined={contents.swimlaneBy === 'NONE'}
+                              door={column.id === doorColumnId ? { projectId } : undefined}
+                              doneOpen={doneOpen}
+                              onToggleDone={() => setDoneOpen((held) => !held)}
                               testId={`${TEST_ID}.Column.${column.name}`}
                             />
                           ))}
@@ -578,8 +605,7 @@ export function ProjectBoardView({ projectId }: { projectId: string }) {
                                 onToggleRow={(storyKey) =>
                                   setCollapsedRows(toggled(`${entry.id}#${storyKey}`))
                                 }
-                                doneOpen={doneOpen.has(entry.id)}
-                                onToggleDone={() => setDoneOpen(toggled(entry.id))}
+                                doneOpen={doneOpen}
                                 projectId={projectId}
                                 onMove={(card, toColumnId) =>
                                   void commit(card, cellId(entry.id, toColumnId))
@@ -662,8 +688,8 @@ interface OpenLane {
 }
 
 /**
- * Flip one member of a `Set` held in state — collapse, sub-bar collapse and the `Done` strip are
- * three of the same thing, and three hand-written copies of it is three chances to write `add`
+ * Flip one member of a `Set` held in state — lane collapse and sub-bar collapse are
+ * two of the same thing, and two hand-written copies of it is two chances to write `add`
  * where `delete` belongs.
  */
 function toggled(id: string) {
@@ -687,6 +713,11 @@ function rowsShutIn(shut: ReadonlySet<string>, laneId: string): ReadonlySet<stri
   const mine = new Set<string>();
   for (const id of shut) if (id.startsWith(prefix)) mine.add(id.slice(prefix.length));
   return mine;
+}
+
+/** The cards drawn in one column across the expanded lanes. */
+function healthCardsIn(columnId: string, open: readonly OpenLane[]): BoardIssueCard[] {
+  return open.flatMap((entry) => entry.cards.filter((card) => card.columnId === columnId));
 }
 
 /** Cards drawn in one column across the expanded lanes, or every drawn card when `columnId` is null. */

@@ -7,11 +7,11 @@ panels of cards whose face leads with identity and ends with the card's test res
 a colour, which its key chip carries; it never fills a canvas. No route moves. The project colour is
 the plan's one contract change (§3a).
 
-**Status:** A1, A2, K1, K2, N1, B1 and B2 built 2026-10-04 (nothing run, per the plan's single gate). A1: the contract, both
+**Status:** A1, A2, K1, K2, N1, B1, B2 and B3 built 2026-10-04 (nothing run, per the plan's single gate). A1: the contract, both
 generated copies, both fixture factories. A2: `V15__project_color.sql`, `Project.color`, the create
 default, `PUT /projects/{projectId}/color`, and their tests. K1: the surface ladder (`bg-bar`,
 `bg-raised`), the radius codemod (106 files) and its check, the overlay primitives on the ladder, and
-the project palette with `projectColorFill` and its contrast check. K2: `PageStrip`, `PageHeader` on it, `Segmented`, `TabStrip` on its helpers, `FilterStrip`'s popover and `openFilters`; every consumer test of a `FilterStrip` picker is still red until B2, P2, P3 and P4. N1: the 48px `TopBar` (launcher, switcher with coloured key chips, project tabs and More, search, Create, My work, theme, user menu with the version) replaced the rail, drawer and footer, and `AppShell.test.tsx` is rewritten against it; the four `TopStripSlot` pages render in place until P1. B1: `BoardCardFace` redrawn per §6.1 (identity row, priority for CRITICAL/HIGH, dot-and-name labels, cases row, 3px edge bar via a new `ResultBar` `variant="edge"`), pointer drag on the card with the keyboard drag on the grip, the click that ends a drag swallowed; `BoardCardFace.test.tsx` extended and two `ProjectBoardView.test.tsx` assertions updated (nothing run). B2: `/projects/:id/work` opens with one strip (`BoardPicker` lead with door badges, five view links, `WorkStripActions` portal carrying each view's Filter and the board's `GroupMenu`); `+ Add`, the GroupBy select, Configure and the keyboard banner are gone and the foot line carries the sentence; `WorkTablePage`, `ProjectBoardView` and `BacklogView` tests rewritten through `openFilters` (nothing run). Next: B3. The server now serves
+the project palette with `projectColorFill` and its contrast check. K2: `PageStrip`, `PageHeader` on it, `Segmented`, `TabStrip` on its helpers, `FilterStrip`'s popover and `openFilters`; every consumer test of a `FilterStrip` picker is still red until B2, P2, P3 and P4. N1: the 48px `TopBar` (launcher, switcher with coloured key chips, project tabs and More, search, Create, My work, theme, user menu with the version) replaced the rail, drawer and footer, and `AppShell.test.tsx` is rewritten against it; the four `TopStripSlot` pages render in place until P1. B1: `BoardCardFace` redrawn per §6.1 (identity row, priority for CRITICAL/HIGH, dot-and-name labels, cases row, 3px edge bar via a new `ResultBar` `variant="edge"`), pointer drag on the card with the keyboard drag on the grip, the click that ends a drag swallowed; `BoardCardFace.test.tsx` extended and two `ProjectBoardView.test.tsx` assertions updated (nothing run). B2: `/projects/:id/work` opens with one strip (`BoardPicker` lead with door badges, five view links, `WorkStripActions` portal carrying each view's Filter and the board's `GroupMenu`); `+ Add`, the GroupBy select, Configure and the keyboard banner are gone and the foot line carries the sentence; `WorkTablePage`, `ProjectBoardView` and `BacklogView` tests rewritten through `openFilters` (nothing run). B3: columns are panels (`ColumnHeader` with count, WIP pill, summed linked-case health and the door `+` on the first-status column; the lane cells, band bar and sub-bar on the §6.3 classes; one board-wide `doneOpen` toggled from the Done header, collapsed lanes showing `n done`); `sumLinkedCases` added; `ProjectBoardView.test.tsx` and `linkedCases.test.ts` extended (nothing run). Next: P1. The server now serves
 `color` and answers the colour endpoint; all of it is unverified until C1. The design was approved on 2026-10-04 on a canvas:
 <https://claude.ai/artifact/5LuW51YtnVNKWHZ4mV6Xbj>. `Main` is the board screen with the new shell,
 and `CardStates` is the card in six states, in both themes. The canvas is the user's private artifact,
@@ -71,60 +71,9 @@ Run them in order, one session each. Each block is complete on its own. Every ga
 only C1 runs one. No prompt pushes, and none starts the local stack. C1 may *use* a stack that is
 already running and must not start one.
 
-A1, A2, K1, K2, N1, B1 and B2 have landed; every block below is live.
+A1, A2, K1, K2, N1, B1, B2 and B3 have landed; every block below is live.
 
 ---
-
-### B3 — the board's columns (fe-react, fe)
-
-````
-You are `fe-react`. Task B3 of docs/plans/023-one-design-language.md: draw columns as panels. Each
-header carries count, WIP, the column's linked-case health and the door `+`. Done collapses
-board-wide from its own header.
-
-Deliverable: columns are panels per §6.3. `ColumnHeader` draws count, WIP, health
-(`sumLinkedCases`) and the door `+` on the first-status column. Done collapses board-wide from
-`${testId}.DoneToggle`. ProjectBoardView tests assert the health row's three zeroes, the `+` placement
-and the board-wide Done.
-
-House rules for this plan: current branch only, never create one; no subagents; stage only your
-files; do not push. **Gate: none** — this plan gates once, in C1. Do not run `npm run build`, `lint`,
-`test:run`, `test:smoke`, `tsc` or any targeted test, locally or on shanks.
-
-Read, in this order:
-1. CLAUDE.md — "Test-harness rules".
-2. The plan: §6.3, §6.4, D8, D10, D11, D12, task B3, and "Close-out — every task".
-3. B1's and B2's "As built" notes.
-4. frontend/src/features/board/ProjectBoardView.tsx — the board grid, `lanes`, `doneOpen`,
-   `laneOrder`/`stepColumn`, `countIn`.
-5. frontend/src/features/board/ColumnHeader.tsx (whole).
-6. frontend/src/features/board/Swimlane.tsx — the cell grid, the band bar, the sub-bar, the Done
-   strip.
-7. frontend/src/features/board/linkedCases.ts and frontend/src/components/kit/ResultBar.tsx.
-   `ResultBar` already has `variant="edge"` (B1); the column's 4px bar is the default variant.
-8. The workflow read in frontend/src/api/queries/ (the hook WorkTablePage uses for
-   `workflow.data.statuses`) and `BoardConfig.columns[].statuses` in frontend/src/api/types.ts.
-9. ProjectBoardView.test.tsx — the column-header, Done-strip and keyboard-walk describes.
-
-Build (the bullets of task B3, in order).
-
-Traps:
-- The breach is the server's (`BoardContents.breaches`). It is counted project-wide and does not
-  shrink under a filter. Keep the three WIP states and their titles exactly.
-- The keyboard walk steps over bands using the first column that is not Done. A collapsed Done is one
-  cell per lane; do not let it become a stop.
-- The door `+` is drawn only on the column that claims the workflow's first status by position. A
-  create enters that status (`IssueInput` has no status field). A board with no such column draws no
-  `+`.
-- B2 already moved the keyboard sentence into the board's foot line (`ProjectBoard.Count`) and took
-  the header's `+ Add` away, so the door `+` is the only add on the board. Do not touch the strip,
-  `GroupMenu` or `workStrip.tsx`.
-- The health sums card summaries and skips `null` ones. A column whose cards are all `null` draws no
-  health row at all. The title says the count is per card link.
-
-Commit: `feat(board): columns as panels, test health in the header, Done from its header (023 B3)`.
-Close out per the plan's "Close-out — every task" before you stop.
-````
 
 ### P1 — document-mode pages onto the strip (fe-react, fe)
 
@@ -1058,6 +1007,12 @@ the plan puts one control in the strip's actions. Cost: Columns is one click dee
 the popover first. Also, door badges are drawn only by the picker, which exists on the Board view, so
 the old "badges on every view" test became "badges in the picker".
 
+**D24 — The Done strip loses its Expand button and the expanded cell its `collapse` link (B3).**
+D12 puts the one toggle in the Done header, so the per-lane controls had nothing left to do. Reading
+two: keep them as shortcuts that flip the same board-wide boolean; rejected, because two controls for
+one switch is the ambiguity D12 removed. Cost: the per-lane test that clicked "Expand the Done column
+of the … lane" now clicks `${testId}.DoneToggle`.
+
 ## Answered questions (2026-10-04)
 
 **O1 — Should My work carry a count in the top bar?** No. An icon link only (D13).
@@ -1444,6 +1399,26 @@ and the board-wide Done.
 - `features/board/Swimlane.tsx`: cells, band bar and sub-bar per §6.3; Done takes the board-wide
   boolean and draws `n done` when collapsed.
 - **Not in B3:** the card (B1) and the strip (B2).
+
+- **As built (2026-10-04):** nothing run, per the gate. `linkedCases.ts` gained `sumLinkedCases` (null
+  when no card was served a summary; null summaries add nothing) with four cases in
+  `linkedCases.test.ts`. `ColumnHeader.tsx` is two rows per §6.4: name, count, WIP pill (three states
+  and titles verbatim; breach is `TriangleAlert` plus the sr-only "over the limit"), `DoneToggle` on a
+  `done` column, and the door `+` (`.Create`, `PermissionGate issue:create`, disabled with its reason);
+  row two (`.Health`) draws `describeLinkedCases` of the sum with a 4px default `ResultBar`, and
+  nothing when the sum is null or `total === 0`. `ProjectBoardView.tsx` reads `useProjectWorkflow`
+  (optional: a failed read costs only the `+`), picks the column claiming the lowest-position status,
+  sums health over the open lanes' cards, holds `doneOpen: boolean`, and joins header and cell under
+  `swimlaneBy === 'NONE'` (no `mb-2`; with lanes the header row keeps it). `Swimlane.tsx`: `cellSurface`
+  is the one panel-classes helper; the band's lane cell is `rounded-b-xl border-t-0 min-h-[120px]`
+  when joined, else `rounded-xl`; band bar `rounded-xl`, sub-bar `rounded-lg`. `DoneStrip` lost its
+  Expand button and `LaneCell` its `.Collapse` button, since the header owns the toggle; the strip
+  reads `n done` and stays a drop target. `stepColumn`/`laneOrder` are untouched. Tests: the Done
+  describe rewritten (two lanes, board-wide, one toggle), plus a health describe (sum, all-null, zero
+  total, `0/n run`) and a door describe (first status, not-first-drawn, absent, disabled). All four
+  `api.get` mocks in the file gained a `/workflow` arm. Unverified and likeliest to need a fix at C1:
+  `getByRole('img')` accessible name on the header's `ResultBar`, the disabled `Button`'s missing
+  `href`, and `Button asChild` merging `size-6` over `size-8`.
 
 ### P1 — document-mode pages onto the strip
 

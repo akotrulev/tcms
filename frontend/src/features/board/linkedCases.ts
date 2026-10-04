@@ -76,3 +76,28 @@ export function describeLinkedCases(
     blocked: summary.blocked,
   };
 }
+
+/**
+ * A column's health: every card's summary added field by field (023 D8).
+ *
+ * `null` when no card carries a summary — *not served* stays distinct from *none linked*, exactly as
+ * {@link describeLinkedCases} keeps them. A card with a `null` summary adds nothing. The sum counts a
+ * case once **per card link**: a case linked to two cards in the column is counted twice, and the
+ * header's title says so.
+ */
+export function sumLinkedCases(
+  summaries: readonly (LinkedCasesSummary | null | undefined)[],
+): LinkedCasesSummary | null {
+  const served = summaries.filter((summary): summary is LinkedCasesSummary => summary != null);
+  if (served.length === 0) return null;
+  return served.reduce(
+    (sum, summary) => ({
+      total: sum.total + summary.total,
+      passing: sum.passing + summary.passing,
+      failing: sum.failing + summary.failing,
+      blocked: sum.blocked + summary.blocked,
+      notRun: sum.notRun + summary.notRun,
+    }),
+    { total: 0, passing: 0, failing: 0, blocked: 0, notRun: 0 },
+  );
+}

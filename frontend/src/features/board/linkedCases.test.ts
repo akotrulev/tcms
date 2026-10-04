@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { aLinkedCasesSummary } from '../../test/fixtures'
-import { describeLinkedCases } from './linkedCases'
+import { describeLinkedCases, sumLinkedCases } from './linkedCases'
 
 /**
  * 021 §2.7 and render note 22 — the three zeroes.
@@ -91,5 +91,38 @@ describe('The linked-cases line', () => {
         aLinkedCasesSummary({ total: 20, passing: 19, failing: 1, blocked: 0, notRun: 0 }),
       )?.tone,
     ).toBe('failed')
+  })
+})
+
+describe('A column’s summed linked cases (023 D8)', () => {
+  it('answers null when no card was served a summary, so the header draws no row', () => {
+    expect(sumLinkedCases([])).toBeNull()
+    expect(sumLinkedCases([null, null])).toBeNull()
+  })
+
+  it('adds field by field and skips the cards that were not served', () => {
+    const sum = sumLinkedCases([
+      aLinkedCasesSummary({ total: 6, passing: 4, failing: 1, blocked: 1, notRun: 0 }),
+      null,
+      aLinkedCasesSummary({ total: 2, passing: 0, failing: 0, blocked: 0, notRun: 2 }),
+    ])
+    expect(sum).toEqual({ total: 8, passing: 4, failing: 1, blocked: 1, notRun: 2 })
+  })
+
+  it('keeps a zero total a real answer, so the wording downstream stays “none linked”', () => {
+    const sum = sumLinkedCases([
+      aLinkedCasesSummary({ total: 0, passing: 0, failing: 0, blocked: 0, notRun: 0 }),
+      null,
+    ])
+    expect(sum).toEqual({ total: 0, passing: 0, failing: 0, blocked: 0, notRun: 0 })
+    expect(describeLinkedCases(sum)?.headline).toBe('no cases linked')
+  })
+
+  it('reads 0/n run when nothing across the column was executed', () => {
+    const sum = sumLinkedCases([
+      aLinkedCasesSummary({ total: 3, passing: 0, failing: 0, blocked: 0, notRun: 3 }),
+      aLinkedCasesSummary({ total: 2, passing: 0, failing: 0, blocked: 0, notRun: 2 }),
+    ])
+    expect(describeLinkedCases(sum)?.headline).toBe('0/5 run')
   })
 })

@@ -18,6 +18,8 @@ import {
   aCardElsewhere,
   aCardMoveResult,
   aCompletion,
+  aLinkedCasesSummary,
+  aProjectWorkflow,
   anIssue,
   anIssueComment,
   anIssueLabel,
@@ -85,7 +87,7 @@ function renderView(
   contents: BoardContents,
   columns = COLUMNS,
   route = '/projects/p1/work?view=board',
-  held: Parameters<typeof heldPermissions>[0] = ['issue:read', 'issue:edit', 'board:configure'],
+  held: Parameters<typeof heldPermissions>[0] = ['issue:read', 'issue:edit', 'issue:create', 'board:configure'],
 ) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) {
@@ -95,6 +97,7 @@ function renderView(
     // paths are one segment apart and this is exactly the collision the harness warns about.
     if (/^\/boards\/[^/]+$/.test(path)) return aBoardConfig({ id: 'b1', columns })
     if (/^\/boards\/[^/]+\/cards/.test(path)) return contents
+    if (/^\/projects\/[^/]+\/workflow$/.test(path)) return aProjectWorkflow({ statuses: [BACKLOG, READY, PROGRESS, DONE] })
     if (/^\/projects\/[^/]+\/boards\/coverage$/.test(path)) return aBoardCoverage()
     if (/^\/projects\/[^/]+\/boards$/.test(path)) {
       return [aBoardSummary({ id: 'b1', name: 'Team board', swimlaneBy: contents.swimlaneBy })]
@@ -662,6 +665,7 @@ describe('the three reads fail separately', () => {
       if (path.startsWith('/me/permissions')) return heldPermissions(['issue:read'])
       if (/^\/boards\/[^/]+$/.test(path)) return aBoardConfig({ id: 'b1', columns: COLUMNS })
       if (/^\/boards\/[^/]+\/cards/.test(path)) throw new Error('cards are down')
+      if (/^\/projects\/[^/]+\/workflow$/.test(path)) return aProjectWorkflow({ statuses: [BACKLOG, READY, PROGRESS, DONE] })
       if (/^\/projects\/[^/]+\/boards\/coverage$/.test(path)) return aBoardCoverage()
       if (/^\/projects\/[^/]+\/boards$/.test(path)) return [aBoardSummary({ id: 'b1' })]
       if (/^\/projects\/[^/]+\/labels$/.test(path)) return []
@@ -840,42 +844,159 @@ describe('an epic lane (021 §2.5)', () => {
   })
 })
 
-describe('a claimed Done column (021 D-l)', () => {
-  it('collapses to a per-lane count strip that is still a drop target, and expands', async () => {
+describe('a claimed Done column (021 D-l, 023 D12)', () => {
+  const doneBoard = () =>
+    boardContents({
+      swimlaneBy: 'EPIC',
+      lanes: [
+        aBoardLane({
+          key: 'PRJ-100',
+          label: 'Checkout redesign',
+          cards: [
+            aBoardIssueCard({ key: 'PRJ-9', columnId: 'col-done', status: DONE }),
+            aBoardIssueCard({ key: 'PRJ-8', columnId: 'col-done', status: DONE }),
+          ],
+        }),
+        aBoardLane({
+          key: 'PRJ-200',
+          label: 'Search',
+          cards: [aBoardIssueCard({ key: 'PRJ-7', columnId: 'col-done', status: DONE })],
+        }),
+      ],
+    })
+
+  it('collapses every lane to an `n done` cell that is still a drop target, and opens them all from its header', async () => {
     const user = userEvent.setup()
+    renderView(doneBoard(), PM_COLUMNS)
+
+    const strip = await screen.findByTestId('ProjectBoard.Lane.PRJ-100.Done.Done')
+    expect(within(strip).getByTestId('ProjectBoard.Lane.PRJ-100.Done.Done.Count')).toHaveTextContent(
+      '2 done',
+    )
+    expect(screen.getByTestId('ProjectBoard.Lane.PRJ-200.Done.Done.Count')).toHaveTextContent('1 done')
+    // Collapsed means the cards are hidden, not the gesture: the PO's drag into Done is the deploy
+    // confirmation, and a column nobody can drop into would remove it.
+    expect(screen.queryByTestId('ProjectBoard.Lane.PRJ-100.Cell.Done.Card.PRJ-9')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Expand the Done column/ })).toBeNull()
+
+    const toggle = within(headerOf('Done')).getByTestId('ProjectBoard.Column.Done.DoneToggle')
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(toggle).toHaveTextContent('Show')
+    await user.click(toggle)
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(toggle).toHaveTextContent('Hide')
+    expect(screen.getByTestId('ProjectBoard.Lane.PRJ-100.Cell.Done.Card.PRJ-9')).toBeInTheDocument()
+    expect(screen.getByTestId('ProjectBoard.Lane.PRJ-200.Cell.Done.Card.PRJ-7')).toBeInTheDocument()
+    expect(screen.queryByTestId('ProjectBoard.Lane.PRJ-100.Done.Done')).toBeNull()
+
+    await user.click(toggle)
+    expect(screen.getByTestId('ProjectBoard.Lane.PRJ-200.Done.Done')).toBeInTheDocument()
+  })
+
+  it('offers the toggle on the Done column only', async () => {
+    renderView(doneBoard(), PM_COLUMNS)
+
+    await screen.findByTestId('ProjectBoard.Column.Done')
+    expect(screen.getAllByTestId(/\.DoneToggle$/)).toHaveLength(1)
+    expect(within(headerOf('Ready')).queryByTestId('ProjectBoard.Column.Ready.DoneToggle')).toBeNull()
+  })
+})
+
+describe('the column header’s health row (023 D8)', () => {
+  const inReady = (key: string, linkedCases: ReturnType<typeof aLinkedCasesSummary> | null) =>
+    aBoardIssueCard({ key, columnId: 'col-ready', status: READY, linkedCases })
+
+  it('sums the cards’ summaries, in the headline’s tone, with the blocked count and the per-link title', async () => {
     renderView(
       boardContents({
-        swimlaneBy: 'EPIC',
         lanes: [
           aBoardLane({
-            key: 'PRJ-100',
-            label: 'Checkout redesign',
             cards: [
-              aBoardIssueCard({ key: 'PRJ-9', columnId: 'col-done', status: DONE }),
-              aBoardIssueCard({ key: 'PRJ-8', columnId: 'col-done', status: DONE }),
+              inReady('PRJ-1', aLinkedCasesSummary({ total: 6, passing: 4, failing: 1, blocked: 1, notRun: 0 })),
+              inReady('PRJ-2', aLinkedCasesSummary({ total: 4, passing: 4, failing: 0, blocked: 0, notRun: 0 })),
+              inReady('PRJ-3', null),
             ],
           }),
         ],
       }),
-      PM_COLUMNS,
     )
 
-    const strip = await screen.findByTestId('ProjectBoard.Lane.PRJ-100.Done.Done')
-    expect(within(strip).getByTestId('ProjectBoard.Lane.PRJ-100.Done.Done.Count')).toHaveTextContent('2')
-    // Collapsed means the count is hidden, not the gesture: the PO's drag into Done is the deploy
-    // confirmation, and a column nobody can drop into would remove it.
-    expect(strip).toHaveAttribute('data-testid')
-    expect(screen.queryByTestId('ProjectBoard.Lane.PRJ-100.Cell.Done.Card.PRJ-9')).toBeNull()
+    const health = await screen.findByTestId('ProjectBoard.Column.Ready.Health')
+    expect(health).toHaveTextContent('8/10 passing')
+    expect(health).toHaveTextContent('1 blocked')
+    expect(health).toHaveAttribute('title', expect.stringMatching(/counted once per card link/))
+    expect(within(health).getByRole('img')).toHaveAccessibleName('8 passed, 1 failed, 1 blocked of 10')
+  })
 
-    await user.click(
-      within(strip).getByRole('button', {
-        name: 'Expand the Done column of the Checkout redesign lane',
-      }),
+  it('draws no row for a column whose cards were all not served a summary', async () => {
+    renderView(boardContents({ lanes: [aBoardLane({ cards: [inReady('PRJ-1', null), inReady('PRJ-2', null)] })] }))
+
+    await screen.findByTestId('ProjectBoard.Column.Ready')
+    expect(screen.queryByTestId('ProjectBoard.Column.Ready.Health')).toBeNull()
+  })
+
+  it('draws no row when every card has no cases linked, rather than a 0/0', async () => {
+    const none = aLinkedCasesSummary({ total: 0, passing: 0, failing: 0, blocked: 0, notRun: 0 })
+    renderView(boardContents({ lanes: [aBoardLane({ cards: [inReady('PRJ-1', none)] })] }))
+
+    await screen.findByTestId('ProjectBoard.Column.Ready')
+    expect(screen.queryByTestId('ProjectBoard.Column.Ready.Health')).toBeNull()
+  })
+
+  it('reads 0/n run, never 0/n passing, when nothing in the column was executed', async () => {
+    const unrun = aLinkedCasesSummary({ total: 3, passing: 0, failing: 0, blocked: 0, notRun: 3 })
+    renderView(boardContents({ lanes: [aBoardLane({ cards: [inReady('PRJ-1', unrun)] })] }))
+
+    const health = await screen.findByTestId('ProjectBoard.Column.Ready.Health')
+    expect(health).toHaveTextContent('0/3 run')
+    expect(health).not.toHaveTextContent('passing')
+    expect(health).not.toHaveTextContent('blocked')
+  })
+})
+
+describe('the door + (023 D10)', () => {
+  it('sits on the column that claims the workflow’s first status, and on no other', async () => {
+    renderView(boardContents({ lanes: [aBoardLane({ cards: [] })] }))
+
+    const door = await screen.findByTestId('ProjectBoard.Column.Backlog.Create')
+    expect(door).toHaveAttribute('href', '/projects/p1/work/new')
+    expect(door).toHaveAccessibleName('Create an issue in Backlog')
+    expect(screen.getAllByTestId(/\.Create$/)).toHaveLength(1)
+  })
+
+  it('is on the first-status column even when that column is not the first one drawn', async () => {
+    renderView(boardContents({ lanes: [aBoardLane({ cards: [] })] }), [
+      column('col-ready', 'Ready', 0, [READY]),
+      column('col-backlog', 'Backlog', 1, [BACKLOG]),
+    ])
+
+    await screen.findByTestId('ProjectBoard.Column.Backlog')
+    expect(screen.getByTestId('ProjectBoard.Column.Backlog.Create')).toBeInTheDocument()
+    expect(screen.queryByTestId('ProjectBoard.Column.Ready.Create')).toBeNull()
+  })
+
+  it('is absent when no column claims the first status', async () => {
+    renderView(boardContents({ lanes: [aBoardLane({ cards: [] })] }), [
+      column('col-ready', 'Ready', 0, [READY]),
+      column('col-prog', 'In Progress', 1, [PROGRESS]),
+    ])
+
+    await screen.findByTestId('ProjectBoard.Column.Ready')
+    expect(screen.queryAllByTestId(/\.Create$/)).toHaveLength(0)
+  })
+
+  it('is disabled with its reason for a caller without issue:create, rather than hidden', async () => {
+    renderView(
+      boardContents({ lanes: [aBoardLane({ cards: [] })] }),
+      COLUMNS,
+      '/projects/p1/work?view=board',
+      ['issue:read'],
     )
 
-    expect(
-      screen.getByTestId('ProjectBoard.Lane.PRJ-100.Cell.Done.Card.PRJ-9'),
-    ).toBeInTheDocument()
+    const door = await screen.findByTestId('ProjectBoard.Column.Backlog.Create')
+    expect(door).toBeDisabled()
+    expect(door).not.toHaveAttribute('href')
   })
 })
 
@@ -990,6 +1111,7 @@ describe('what a card says about the other boards (021 §2.5–§2.6)', () => {
           ],
         })
       }
+      if (/^\/projects\/[^/]+\/workflow$/.test(path)) return aProjectWorkflow({ statuses: [BACKLOG, READY, PROGRESS, DONE] })
       if (/^\/projects\/[^/]+\/boards\/coverage$/.test(path)) {
         return aBoardCoverage({
           rows: [
