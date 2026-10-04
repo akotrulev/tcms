@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -148,7 +148,7 @@ describe('selection', () => {
   it('survives paging — a row selected elsewhere is not dropped by a click on this page', async () => {
     const props = renderGrid({ selection: ['not-on-this-page'] });
 
-    await userEvent.click(screen.getAllByTestId('Cases.Row.Select')[0]);
+    fireEvent.click(screen.getAllByTestId('Cases.Row.Select')[0]);
 
     expect(props.onSelectionChange).toHaveBeenCalledWith(['not-on-this-page', 'c1']);
   });
@@ -156,7 +156,7 @@ describe('selection', () => {
   it('select-all reaches the page, never the 120 rows behind it', async () => {
     const props = renderGrid();
 
-    await userEvent.click(screen.getByTestId('Cases.SelectAll'));
+    fireEvent.click(screen.getByTestId('Cases.SelectAll'));
 
     expect(props.onSelectionChange).toHaveBeenCalledWith(['c1', 'c2', 'c3']);
   });

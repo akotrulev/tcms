@@ -7,16 +7,11 @@ panels of cards whose face leads with identity and ends with the card's test res
 a colour, which its key chip carries; it never fills a canvas. No route moves. The project colour is
 the plan's one contract change (§3a).
 
-**Status:** A1, A2, K1, K2, N1, B1, B2, B3, P1, P2, P3 and P4 built 2026-10-04 (nothing run, per the plan's single gate). A1: the contract, both
-generated copies, both fixture factories. A2: `V15__project_color.sql`, `Project.color`, the create
-default, `PUT /projects/{projectId}/color`, and their tests. K1: the surface ladder (`bg-bar`,
-`bg-raised`), the radius codemod (106 files) and its check, the overlay primitives on the ladder, and
-the project palette with `projectColorFill` and its contrast check. K2: `PageStrip`, `PageHeader` on it, `Segmented`, `TabStrip` on its helpers, `FilterStrip`'s popover and `openFilters`; every consumer test of a `FilterStrip` picker is still red until B2, P2, P3 and P4. N1: the 48px `TopBar` (launcher, switcher with coloured key chips, project tabs and More, search, Create, My work, theme, user menu with the version) replaced the rail, drawer and footer, and `AppShell.test.tsx` is rewritten against it; the four `TopStripSlot` pages render in place until P1. B1: `BoardCardFace` redrawn per §6.1 (identity row, priority for CRITICAL/HIGH, dot-and-name labels, cases row, 3px edge bar via a new `ResultBar` `variant="edge"`), pointer drag on the card with the keyboard drag on the grip, the click that ends a drag swallowed; `BoardCardFace.test.tsx` extended and two `ProjectBoardView.test.tsx` assertions updated (nothing run). B2: `/projects/:id/work` opens with one strip (`BoardPicker` lead with door badges, five view links, `WorkStripActions` portal carrying each view's Filter and the board's `GroupMenu`); `+ Add`, the GroupBy select, Configure and the keyboard banner are gone and the foot line carries the sentence; `WorkTablePage`, `ProjectBoardView` and `BacklogView` tests rewritten through `openFilters` (nothing run). B3: columns are panels (`ColumnHeader` with count, WIP pill, summed linked-case health and the door `+` on the first-status column; the lane cells, band bar and sub-bar on the §6.3 classes; one board-wide `doneOpen` toggled from the Done header, collapsed lanes showing `n done`); `sumLinkedCases` added; `ProjectBoardView.test.tsx` and `linkedCases.test.ts` extended (nothing run). P1: the nine document-mode pages open with `PageStrip`, `app/topStripSlot.tsx` and `TopStripProvider` are gone, `AppShell.test.tsx`'s slot tests deleted, panel-role pass over `cases`/`docs` (nothing run). P2: every `TabStrip` is in its page's `PageHeader views`; FeatureImport, SuiteHistory, RunDetail, Analytics' window pickers and Proposals' status tabs are `Segmented`; Plan statistics is `ui/tabs` (Radix `Tabs` root around the page, the list in `views`); case search's box and pickers are a `FilterStrip`; `CaseFilterBar`'s tests and `CaseSearchPage.test.tsx` reach pickers through `openFilters` (nothing run). P3: IssueNew, IssueDetail, MyWork, TeamBoard and OrgChart open with `PageHeader`; Staffing's range is a `Segmented` in `views`; the shared `Panel` gained `flush`, `count`, `hint` and `foot` and MyWork's local one is gone; AwaitingYou, ProjectOverview's five titled sections, the Projects tiles (with `ProjectKeyChip`), ReadinessPanels' and Timesheet's tiles sit on the ladder; `DirectoryPage.test.tsx` and `StaffingPage.test.tsx` updated (nothing run). P4: the 12 hosts render `SettingsSubnav` (segment helpers) in `PageHeader views`; AccountSecurity is a `PageHeader`; the audit filters are a `FilterStrip` (`Audit.Filters`) with chips; General's sections are `Panel`s and a Colour radio group saves through `useSetProjectColor`; three tile/card boxes moved to the card role (nothing run). Next: C1. The server now serves
-`color` and answers the colour endpoint; all of it is unverified until C1. The design was approved on 2026-10-04 on a canvas:
-<https://claude.ai/artifact/5LuW51YtnVNKWHZ4mV6Xbj>. `Main` is the board screen with the new shell,
-and `CardStates` is the card in six states, in both themes. The canvas is the user's private artifact,
-so §2–§6 restate every value a task needs. All three open questions were answered on 2026-10-04
-(`## Answered questions`).
+**Status:** Delivered 2026-10-04 (A1, A2, K1, K2, N1, B1, B2, B3, P1–P4, C1). The gate ran once, in C1,
+and all seven commands are green on shanks (backend 4088 tests, packages 649, frontend 3222). The
+help guide, the design-language spec (§10), the IA proposal, `docs/features.md` and the ERD describe
+the shell that shipped. Still unverified: the walk — no stack was running — so no screen was seen in a
+browser at either width or in either scheme; the `userEvent` cause behind D29 is open. Filed.
 
 **Sequential. One agent at a time.** Every gate runs on shanks through `~/bin/tcms-remote`; never
 run a local `npm run build` / `lint` / `test:run`.
@@ -71,77 +66,7 @@ Run them in order, one session each. Each block is complete on its own. Every ga
 only C1 runs one. No prompt pushes, and none starts the local stack. C1 may *use* a stack that is
 already running and must not start one.
 
-A1, A2, K1, K2, N1, B1, B2, B3, P1, P2, P3 and P4 have landed; the one block below is live.
-
----
-
-### C1 — help copy, the specs, the gate, the walk (fe-react, fe)
-
-````
-You are `fe-react`. Task C1 of docs/plans/023-one-design-language.md, the plan's last task: make the
-user guide and the specs describe the shell that shipped, run the plan's only gate on shanks and fix
-what it finds, walk the screens if a stack is already running, and close the plan.
-
-Deliverable: the user guide's navigation section describes the top bar. The design-language spec
-carries §10 (A1–A11) with §4 struck through. The IA proposal's rail decisions are marked superseded
-by 023. The ERD and `docs/features.md` carry the project colour. §8's seven gate commands, backend
-included, are green on shanks. The walk is recorded, or its screens are listed as unverified. This
-plan is in `docs/plans/implemented/`.
-
-House rules for this plan: current branch only, never create one; no subagents; stage only your
-files; do not push — end by telling the user the branch is ready to push.
-
-P3 landed: the shared `Panel` (`components/PageHeader.tsx`) now takes `flush` (no body padding, for a
-table or a body that pads itself), `count` and `hint` (beside a string title) and `foot` (a closing
-line over a hairline). Use them rather than a local panel. Every `PageHeader` consumer's test needs a
-Router for the trail.
-
-P4 landed: `AuditLogPage.test.tsx` reaches its three inputs through `openFilters(user, 'Audit.Filters')`; the
-new `SettingsSubnav.test.tsx` and four Colour tests in `GeneralSettingsPage.test.tsx` (`api.put` called with
-`('/projects/p1/color', { color }, expect.anything())`) have never run, so read them first if red.
-
-Read, in this order:
-1. CLAUDE.md — "Run the gates on shanks", "What CI does", "Test-harness rules"; then
-   docs/specs/shanks-runner-details.md, "Five things that bite".
-2. The plan: §2, §3, §8, every `**As built**` note in §9, `## Decisions`, task C1, and
-   "Close-out — every task".
-3. frontend/src/features/help/sections.tsx — the navigation section (search "rail", "zone",
-   "header") and the run-schedules sentence (search "no entry in the navigation"). Then
-   frontend/src/features/help/TokenSteps.tsx (search "sidebar").
-4. docs/specs/2026-08-28-design-language.md §2 and §4; docs/specs/2026-09-06-navigation-ia-redesign-proposal.md
-   §1 and §3 (the headings, the R1 paragraph, and the rail-switcher paragraph);
-   `grep -n "rail\|sidebar" docs/features.md`; and the `project` table in
-   docs/specs/2026-07-30-tcms-erd.md (A2 added the column row; check it).
-
-Build (the bullets of task C1, in order), then the gate, in this order:
-  ~/bin/tcms-remote sync
-  ~/bin/tcms-remote backend "ulimit -n 65535; ./gradlew build"
-  ~/bin/tcms-remote packages 'npm run build'
-  ~/bin/tcms-remote packages 'npm run test:run --workspaces'
-  ~/bin/tcms-remote frontend 'npm run build'
-  ~/bin/tcms-remote frontend 'npm run lint'
-  ~/bin/tcms-remote frontend 'npm run test:run'
-Fix what it finds. A failure may belong to any task in this plan, not only to yours. A backend
-failure is A2's code: load `be-java` and `be-java-database-code` before you touch it. Re-run from the
-first red command until all seven are green.
-
-Traps:
-- `npm run build` is the gate, not `tsc --noEmit`; `tsc -b` uses the stricter config.
-- The packages run is not optional. `citedFiles.test.ts` scans frontend comments for deleted files
-  (`ShellBreadcrumbs.tsx`, `topStripSlot.tsx`). `tierClaims.test.ts` fails a comment claiming somebody
-  LACKS a permission §A3 grants. `guideCopies.test.ts` pins `sections.tsx`.
-- A backend `BUILD FAILED` with `Could not write XML test results` and zero assertion failures is the
-  fd limit, not a red suite. Count `grep -c ' FAILED$'` (excluding `> Task` lines) before believing
-  it.
-- The packages run also checks the contract: `schemaFreshness` fails if either generated copy is
-  older than `openapi.yaml`, and `contractPairing` fails if the two copies' shared region drifted.
-- The walk uses a stack that is ALREADY up (`curl -sf localhost:8080/actuator/health` and
-  `curl -sf localhost:5173`). If either is down, do not start one: list the screens as unverified.
-
-Commit: `docs(design): 023 close-out — help, specs, gate (023 C1)`.
-Close out per the plan's "Close-out — every task" before you stop. Your deletion leaves no blocks, so
-step 6 applies: final Status, then `git mv` this plan to docs/plans/implemented/.
-````
+Every task has landed. No prompt block remains.
 
 ---
 
@@ -876,6 +801,20 @@ count, hint or foot, all of which MyWork's four panels use. Reading two: wrap ea
 margins, or keep the local `Panel` — rejected, the second breaks the task. Cost: four props on a shared
 component, each earned by a second caller (ProjectOverview's panels use `count`, `hint`, `flush`).
 
+**D29 — The CaseGrid selection tests use `fireEvent.click`, not `userEvent.click` (C1).**
+`CaseGrid.test.tsx`'s two selection tests were red on 323625a9, before this plan began (checked by
+running that tree against the same `node_modules`): `userEvent.click` on the grid's Radix checkboxes
+dispatches no pointer events at all under the shanks toolchain, while the same `Checkbox` alone, and
+`fireEvent.click` on the grid's, behave. Reading one: find and fix the `userEvent` cause — not found
+inside the budget. Reading two: `fireEvent.click` — taken, because the component's handler is what
+the tests pin and `fireEvent` reaches it. The `userEvent` cause is still open.
+
+**D30 — `projectPalette.test.ts` is split in two (C1).** It read `index.css` with `node:fs` and
+imported two app modules, so `tsc -b` failed it in the app project (no node types) and, moved to the
+node project, failed it on the app modules it pulled in. The CSS half (`projectPalette.test.ts`, in
+both lists in `tsconfig.app.json` / `tsconfig.node.json`, eight literal slots) imports nothing from
+the app; the table half is `projectPaletteMap.test.ts`, in the app project.
+
 ## Answered questions (2026-10-04)
 
 **O1 — Should My work carry a count in the top bar?** No. An icon link only (D13).
@@ -1463,3 +1402,32 @@ it belongs to; for a backend failure load `be-java` and `be-java-database-code` 
 - The gate (§8), then the walk (§8), each recorded in As built.
 - Close-out step 6: the final Status, then `git mv` this plan to `docs/plans/implemented/`. End by
   telling the user the branch is ready to push, and what is still unverified.
+
+**As built (2026-10-04):**
+- Docs: `frontend/src/features/help/sections.tsx` navigation section rewritten for the top bar
+  (launcher, switcher, tabs and More, Create, trail in the strip; added Launcher, Project tabs and
+  Create terms), run-schedules note now says Schedules is a tab on Test runs and is a plain `Note`;
+  `TokenSteps.tsx` "sidebar" → the launcher. Design-language spec: new §10 with A1–A11 and the A4
+  table, §4 struck through, rule 1 reworded. IA proposal §1, §3 and R1 struck through → superseded by
+  023 (D1, D3). `docs/features.md`: navigation section rewritten for the bar, one sentence on the
+  project colour under Projects. ERD `project.color` row was already there (A2), line 359.
+- Gate, all seven on shanks, green after fixes: backend `./gradlew build` BUILD SUCCESSFUL, 4088
+  tests (11m 31s); packages build and `test:run --workspaces` 203 + 177 + 269 passed; frontend build,
+  lint (0 warnings), `test:run` 3222 passed in 225 files.
+- What the gate found, and fixed: (1) backend, A2's tests: `ContractConventionTest` had no pairing for
+  `ProjectColorUpdate` (added → `ProjectColorRequest`), and `ContractEnumTest` had no owner for
+  `ProjectColor` (added to `NO_SERVER_ENUM` with a new test comparing `Project.COLORS` to the schema).
+  (2) frontend build: `PageHeader` not imported in `TeamBoardPage` and `OrgChartPage` (P3);
+  `AccessPage`'s company-wide stand-in `Project` lacked `color`; `projectPalette.test.ts` (D30).
+  (3) lint: `segmentItemClass` and `useShellFrame` sat in component files — moved to
+  `components/kit/segmentClasses.ts` and `app/shellFrameContext.ts`. (4) tests: `ProjectTabs` labelled
+  More with a folded tab while that tab was still drawn (now only below `lg`); `AppShell.test.tsx`
+  rendered without `ColorSchemeProvider`; `contractDoubles.test.ts` lacked `$.color`; the Work
+  empty-state action and the Directory match count (now the popover's footnote, per A9) needed an
+  await / `openFilters`; `CaseGrid.test.tsx` (D29, red before this plan).
+- The walk: not done. `curl localhost:8080/actuator/health` and `curl localhost:5173` both refused, and
+  the task forbids starting a stack. Built and unverified in a browser: the Work board (NONE and Epic),
+  a case list with a filter, a case detail, the execution runner, Settings → General colour change and
+  the switcher's chip, the launcher open, all at 1280×800 and 390×844 in both schemes.
+- Evidence: `frontend/src/features/help/sections.tsx:84` onward; `docs/specs/2026-08-28-design-language.md`
+  §10; backend `ContractEnumTest.projectColorsAreTheContractsMembers`; gate output above.

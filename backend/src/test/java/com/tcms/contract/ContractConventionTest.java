@@ -654,6 +654,7 @@ class ContractConventionTest {
             Map.entry("PlanStatusInput", List.of(com.tcms.execution.PlanStatusRequest.class)),
             Map.entry("Project", List.of(com.tcms.project.ProjectView.class)),
             Map.entry("ProjectArchiveInput", List.of(com.tcms.project.ProjectArchiveRequest.class)),
+            Map.entry("ProjectColorUpdate", List.of(com.tcms.project.ProjectColorRequest.class)),
             Map.entry("ProjectInput", List.of(com.tcms.project.ProjectWriteRequest.class)),
             // Seven required properties, six of them primitives — so the failure this catches on
             // ProjectSettings is not an absent key but a renamed one, which reads to a client as the

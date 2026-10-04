@@ -1,7 +1,7 @@
 import { Fragment, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
-import { useShellFrame } from '../app/shellFrame';
+import { useShellFrame } from '../app/shellFrameContext';
 import { crumbsFor, type Crumb } from '../app/routeMeta';
 import { cn } from '../lib/cn';
 

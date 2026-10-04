@@ -63,7 +63,7 @@ export function TokenSteps({ purpose }: { purpose: 'agent' | 'ci' }) {
       />
       <Note>
         Issuing costs <Code>token:issue</Code>, which Company Admins hold. If{' '}
-        <strong>API tokens</strong> is not in your sidebar, that is the thing to ask one for — and a
+        <strong>API tokens</strong> is not under Administration in the launcher (⊞), that is the thing to ask one for — and a
         token never grants more than its owner has anyway, so the person issuing it cannot hand you
         more access than they hold themselves.
       </Note>

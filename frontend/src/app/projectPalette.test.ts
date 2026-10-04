@@ -2,8 +2,6 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { projectColorFill } from '../lib/projectColors';
-import { projectColorLabels } from '../lib/labels';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CSS = readFileSync(resolve(HERE, '../index.css'), 'utf8');
@@ -42,22 +40,11 @@ const schemes = {
   light: palette(0, darkAt),
   dark: palette(darkAt, CSS.length),
 };
-const slots = Object.keys(projectColorFill);
+const slots = Array.from({ length: 8 }, (_, index) => `project-${index + 1}`);
 
 describe('the project palette, per scheme', () => {
   it('has the dark block to split on', () => {
     expect(darkAt).toBeGreaterThan(0);
-  });
-
-  it('maps the same eight slots in the fill and label tables', () => {
-    expect(Object.keys(projectColorLabels)).toEqual(slots);
-    expect(slots).toHaveLength(8);
-  });
-
-  it.each(slots)('%s resolves to the custom property of its own name', (slot) => {
-    expect(projectColorFill[slot as keyof typeof projectColorFill]).toBe(
-      `var(--color-${slot})`,
-    );
   });
 
   for (const scheme of ['light', 'dark'] as const) {

@@ -2,6 +2,7 @@ import { Link as RouterLink, useParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import { useTeamBoard, useTeams } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
+import { PageHeader } from '../../components/PageHeader';
 import { Banner } from '../../components/kit';
 import { buttonVariants } from '../../components/ui';
 import { Board } from './BoardPage';

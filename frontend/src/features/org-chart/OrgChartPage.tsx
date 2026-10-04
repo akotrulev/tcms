@@ -1,5 +1,6 @@
 import { useOrgChart } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
+import { PageHeader } from '../../components/PageHeader';
 import { ScrollX } from '../../components/ScrollX';
 import { Banner } from '../../components/kit';
 import { OrgChartGaps } from './OrgChartGaps';

@@ -148,7 +148,12 @@ describe('Skills directory', () => {
     mockReads({ matching: [TOMAS], everybody: [MIRA, TOMAS] })
     renderPage('/directory?skill=sk-pw')
 
-    expect(await screen.findByTestId('Directory.Filters')).toHaveTextContent('1 of 2 people match')
+    await screen.findByTestId('Directory.Filters')
+    await openFilters(userEvent.setup(), 'Directory.Filters')
+
+    await waitFor(() =>
+      expect(screen.getByTestId('Directory.Filters.Popover')).toHaveTextContent('1 of 2 people match'),
+    )
   })
 
   it('heads an over-allocated person with what they have, which is no room', async () => {

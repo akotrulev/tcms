@@ -254,7 +254,7 @@ export function AccessPage() {
  * expression over both scopes instead of a branch that has to be written twice and can therefore
  * be written two different ways.
  */
-const COMPANY_WIDE: Project[] = [{ id: '', key: '', name: '', archived: false, caseCount: 0, myRole: null }];
+const COMPANY_WIDE: Project[] = [{ id: '', key: '', name: '', archived: false, caseCount: 0, color: 'project-1', myRole: null }];
 
 function scopeOf(entry: GatedEntry, lacking: Project[]): string {
   if (entry.gate.scope === 'company') return 'Company';

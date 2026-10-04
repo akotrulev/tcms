@@ -43,6 +43,7 @@
     "src/api/contractIntrospection.ts",
     "src/app/tokenSystem.test.ts",
     "src/app/statusPalette.test.ts",
-    "src/app/noVelocity.test.ts"
+    "src/app/noVelocity.test.ts",
+    "src/app/projectPalette.test.ts"
   ]
 }

@@ -216,7 +216,7 @@ describe('The states no static render exercises', () => {
     renderPage()
 
     const empty = await screen.findByTestId('WorkTable.Content.Empty')
-    expect(within(empty).getByTestId('WorkTable.Empty.Add')).toHaveAttribute(
+    expect(await within(empty).findByTestId('WorkTable.Empty.Add')).toHaveAttribute(
       'href',
       '/projects/p1/work/new',
     )

@@ -82,33 +82,50 @@ export const helpSections: HelpSection[] = [
 
         <H>Finding your way around</H>
         <P>
-          The left rail has <strong>three zones</strong>: what is yours, the project you are in, and
-          the company. Inside a zone it is a flat list, ordered by how often a screen gets opened —
-          so <strong>Work</strong>, where the boards are, is first in the project zone, and{' '}
-          <strong>Overview</strong> is seventh, because it is the project&apos;s dashboard rather
-          than a place you work in.
+          One <strong>top bar</strong> runs across every screen. From the left it holds the
+          launcher, the project switcher, the project&apos;s tabs, search, Create, My work, the
+          theme toggle and your name. Under it, every page opens with one strip carrying the trail,
+          the title, the page&apos;s views, its filter and its actions. The project tabs are ordered
+          by how often a screen gets opened — <strong>Work</strong>, where the boards are, comes
+          first — and <strong>Overview</strong> sits under <strong>More</strong>, because it is the
+          project&apos;s dashboard rather than a place you work in.
         </P>
         <Definitions
           items={[
             {
+              term: 'The launcher (⊞)',
+              detail:
+                'The grid button at the far left of the bar. It lists what is yours and the company’s screens — Administration, Company and the rest — each with a line saying what it is for. It lists only the entries you can open; “Your access” at its foot explains the rest.',
+            },
+            {
               term: 'The project switcher',
               detail:
-                'The Project zone’s own header in the left rail. Everything below it is scoped to the project you picked — switching projects changes what those screens show. With the rail collapsed to its narrow form, the zone header becomes the project’s key and still opens the switcher.',
+                'The project’s key and name in the bar, drawn in the project’s colour. Everything to its right is scoped to the project you picked — switching projects changes what those screens show. Below 600px wide only the key is shown, and it still opens the switcher.',
+            },
+            {
+              term: 'Project tabs and More',
+              detail:
+                'Work, Test cases, Test plans, Test runs, Releases and Documents are tabs; Overview, Analytics, Test reports, Team and Settings are under More. On a narrower window the tabs other than Work fold into More, and More is named after the screen you are on when it is one of its entries.',
+            },
+            {
+              term: 'Create',
+              detail:
+                'A button in the bar for a new issue, test case or release in the project you are in. An entry you lack the permission for is shown disabled, with the reason, rather than hidden.',
             },
             {
               term: 'Search — ⌘K',
               detail:
-                'In the header, and also opened by pressing / anywhere outside a text field. One control over issues, cases, doc pages, places in the product and projects. Issues and cases are searched across every project you can open; doc pages are searched inside the project you are in, and the palette tells you so rather than quietly returning nothing. Typing a key jumps straight to it: ACME-118 opens the issue, TC-118 the case.',
+                'In the bar, and also opened by pressing / anywhere outside a text field. One control over issues, cases, doc pages, places in the product and projects. Issues and cases are searched across every project you can open; doc pages are searched inside the project you are in, and the palette tells you so rather than quietly returning nothing. Typing a key jumps straight to it: ACME-118 opens the issue, TC-118 the case.',
             },
             {
               term: 'Places',
               detail:
-                'The palette indexes the rail, every tab, every settings section and the user menu by name — which is how you reach a screen that is a tab on another screen, and therefore invisible until you are already there. It hides exactly what the rail hides: a place you lack the permission for is not offered.',
+                'The palette indexes the launcher, the project tabs, every tab, every settings section and the user menu by name — which is how you reach a screen that is a tab on another screen, and therefore invisible until you are already there. It hides exactly what the launcher hides: a place you lack the permission for is not offered.',
             },
             {
               term: 'Breadcrumbs',
               detail:
-                'In the header, built from the address rather than by each page, so the trail cannot disagree with the rail — and a screen whose data failed to load still shows you the way back up.',
+                'In the page strip, built from the address rather than by each page, so the trail cannot disagree with the navigation — and a screen whose data failed to load still shows you the way back up.',
             },
             {
               term: 'Your name (top right)',
@@ -118,12 +135,12 @@ export const helpSections: HelpSection[] = [
             {
               term: 'My work',
               detail:
-                'First in the rail\u2019s You zone, above the project frame, so it is not scoped by the switcher: every issue, execution and review assigned to you, across every project you can see. It is also where you land after signing in, and it opens with an Awaiting you strip — reviews assigned to you, the boards with work waiting at their door, your blocked cards and any proposals waiting.',
+                'An inbox icon in the bar, and the first entry under You in the launcher, so it is not scoped by the switcher: every issue, execution and review assigned to you, across every project you can see. It is also where you land after signing in, and it opens with an Awaiting you strip — reviews assigned to you, the boards with work waiting at their door, your blocked cards and any proposals waiting.',
             },
           ]}
         />
         <Note>
-          A number beside a rail entry or a board is always an <em>awaiting-you</em> count and never
+          A number beside a navigation entry or a board is always an <em>awaiting-you</em> count and never
           a total. A board&apos;s badge is what is sitting in its first column — what is waiting at
           its door.
         </Note>
@@ -544,9 +561,8 @@ export const helpSections: HelpSection[] = [
           for and when, re-asked by the server. The screen is at{' '}
           <Code>/projects/&lt;project&gt;/run-schedules</Code>.
         </P>
-        <Note severity="warning">
-          That screen currently has no entry in the navigation rail and nothing in the app links to
-          it, so the address above is the only way to reach it today.
+        <Note>
+          Schedules is a tab on <strong>Test runs</strong>, beside Runs and CI results.
         </Note>
       </>
     ),

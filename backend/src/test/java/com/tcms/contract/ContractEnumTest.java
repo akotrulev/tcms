@@ -286,7 +286,13 @@ class ContractEnumTest {
                     + "the outbox exists to avoid. What checks it instead is "
                     + "com.tcms.integration.NotificationEventTypeTest, which compares this "
                     + "schema's members to the set a channel may subscribe to in both directions, "
-                    + "and each of those to the constants the producers actually record");
+                    + "and each of those to the constants the producers actually record",
+            "ProjectColor",
+            "the palette is a list of design-token names, not a type: Project.COLORS builds "
+                    + "project-1 … project-8 and the column's CHECK constraint spells the same "
+                    + "pattern, so a Java enum would be a third copy. What checks it instead is "
+                    + "projectColorsAreTheContractsMembers below, which compares that list to this "
+                    + "schema's members in both directions (023 D17)");
 
     /**
      * Production enums whose simple name collides with a contract enum and which are not that
@@ -403,6 +409,13 @@ class ContractEnumTest {
                 .as("an owner named here is not a production enum — it has been renamed, moved, or "
                         + "deleted while the contract still declares the schema it served")
                 .isEmpty();
+    }
+
+    @Test
+    @DisplayName("Project.COLORS and the contract's ProjectColor hold the same members")
+    void projectColorsAreTheContractsMembers() {
+        assertThat(OpenApiContract.load().enumSchemas().get("ProjectColor"))
+                .containsExactlyInAnyOrderElementsOf(com.tcms.project.Project.COLORS);
     }
 
     @Test

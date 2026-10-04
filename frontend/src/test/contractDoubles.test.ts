@@ -90,6 +90,7 @@ describe('the contract-doubles seam', () => {
       '$.archived — required by the contract, absent from the body this double served',
       '$.caseCount — required by the contract, absent from the body this double served',
       '$.myRole — required by the contract, absent from the body this double served',
+      '$.color — required by the contract, absent from the body this double served',
     ])
     expect(served.every((violation) => violation.url === '/projects/{projectId}')).toBe(true)
   })

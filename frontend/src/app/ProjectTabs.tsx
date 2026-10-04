@@ -20,8 +20,9 @@ const tabClass = (active: boolean) =>
 /**
  * The project's tabs and More (023 §3). Work is always a tab; the other tabs fold into More below
  * `lg`, so More lists the `more` entries and, on a narrow bar, the folded tabs too (as `lg:hidden`
- * items). More is labelled with the active entry when one of its entries is the current place, and
- * is then drawn active, so the current place is never nowhere.
+ * items). More is labelled with the active entry when one of the `more` entries is the current
+ * place, and is then drawn active; when a folded tab is current, More takes its name only below
+ * `lg`, where the tab itself is hidden, so the current place is never nowhere.
  */
 export function ProjectTabs({ projectId }: { projectId: string }) {
   const { pathname } = useLocation();
@@ -37,7 +38,8 @@ export function ProjectTabs({ projectId }: { projectId: string }) {
     const to = item.to(projectId);
     return item.end ? pathname === to : pathname === to || pathname.startsWith(`${to}/`);
   };
-  const activeInMore = overflow.find(isCurrent);
+  const activeInMore = more.find(isCurrent);
+  const activeFolded = tabs.find((tab) => tab.label !== 'Work' && isCurrent(tab));
 
   return (
     <>
@@ -61,9 +63,22 @@ export function ProjectTabs({ projectId }: { projectId: string }) {
               type="button"
               data-testid="Nav.More"
               aria-label={activeInMore ? `More: ${activeInMore.label}` : 'More'}
-              className={cn(tabClass(Boolean(activeInMore)), 'cursor-pointer gap-1 border-0 bg-transparent')}
+              className={cn(
+                tabClass(Boolean(activeInMore)),
+                'cursor-pointer gap-1 border-0 bg-transparent',
+                activeFolded && 'max-lg:bg-steel/12 max-lg:font-semibold max-lg:text-ink',
+              )}
             >
-              {activeInMore ? activeInMore.label : 'More'}
+              {activeInMore ? (
+                activeInMore.label
+              ) : activeFolded ? (
+                <>
+                  <span className="max-lg:hidden">More</span>
+                  <span className="lg:hidden">{activeFolded.label}</span>
+                </>
+              ) : (
+                'More'
+              )}
               <ChevronDown aria-hidden className="size-3.5 shrink-0" />
             </button>
           </DropdownMenuTrigger>

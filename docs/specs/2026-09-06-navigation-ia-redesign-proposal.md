@@ -15,7 +15,9 @@ contract change; they are marked as such, and the decisions they reverse are in 
 
 ---
 
-## 1. The rail
+## ~~1. The rail~~ → superseded by plan 023 (D1, D3)
+
+> **→ superseded by plan 023 (D1, D3)**, 2026-10-04. The rail, its three zones' placement, its collapsed state and the mobile drawer are replaced by one 48px top bar (launcher, project switcher, project tabs and More). `nav.ts`'s zones and their permission gates are unchanged. Kept struck through as the record.
 
 Three scope zones, fixed order, never mixed. **No subject folders in the project zone** — the
 ~~Repository ▸ / Quality ▸~~ split of the first draft is withdrawn: it filed the most-used screens
@@ -306,7 +308,9 @@ is specified for `EPIC` only.
 
 ---
 
-## 3. The header (52px, unchanged height)
+## ~~3. The header (52px, unchanged height)~~ → superseded by plan 023 (D1, D3)
+
+> **→ superseded by plan 023 (D1, D3)**, 2026-10-04. The header is now the 48px top bar, and the breadcrumb lives in each page's strip, ancestors only. Kept struck through as the record.
 
 ```
 [≡]  [ Acme Ltd ]  Projects / ACME / Work / QA board          [ Search…  ⌘K ]  [page slot]  [◐]  [avatar]
@@ -461,7 +465,7 @@ House rule: struck through beside the original when implemented.
 
 | # | Decision | Reversal | Counter-argument |
 |---|---|---|---|
-| R1 | Project switcher in the header because the rail collapses to 64px | Switcher is the **Project zone header** | The frame is still stated at full width by the breadcrumb's first segment, and the collapsed zone header is the project key chip, which still opens the switcher |
+| R1 | ~~Project switcher in the header because the rail collapses to 64px~~ | ~~Switcher is the **Project zone header**~~ → **superseded by plan 023 (D1, D3):** the switcher is in the top bar | The frame is still stated at full width by the breadcrumb's first segment, and the collapsed zone header is the project key chip, which still opens the switcher |
 | R2 | Breadcrumbs are per-page | Shell-owned from route handles | R1 and the capped page slot free the header; 44 files passing crumbs is 44 chances to disagree with the rail |
 | R3 | Search is a cases-only field | A palette, honest by phase | *Field not rail entry* stands; only scope changes |
 | R4 | Generated cases are their own group (§138) | A `Proposals` tab on Test cases | The label and the screen's banner deny membership before anyone clicks |

@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import type { TabEntry } from '../app/nav';
 import { cn } from '../lib/cn';
-import { segmentItemClass, segmentTrackClass } from './kit/Segmented';
+import { segmentItemClass, segmentTrackClass } from './kit/segmentClasses';
 
 /**
  * The segmented strip that carries the five screens which used to be rail rows (021 §1, §2.6).

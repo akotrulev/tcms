@@ -44,6 +44,9 @@ Written for a reader deciding what the product does. Implementation detail is co
 ## Projects
 
 - Create projects, edit them, and archive ones that are finished
+- A project has a colour, one of eight, assigned when it is created and changed in Settings → General.
+  It is shown on the project's key chip in the top bar's switcher and on the Projects page, and
+  never fills a canvas
 - Each project carries its own execution-status vocabulary and the order it reads in — the app
   never assumes "Passed" and "Failed" — but the six are seeded at provisioning and
   ~~naming your own~~ is not built: `GET /projects/{projectId}/statuses` is the only verb in
@@ -308,28 +311,31 @@ built-but-unverified list.
 
 ## Navigation
 
-The product is reached through **three zones** in one left rail: what is yours, the project you are
-in, and the company. Everything below is what 021 changed about finding things, as opposed to what
+The product is reached through **one 48px top bar** (plan 023, replacing the left rail): a launcher
+for what is yours and the company's screens, the project switcher, the project's tabs with a More
+menu, search, Create, My work, the theme toggle and the user menu. The three zones — yours, the
+project, the company — still order the entries. Everything below is what 021 changed about finding things, as opposed to what
 the product does.
 
-- **The rail is flat inside a zone and ordered by how often a screen is opened.** The project zone
+- **The tabs are ordered by how often a screen is opened.** The project zone
   leads with **Work** — the boards and the backlog, where the day starts and ends — and puts
-  **Overview** seventh, because it is the project's dashboard: read at stand-up rather than worked
+  **Overview** under More, because it is the project's dashboard: read at stand-up rather than worked
   in. There are no subject headings inside a zone
 - **One entry per screen, at most twenty rows.** Five screens that were rail rows are now **tabs**
   on the screen they extend (Suites under Test cases, Proposals under Test cases, CI results under
   Test runs, and so on), and eleven settings rows are now **cards on one Settings landing** with a
-  subnav — so the rail names places, not every page
-- **The project switcher is the Project zone's header**, not a control in the top bar. Collapsed to
-  64px the zone header becomes the project's key chip and still opens the switcher
+  subnav — so the bar names places, not every page
+- **The project switcher is in the top bar**, drawn as the project's key chip and name; below 600px
+  only the key shows and it still opens the switcher. ~~The Project zone's header in the rail~~ →
+  superseded (023 D1)
 - **Breadcrumbs are the shell's**, built from the route rather than passed up by each page, so the
-  trail cannot disagree with the rail — and a page whose read failed still has its way back up
+  trail cannot disagree with the navigation — and a page whose read failed still has its way back up
 - **`⌘K` (or `/` outside a text field) opens a palette** over **issues, cases, docs, places and
   projects**, plus a key jump: type `ACME-118` and go to the issue, `TC-118` and go to the case.
   Issues and cases are searched across every project you can read; **doc pages are searched inside
   the project you are in**, and the palette says so rather than quietly returning nothing. Places
-  are the rail, the tabs, the settings sections and the user menu — indexed by name, and filtered by
-  exactly the permissions the rail filters by, so the palette cannot offer a screen the rail hides
+  are the launcher, the project tabs, the tabs on a screen, the settings sections and the user menu — indexed by name, and filtered by
+  exactly the permissions the launcher filters by, so the palette cannot offer a screen it hides
 - **The user menu is the person's own things** — your account, your security and identities, your
   API tokens, your notifications, **your timesheets** (a timesheet is one person's fortnight, not a
   place in the product), and `Your access`, a page that explains which entries are hidden from you
@@ -593,7 +599,7 @@ Logging hours against work, and having somebody sign for them. Landed 2026-09-04
 - **Approve-all and Remind on the approvals queue.** There is no batch operation on the contract for
   the first — it would be N irreversible writes with a partial outcome nobody could word, and there
   is no un-approve — and no endpoint at all behind the second
-- **A waiting-count badge on the rail.** The count needs a read that refuses anybody without
+- **A waiting-count badge on the navigation.** The count needs a read that refuses anybody without
   approval rights on a project, and there is no company-wide "where may I approve" question to ask
   first. The count is on the approvals screen's own subtitle instead
 
@@ -700,7 +706,7 @@ What an approved hour is worth, what a project may spend, and the invoice that s
   the figures stop moving
 - **Expenses are recorded against a project and are never invoice lines.** Reachable from the
   command line and over MCP; there is no expenses screen
-- **Billing is absent from the sidebar** — not greyed out — for anybody without `billing:read`. The
+- **Billing is absent from the launcher** — not greyed out — for anybody without `billing:read`. The
   deliberate exception to this app's disable-don't-hide rule: what a colleague costs is not
   something to advertise the existence of to the colleague. The route stays reachable and refuses
   with a sentence naming who does hold the key

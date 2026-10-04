@@ -8,6 +8,7 @@ import { heldPermissions } from '../test/permissions'
 import { createTestQueryClient } from '../test/queryClient'
 import { TestProviders } from '../test/TestProviders'
 import { AppShell } from './AppShell'
+import { ColorSchemeProvider } from './colorScheme'
 import { NAV } from './nav'
 
 /**
@@ -72,7 +73,9 @@ function renderShell(route: string, permissions: PermissionKey[] = [], projects:
 
   return render(
     <TestProviders client={createTestQueryClient()} route={route} userId="user-1">
-      <AppShell />
+      <ColorSchemeProvider>
+        <AppShell />
+      </ColorSchemeProvider>
     </TestProviders>,
   )
 }

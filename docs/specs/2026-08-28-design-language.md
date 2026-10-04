@@ -56,7 +56,7 @@ Each is stated as the failure it prevents, because most of them look arbitrary o
 
 1. **The subject of the page is the page.** Whatever the reader came for — a procedure, a result
    log, a table, a spec paragraph — gets the width and the ink. No card wrapping a table, no page
-   heading repeating the rail's active item, no panel around the only thing on screen.
+   heading repeating the top bar's active tab, no panel around the only thing on screen.
    *Prevents:* three borders before the first row of data.
 
 2. **Chrome is a strip above and a strip below.** Filters in one row under the toolbar; a footer
@@ -102,7 +102,11 @@ Help is deliberately the fourth. It is written **in the product**, on the produc
 surface, using the product's own chart components to explain the product — which is what keeps it
 from drifting away from the thing it describes.
 
-## 4. Where the rail collapses
+## ~~4. Where the rail collapses~~ → superseded (023 D1)
+
+> **Superseded 2026-10-04 by plan 023 (D1) and §10 below.** There is no rail: one 48px top bar serves every
+> route, the case editor and the execution runner included, so nothing collapses. Kept as the record of
+> why the two routes were special.
 
 The expanded 232px rail — headings and order exactly as `AppShell.tsx:projectNav` has them — is the
 default everywhere. It collapses to the ~~60px~~ **64px** icon rail (see §9.2 for why the
@@ -305,3 +309,51 @@ never by when the tab opened, for the reason the timer above was rejected.
 
    Still unchecked and most likely to break first: the org-chart matrix at five projects, the board
    at five columns on a 1280px screen, and the execution runner's three-pane split.
+
+## 10. Amended 2026-10-04 — one bar, one strip, one ladder (plan 023)
+
+The eight rules of §2 all still hold. Plan 023 (`docs/plans/implemented/023-one-design-language.md`) adds
+eleven, A1–A11. A1 retires §4; A6 and the radius table replace the spacing and corner values stated
+earlier; the card of A10 and the shell of A1 are specified in that plan's §3 and §6.
+
+- **A1 — No rail.** One 48px top bar (§3) on every authenticated screen. Navigation is the bar's
+  tabs and menus; the page below is the work.
+- **A2 — One strip opens every page.** `PageStrip` (§4) sits directly under the top bar and is
+  sticky beneath it. It holds the trail, the title, the views, the filter and the actions. Nothing
+  else sits between the top bar and the content. This is rule 2's "a strip above", made literal.
+- **A3 — The surface ladder.** The canvas is `bg-paper`. A panel (a column, a side panel, a section
+  of a settings page) is `bg-panel border border-line rounded-xl`. A card on a panel (a board card, a
+  tile) is `bg-raised border border-line rounded-lg shadow-e1`. An overlay (menu, popover, dialog,
+  select content) is `bg-raised border border-line rounded-xl shadow-e3`. The top bar is `bg-bar`.
+  `DocumentSurface` stays on `bg-paper` with no border: the document is the page.
+- **A4 — Radius roles on Tailwind's own scale.** No `rounded-[…]` literal anywhere (§5.2):
+
+  | Role | Utility | px |
+  |---|---|---|
+  | bar segment, meter | `rounded-xs` | 2 |
+  | badge, tag, kbd | `rounded-sm` | 4 |
+  | segment item, menu item, small icon button | `rounded-md` | 6 |
+  | button, input, select, card, banner | `rounded-lg` | 8 |
+  | panel, column, overlay | `rounded-xl` | 12 |
+  | chip, avatar, count pill | `rounded-full` | — |
+
+- **A5 — Type in the chrome.** Strip title 17px / 650 / `-0.015em`; trail 12px `text-ink-3`;
+  subtitle 12.5px `text-ink-3`, `max-w-[74ch]`; panel heading 13px / 600. Document titles inside a
+  `DocumentSurface` keep §3's 24–25px. Rule 6 (mono for identity and quantity) is unchanged.
+- **A6 — Gutter.** 16px from `md`, 12px below it. ~~22px, the render kit's one spatial constant~~ →
+  superseded by D14.
+- **A7 — Menus.** Radix `DropdownMenu` or `Popover` only. A group heading is mono 10.5px uppercase
+  `tracking-[.08em] text-ink-3`. An item is 13px `px-2.5 py-1.5 rounded-md`; the current item carries
+  a check and `aria-current`/`aria-checked`. A footnote is 11.5px `text-ink-3` over a `border-t
+  border-line`.
+- **A8 — One segmented control.** Track `inline-flex gap-0.5 rounded-lg bg-wash-1 p-0.5`. Item
+  `flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[12.5px] font-medium`. Active item
+  `bg-raised text-ink font-semibold shadow-e1`; inactive `text-ink-3 hover:text-ink-2`. Three
+  semantics share this one look (§5.4).
+- **A9 — Filters behind one button.** A "Filter" button opens a popover holding every picker; its
+  count is the number of applied filters. Search stays inline beside it. Applied filters stay visible
+  as chips after the button. The OR-within / AND-across sentence is the popover's footnote.
+- **A10 — The card.** One card shape on every board (§6.1). Identity first, test result last; labels
+  are a 7px dot plus the name. No tilt, no coloured fill.
+- **A11 — Colour.** The thesis is unchanged: steel only for actions and the current place; status hues
+  only for data. No coloured canvases (D5). A label's colour appears only as its dot.

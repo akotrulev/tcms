@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { cn } from '../../lib/cn';
-import { segmentItemClass, segmentTrackClass } from '../../components/kit/Segmented';
+import { segmentItemClass, segmentTrackClass } from '../../components/kit/segmentClasses';
 import { useSettingsSections } from './useSettingsSections';
 
 /**
