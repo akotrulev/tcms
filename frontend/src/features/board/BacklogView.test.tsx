@@ -6,6 +6,7 @@ import { ApiError, api } from '../../api/client'
 import type { BacklogRow, IssueStatusRef } from '../../api/types'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
+import { openFilters } from '../../test/filters'
 import { TestProviders } from '../../test/TestProviders'
 import { drivingAFailedWrite } from '../../test/renderFailures'
 import {
@@ -439,8 +440,18 @@ describe('the filter and the empty states', () => {
     )
     // No picker for either — B3's backlog asks for label, assignee and priority, and §12.2's rule
     // is that the strip's height is bounded by the reader's own choices.
+    await openFilters(userEvent.setup(), 'Backlog.Filters')
     expect(screen.queryByLabelText('Level')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Status')).not.toBeInTheDocument()
+    expect(screen.getByTestId('Backlog.Filter.Label')).toBeInTheDocument()
+  })
+
+  it('keeps its pickers behind one Filter button whose count is the applied filters', async () => {
+    renderView(ROWS, '/projects/p1/work?view=backlog&level=STORY&epicKey=ACME-1')
+
+    const open = await screen.findByTestId('Backlog.Filters.Open')
+    expect(open).toHaveTextContent('2')
+    expect(screen.queryByTestId('Backlog.Filter.Label')).not.toBeInTheDocument()
   })
 
   it('offers the way back off a list a filter emptied', async () => {

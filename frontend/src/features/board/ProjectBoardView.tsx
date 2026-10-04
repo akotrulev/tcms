@@ -10,7 +10,7 @@ import {
 } from '@dnd-kit/core';
 import { X } from 'lucide-react';
 import { useCallback, useMemo, useState, type CSSProperties } from 'react';
-import { Link as RouterLink, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useAnnounce } from '../../a11y/useAnnounce';
 import { ApiError } from '../../api/client';
 import {
@@ -22,31 +22,29 @@ import {
   useMoveCard,
   useProjectMembers,
   useTransitionIssue,
-  useUpdateBoard,
 } from '../../api/queries';
 import type {
-  BoardConfig,
   BoardIssueCard,
   CardElsewhere,
   Priority,
-  SwimlaneBy,
 } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
 import { PermissionGate } from '../../components/PermissionGate';
 import { Banner, FilterStrip } from '../../components/kit';
-import { Button } from '../../components/ui';
 import { NativeSelect } from '../../components/ui/native-select';
 import { cn } from '../../lib/cn';
-import { priorityLabels, swimlaneByLabels } from '../../lib/labels';
+import { priorityLabels } from '../../lib/labels';
 import { plural } from '../../lib/format';
 import { BlockDialog } from './BlockDialog';
 import { BoardCardFace } from './BoardCardFace';
 import { ColumnHeader } from './ColumnHeader';
+import { GroupMenu } from './GroupMenu';
 import { Swimlane } from './Swimlane';
 import { boardKeyboardCoordinates } from './boardKeyboard';
 import { blockingTargetOf, groomsWork, resolveColumnMove, serverColumnsOf } from './cardMove';
 import { epicCardsByLane, laneRowsOf, type LaneShape } from './laneRows';
 import { useBoardFilterChips, useWorkFilter } from './useWorkFilter';
+import { WorkStripActions } from '../tracker/workStrip';
 
 /**
  * `work-board.html` — the **project** board, inside the Work switcher (012 M2, story B3).
@@ -174,7 +172,6 @@ export function ProjectBoardView({ projectId }: { projectId: string }) {
   const labels = useLabels(projectId);
   const members = useProjectMembers(projectId, true);
   const move = useMoveCard(boardId, projectId);
-  const updateBoard = useUpdateBoard(projectId);
 
   const coverage = useBoardCoverage(projectId);
   const transition = useTransitionIssue();
@@ -380,66 +377,8 @@ export function ProjectBoardView({ projectId }: { projectId: string }) {
 
   return (
     <div data-testid={`${TEST_ID}.View`}>
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        {/*
-          ~~The board picker — a `NativeSelect` of every board over this project.~~ → **retired by
-          021 D-f.** The project's boards are the Work strip's own segments now, one per board in
-          position order, so a picker here would be a second control for one choice sitting a few
-          pixels below the first — and the two would disagree the moment somebody used the wrong one.
-          `?board=` is unchanged and is still what this reads; what moved is who writes it.
-        */}
-
-        {/*
-          Grouping is the **board's** `swimlaneBy`, not a view preference — B3 says the board reloads
-          into lanes, and the lanes are the server's. So it costs `board:configure` and is disabled
-          with its reason for a caller who lacks it (§31), rather than hidden or silently ignored.
-
-          The PATCH carries the board's existing columns back verbatim, because `BoardInput.columns`
-          is a **replacement**: every column keeps its id, so none is created or deleted, and the
-          array stays in the order the contract already sends them in.
-        */}
-        <PermissionGate projectId={projectId} permission="board:configure">
-          {({ allowed, reason }) => (
-            <NativeSelect
-              aria-label="Group by"
-              className="w-auto"
-              disabled={!allowed || config.data === undefined || updateBoard.isPending}
-              title={allowed ? undefined : reason}
-              value={config.data?.swimlaneBy ?? 'NONE'}
-              data-testid={`${TEST_ID}.GroupBy`}
-              onChange={(event) => {
-                const board = config.data;
-                if (!board) return;
-                updateBoard.mutate({
-                  boardId: board.id,
-                  input: { ...boardInputOf(board), swimlaneBy: event.target.value as SwimlaneBy },
-                });
-              }}
-            >
-              {(Object.keys(swimlaneByLabels) as SwimlaneBy[]).map((axis) => (
-                <option key={axis} value={axis}>
-                  {axis === 'NONE' ? swimlaneByLabels[axis] : `Group by: ${swimlaneByLabels[axis]}`}
-                </option>
-              ))}
-            </NativeSelect>
-          )}
-        </PermissionGate>
-
-        <span className="flex-1" />
-
-        {/*
-          ~~Disabled, with *"arrives with the board settings screen"* on it, because
-          `settings-boards.html` was T9's and the route did not exist.~~ → **012 T9 landed it**, so
-          the sentence is false and the control is what the mockup draws: a real `<Link>`. Ungated —
-          the screen is readable by anybody who can read a board and renders read-only without
-          `board:configure`, so gating the way in would hide the page that explains what a board is
-          from exactly the people who cannot change one.
-        */}
-        <Button asChild size="sm" data-testid={`${TEST_ID}.Configure`}>
-          <RouterLink to={`/projects/${projectId}/settings/boards`}>Configure boards</RouterLink>
-        </Button>
-      </div>
-
+      <WorkStripActions>
+        <GroupMenu projectId={projectId} boardId={boardId} />
       <FilterStrip
         data-testid={`${TEST_ID}.Filters`}
         applied={applied}
@@ -506,26 +445,7 @@ export function ProjectBoardView({ projectId }: { projectId: string }) {
           </>
         }
       />
-
-      {/*
-        The keyboard note is on the board, in the mockup's own words, and it is not chrome: WCAG 2.2
-        requires the single-pointer alternative to exist, and a path nobody can discover is one
-        nobody uses. The second sentence names the audience the criterion does not.
-      */}
-      <div
-        data-testid={`${TEST_ID}.KeyboardNote`}
-        className={cn(
-          'mb-3.5 flex gap-[9px] rounded-md border px-3 py-2.5 text-[12.5px] leading-[1.5] text-ink-2',
-          'border-[color:var(--color-steel-line)] bg-[color:var(--color-steel-glow)]',
-        )}
-      >
-        <span aria-hidden>&#9000;</span>
-        <p className="m-0">
-          <b className="font-semibold text-ink">Dragging is never the only way.</b> Every card carries
-          a <span className="identifier">⋮</span> menu with &ldquo;Move to…&rdquo;, so a column change
-          is reachable from the keyboard — and the same menu is what a touch user gets.
-        </p>
-      </div>
+      </WorkStripActions>
 
       {rejected && (
         <div role="alert" className="mb-3">
@@ -683,6 +603,7 @@ export function ProjectBoardView({ projectId }: { projectId: string }) {
                       {board.swimlaneBy === 'NONE'
                         ? ''
                         : ` across ${plural(lanes.length, 'swimlane')}`}
+                      {' · Every card’s ⋯ menu has Move to… — dragging is never the only way.'}
                     </p>
 
                     {/*
@@ -792,28 +713,4 @@ function cardOf(open: readonly OpenLane[], id: string | number): BoardIssueCard 
     if (card) return card;
   }
   return null;
-}
-
-/**
- * The board's current definition as `BoardInput` — a faithful round-trip, so a grouping change
- * changes only the grouping.
- *
- * `columns` on the update is a **replacement, not a patch**: a column with an `id` is kept, one
- * without is created, and one whose id is absent is deleted. Every column keeps its id here and the
- * array stays in the order the contract sent it, which is `position` order — so this rewrites
- * nothing. `wipLimit ?? null` rather than `|| null` keeps *no limit* and a limit of zero apart, the
- * same distinction `serverColumnsOf` holds one file over.
- */
-function boardInputOf(board: BoardConfig) {
-  return {
-    name: board.name,
-    swimlaneBy: board.swimlaneBy,
-    columns: board.columns.map((column) => ({
-      id: column.id,
-      name: column.name,
-      wipLimit: column.wipLimit ?? null,
-      statusIds: column.statuses.map((status) => status.id),
-      defaultStatusId: column.defaultStatusId,
-    })),
-  };
 }

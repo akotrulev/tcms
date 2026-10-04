@@ -29,6 +29,8 @@ export {
   DropdownMenuSeparator,
   DropdownMenuLabel,
   DropdownMenuCheckboxItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
 } from './dropdown-menu';
 export { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from './tooltip';
 export { Tabs, TabsList, TabsTrigger, TabsContent } from './tabs';

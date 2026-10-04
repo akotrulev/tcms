@@ -7,11 +7,11 @@ panels of cards whose face leads with identity and ends with the card's test res
 a colour, which its key chip carries; it never fills a canvas. No route moves. The project colour is
 the plan's one contract change (§3a).
 
-**Status:** A1, A2, K1, K2, N1 and B1 built 2026-10-04 (nothing run, per the plan's single gate). A1: the contract, both
+**Status:** A1, A2, K1, K2, N1, B1 and B2 built 2026-10-04 (nothing run, per the plan's single gate). A1: the contract, both
 generated copies, both fixture factories. A2: `V15__project_color.sql`, `Project.color`, the create
 default, `PUT /projects/{projectId}/color`, and their tests. K1: the surface ladder (`bg-bar`,
 `bg-raised`), the radius codemod (106 files) and its check, the overlay primitives on the ladder, and
-the project palette with `projectColorFill` and its contrast check. K2: `PageStrip`, `PageHeader` on it, `Segmented`, `TabStrip` on its helpers, `FilterStrip`'s popover and `openFilters`; every consumer test of a `FilterStrip` picker is still red until B2, P2, P3 and P4. N1: the 48px `TopBar` (launcher, switcher with coloured key chips, project tabs and More, search, Create, My work, theme, user menu with the version) replaced the rail, drawer and footer, and `AppShell.test.tsx` is rewritten against it; the four `TopStripSlot` pages render in place until P1. B1: `BoardCardFace` redrawn per §6.1 (identity row, priority for CRITICAL/HIGH, dot-and-name labels, cases row, 3px edge bar via a new `ResultBar` `variant="edge"`), pointer drag on the card with the keyboard drag on the grip, the click that ends a drag swallowed; `BoardCardFace.test.tsx` extended and two `ProjectBoardView.test.tsx` assertions updated (nothing run). Next: B2. The server now serves
+the project palette with `projectColorFill` and its contrast check. K2: `PageStrip`, `PageHeader` on it, `Segmented`, `TabStrip` on its helpers, `FilterStrip`'s popover and `openFilters`; every consumer test of a `FilterStrip` picker is still red until B2, P2, P3 and P4. N1: the 48px `TopBar` (launcher, switcher with coloured key chips, project tabs and More, search, Create, My work, theme, user menu with the version) replaced the rail, drawer and footer, and `AppShell.test.tsx` is rewritten against it; the four `TopStripSlot` pages render in place until P1. B1: `BoardCardFace` redrawn per §6.1 (identity row, priority for CRITICAL/HIGH, dot-and-name labels, cases row, 3px edge bar via a new `ResultBar` `variant="edge"`), pointer drag on the card with the keyboard drag on the grip, the click that ends a drag swallowed; `BoardCardFace.test.tsx` extended and two `ProjectBoardView.test.tsx` assertions updated (nothing run). B2: `/projects/:id/work` opens with one strip (`BoardPicker` lead with door badges, five view links, `WorkStripActions` portal carrying each view's Filter and the board's `GroupMenu`); `+ Add`, the GroupBy select, Configure and the keyboard banner are gone and the foot line carries the sentence; `WorkTablePage`, `ProjectBoardView` and `BacklogView` tests rewritten through `openFilters` (nothing run). Next: B3. The server now serves
 `color` and answers the colour endpoint; all of it is unverified until C1. The design was approved on 2026-10-04 on a canvas:
 <https://claude.ai/artifact/5LuW51YtnVNKWHZ4mV6Xbj>. `Main` is the board screen with the new shell,
 and `CardStates` is the card in six states, in both themes. The canvas is the user's private artifact,
@@ -71,56 +71,9 @@ Run them in order, one session each. Each block is complete on its own. Every ga
 only C1 runs one. No prompt pushes, and none starts the local stack. C1 may *use* a stack that is
 already running and must not start one.
 
-A1, A2, K1, K2, N1 and B1 have landed; every block below is live.
+A1, A2, K1, K2, N1, B1 and B2 have landed; every block below is live.
 
 ---
-
-### B2 — the Work strip (fe-react, fe)
-
-````
-You are `fe-react`. Task B2 of docs/plans/023-one-design-language.md: give `/projects/:id/work` one
-strip. It holds the board picker (with door badges), the five views, and each view's Filter (plus
-Group on the board) in the strip's actions. The keyboard banner, the Configure button, the GroupBy
-select and `+ Add` go.
-
-Deliverable: `/projects/:id/work` opens with one strip per §6.2: the board picker with door
-badges, five view links, and each view's Filter (plus Group on the board) in the strip's actions.
-`.Add`, `.GroupBy`, `.Configure` and `.KeyboardNote` are gone, and the board's foot line carries the
-keyboard sentence. WorkTablePage, ProjectBoardView and BacklogView tests assert it.
-
-House rules for this plan: current branch only, never create one; no subagents; stage only your
-files; do not push. **Gate: none** — this plan gates once, in C1. Do not run `npm run build`, `lint`,
-`test:run`, `test:smoke`, `tsc` or any targeted test, locally or on shanks.
-
-Read, in this order:
-1. CLAUDE.md — "Test-harness rules"; filter state lives in the URL.
-2. The plan: §2 (A8, A9), §4, §6.2, D6, D16, task B2, and "Close-out — every task".
-3. K2's and B1's "As built" notes.
-4. frontend/src/features/tracker/WorkTablePage.tsx — the header, the view switcher, the Table view's
-   FilterStrip, `useBoardDoors`.
-5. frontend/src/features/board/ProjectBoardView.tsx — from the top of the returned JSX down to the
-   `{rejected && …}` banner, and the count line under the board.
-6. The FilterStrip call sites in frontend/src/features/board/BacklogView.tsx and
-   frontend/src/features/releases/CalendarView.tsx.
-7. The tests that reach what you move: WorkTablePage.test.tsx (`.Add`, `.View.Board.*` and its
-   badge, the filters), ProjectBoardView.test.tsx (`.GroupBy`, `.Configure`, `.KeyboardNote`,
-   `.Filter.*`), BacklogView.test.tsx (`.Filter.*`). Use frontend/src/test/filters.ts's
-   `openFilters` from K2.
-
-Build (the bullets of task B2, in order).
-
-Traps:
-- A board is not a filter. Clearing filters keeps `?view` and `?board` (`useWorkFilter` owns this).
-  Choosing a board in the picker keeps every other parameter.
-- The door badge counts the first column's cards, never a total. A board with no answer yet shows no
-  number rather than 0.
-- The strip's actions slot is a local portal with an in-place fallback. A view rendered by a test
-  without `WorkTablePage` must still draw its Filter.
-- Grouping costs `board:configure` and is disabled with its reason. It is not hidden.
-
-Commit: `feat(work): one strip for the Work page (023 B2)`.
-Close out per the plan's "Close-out — every task" before you stop.
-````
 
 ### B3 — the board's columns (fe-react, fe)
 
@@ -163,6 +116,9 @@ Traps:
 - The door `+` is drawn only on the column that claims the workflow's first status by position. A
   create enters that status (`IssueInput` has no status field). A board with no such column draws no
   `+`.
+- B2 already moved the keyboard sentence into the board's foot line (`ProjectBoard.Count`) and took
+  the header's `+ Add` away, so the door `+` is the only add on the board. Do not touch the strip,
+  `GroupMenu` or `workStrip.tsx`.
 - The health sums card summaries and skips `null` ones. A column whose cards are all `null` draws no
   health row at all. The title says the count is per card link.
 
@@ -276,7 +232,8 @@ Read, in this order:
    and testid queries.
 5. The FilterStrip consumers' tests in this family: frontend/src/features/staffing/ (DirectoryFilters)
    and frontend/src/features/releases/CalendarView.test.tsx if it reaches the strip. Use
-   `openFilters`.
+   `openFilters`. B2 already moved CalendarView's `FilterStrip` into `WorkStripActions`; it has no
+   pickers, so it has no Filter button and its test needs no `openFilters`.
 
 Build (the bullets of task P3, in order).
 
@@ -1093,6 +1050,14 @@ position it visually; rejected, because DOM order is the tab order and the readi
 for behaviour. Also: the `DragOverlay` classes (`shadow-e3 ring-2 ring-steel`) live in the face's own
 `overlay` branch, so `ProjectBoardView.tsx` did not change.
 
+**D23 — The Work strip drops the page subtitle, and the Columns menu lives in the Table's Filter popover (B2).**
+§6.2 lists the strip's parts and none of them is the old "Board · Backlog · … — one entry, one filter."
+subtitle, so it is gone; the five links say it. The Table's `Columns` button was a sibling of the
+pickers, so it moved into the popover with them; reading two: a separate strip button, rejected because
+the plan puts one control in the strip's actions. Cost: Columns is one click deeper, and its test opens
+the popover first. Also, door badges are drawn only by the picker, which exists on the Board view, so
+the old "badges on every view" test became "badges in the picker".
+
 ## Answered questions (2026-10-04)
 
 **O1 — Should My work carry a count in the top bar?** No. An icon link only (D13).
@@ -1428,6 +1393,28 @@ group and configure parts ~5k, `useBoards`/`useBoardDoors` 2k; 3 files created (
 - Tests: WorkTablePage.test, ProjectBoardView.test (filter/group/configure/keyboard-note describes),
   BacklogView.test, all reaching pickers through `openFilters`.
 - **Not in B2:** the columns, headers and Done (B3).
+
+- **As built (2026-10-04):** nothing run, per the gate. New: `features/tracker/workStrip.tsx`
+  (`WorkStripActionsProvider`, `WorkStripActionsTarget` — testid `WorkTable.StripActions` — and
+  `WorkStripActions`: a portal once the target has mounted, in place when there is no provider),
+  `features/tracker/BoardPicker.tsx` (`WorkTable.BoardPicker`, `.<Board name>`, `.<Board name>.Badge`,
+  plus `.Waiting` for the trigger's pill and `.Configure`; `useBoardDoors` is called here and gone
+  from `WorkTablePage`) and `features/board/GroupMenu.tsx` (`ProjectBoard.GroupBy` on the trigger,
+  `ProjectBoard.GroupBy.<AXIS>` on each radio item; `boardInputOf` moved into it).
+  `components/ui/dropdown-menu.tsx` gained `DropdownMenuRadioGroup` and `DropdownMenuRadioItem`
+  (exported from `ui/index.ts`). `WorkTablePage` is now a provider around `WorkTableBody`; its header
+  is `PageHeader` (`WorkTable.Header`) with `lead` on the Board view only and five `WorkTable.View.<id>`
+  links (`board` included, so `WorkTable.View.Board.<name>` is gone). The page's old subtitle is
+  dropped, since the strip is one row. `BacklogView`, `CalendarView` and the board put their
+  `FilterStrip` in `WorkStripActions`; the Table's pickers, **including the Columns menu**, are inside
+  its popover. The foot line is `ProjectBoard.Count` with the sentence appended. Door badges now
+  exist only while the picker is on screen (Board view), because the picker is the only place they
+  are drawn. Tests: the board-segment and three badge tests in `WorkTablePage.test.tsx` rewritten,
+  plus picker-keeps-parameters and no-picker-off-board; `ProjectBoardView.test.tsx` has the foot
+  line, the Group menu (change, footnote, disabled with its reason) and a no-top-row test; the
+  `BacklogView.test.tsx` filter tests open the popover and one pins the count. Unverified and likeliest
+  to need a fix at C1: the Radix dropdown interactions under jsdom, the Columns menu opening from
+  inside the Filter popover, and `PermissionGate`'s remount around `GroupMenu`'s trigger.
 
 ### B3 — the board's columns
 

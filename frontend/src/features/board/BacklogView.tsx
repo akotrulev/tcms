@@ -30,6 +30,7 @@ import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PermissionGate } from '../../components/PermissionGate';
 import { Banner, Chip, FilterStrip } from '../../components/kit';
+import { WorkStripActions } from '../tracker/workStrip';
 import { NativeSelect } from '../../components/ui/native-select';
 import { cn } from '../../lib/cn';
 import { formatDate, plural } from '../../lib/format';
@@ -179,6 +180,7 @@ export function BacklogView({ projectId }: { projectId: string }) {
 
   return (
     <div data-testid={`${TEST_ID}.View`}>
+      <WorkStripActions>
       <FilterStrip
         data-testid={`${TEST_ID}.Filters`}
         applied={applied}
@@ -296,6 +298,7 @@ export function BacklogView({ projectId }: { projectId: string }) {
           </>
         }
       />
+      </WorkStripActions>
 
       {/*
         A contextual toolbar that arrives with the selection and leaves with it, rather than a row of

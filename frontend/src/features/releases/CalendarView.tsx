@@ -5,6 +5,7 @@ import { useIssues, useReleases } from '../../api/queries';
 import type { IssueSummary, ReleaseSummary } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
 import { FilterStrip } from '../../components/kit';
+import { WorkStripActions } from '../tracker/workStrip';
 import { Button } from '../../components/ui';
 import { cn } from '../../lib/cn';
 import { useIssueFilterChips, useWorkFilter } from '../board/useWorkFilter';
@@ -95,11 +96,13 @@ export function CalendarView({ projectId }: { projectId: string }) {
         Above the region, like every other filter strip in the product: a failed read must not
         unmount the controls a reader would use to change the query or retry.
       */}
-      <FilterStrip
-        data-testid={`${TEST_ID}.Filters`}
-        applied={applied}
-        onClear={applied.length > 0 ? clearFilters : undefined}
-      />
+      <WorkStripActions>
+        <FilterStrip
+          data-testid={`${TEST_ID}.Filters`}
+          applied={applied}
+          onClear={applied.length > 0 ? clearFilters : undefined}
+        />
+      </WorkStripActions>
 
       <section className="overflow-hidden rounded-lg border border-line bg-panel">
         <DataRegion

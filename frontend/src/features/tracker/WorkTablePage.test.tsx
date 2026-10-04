@@ -7,6 +7,7 @@ import type { BoardColumnConfig, BoardIssueCard, BoardSummary } from '../../api/
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
 import { TestProviders } from '../../test/TestProviders'
+import { openFilters } from '../../test/filters'
 import { drivingAFailedRead } from '../../test/renderFailures'
 import {
   aBoardConfig,
@@ -332,15 +333,11 @@ describe('The view switcher (D34)', () => {
     expect(screen.queryByTestId('WorkTable.Table')).toBeNull()
   })
 
-  it('lists the project’s boards as segments, in position order, and no fixed “Board” tab', async () => {
+  it('draws one strip: the board picker as its lead, five view links, and no + Add', async () => {
     /*
-      021 D-f. The strip is **the project's boards** and then the four fixed views: a project with
-      three boards gets three segments, and nothing here spells `PM`, `Dev` or `QA` — those are the
-      names §2.4's seed happens to use. `?view=board` with no `board` means the first, which is what
-      makes `boards.data[0]` and the board below agree without either naming the other.
-
-      The order asserted is the SERVER's: `listBoards` orders by the `position` V13 added, and
-      alphabetical — which is what it did before — would have put Dev before PM.
+      023 §6.2. The boards are a dropdown in the strip's lead, in the SERVER's position order (the
+      `position` V13 added; alphabetical would put Dev before PM), and the views are five links with
+      `Board` among them. `?view=board` with no `board` means the first board.
     */
     mockReads(undefined, {}, {
       summaries: [
@@ -350,15 +347,53 @@ describe('The view switcher (D34)', () => {
     })
     renderPage('/projects/p1/work?view=board')
 
-    await screen.findByTestId('WorkTable.View.Board.PM board')
+    const picker = await screen.findByTestId('WorkTable.BoardPicker')
+    await waitFor(() => expect(picker).toHaveTextContent('PM board'))
     const strip = screen.getByRole('navigation', { name: 'Work views' })
     expect(
       within(strip).getAllByRole('link').map((link) => link.textContent),
-    ).toEqual(['PM board', 'Dev board', 'Backlog', 'Table', 'Timeline', 'Calendar'])
-    expect(screen.getByTestId('WorkTable.View.Board.PM board')).toHaveAttribute(
-      'aria-current',
-      'page',
+    ).toEqual(['Board', 'Backlog', 'Table', 'Timeline', 'Calendar'])
+    expect(screen.getByTestId('WorkTable.View.board')).toHaveAttribute('aria-current', 'page')
+    expect(screen.queryByTestId('WorkTable.Add')).toBeNull()
+    expect(screen.queryByTestId('WorkTable.View.Board.PM board')).toBeNull()
+
+    await userEvent.click(picker)
+    const items = await screen.findAllByRole('menuitem')
+    expect(items.map((item) => item.textContent)).toEqual(['PM board', 'Dev board', 'Configure boards'])
+    expect(screen.getByTestId('WorkTable.BoardPicker.PM board')).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByTestId('WorkTable.BoardPicker.Configure')).toHaveAttribute(
+      'href',
+      '/projects/p1/settings/boards',
     )
+  })
+
+  it('shows the picker only on the Board view, and the h1 “Work” everywhere', async () => {
+    mockReads()
+    renderPage('/projects/p1/work')
+
+    await waitFor(() => expect(screen.queryByTestId('WorkTable.Table')).not.toBeNull())
+    expect(screen.queryByTestId('WorkTable.BoardPicker')).toBeNull()
+    expect(screen.getByRole('heading', { level: 1, name: 'Work' })).toBeInTheDocument()
+  })
+
+  it('choosing a board keeps every other parameter, and the board is not a filter', async () => {
+    mockReads(undefined, {}, {
+      summaries: [
+        aBoardSummary({ id: 'b1', name: 'PM board' }),
+        aBoardSummary({ id: 'b2', name: 'Dev board' }),
+      ],
+    })
+    renderPage('/projects/p1/work?view=board&labelId=lab-1')
+
+    await userEvent.click(await screen.findByTestId('WorkTable.BoardPicker'))
+    await userEvent.click(await screen.findByTestId('WorkTable.BoardPicker.Dev board'))
+
+    await waitFor(() => {
+      const address = screen.getByTestId('Address').textContent ?? ''
+      expect(address).toContain('board=b2')
+      expect(address).toContain('view=board')
+      expect(address).toContain('labelId=lab-1')
+    })
   })
 
   it('badges the active board with what is waiting in its FIRST column, never a total', async () => {
@@ -382,12 +417,11 @@ describe('The view switcher (D34)', () => {
     })
     renderPage('/projects/p1/work?view=board')
 
-    expect(
-      await screen.findByTestId('WorkTable.View.Board.Dev board.Badge'),
-    ).toHaveTextContent('2')
+    await userEvent.click(await screen.findByTestId('WorkTable.BoardPicker'))
+    expect(await screen.findByTestId('WorkTable.BoardPicker.Dev board.Badge')).toHaveTextContent('2')
   })
 
-  it('badges every board, not only the one being looked at (021 T8)', async () => {
+  it('badges every board in the picker, not only the one being looked at (021 T8)', async () => {
     /*
       ~~The ACTIVE segment only.~~ → T8's half. The point of a door badge on a segment is to be
       read **without** switching to it: a badge that only appears once you are already on the board
@@ -416,17 +450,18 @@ describe('The view switcher (D34)', () => {
     })
     renderPage('/projects/p1/work?view=board')
 
-    expect(await screen.findByTestId('WorkTable.View.Board.Dev board.Badge')).toHaveTextContent('1')
-    // The INACTIVE segment, and its own number rather than the active board's.
-    expect(await screen.findByTestId('WorkTable.View.Board.QA board.Badge')).toHaveTextContent('2')
+    await userEvent.click(await screen.findByTestId('WorkTable.BoardPicker'))
+    expect(await screen.findByTestId('WorkTable.BoardPicker.Dev board.Badge')).toHaveTextContent('1')
+    // The OTHER board, and its own number rather than the active board's.
+    expect(await screen.findByTestId('WorkTable.BoardPicker.QA board.Badge')).toHaveTextContent('2')
+    // The trigger's pill sums the boards other than the one being looked at.
+    expect(screen.getByTestId('WorkTable.BoardPicker.Waiting')).toHaveTextContent('2')
   })
 
-  it('draws no badge for a board with an empty door, on any view', async () => {
+  it('draws no badge, and no waiting pill, for a board with an empty door', async () => {
     /*
       A `0` beside every board is five characters that say nothing and train the eye to skip the
-      place a real number appears. Asserted from the **Table** view, which is also where the strip
-      is drawn: the badges are the same badges on all seven views, and one that appeared only on
-      the board view would be a number the reader learns to distrust.
+      place a real number appears. The only card is in the SECOND column, so the door is empty.
     */
     mockReads(undefined, {}, {
       summaries: [aBoardSummary({ id: 'b1', name: 'Dev board' })],
@@ -436,11 +471,13 @@ describe('The view switcher (D34)', () => {
       ],
       byBoard: { b1: [aBoardIssueCard({ key: 'A-3', columnId: 'c2', status: REVIEW })] },
     })
-    renderPage('/projects/p1/work')
+    renderPage('/projects/p1/work?view=board')
 
-    expect(await screen.findByTestId('WorkTable.View.Board.Dev board')).toBeInTheDocument()
-    await waitFor(() => expect(screen.queryByTestId('WorkTable.Table')).not.toBeNull())
-    expect(screen.queryByTestId('WorkTable.View.Board.Dev board.Badge')).toBeNull()
+    await userEvent.click(await screen.findByTestId('WorkTable.BoardPicker'))
+    expect(await screen.findByTestId('WorkTable.BoardPicker.Dev board')).toBeInTheDocument()
+    await screen.findByTestId('ProjectBoard.Count')
+    expect(screen.queryByTestId('WorkTable.BoardPicker.Dev board.Badge')).toBeNull()
+    expect(screen.queryByTestId('WorkTable.BoardPicker.Waiting')).toBeNull()
   })
 })
 
@@ -456,7 +493,10 @@ describe('The column picker (D-f)', () => {
     mockReads()
     renderPage()
 
-    await userEvent.click(await screen.findByTestId('WorkTable.Columns'))
+    const user = userEvent.setup()
+    await screen.findByTestId('WorkTable.Filters.Open')
+    await openFilters(user, 'WorkTable.Filters')
+    await user.click(await screen.findByTestId('WorkTable.Columns'))
 
     expect(await screen.findByTestId('WorkTable.Columns.status')).toBeInTheDocument()
     expect(screen.queryByTestId('WorkTable.Columns.release')).toBeNull()

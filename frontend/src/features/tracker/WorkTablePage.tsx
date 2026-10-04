@@ -1,7 +1,7 @@
+import { CalendarDays, GanttChart, Kanban, ListOrdered, Table2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
 import {
-  useBoardDoors,
   useBoards,
   useIssueTimeRollups,
   useIssues,
@@ -13,10 +13,13 @@ import type { IssueSummary } from '../../api/types';
 import type { IssueSort } from '../../api/queries';
 import { DataRegion, GridSkeleton } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
+import { PageHeader } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
 import { ScrollX } from '../../components/ScrollX';
 import {
   FilterStrip,
+  segmentItemClass,
+  segmentTrackClass,
   Table,
   TableBody,
   TableCell,
@@ -34,7 +37,7 @@ import {
   DropdownMenuTrigger,
 } from '../../components/ui';
 import { cn } from '../../lib/cn';
-import { formatCount, formatHours, plural } from '../../lib/format';
+import { formatHours, plural } from '../../lib/format';
 import { issueLevels } from '../../lib/labels';
 import { NativeSelect } from '../../components/ui/native-select';
 import { BacklogView } from '../board/BacklogView';
@@ -45,6 +48,12 @@ import { RoadmapView } from '../releases/RoadmapView';
 import { StatusBadge } from './StatusBadge';
 import { AiEligibleMarker } from './AiEligibleMarker';
 import { TypeIcon } from './TypeIcon';
+import { BoardPicker } from './BoardPicker';
+import {
+  WorkStripActions,
+  WorkStripActionsProvider,
+  WorkStripActionsTarget,
+} from './workStrip';
 
 /**
  * `work-table.html` — the project's issues as a table.
@@ -101,10 +110,11 @@ const TEST_ID = 'WorkTable';
  * which are the names §2.4's seed happens to use.
  */
 const VIEWS = [
-  { id: 'backlog', label: 'Backlog' },
-  { id: 'table', label: 'Table' },
-  { id: 'timeline', label: 'Timeline' },
-  { id: 'calendar', label: 'Calendar' },
+  { id: 'board', label: 'Board', icon: Kanban },
+  { id: 'backlog', label: 'Backlog', icon: ListOrdered },
+  { id: 'table', label: 'Table', icon: Table2 },
+  { id: 'timeline', label: 'Timeline', icon: GanttChart },
+  { id: 'calendar', label: 'Calendar', icon: CalendarDays },
 ] as const;
 
 /**
@@ -137,6 +147,14 @@ type ColumnId = (typeof COLUMNS)[number]['id'];
 const ALL_COLUMNS = COLUMNS.map((column) => column.id);
 
 export function WorkTablePage() {
+  return (
+    <WorkStripActionsProvider>
+      <WorkTableBody />
+    </WorkStripActionsProvider>
+  );
+}
+
+function WorkTableBody() {
   const { projectId = '' } = useParams();
   const [params] = useSearchParams();
 
@@ -228,139 +246,41 @@ export function WorkTablePage() {
   const activeBoardId =
     view === 'board' ? params.get('board') ?? boards.data?.[0]?.id ?? '' : '';
 
-  /*
-    §8.3's **door badge**: how many cards are sitting in the board's FIRST column — what is waiting
-    at this board's door, never a total.
-
-    ~~**The ACTIVE segment only.** 021 T1 added no contract for the inactive boards' counts, on
-    purpose, and inventing one here would mean a `GET …/cards` per board on every visit to the
-    Table view. T8 badges the rest.~~ → **superseded (021 T8), and the objection is answered rather
-    than overruled.** The counts are still not on the contract and nothing was invented: `useBoardDoors`
-    runs the SAME two options objects `ProjectBoardView` uses, under the same two keys, so the
-    active board is a cache hit and only the inactive boards are new requests. The "on every visit
-    to the Table view" half was the real cost, and it is paid for by `enabled` — the fan-out fires
-    only once the strip has a board list to draw, and it is the strip that needs the numbers.
-
-    One `boards.length` fan-out and not one per view: the strip is the same strip on all seven
-    views, and a badge that appeared when you switched to Board would be a number the reader
-    learns to distrust.
-  */
-  const boardIds = useMemo(() => (boards.data ?? []).map((board) => board.id), [boards.data]);
-  const doors = useBoardDoors(boardIds, work.board, boards.data !== undefined);
-
-  const current = VIEWS.find((entry) => entry.id === view) ?? VIEWS[1];
+  const current = VIEWS.find((entry) => entry.id === view) ?? VIEWS[2];
 
   return (
     <div>
-      <title>{project.data ? `Work · ${project.data.name} · TCMS` : 'Work · TCMS'}</title>
-
-      <header
-        data-testid={`${TEST_ID}.Header`}
-        className="mb-3 flex flex-wrap items-start gap-3 border-b border-line pb-3"
-      >
-        <div className="min-w-0 flex-1">
-          <h1
-            data-testid={`${TEST_ID}.Header.Title`}
-            className="m-0 text-[19px] font-semibold tracking-[-.018em] text-ink"
-          >
-            Work
-          </h1>
-          {/*
-            ~~"The same issues the board is showing — a different shape, not a different query."~~ →
-            that sentence was written when this header belonged to the table alone. The board is now
-            one of the views under it, so the subtitle is `work-board.html`'s, which names the whole
-            switcher and the one thing every view shares.
-          */}
-          <p className="m-0 mt-1 max-w-[74ch] text-[13px] text-ink-3">
-            Board · Backlog · Table · Timeline · Calendar — one entry, one filter.
-          </p>
-        </div>
-
-        <PermissionGate projectId={projectId} permission="issue:create">
-          {({ allowed }) => (
-            <Button
-              variant="primary"
-              size="sm"
-              disabled={!allowed}
-              asChild={allowed}
-              data-testid={`${TEST_ID}.Add`}
-            >
-              {allowed ? <RouterLink to={`/projects/${projectId}/work/new`}>+ Add</RouterLink> : <span>+ Add</span>}
-            </Button>
-          )}
-        </PermissionGate>
-      </header>
-
-      {/*
-        The switcher. Real links, not buttons: a view is an address, and the query string travels
-        with it — which is the whole of D34's "switching views never loses the filter".
-      */}
-      <nav aria-label="Work views" className="mb-3 flex flex-wrap gap-0.5 rounded-lg bg-wash-1 p-0.5">
-        {(boards.data ?? []).map((board) => {
-          const to = new URLSearchParams(params);
-          to.set('view', 'board');
-          to.set('board', board.id);
-          const on = board.id === activeBoardId;
-          return (
-            <RouterLink
-              key={board.id}
-              to={{ search: `?${to.toString()}` }}
-              aria-current={on ? 'page' : undefined}
-              data-testid={`${TEST_ID}.View.Board.${board.name}`}
-              className={cn(
-                'flex items-center gap-1.5 rounded-md px-[11px] py-1 text-[12px] font-medium no-underline',
-                'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
-                on ? 'bg-panel text-ink shadow-e1' : 'bg-transparent text-ink-3 hover:text-ink-2',
-              )}
-            >
-              {board.name}
-              {/*
-                The badge is an *awaiting you* count and never a total (§8.3), so it is drawn only
-                when there is something at the door: a `0` beside every board is five characters
-                that say nothing and train the eye to skip the place a real number will appear.
-
-                An unanswered board has **no entry** in `waiting` rather than a zero, so a board
-                still loading and a board with an empty door draw the same nothing — which is the
-                honest pair, because the alternative is a `0` that turns into a `7` a moment later.
-              */}
-              {(doors.waiting[board.id] ?? 0) > 0 && (
-                <span
-                  data-testid={`${TEST_ID}.View.Board.${board.name}.Badge`}
-                  className={cn(
-                    'min-w-4 rounded-full bg-[color:var(--color-steel)] px-1 text-center',
-                    'font-mono text-[10px] font-semibold leading-[15px] text-rail',
-                  )}
+      <PageHeader
+        title="Work"
+        documentTitle={project.data ? `Work · ${project.data.name}` : 'Work'}
+        testId={`${TEST_ID}.Header`}
+        lead={view === 'board' ? <BoardPicker projectId={projectId} activeBoardId={activeBoardId} /> : undefined}
+        views={
+          <nav aria-label="Work views" data-testid={`${TEST_ID}.Views`} className={segmentTrackClass}>
+            {VIEWS.map((entry) => {
+              const to = new URLSearchParams(params);
+              to.set('view', entry.id);
+              /* A view is not a board, so the board a reader last looked at does not travel with it. */
+              if (entry.id !== 'board') to.delete('board');
+              const on = entry.id === current.id;
+              const Icon = entry.icon;
+              return (
+                <RouterLink
+                  key={entry.id}
+                  to={{ search: `?${to.toString()}` }}
+                  aria-current={on ? 'page' : undefined}
+                  data-testid={`${TEST_ID}.View.${entry.id}`}
+                  className={cn(segmentItemClass(on), 'no-underline')}
                 >
-                  {formatCount(doors.waiting[board.id] ?? 0)}
-                </span>
-              )}
-            </RouterLink>
-          );
-        })}
-
-        {VIEWS.map((entry) => {
-          const to = new URLSearchParams(params);
-          to.set('view', entry.id);
-          /* A view is not a board, so the board a reader last looked at does not travel with it. */
-          to.delete('board');
-          const on = view !== 'board' && entry.id === current.id;
-          return (
-            <RouterLink
-              key={entry.id}
-              to={{ search: `?${to.toString()}` }}
-              aria-current={on ? 'page' : undefined}
-              data-testid={`${TEST_ID}.View.${entry.id}`}
-              className={cn(
-                'rounded-md px-[11px] py-1 text-[12px] font-medium no-underline',
-                'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
-                on ? 'bg-panel text-ink shadow-e1' : 'bg-transparent text-ink-3 hover:text-ink-2',
-              )}
-            >
-              {entry.label}
-            </RouterLink>
-          );
-        })}
-      </nav>
+                  <Icon aria-hidden className="size-3.5" />
+                  {entry.label}
+                </RouterLink>
+              );
+            })}
+          </nav>
+        }
+        actions={<WorkStripActionsTarget />}
+      />
 
       {/*
         The board is a view of this screen, not a screen of its own — D34, and the reason the filter
@@ -384,6 +304,7 @@ export function WorkTablePage() {
         <CalendarView projectId={projectId} />
       ) : (
         <>
+          <WorkStripActions>
           <FilterStrip
             data-testid={`${TEST_ID}.Filters`}
             applied={applied}
@@ -472,6 +393,7 @@ export function WorkTablePage() {
               </>
             }
           />
+          </WorkStripActions>
 
           <DataRegion
             testId={`${TEST_ID}.Content`}

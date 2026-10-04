@@ -6,6 +6,7 @@ import { api } from '../../api/client'
 import type { BoardColumnConfig, BoardContents, IssueStatusRef } from '../../api/types'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
+import { openFilters } from '../../test/filters'
 import { TestProviders } from '../../test/TestProviders'
 import {
   aBoardClaim,
@@ -80,10 +81,15 @@ const COLUMNS = [
   column('col-done', 'Done', 3, [DONE]),
 ]
 
-function renderView(contents: BoardContents, columns = COLUMNS, route = '/projects/p1/work?view=board') {
+function renderView(
+  contents: BoardContents,
+  columns = COLUMNS,
+  route = '/projects/p1/work?view=board',
+  held: Parameters<typeof heldPermissions>[0] = ['issue:read', 'issue:edit', 'board:configure'],
+) {
   vi.spyOn(api, 'get').mockImplementation((async (path: string) => {
     if (path.startsWith('/me/permissions')) {
-      return heldPermissions(['issue:read', 'issue:edit', 'board:configure'])
+      return heldPermissions(held)
     }
     // Anchored, so `/boards/b1/cards` is not caught by the configuration arm's prefix — the two
     // paths are one segment apart and this is exactly the collision the harness warns about.
@@ -483,15 +489,18 @@ describe('keyboard parity with the pointer', () => {
     )
   })
 
-  it('tells the reader on the board that dragging is never the only way', async () => {
-    // The mockup says it in prose ON the board, and names the second audience the WCAG criterion
-    // does not: this is also what a touch user gets. A keyboard path nobody can discover is one
-    // nobody uses, which is why the sentence is part of the screen rather than of the docs.
+  it('says in the foot line that dragging is never the only way, and draws no banner', async () => {
+    /*
+      023 D16. The sentence moved from a banner above the board to the line under it: WCAG needs the
+      single-pointer alternative to exist (the card's menu), not 50px of chrome above every board.
+    */
     renderView(boardContents({ lanes: [aBoardLane({ cards: [] })] }))
 
-    const note = await screen.findByTestId('ProjectBoard.KeyboardNote')
-    expect(note).toHaveTextContent('Dragging is never the only way')
-    expect(note).toHaveTextContent(/touch user/)
+    const foot = await screen.findByTestId('ProjectBoard.Count')
+    expect(foot).toHaveTextContent('0 cards shown')
+    expect(foot).toHaveTextContent('Move to…')
+    expect(foot).toHaveTextContent('dragging is never the only way')
+    expect(screen.queryByTestId('ProjectBoard.KeyboardNote')).toBeNull()
   })
 })
 
@@ -523,6 +532,7 @@ describe('the filter', () => {
       'Level · Story level',
     )
     // Trello's semantics, rendered rather than assumed: OR within a category, AND across them.
+    await openFilters(userEvent.setup(), 'ProjectBoard.Filters')
     expect(screen.getByTestId('ProjectBoard.Filters.Summary')).toHaveTextContent(
       /any of the values within a filter, and every filter together/,
     )
@@ -576,8 +586,9 @@ describe('the board’s own controls', () => {
       the control — so a node captured before the verdict is a detached element that stays disabled
       forever. `ArchiveProject.test.tsx` carries the same comment for the same five wasted minutes.
     */
-    await waitFor(() => expect(screen.getByLabelText('Group by')).toBeEnabled())
-    await user.selectOptions(screen.getByLabelText('Group by'), 'EPIC')
+    await waitFor(() => expect(screen.getByTestId('ProjectBoard.GroupBy')).toBeEnabled())
+    await user.click(screen.getByTestId('ProjectBoard.GroupBy'))
+    await user.click(await screen.findByTestId('ProjectBoard.GroupBy.EPIC'))
 
     await waitFor(() =>
       expect(patch).toHaveBeenCalledWith(
@@ -598,18 +609,42 @@ describe('the board’s own controls', () => {
     )
   })
 
-  it('links Configure boards at the settings screen 012 T9 landed', async () => {
+  it('names the grouping on its trigger, and carries the footnote in its menu', async () => {
+    renderView(boardContents({ lanes: [aBoardLane({ cards: [] })] }))
+    const user = userEvent.setup()
+
+    await waitFor(() => expect(screen.getByTestId('ProjectBoard.GroupBy')).toBeEnabled())
+    expect(screen.getByTestId('ProjectBoard.GroupBy')).toHaveTextContent('Group: No swimlanes')
+
+    await user.click(screen.getByTestId('ProjectBoard.GroupBy'))
+    expect(await screen.findByText('Changes this board for everyone.')).toBeInTheDocument()
+  })
+
+  it('has no top row any more: no select, no Configure button, no keyboard banner', async () => {
     /*
-      ~~It was disabled with *"arrives with the board settings screen"* on it, because the route did
-      not exist and a link to a 404 is worse than a control that explains itself.~~ → T9 built the
-      route, so the sentence became false and the assertion had to move with it. The `href` is what
-      is asserted rather than the absence of `disabled`: a `<span>` styled as a link would satisfy
-      the weaker claim, and in-app navigation has to be a real `<Link>`.
+      023 §6.2. Configure boards is the picker's last item; the keyboard sentence is the foot line.
     */
     renderView(boardContents({ lanes: [aBoardLane({ cards: [] })] }))
 
-    const configure = await screen.findByTestId('ProjectBoard.Configure')
-    expect(configure).toHaveAttribute('href', '/projects/p1/settings/boards')
+    await screen.findByTestId('ProjectBoard.Count')
+    expect(screen.queryByLabelText('Group by')).toBeNull()
+    expect(screen.queryByTestId('ProjectBoard.Configure')).toBeNull()
+    expect(screen.queryByTestId('ProjectBoard.KeyboardNote')).toBeNull()
+  })
+
+  it('disables Group with its reason for a caller without board:configure, rather than hiding it', async () => {
+    renderView(
+      boardContents({ lanes: [aBoardLane({ cards: [] })] }),
+      COLUMNS,
+      '/projects/p1/work?view=board',
+      ['issue:read'],
+    )
+
+    await waitFor(() => {
+      const trigger = screen.getByTestId('ProjectBoard.GroupBy')
+      expect(trigger).toBeDisabled()
+      expect(trigger).toHaveAttribute('title')
+    })
   })
 })
 
@@ -645,7 +680,7 @@ describe('the three reads fail separately', () => {
     expect(await screen.findByTestId('ProjectBoard.Content.Error')).toBeInTheDocument()
     /*
       ~~The board picker.~~ → **retired by 021 D-f** — the project's boards are the Work strip's
-      segments now. The `Group by` control is the one that took its place above the region, and the
+      picker now. The `Group` control is the one that took its place above the region, and the
       property under test is unchanged: a failed cards read empties the board without unmounting the
       controls the reader needs in order to change the query and retry.
     */
