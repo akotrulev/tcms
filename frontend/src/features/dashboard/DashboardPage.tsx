@@ -434,8 +434,8 @@ function BreakdownList({
                 style={entry.color ? { backgroundColor: entry.color } : undefined}
                 className={
                   entry.color
-                    ? 'block size-2.5 rounded-[1px]'
-                    : 'block size-2.5 rounded-[1px] border border-line-strong bg-field'
+                    ? 'block size-2.5 rounded-xs'
+                    : 'block size-2.5 rounded-xs border border-line-strong bg-field'
                 }
               />
               {entry.label}
@@ -553,7 +553,7 @@ function ActivityChart({ activity }: { activity: RepositoryDashboard['recentActi
                   key={day.date}
                   title={`${day.date} — ${plural(day[key], 'case')} ${key}`}
                   style={{ height: `${(day[key] / max) * 100}%` }}
-                  className="block min-h-px flex-1 rounded-t-[1px] bg-steel opacity-75"
+                  className="block min-h-px flex-1 rounded-t-xs bg-steel opacity-75"
                 />
               ))}
             </span>

@@ -409,7 +409,7 @@ function Kpi({
   return (
     <section
       data-testid={`${TEST_ID}.Tile.${label.replaceAll(' ', '')}`}
-      className="rounded-[8px] border border-line bg-panel px-[15px] py-[13px]"
+      className="rounded-lg border border-line bg-panel px-[15px] py-[13px]"
     >
       <span className="mb-1.5 block text-[11.5px] text-ink-3">{label}</span>
       <span

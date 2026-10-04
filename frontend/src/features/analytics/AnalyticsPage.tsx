@@ -204,7 +204,7 @@ function ReleasePicker({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         data-testid={`${TEST_ID}.ReleasePicker`}
-        className="rounded-[5px] border border-line bg-field px-1.5 py-0.5 text-[11.5px] text-ink-2"
+        className="rounded-md border border-line bg-field px-1.5 py-0.5 text-[11.5px] text-ink-2"
       >
         {releases.map((release) => (
           <option key={release.id} value={release.id}>
@@ -242,8 +242,8 @@ function WindowPicker({
             aria-pressed={option === value}
             className={
               option === value ?
-                'rounded-[5px] border border-steel-line bg-field px-1.5 py-0.5 font-mono tabular-nums text-ink-2'
-              : 'rounded-[5px] border border-transparent px-1.5 py-0.5 font-mono tabular-nums hover:text-ink-3'
+                'rounded-md border border-steel-line bg-field px-1.5 py-0.5 font-mono tabular-nums text-ink-2'
+              : 'rounded-md border border-transparent px-1.5 py-0.5 font-mono tabular-nums hover:text-ink-3'
             }
           >
             {option}

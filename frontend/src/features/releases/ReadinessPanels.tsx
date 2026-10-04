@@ -65,7 +65,7 @@ export function ReadinessTiles({
     <div className="mb-4 grid gap-3 md:grid-cols-3">
       <section
         data-testid={`${testId}.Stories`}
-        className="rounded-[8px] border border-line bg-panel px-[15px] py-[13px]"
+        className="rounded-lg border border-line bg-panel px-[15px] py-[13px]"
       >
         <TileHead label="Stories" value={`${stories.done} / ${stories.total}`} />
         <TallMeter
@@ -90,7 +90,7 @@ export function ReadinessTiles({
 
       <section
         data-testid={`${testId}.Tests`}
-        className="rounded-[8px] border border-line bg-panel px-[15px] py-[13px]"
+        className="rounded-lg border border-line bg-panel px-[15px] py-[13px]"
       >
         <TileHead
           label="Linked test cases"
@@ -130,7 +130,7 @@ export function ReadinessTiles({
 
       <section
         data-testid={`${testId}.Scope`}
-        className="rounded-[8px] border border-line bg-panel px-[15px] py-[13px]"
+        className="rounded-lg border border-line bg-panel px-[15px] py-[13px]"
       >
         <TileHead label="Scope change" value={`+${scopeAddedAfterCreation}`} />
         <TallMeter
@@ -307,7 +307,7 @@ export function EpicsPanel({
               key={epic.key}
               to={`/issues/${encodeURIComponent(epic.key)}`}
               data-testid={`${testId}.Epic`}
-              className="flex items-center gap-3 rounded-[6px] border border-line px-3 py-2.5 no-underline hover:border-line-strong"
+              className="flex items-center gap-3 rounded-md border border-line px-3 py-2.5 no-underline hover:border-line-strong"
             >
               <TypeIcon type={{ name: 'Epic', level: 'EPIC' }} />
               <span className="min-w-0 flex-1">

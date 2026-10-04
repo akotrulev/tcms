@@ -133,7 +133,7 @@ export function BillingPage() {
             skeleton={
               <div className="mb-4 grid gap-3 md:grid-cols-4">
                 {[0, 1, 2, 3].map((slot) => (
-                  <Skeleton key={slot} className="h-[92px] rounded-[8px]" />
+                  <Skeleton key={slot} className="h-[92px] rounded-lg" />
                 ))}
               </div>
             }
@@ -244,7 +244,7 @@ function MoneyTile({
   testId: string;
 }) {
   return (
-    <section data-testid={testId} className="rounded-[8px] border border-line bg-panel px-[15px] py-[13px]">
+    <section data-testid={testId} className="rounded-lg border border-line bg-panel px-[15px] py-[13px]">
       {figures.length === 0 ?
         <span className="block font-mono text-[26px] leading-[1.1] font-medium tracking-[-.02em] tabular-nums text-ink">
           —
@@ -283,7 +283,7 @@ function Tile({
   testId: string;
 }) {
   return (
-    <section data-testid={testId} className="rounded-[8px] border border-line bg-panel px-[15px] py-[13px]">
+    <section data-testid={testId} className="rounded-lg border border-line bg-panel px-[15px] py-[13px]">
       <span className="block font-mono text-[26px] leading-[1.1] font-medium tracking-[-.02em] tabular-nums text-ink">
         {value}
       </span>

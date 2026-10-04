@@ -66,6 +66,8 @@
   --color-wash-2: var(--color-overlay-2);
   --color-wash-3: var(--color-overlay-3);
   --color-rail: var(--color-surface-rail);
+  --color-bar: var(--color-surface-bar);
+  --color-raised: var(--color-surface-raised);
 
   /*
    * Elevation, and the accent's two derived washes.
@@ -197,6 +199,7 @@
   --color-overlay-2: rgb(22 32 46 / 7%);
   --color-overlay-3: rgb(22 32 46 / 11%);
   --color-surface-rail: #e6ebf3;
+  --color-surface-bar: #ffffff;
 
   /* --- text --- */
   --color-text: #16202e;
@@ -294,6 +297,17 @@
   --color-label-9: #f0d9ee;
   --color-label-10: #e2e5ea;
 
+  /* A project's key chip: one deep fill carrying white text, the same in both schemes (023 §3a).
+     `app/projectPalette.test.ts` holds white on each at 4.5:1. */
+  --color-project-1: #2f6f8f;
+  --color-project-2: #4b4f9e;
+  --color-project-3: #1f6f6a;
+  --color-project-4: #2f6b45;
+  --color-project-5: #5f6a24;
+  --color-project-6: #8a5a1b;
+  --color-project-7: #9a3f2c;
+  --color-project-8: #7a3f73;
+
   /* --- progress: a JOB's own lifecycle, never the outcome of what it ran --- */
   /* A finished run is not a passing run. `--color-passed` on a COMPLETED chip put a green
      badge on a run with a 0% pass rate, which is the outcome tier answering a question it
@@ -390,6 +404,7 @@
   --color-overlay-2: rgb(255 255 255 / 5%);
   --color-overlay-3: rgb(255 255 255 / 8%);
   --color-surface-rail: #0c1119;
+  --color-surface-bar: #0c1119;
 
   --color-text: #e8edf3;
   --color-text-muted: #9aa8ba;
@@ -452,6 +467,17 @@
   --color-label-8: #443a63;
   --color-label-9: #57345a;
   --color-label-10: #3b424c;
+
+  /* A project's key chip: one deep fill carrying white text, the same in both schemes (023 §3a).
+     Same values as the light palette. */
+  --color-project-1: #2f6f8f;
+  --color-project-2: #4b4f9e;
+  --color-project-3: #1f6f6a;
+  --color-project-4: #2f6b45;
+  --color-project-5: #5f6a24;
+  --color-project-6: #8a5a1b;
+  --color-project-7: #9a3f2c;
+  --color-project-8: #7a3f73;
 
   --color-progress-done: #93a3ba;
 

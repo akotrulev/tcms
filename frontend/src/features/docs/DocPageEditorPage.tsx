@@ -310,7 +310,7 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
       <div className="flex flex-col items-start gap-4 xl:flex-row">
         <DocumentSurface
           measure="prose"
-          className="min-w-0 flex-1 rounded-[8px] border border-line"
+          className="min-w-0 flex-1 rounded-lg border border-line"
         >
           {errors.root && (
             <div className="mb-4" data-testid={`${TestIdPrefix}.Error`}>
@@ -385,7 +385,7 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
                           type="button"
                           aria-label={`Block ${index + 1} actions`}
                           data-testid={`${TestIdPrefix}.Block.Menu`}
-                          className="rounded-[3px] font-mono text-[10px] tracking-[.06em] text-ink-4 uppercase hover:text-ink-2 focus-visible:outline-2 focus-visible:outline-[color:var(--color-given)]"
+                          className="rounded-sm font-mono text-[10px] tracking-[.06em] text-ink-4 uppercase hover:text-ink-2 focus-visible:outline-2 focus-visible:outline-[color:var(--color-given)]"
                         >
                           {GUTTER_LABEL[type]}
                         </button>
@@ -588,7 +588,7 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
           </div>
         </DocumentSurface>
 
-        <aside className="w-full shrink-0 rounded-[8px] border border-line bg-panel p-4 xl:w-[280px]">
+        <aside className="w-full shrink-0 rounded-lg border border-line bg-panel p-4 xl:w-[280px]">
           {linkedCases.size > 0 && (
             <section className="mb-5">
               <h2 className={SECTION_HEADING}>
@@ -716,7 +716,7 @@ function TableRowsEditor({
               placeholder={rowIndex === 0 ? 'Column name' : undefined}
               data-testid={`${testId}.Cell`}
               className={
-                'min-w-[90px] flex-1 rounded-[8px] border border-line bg-field px-2 py-1 ' +
+                'min-w-[90px] flex-1 rounded-lg border border-line bg-field px-2 py-1 ' +
                 'font-mono text-[12px] text-ink placeholder:text-ink-4 ' +
                 'focus-visible:outline-2 focus-visible:outline-offset-2 ' +
                 'focus-visible:outline-[color:var(--color-given)]'

@@ -41,6 +41,7 @@ const PROJECT: Project = {
   archived: false,
   caseCount: 0,
   myRole: null,
+  color: 'project-1',
 }
 
 const DASHBOARD: RepositoryDashboard = {

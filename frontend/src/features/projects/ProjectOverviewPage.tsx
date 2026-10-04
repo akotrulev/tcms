@@ -242,7 +242,7 @@ function Tile({
 }) {
   return (
     <div
-      className="rounded-[10px] border border-line bg-panel px-3.5 py-3"
+      className="rounded-xl border border-line bg-panel px-3.5 py-3"
       title={title}
       data-testid={testId}
     >
@@ -423,7 +423,7 @@ function TestsPassingTile({ projectId }: { projectId: string }) {
   if (total === 0) {
     return (
       <div
-        className="rounded-[10px] border border-line bg-panel px-3.5 py-3"
+        className="rounded-xl border border-line bg-panel px-3.5 py-3"
         data-testid={`${TEST_ID}.TestsPassing.None`}
       >
         <span className="block text-[12px] text-ink-2">Tests passing</span>
@@ -470,7 +470,7 @@ function EpicsPanel({
   const capped = rows.length > EPIC_COMPLETION_LIMIT;
 
   return (
-    <section className="rounded-[10px] border border-line bg-panel" data-testid={`${TEST_ID}.Epics`}>
+    <section className="rounded-xl border border-line bg-panel" data-testid={`${TEST_ID}.Epics`}>
       <div className="flex flex-wrap items-center gap-2.5 border-b border-line px-3.5 py-2.5">
         <h2 className="m-0 text-[13.5px] font-semibold text-ink">Epics</h2>
         <Identifier variant="muted">{String(rows.length)}</Identifier>
@@ -508,7 +508,7 @@ function EpicsPanel({
                 key={epic.key}
                 to={`/issues/${encodeURIComponent(epic.key)}`}
                 data-testid={`${TEST_ID}.Epics.Row`}
-                className="block rounded-[8px] border border-line bg-paper px-2.5 py-2.5 no-underline hover:border-line-strong"
+                className="block rounded-lg border border-line bg-paper px-2.5 py-2.5 no-underline hover:border-line-strong"
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <TypeIcon type={epic.type} />
@@ -611,7 +611,7 @@ function BacklogPanel({
   const solo = epics.data !== undefined && epics.data.length === 0;
 
   return (
-    <section className="rounded-[10px] border border-line bg-panel" data-testid={`${TEST_ID}.Backlog`}>
+    <section className="rounded-xl border border-line bg-panel" data-testid={`${TEST_ID}.Backlog`}>
       <div className="flex flex-wrap items-center gap-2.5 border-b border-line px-3.5 py-2.5">
         <h2 className="m-0 text-[13.5px] font-semibold text-ink" data-testid={`${TEST_ID}.Backlog.Title`}>
           {solo ? 'Quick tasks' : 'Unscheduled backlog'}
@@ -719,7 +719,7 @@ function NextReleasePanel({ projectId }: { projectId: string }) {
   const { releases, release, readiness } = useNextRelease(projectId);
 
   return (
-    <section className="rounded-[10px] border border-line bg-panel" data-testid={`${TEST_ID}.Release`}>
+    <section className="rounded-xl border border-line bg-panel" data-testid={`${TEST_ID}.Release`}>
       <div className="flex flex-wrap items-center gap-2.5 border-b border-line px-3.5 py-2.5">
         <h2 className="m-0 text-[13.5px] font-semibold text-ink">Next release</h2>
         <span className="flex-1" />
@@ -1013,7 +1013,7 @@ function BudgetBurnPanel({ projectId }: { projectId: string }) {
   if (burn.isPending || burn.data?.basis === null) return null;
 
   return (
-    <section className="rounded-[10px] border border-line bg-panel" data-testid={`${TEST_ID}.Budget`}>
+    <section className="rounded-xl border border-line bg-panel" data-testid={`${TEST_ID}.Budget`}>
       <div className="flex items-center gap-2.5 border-b border-line px-3.5 py-2.5">
         <h2 className="m-0 text-[13.5px] font-semibold text-ink">Budget burn</h2>
         <span className="text-[11.5px] text-ink-4">hours, no rates</span>
@@ -1077,7 +1077,7 @@ function TestHealthPanel({
   dashboard: ReturnType<typeof useDashboard>;
 }) {
   return (
-    <section className="rounded-[10px] border border-line bg-panel" data-testid={`${TEST_ID}.TestHealth`}>
+    <section className="rounded-xl border border-line bg-panel" data-testid={`${TEST_ID}.TestHealth`}>
       <div className="flex flex-wrap items-center gap-2.5 border-b border-line px-3.5 py-2.5">
         <h2 className="m-0 text-[13.5px] font-semibold text-ink">Test health</h2>
         <span className="text-[11.5px] text-ink-4">latest run per case</span>

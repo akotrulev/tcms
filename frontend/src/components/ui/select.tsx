@@ -15,7 +15,7 @@ function SelectTrigger({ className, children, ...props }: ComponentProps<typeof 
   return (
     <SelectPrimitive.Trigger
       className={cn(
-        'flex w-full items-center justify-between gap-2 rounded-[8px] border border-transparent ' +
+        'flex w-full items-center justify-between gap-2 rounded-lg border border-transparent ' +
           'px-3 py-1.5 text-[13px] text-ink hover:border-line-strong ' +
           'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)] ' +
           'disabled:pointer-events-none disabled:opacity-45 data-[placeholder]:text-ink-4',
@@ -47,7 +47,7 @@ function SelectContent({ className, children, position = 'popper', ...props }: C
       <SelectPrimitive.Content
         position={position}
         className={cn(
-          'z-50 min-w-[8rem] overflow-hidden rounded-[8px] border border-line bg-panel ' +
+          'z-50 min-w-[8rem] overflow-hidden rounded-xl border border-line bg-raised ' +
             'shadow-e3',
           position === 'popper' &&
             'data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1',
@@ -74,7 +74,7 @@ function SelectItem({ className, children, ...props }: ComponentProps<typeof Sel
   return (
     <SelectPrimitive.Item
       className={cn(
-        'relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-[13px] ' +
+        'relative flex cursor-pointer select-none items-center rounded-md px-2.5 py-1.5 text-[13px] ' +
           'text-ink-2 outline-none data-[highlighted]:bg-wash-2 data-[highlighted]:text-ink ' +
           'data-[disabled]:pointer-events-none data-[disabled]:opacity-45',
         className,

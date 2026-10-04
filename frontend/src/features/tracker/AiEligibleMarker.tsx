@@ -36,7 +36,7 @@ export function AiEligibleMarker({
       data-testid={testId}
       title="Flagged AI-eligible — it reaches the owner's assistant queue"
       className={cn(
-        'inline-flex items-center rounded-[3px] border border-[color:var(--color-steel-line)] bg-[color:var(--color-steel-glow)]',
+        'inline-flex items-center rounded-sm border border-[color:var(--color-steel-line)] bg-[color:var(--color-steel-glow)]',
         'px-[5px] text-[10px] font-semibold tracking-[.04em] text-steel',
         className,
       )}

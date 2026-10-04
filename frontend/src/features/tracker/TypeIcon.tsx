@@ -92,7 +92,7 @@ export function TypeIcon({
       title={type.name}
       data-testid={rest['data-testid']}
       className={cn(
-        'inline-grid size-[15px] flex-none place-items-center rounded-[3px]',
+        'inline-grid size-[15px] flex-none place-items-center rounded-sm',
         'font-mono text-[9px] font-bold text-rail',
         className,
       )}

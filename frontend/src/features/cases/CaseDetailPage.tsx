@@ -725,7 +725,7 @@ function LifecycleMenu({
           <div
             role="menu"
             data-testid="CaseDetail.StatusMenu"
-            className="absolute right-0 z-50 mt-1 min-w-[200px] rounded-[8px] border border-line bg-panel p-1 shadow-e3"
+            className="absolute right-0 z-50 mt-1 min-w-[200px] rounded-lg border border-line bg-panel p-1 shadow-e3"
           >
             {moves.map((option) => (
               <PermissionGate

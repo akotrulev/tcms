@@ -45,7 +45,7 @@ export function ClientRateCardPanel({ clientId }: { clientId: string }) {
       <DataRegion
         testId={`${TEST_ID}.Region`}
         state={{ ...cards, refetch: () => void cards.refetch() }}
-        skeleton={<Skeleton className="h-[64px] rounded-[8px]" />}
+        skeleton={<Skeleton className="h-[64px] rounded-lg" />}
       >
         {(slots) => {
           const card = slots.find((slot) => slot.client.id === clientId)?.card ?? null;

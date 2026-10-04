@@ -328,7 +328,7 @@ export function Board({ items, crossProject = false }: { items: BoardCard[]; cro
           about something.
         */}
         {dragging && (
-          <div className="flex flex-wrap items-center gap-3 rounded-[8px] border border-line bg-[rgb(14_19_26/92%)] px-4 py-2.5">
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-line bg-[rgb(14_19_26/92%)] px-4 py-2.5">
             <span className="flex-1 text-[12px] text-ink-4">
               Dragging <b className="font-medium text-ink-3">{dragging.title}</b> · drop to move, or
               press <b className="font-medium text-ink-3">Esc</b> to cancel
@@ -390,7 +390,7 @@ function BoardColumn({
       data-testid={`Board.Column.${column.name}`}
       data-over={isOver ? 'true' : undefined}
       className={cn(
-        'flex min-h-0 flex-col rounded-[8px] border border-line bg-panel',
+        'flex min-h-0 flex-col rounded-lg border border-line bg-panel',
         'transition-colors duration-150 motion-reduce:transition-none',
         isOver && canAccept && 'border-[color:var(--color-steel)]',
         // Not colour alone: a column that cannot accept the card also dims, and the card's own
@@ -457,7 +457,7 @@ function WorkCard({
       ref={overlay ? undefined : setNodeRef}
       data-testid="Board.Card"
       className={cn(
-        'rounded-[5px] border border-line bg-paper px-[11px] py-2.5 text-[13px] leading-[1.5]',
+        'rounded-md border border-line bg-paper px-[11px] py-2.5 text-[13px] leading-[1.5]',
         'hover:border-line-strong',
         item.status.kind === 'NOT_STARTED'
           && 'border-[color:color-mix(in_oklab,var(--color-blocked)_26%,transparent)]',

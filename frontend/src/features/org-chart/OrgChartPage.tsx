@@ -94,7 +94,7 @@ export function OrgChartPage() {
           </DataRegion>
         </section>
 
-        <aside className="flex flex-col rounded-[8px] border border-line bg-panel">
+        <aside className="flex flex-col rounded-lg border border-line bg-panel">
           <section className="border-b border-line p-4" data-testid="OrgChart.Teams">
             <h2 className="m-0 mb-3 text-[11px] font-semibold uppercase tracking-[.08em] text-ink-3">
               Teams

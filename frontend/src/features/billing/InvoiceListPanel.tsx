@@ -51,8 +51,8 @@ export function InvoiceListPanel({ canRead }: InvoiceListPanelProps) {
         isEmpty={(data) => data.length === 0}
         skeleton={
           <div className="flex flex-col gap-2">
-            <Skeleton className="h-12 rounded-[8px]" />
-            <Skeleton className="h-12 rounded-[8px]" />
+            <Skeleton className="h-12 rounded-lg" />
+            <Skeleton className="h-12 rounded-lg" />
           </div>
         }
         empty={{
@@ -70,7 +70,7 @@ export function InvoiceListPanel({ canRead }: InvoiceListPanelProps) {
                   to={`/billing/invoices/${invoice.id}`}
                   data-testid={`${TEST_ID}.Row.${invoice.id}`}
                   className={
-                    'flex items-center gap-2.5 rounded-[8px] border bg-paper px-2.5 py-2 no-underline ' +
+                    'flex items-center gap-2.5 rounded-lg border bg-paper px-2.5 py-2 no-underline ' +
                     (invoice.status === 'DRAFT' ?
                       'border-steel-line hover:border-steel'
                     : 'border-line hover:border-line-strong')

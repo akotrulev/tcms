@@ -146,7 +146,7 @@ export function ProjectsPage() {
             <label className="flex items-center gap-2 text-[12px] text-ink-3" data-testid="Projects.ClientFilter">
               Client
               <select
-                className="rounded-[6px] border border-line bg-panel px-2 py-1 text-[12px] text-ink"
+                className="rounded-md border border-line bg-panel px-2 py-1 text-[12px] text-ink"
                 value={clientFilter}
                 onChange={(event) =>
                   setParams(
@@ -264,7 +264,7 @@ export function ProjectsPage() {
                 key={project.id}
                 to={`/projects/${project.id}`}
                 data-testid="Projects.Card"
-                className="block h-full rounded-[8px] border border-line bg-panel p-4 no-underline transition-colors hover:border-steel/35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]"
+                className="block h-full rounded-lg border border-line bg-panel p-4 no-underline transition-colors hover:border-steel/35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]"
               >
                 <span className="mb-2 flex items-baseline gap-2">
                   <span className="text-[15px] font-semibold tracking-[-.015em] text-ink">

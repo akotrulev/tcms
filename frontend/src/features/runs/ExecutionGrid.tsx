@@ -99,7 +99,7 @@ export function ExecutionGrid({
         it opens the checklist rather than recording in one click.
       </span>
 
-      <div className="border border-line rounded-[8px] bg-panel">
+      <div className="border border-line rounded-lg bg-panel">
         <ScrollX>
           <Table data-testid="Execution.Grid">
             <TableHead>

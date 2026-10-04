@@ -29,7 +29,7 @@ export function InsufficientBlock({ reason }: { reason: string | null }) {
   return (
     <div
       data-testid="analytics-insufficient"
-      className="flex items-start gap-2.5 rounded-[6px] border border-line bg-field px-3.5 py-3"
+      className="flex items-start gap-2.5 rounded-md border border-line bg-field px-3.5 py-3"
     >
       <Info className="mt-px size-4 shrink-0 text-ink-4" aria-hidden />
       <p className="text-[12.5px] leading-[1.5] text-ink-2">

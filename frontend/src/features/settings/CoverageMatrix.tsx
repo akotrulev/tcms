@@ -49,7 +49,7 @@ export function CoverageMatrix({
 
   return (
     <section
-      className="rounded-[10px] border border-line bg-panel"
+      className="rounded-xl border border-line bg-panel"
       data-testid={TEST_ID}
       aria-label="Coverage — which boards show each status"
     >

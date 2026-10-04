@@ -91,7 +91,7 @@ export function PreviewStep({
                   {blocker.keys.map((key) => (
                     <Identifier
                       key={key}
-                      className="rounded-[6px] border border-line bg-paper px-1.5 py-0.5 text-[11.5px]"
+                      className="rounded-md border border-line bg-paper px-1.5 py-0.5 text-[11.5px]"
                     >
                       {key}
                     </Identifier>

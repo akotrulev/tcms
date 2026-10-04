@@ -101,7 +101,7 @@ export function CalendarView({ projectId }: { projectId: string }) {
         onClear={applied.length > 0 ? clearFilters : undefined}
       />
 
-      <section className="overflow-hidden rounded-[8px] border border-line bg-panel">
+      <section className="overflow-hidden rounded-lg border border-line bg-panel">
         <DataRegion
           testId={`${TEST_ID}.Content`}
           state={{ ...issues, refetch: () => void issues.refetch() }}
@@ -198,7 +198,7 @@ function Day({
             style={{
               borderLeftColor: issue.overdue ? 'var(--color-failed)' : 'var(--color-steel)',
             }}
-            className="block truncate rounded-[3px] border-l-2 bg-wash-2 px-1.5 py-[3px] text-[11px] text-ink-2 no-underline hover:text-ink"
+            className="block truncate rounded-sm border-l-2 bg-wash-2 px-1.5 py-[3px] text-[11px] text-ink-2 no-underline hover:text-ink"
           >
             {`${issue.key} ${issue.overdue ? 'overdue' : 'due'}`}
           </RouterLink>
@@ -210,7 +210,7 @@ function Day({
             to={`/projects/${projectId}/releases/${release.id}`}
             data-testid={`${TEST_ID}.Target.${release.version}`}
             style={{ borderLeftColor: 'var(--color-given)' }}
-            className="block truncate rounded-[3px] border-l-2 bg-wash-2 px-1.5 py-[3px] text-[11px] font-medium text-ink-2 no-underline hover:text-ink"
+            className="block truncate rounded-sm border-l-2 bg-wash-2 px-1.5 py-[3px] text-[11px] font-medium text-ink-2 no-underline hover:text-ink"
           >
             {`${release.version} target`}
           </RouterLink>

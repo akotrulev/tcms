@@ -39,7 +39,7 @@ export function CopyBlock({
 
   return (
     <div className="mb-4" data-testid={testId}>
-      <div className="rounded-[8px] border border-line bg-field">
+      <div className="rounded-lg border border-line bg-field">
         <div className="flex items-center justify-between gap-3 border-b border-line px-3 py-1.5">
           <span className="font-mono text-[11px] font-medium tracking-[.07em] text-ink-4 uppercase">
             {label}

@@ -43,6 +43,7 @@ const LIVE: Project = {
   archived: false,
   caseCount: 12,
   myRole: 'Test Lead',
+  color: 'project-1',
 }
 
 const RETIRED: Project = { ...LIVE, id: 'p2', key: 'OLD', name: 'Retired Platform', archived: true }

@@ -101,7 +101,7 @@ export function MultiPicker<T>({
           {selected.map((option) => (
             <span
               key={optionKey(option)}
-              className="inline-flex items-center gap-1.5 rounded-[5px] border border-line px-2.5 py-[3px] text-[12px] text-ink-2"
+              className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-[3px] text-[12px] text-ink-2"
             >
               {optionLabel(option)}
               <button
@@ -143,7 +143,7 @@ export function MultiPicker<T>({
           if (event.key === 'Escape') setOpen(false);
         }}
         className={
-          'w-full rounded-[8px] border border-line bg-field px-3 py-1.5 text-left text-[13px] text-ink ' +
+          'w-full rounded-lg border border-line bg-field px-3 py-1.5 text-left text-[13px] text-ink ' +
           'placeholder:text-ink-4 focus-visible:outline-2 focus-visible:outline-offset-2 ' +
           'focus-visible:outline-[color:var(--color-given)] disabled:cursor-not-allowed disabled:opacity-45'
         }
@@ -157,7 +157,7 @@ export function MultiPicker<T>({
             role="listbox"
             aria-multiselectable
             className={cn(
-              'absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-[8px] border border-line',
+              'absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-line',
               'bg-panel p-1 shadow-e3',
             )}
           >

@@ -320,7 +320,7 @@ function BlockView({
                     ? `/projects/${projectId}/cases/${link.sourceId}`
                     : `/projects/${projectId}/suites/${link.sourceId}`
                 }
-                className="inline-flex items-center gap-1.5 rounded-[5px] border border-line px-2.5 py-[3px] text-[12px] text-ink-2 no-underline hover:border-line-strong hover:bg-wash-1 hover:text-ink"
+                className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-[3px] text-[12px] text-ink-2 no-underline hover:border-line-strong hover:bg-wash-1 hover:text-ink"
               >
                 <Identifier>{link.sourceKey}</Identifier>
                 <span>{link.sourceTitle}</span>

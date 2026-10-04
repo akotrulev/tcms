@@ -339,7 +339,7 @@ function MyWorkBody({
               {noted.map((card) => (
                 <li
                   key={card.id}
-                  className="rounded-[8px] border border-line bg-paper px-2.5 py-2"
+                  className="rounded-lg border border-line bg-paper px-2.5 py-2"
                   data-testid={`${TEST_ID}.Notes.Row`}
                 >
                   <RouterLink
@@ -666,7 +666,7 @@ function Panel({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-[10px] border border-line bg-panel" data-testid={testId}>
+    <section className="rounded-xl border border-line bg-panel" data-testid={testId}>
       <div className="flex flex-wrap items-center gap-2.5 border-b border-line px-3.5 py-2.5">
         <h2 className="m-0 text-[13.5px] font-semibold text-ink">{title}</h2>
         {count !== undefined && <Identifier variant="muted">{String(count)}</Identifier>}

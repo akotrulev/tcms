@@ -7,10 +7,12 @@ panels of cards whose face leads with identity and ends with the card's test res
 a colour, which its key chip carries; it never fills a canvas. No route moves. The project colour is
 the plan's one contract change (§3a).
 
-**Status:** A1 and A2 built 2026-10-04 (nothing run, per the plan's single gate). A1: the contract, both
+**Status:** A1, A2 and K1 built 2026-10-04 (nothing run, per the plan's single gate). A1: the contract, both
 generated copies, both fixture factories. A2: `V15__project_color.sql`, `Project.color`, the create
-default, `PUT /projects/{projectId}/color`, and their tests. Next: K1. The server now serves `color`
-and answers the colour endpoint; both are unverified until C1. The design was approved on 2026-10-04 on a canvas:
+default, `PUT /projects/{projectId}/color`, and their tests. K1: the surface ladder (`bg-bar`,
+`bg-raised`), the radius codemod (106 files) and its check, the overlay primitives on the ladder, and
+the project palette with `projectColorFill` and its contrast check. Next: K2. The server now serves
+`color` and answers the colour endpoint; all of it is unverified until C1. The design was approved on 2026-10-04 on a canvas:
 <https://claude.ai/artifact/5LuW51YtnVNKWHZ4mV6Xbj>. `Main` is the board screen with the new shell,
 and `CardStates` is the card in six states, in both themes. The canvas is the user's private artifact,
 so §2–§6 restate every value a task needs. All three open questions were answered on 2026-10-04
@@ -69,75 +71,9 @@ Run them in order, one session each. Each block is complete on its own. Every ga
 only C1 runs one. No prompt pushes, and none starts the local stack. C1 may *use* a stack that is
 already running and must not start one.
 
-A1 and A2 have landed; every block below is live.
+A1, A2 and K1 have landed; every block below is live.
 
 ---
-
-### K1 — the surface ladder and the radius scale (fe-react, fe)
-
-````
-You are `fe-react`. Task K1 of docs/plans/023-one-design-language.md: put the surface ladder and the
-radius scale into the token system and the overlay primitives, so every later task draws with them.
-
-Deliverable: `bg-bar` and `bg-raised` resolve in both schemes; `grep -rnE "rounded(-[trbl]{1,2})?-\[" frontend/src | grep -v '\.test\.'`
-returns nothing, and `tokenSystem.test.ts` fails on a new literal; every `components/ui` overlay is
-`rounded-xl bg-raised shadow-e3` and every item `rounded-md`. `--color-project-1…8` are declared in
-both palettes, `lib/projectColors.ts` maps every `ProjectColor`, and a computed check holds white text
-at ≥ 4.5:1 on each.
-
-House rules for this plan: work on the current branch (`git rev-parse --abbrev-ref HEAD`), never
-create one; no subagents; stage only the files you touched (`git add <paths>`, never `-A`); do not
-push. **Gate: none** — this plan gates once, in C1. Do not run `npm run build`, `lint`, `test:run`,
-`test:smoke`, `tsc` or any targeted test, locally or on shanks.
-
-Read, in this order:
-1. CLAUDE.md — "Frontend" and "Test-harness rules".
-2. The plan: §2 (A3, A4, A7), §3a, §5.1, §5.2, §5.3, D4, D5, D17, task K1, and "Close-out — every
-   task". Then A1's "As built" note (the `ProjectColor` type it generated).
-3. frontend/src/index.css — the `@theme inline` block, both palettes, and the deleted-scale note
-   above `--leading-body` (it is why this plan adds no radius token).
-4. frontend/node_modules/tailwindcss/theme.css — the `--radius-*` lines only. Confirm xs 2 · sm 4 ·
-   md 6 · lg 8 · xl 12 px before you run the codemod; if they differ, stop and record it as a D<n>.
-5. frontend/src/app/tokenSystem.test.ts — the "lines and washes are tokens, not literals" describe;
-   its file walker is the pattern for the new check.
-6. frontend/src/components/ui/{dropdown-menu,select,popover,dialog,command,tooltip,tabs}.tsx and
-   frontend/src/components/kit/{Badge,Chip,Banner,FigurePanel}.tsx.
-7. frontend/src/app/statusPalette.test.ts — how it computes contrast per scheme (the pattern for
-   the project palette's check); frontend/src/lib/statusColors.ts (`labelFill`, the pattern for
-   `projectColorFill`); frontend/src/lib/labels.ts (the `satisfies Record<Union, string>` idiom).
-
-Build (the bullets of task K1, in order):
-- index.css: `--color-surface-bar` in both palettes (light `#ffffff`, dark `#0c1119`); in
-  `@theme inline` add `--color-bar: var(--color-surface-bar)` and
-  `--color-raised: var(--color-surface-raised)`; `--color-project-1…8` per §3a's table, in both
-  palettes.
-- `lib/projectColors.ts` (`projectColorFill`) and `projectColorLabels` in `lib/labels.ts`, both
-  `satisfies Record<ProjectColor, string>`; the white-on-each ≥ 4.5:1 check beside
-  `statusPalette.test.ts`'s, in both schemes. If a value fails it, darken it and record the value
-  you used.
-- Every hand-written `Project` literal in frontend tests gains `color` (A1 changed the type):
-  `grep -rln "myRole:" frontend/src --include='*.test.tsx' --include='*.test.ts'`.
-- The codemod (§5.2's table) over `frontend/src/**/*.{ts,tsx}`, as one `perl -pi` pass, then
-  `git diff --stat` and spot-read five files.
-- The computed check in tokenSystem.test.ts: no `rounded(-side)?-[` literal in any non-test file
-  under `src/`, with a message naming §5.2's role table.
-- The overlay and control primitives per §5.3; Badge `rounded-sm`, Chip `rounded-full`, Banner
-  `rounded-lg`, FigurePanel `rounded-xl`.
-
-Traps:
-- A token declared outside `@theme` under a Tailwind name shadows the utility. This task adds no
-  radius token at all; it uses Tailwind's scale, and the check is what keeps it that way.
-- The codemod is literal for literal. Do not hand-edit the 191 sites, and do not "improve" a role
-  while you are there. Role fixes are P1–P4's.
-- `bg-raised` is new. Nothing has used `surface-raised` as a utility before, so the bridge test will
-  report a typo as an undeclared property. Read its message rather than guessing.
-- `--rail-width` and `--header-height` are N1's, not yours.
-- `tokenSystem.test.ts`'s "no component hardcodes a palette hue" check means the project hues live
-  only in `index.css`. `projectColorFill` returns `var(--color-project-n)`, never a hex.
-
-Commit: `feat(design): the surface ladder, the radius scale and the project palette (023 K1)`.
-Close out per the plan's "Close-out — every task" before you stop.
-````
 
 ### K2 — the page strip, the segmented control, the filter popover (fe-react, fe)
 
@@ -234,7 +170,7 @@ Traps:
   still names it: `grep -rn "ShellBreadcrumbs" frontend/src docs/specs/*.yaml backend/src`.
 - `TopStripProvider` stays mounted and `TopStripTarget` goes. The four pages that use `TopStripSlot`
   then render their content in place until P1 moves them, which is expected.
-- The key chip's text is white on `projectColorFill(project.color)`. K1's check holds that contrast,
+- The key chip's text is white on `projectColorFill[project.color]`. K1's check holds that contrast,
   so do not tint the text by scheme.
 
 Commit: `feat(shell): one top bar instead of the rail (023 N1)`.
@@ -695,7 +631,7 @@ From left to right:
 | 1 | Launcher (`LayoutGrid`, quiet icon button, label "Your work and company") | `app/LauncherMenu.tsx` | `DropdownMenuContent align="start" className="grid w-[500px] grid-cols-2 gap-x-2.5 p-2"`. Left column: **You** (`NAV` zone `you`), then **Administration** (the folder's visible children). Right column: **Company** (the zone's visible entries). Each item is a two-line link: label 13px/500, then `hint` 11.5px `text-ink-3`. A section with no visible entries is not drawn. Footnote: "Only entries you can open are listed." plus a link "Your access" → `/account/access` | `Nav.Launcher`; items keep `Nav.Link.<Label>` |
 | 2 | Wordmark `TCMS` → `/` | `TopBar.tsx` | mono 13px 600 `tracking-[.08em]`; hidden below `sm` | `Nav.Wordmark` |
 | 3 | Divider | — | `h-5 w-px bg-line` | — |
-| 4 | Project switcher | `app/ProjectSwitcher.tsx` | Button: key chip (`Identifier` strong, `h-[22px] rounded-sm px-1.5 text-[10.5px] text-white`, background `projectColorFill(project.color)`, §3a), name 14px/600 (hidden below `sm`), `ChevronDown`. Popover with a `Command` list: "Find a project" filter, rows of key chip + name, a check on the current one, then "All projects" → `/`. Choosing one navigates `/projects/:id`, as today. Resolution is `useActiveProject`, unchanged | `Nav.ProjectSwitcher` |
+| 4 | Project switcher | `app/ProjectSwitcher.tsx` | Button: key chip (`Identifier` strong, `h-[22px] rounded-sm px-1.5 text-[10.5px] text-white`, background `projectColorFill[project.color]`, §3a), name 14px/600 (hidden below `sm`), `ChevronDown`. Popover with a `Command` list: "Find a project" filter, rows of key chip + name, a check on the current one, then "All projects" → `/`. Choosing one navigates `/projects/:id`, as today. Resolution is `useActiveProject`, unchanged | `Nav.ProjectSwitcher` |
 | 5 | Project tabs | `app/ProjectTabs.tsx` | `<nav aria-label="Project">` of `NavLink`s for the `NAV` project-zone entries with `placement: 'tab'`. Each tab is `flex h-8 items-center rounded-md px-2.5 text-[13px] font-medium whitespace-nowrap`; active is `bg-steel/12 text-ink font-semibold` plus `aria-current="page"`; inactive is `text-ink-3 hover:bg-wash-1 hover:text-ink-2`. Every tab except Work is `max-lg:hidden`. Then **More** (`DropdownMenu`): the `placement: 'more'` entries, plus the `placement: 'tab'` entries other than Work as `lg:hidden` items. More is labelled with the active entry's label when one of its entries is active, and is then drawn active | `Nav.ProjectTabs`, `Nav.Link.<Label>`, `Nav.More` |
 | 6 | Spacer | — | `flex-1` | — |
 | 7 | Search | `CommandPalette` trigger | `w-[280px] h-[34px] rounded-lg border border-line bg-field`, `Search` icon, placeholder "Search or jump to…", `⌘K` `kbd`. Below `md` it is an icon button with the same accessible name | unchanged |
@@ -1274,6 +1210,12 @@ column is `NOT NULL`, so a default only in the service would have left every one
 insert. The formula is the plan's. Cost: the entity knows the palette's size (eight), which it must
 share with the CHECK and `openapi.yaml` anyway.
 
+**D19 — `projectColorFill` is a record, not a function (K1).** The plan's N1 text and §3's table row wrote
+`projectColorFill(project.color)`, but §3a and K1 also say it `satisfies Record<ProjectColor, string>`,
+which only a record can. K1 built the record, so a caller writes `projectColorFill[project.color]`, and
+N1's prompt and §3's row are rewritten to match. Reading two: a function wrapping the record, rejected
+as a wrapper with one caller shape.
+
 ## Answered questions (2026-10-04)
 
 **O1 — Should My work carry a count in the top bar?** No. An icon link only (D13).
@@ -1407,6 +1349,23 @@ modified 16.5k; test `Project` literals ~3k; the codemod and its diff stat 4k; r
 - `components/ui/` and the four kit leaves per §5.3.
 - **Not in K1:** `--header-height` and `--rail-width` (N1); `PageStrip`, `Segmented` and
   `FilterStrip` (K2); any role fix on a screen (P1–P4); drawing the chip anywhere (N1, P3, P4).
+- **As built (2026-10-04):** `--color-surface-bar` in both palettes and `--color-bar` /
+  `--color-raised` in `@theme inline`; `--color-project-1…8` in both palettes, §3a's values unchanged
+  (white on each measures 5.54 / 7.21 / 5.93 / 6.34 / 5.88 / 5.90 / 6.73 / 7.54, so none was
+  darkened). `ProjectColor` was not aliased in `api/types.ts`, so K1 added `export type ProjectColor`
+  there. `lib/projectColors.ts` exports `projectColorFill` as a **record, not a function** (D19);
+  `projectColorLabels` is at the foot of `lib/labels.ts`. The contrast check is
+  `app/projectPalette.test.ts`; `tokenSystem.test.ts` gained `it('no component spells an arbitrary
+  radius')` and `--color-surface-bar` in its both-palettes list. The codemod ran over every
+  `.ts`/`.tsx`, tests included, and touched 106 files; the pre-check found no value outside §5.2's
+  table, so nothing was mapped by hand, and the radius grep over `src` is empty. Seven test files'
+  `Project` literals gained `color: 'project-1'` (AppShell, ArchiveProject, GrantRoleDialog,
+  IssueTokenDialog, ApiTokensPage, TileLabels, HelpPage). Primitives per §5.3: dropdown-menu, select,
+  popover, dialog and command are `rounded-xl bg-raised` with `rounded-md` items; the dropdown label
+  is A7's mono heading; tooltip `rounded-md`; tabs take A8's item classes; Badge `rounded-sm`, Chip
+  `rounded-full`, Banner already `rounded-lg`, FigurePanel `rounded-xl`. Built but unverified: nothing
+  was built, linted or run, per the gate. C1 should watch the bridge test on `--color-raised`, any
+  test asserting the old Badge/Chip radius or a `bg-panel` overlay, and `isSource` in the radius check.
 
 ### K2 — the page strip, the segmented control, the filter popover
 
@@ -1466,7 +1425,7 @@ them together.
   → 023 D1).
 - New: `app/TopBar.tsx`, `app/LauncherMenu.tsx`, `app/ProjectSwitcher.tsx`, `app/ProjectTabs.tsx`,
   `app/CreateMenu.tsx`, `app/UserMenu.tsx`, per §3's table. `ProjectSwitcher.tsx` exports its
-  `ProjectKeyChip` (key on `projectColorFill(project.color)`, white text) for P3 and P4 to reuse.
+  `ProjectKeyChip` (key on `projectColorFill[project.color]`, white text) for P3 and P4 to reuse.
 - `app/AppShell.tsx`:
   - root `flex min-h-full flex-col bg-paper`;
   - `ShellFrameProvider` from `useActiveProject`;

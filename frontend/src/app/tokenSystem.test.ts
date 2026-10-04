@@ -258,6 +258,7 @@ describe('lines and washes are tokens, not literals', () => {
     '--color-overlay-2',
     '--color-overlay-3',
     '--color-surface-rail',
+    '--color-surface-bar',
   ];
 
   it.each(surfaceModifiers)('%s is declared in both palettes', (token) => {
@@ -359,6 +360,15 @@ describe('lines and washes are tokens, not literals', () => {
       ).toContain(`${token}:`);
     },
   );
+
+  it('no component spells an arbitrary radius', () => {
+    const offenders = sourceGrep(/\brounded(?:-[trbl]{1,2})?-\[/).filter(isSource);
+
+    expect(
+      offenders,
+      'use Tailwind\'s scale by role — rounded-xs/sm/md/lg/xl/full — per the 023 plan §2 A4 table',
+    ).toEqual([]);
+  });
 
   it('no component hardcodes a palette hue', () => {
     const offenders = sourceGrep(

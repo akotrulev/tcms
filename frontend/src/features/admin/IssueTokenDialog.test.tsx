@@ -78,6 +78,7 @@ const PROJECTS = [
     archived: false,
     caseCount: 0,
     myRole: 'Test Lead',
+    color: 'project-1',
   },
 ]
 

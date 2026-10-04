@@ -175,7 +175,7 @@ function ClosingWorkPanel({
 
   return (
     <section
-      className="rounded-[10px] border border-line bg-panel"
+      className="rounded-xl border border-line bg-panel"
       data-testid={`${TEST_ID}.Closing.Panel`}
     >
       <div className="border-b border-line px-3.5 py-2.5">
@@ -270,7 +270,7 @@ function TimePanel({
 
   return (
     <section
-      className="rounded-[10px] border border-line bg-panel"
+      className="rounded-xl border border-line bg-panel"
       data-testid={`${TEST_ID}.Time.Panel`}
     >
       <div className="border-b border-line px-3.5 py-2.5">
@@ -425,13 +425,13 @@ function ClientPanel({
   if ((options.data?.length ?? 0) === 0) return null;
 
   return (
-    <section className="rounded-[10px] border border-line bg-panel" data-testid={`${TEST_ID}.Client.Panel`}>
+    <section className="rounded-xl border border-line bg-panel" data-testid={`${TEST_ID}.Client.Panel`}>
       <div className="border-b border-line px-3.5 py-2.5">
         <h2 className="m-0 text-[13.5px] font-semibold text-ink">Client</h2>
       </div>
       <div className="px-3.5 py-3">
         <select
-          className="w-full max-w-sm rounded-[6px] border border-line bg-panel px-2.5 py-1.5 text-[13px] text-ink disabled:opacity-60"
+          className="w-full max-w-sm rounded-md border border-line bg-panel px-2.5 py-1.5 text-[13px] text-ink disabled:opacity-60"
           value={project.client?.id ?? ''}
           disabled={!canEdit || save.isPending}
           onChange={(event) =>
@@ -457,7 +457,7 @@ function ClientPanel({
 
 function IdentityPanel({ project }: { project: Project }) {
   return (
-    <section className="rounded-[10px] border border-line bg-panel" data-testid={`${TEST_ID}.Identity.Panel`}>
+    <section className="rounded-xl border border-line bg-panel" data-testid={`${TEST_ID}.Identity.Panel`}>
       <div className="border-b border-line px-3.5 py-2.5">
         <h2 className="m-0 text-[13.5px] font-semibold text-ink">Identity</h2>
       </div>
@@ -518,7 +518,7 @@ function completionBadge(type: IssueTypeRef): string {
 
 function IssueTypesPanel({ types }: { types: readonly IssueTypeRef[] }) {
   return (
-    <section className="rounded-[10px] border border-line bg-panel" data-testid={`${TEST_ID}.Types.Panel`}>
+    <section className="rounded-xl border border-line bg-panel" data-testid={`${TEST_ID}.Types.Panel`}>
       <div className="flex flex-wrap items-center gap-2.5 border-b border-line px-3.5 py-2.5">
         <h2 className="m-0 text-[13.5px] font-semibold text-ink">Issue types</h2>
         <Identifier variant="muted">{String(types.length)}</Identifier>
@@ -593,7 +593,7 @@ function DangerZone({ projectId, archived }: { projectId: string; archived: bool
   const setArchived = useSetProjectArchived(projectId);
 
   return (
-    <section className="rounded-[10px] border border-line bg-panel" data-testid={`${TEST_ID}.Danger.Panel`}>
+    <section className="rounded-xl border border-line bg-panel" data-testid={`${TEST_ID}.Danger.Panel`}>
       <div className="border-b border-line px-3.5 py-2.5">
         <h2 className="m-0 text-[13.5px] font-semibold text-ink">Danger zone</h2>
       </div>

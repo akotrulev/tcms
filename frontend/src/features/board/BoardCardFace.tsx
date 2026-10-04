@@ -128,7 +128,7 @@ export function BoardCardFace({
       ref={overlay ? undefined : setNodeRef}
       data-testid={testId}
       className={cn(
-        'rounded-[5px] border border-line bg-panel px-2.5 py-2 shadow-e1',
+        'rounded-md border border-line bg-panel px-2.5 py-2 shadow-e1',
         'transition-colors duration-150 hover:border-line-strong motion-reduce:transition-none',
         isDragging && 'opacity-40',
         overlay && 'shadow-e3',

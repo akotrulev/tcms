@@ -136,7 +136,7 @@ export function Swimlane({
         <div
           data-testid={`${testId}.Head`}
           className={cn(
-            'mb-2 flex flex-wrap items-center gap-[9px] rounded-[6px] border border-line',
+            'mb-2 flex flex-wrap items-center gap-[9px] rounded-md border border-line',
             'bg-panel px-3 py-2',
           )}
         >
@@ -366,7 +366,7 @@ function StoryRow({
         data-testid={testId}
         style={{ gridColumn: '1 / -1', ...(gridRow === undefined ? {} : { gridRow }) }}
         className={cn(
-          'ml-[18px] flex flex-wrap items-center gap-[7px] rounded-[6px] border border-line',
+          'ml-[18px] flex flex-wrap items-center gap-[7px] rounded-md border border-line',
           'bg-wash-1 px-2.5 py-1.5',
         )}
       >
@@ -579,7 +579,7 @@ function DoneStrip({
       data-over={isOver ? 'true' : undefined}
       style={{ gridColumn: index + 1, gridRow: '1 / -1', alignSelf: 'stretch' }}
       className={cn(
-        'flex min-h-[64px] flex-col items-center gap-2 rounded-[8px] border border-line bg-wash-1 p-2',
+        'flex min-h-[64px] flex-col items-center gap-2 rounded-lg border border-line bg-wash-1 p-2',
         'transition-colors duration-150 motion-reduce:transition-none',
         isOver && 'border-[color:var(--color-steel)] bg-wash-2',
       )}
@@ -654,7 +654,7 @@ function LaneCell({
       data-over={isOver ? 'true' : undefined}
       style={place}
       className={cn(
-        'flex min-h-[64px] flex-col gap-2 rounded-[8px] border p-2 transition-colors duration-150',
+        'flex min-h-[64px] flex-col gap-2 rounded-lg border p-2 transition-colors duration-150',
         'motion-reduce:transition-none',
         isOver ? 'border-[color:var(--color-steel)] bg-wash-1' : 'border-line bg-paper',
       )}

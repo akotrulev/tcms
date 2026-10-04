@@ -119,7 +119,7 @@ function SpecLinkCard({
     <div
       data-testid={`${testId}.Item`}
       className={cn(
-        'flex flex-col gap-2 rounded-[6px] border p-3',
+        'flex flex-col gap-2 rounded-md border p-3',
         link.stale
           ? 'border-[color:color-mix(in_oklab,var(--color-blocked)_34%,transparent)]'
           : 'border-line',

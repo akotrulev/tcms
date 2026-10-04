@@ -217,7 +217,7 @@ export function ProjectCreateDialog({
               >
                 <select
                   id="project-client"
-                  className="w-full rounded-[6px] border border-line bg-panel px-2.5 py-1.5 text-[13px] text-ink"
+                  className="w-full rounded-md border border-line bg-panel px-2.5 py-1.5 text-[13px] text-ink"
                   value={clientId}
                   onChange={(event) => setClientId(event.target.value)}
                   data-testid={`${TestId}.Client`}

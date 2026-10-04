@@ -47,7 +47,7 @@ export function ReadinessSignals({
           key={signal.label}
           data-testid={`${testId}.${signal.name}`}
           className={cn(
-            'inline-flex items-center gap-1 rounded-[4px] border px-[5px] py-[1px]',
+            'inline-flex items-center gap-1 rounded-sm border px-[5px] py-[1px]',
             signal.held
               ? 'border-[color:var(--color-passed)] text-ink-2'
               : 'border-line text-ink-4',

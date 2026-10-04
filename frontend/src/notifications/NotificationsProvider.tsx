@@ -300,7 +300,7 @@ function NotificationCard({ group, onDismiss }: { group: Group; onDismiss: (id: 
         borderLeftColor: isPrompt ? 'var(--color-steel)' : 'var(--color-failed)',
       }}
       className={cn(
-        'pointer-events-auto flex items-start gap-[11px] rounded-[8px] border border-line',
+        'pointer-events-auto flex items-start gap-[11px] rounded-lg border border-line',
         'border-l-[3px] bg-ground px-3.5 py-3 text-[13px] leading-[1.5] text-ink-2',
         'shadow-e3',
       )}

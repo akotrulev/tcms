@@ -200,7 +200,7 @@ export function StateBlock(props: StateBlockProps) {
         borderColor: 'color-mix(in oklab, var(--color-blocked) 26%, transparent)',
         backgroundColor: 'color-mix(in oklab, var(--color-blocked) 7%, transparent)',
       }}
-      className={cn('flex items-center gap-2.5 rounded-[8px] border px-3.5 py-2.5 text-[13px] text-ink-2', className)}
+      className={cn('flex items-center gap-2.5 rounded-lg border px-3.5 py-2.5 text-[13px] text-ink-2', className)}
       data-testid={rest['data-testid']}
     >
       <RefreshCcw aria-hidden style={{ color: 'var(--color-blocked)' }} className="size-4 shrink-0" />

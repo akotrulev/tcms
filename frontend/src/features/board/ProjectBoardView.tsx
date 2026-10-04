@@ -515,7 +515,7 @@ export function ProjectBoardView({ projectId }: { projectId: string }) {
       <div
         data-testid={`${TEST_ID}.KeyboardNote`}
         className={cn(
-          'mb-3.5 flex gap-[9px] rounded-[6px] border px-3 py-2.5 text-[12.5px] leading-[1.5] text-ink-2',
+          'mb-3.5 flex gap-[9px] rounded-md border px-3 py-2.5 text-[12.5px] leading-[1.5] text-ink-2',
           'border-[color:var(--color-steel-line)] bg-[color:var(--color-steel-glow)]',
         )}
       >

@@ -98,6 +98,7 @@ export type AuditEvent = S['AuditEvent'];
 
 // project
 export type Project = S['Project'];
+export type ProjectColor = S['ProjectColor'];
 export type ProjectInput = S['ProjectInput'];
 export type ClassificationDimension = S['ClassificationDimension'];
 export type ClassificationValue = S['ClassificationValue'];

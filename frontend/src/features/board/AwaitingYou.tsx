@@ -125,7 +125,7 @@ export function AwaitingYou({ rows }: { rows: readonly BoardCard[] }) {
   */
   return (
     <section
-      className="mb-3.5 rounded-[10px] border border-line bg-panel"
+      className="mb-3.5 rounded-xl border border-line bg-panel"
       data-testid={TEST_ID}
     >
       <div className="flex flex-wrap items-center gap-2.5 border-b border-line px-3.5 py-2.5">
@@ -189,7 +189,7 @@ export function AwaitingYou({ rows }: { rows: readonly BoardCard[] }) {
           to="/timesheets/approvals"
           data-testid={`${TEST_ID}.Approvals`}
           className={cn(
-            'flex min-w-[180px] flex-1 flex-col gap-0.5 rounded-[8px] border border-dashed border-line',
+            'flex min-w-[180px] flex-1 flex-col gap-0.5 rounded-lg border border-dashed border-line',
             'bg-transparent px-3 py-2.5 no-underline hover:border-line-strong',
             'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
           )}
@@ -239,7 +239,7 @@ function Tile({
     </>
   );
   const className = cn(
-    'flex min-w-[180px] flex-1 flex-col gap-0.5 rounded-[8px] border border-line bg-paper px-3 py-2.5',
+    'flex min-w-[180px] flex-1 flex-col gap-0.5 rounded-lg border border-line bg-paper px-3 py-2.5',
     to !== undefined
       && 'no-underline hover:border-line-strong focus-visible:outline-2'
       + ' focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',

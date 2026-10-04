@@ -200,7 +200,7 @@ function DimensionControl({
           <label
             key={value.id}
             style={depth > 0 ? { paddingLeft: depth * 16 } : undefined}
-            className="flex cursor-pointer items-center gap-2 rounded-[5px] py-1 text-[13px] text-ink-2 hover:bg-wash-1"
+            className="flex cursor-pointer items-center gap-2 rounded-md py-1 text-[13px] text-ink-2 hover:bg-wash-1"
           >
             {/*
               A native input rather than `components/ui/checkbox`, and it is the one place in the
@@ -265,7 +265,7 @@ function SingleValue({
   };
 
   const ROW =
-    'flex w-full items-center justify-between gap-2.5 rounded-[5px] py-1 text-[13px] text-left min-h-7';
+    'flex w-full items-center justify-between gap-2.5 rounded-md py-1 text-[13px] text-left min-h-7';
 
   if (disabled) {
     return (
@@ -298,7 +298,7 @@ function SingleValue({
       <div
         role="listbox"
         aria-label={dimension.name}
-        className="mt-1 flex max-h-56 flex-col overflow-auto rounded-[5px] border border-line bg-panel p-1"
+        className="mt-1 flex max-h-56 flex-col overflow-auto rounded-md border border-line bg-panel p-1"
       >
         {/* A case need not be classified — `test_case` has no NOT NULL for any of this, and a
             picker with no way back to "unset" makes the first accidental choice permanent. */}

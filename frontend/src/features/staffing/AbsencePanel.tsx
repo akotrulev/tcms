@@ -235,7 +235,7 @@ function AbsenceForm({
       onSubmit={submit}
       noValidate
       aria-busy={create.isPending}
-      className="rounded-[6px] border border-line p-3"
+      className="rounded-md border border-line p-3"
       data-testid={`${testId}.Form`}
     >
       <div className="flex flex-col gap-3">

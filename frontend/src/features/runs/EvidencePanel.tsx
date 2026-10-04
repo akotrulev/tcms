@@ -164,7 +164,7 @@ function EvidenceRow({
   return (
     <div className="flex items-center gap-3" data-testid="Execution.Evidence.Row">
       {isImage && (
-        <img className="object-cover rounded-[8px] border border-line shrink-0" style={{ width: 48, height: 48 }} src={item.url} alt="" />
+        <img className="object-cover rounded-lg border border-line shrink-0" style={{ width: 48, height: 48 }} src={item.url} alt="" />
       )}
       <div className="flex flex-col min-w-0 flex-1">
         <a

@@ -74,7 +74,7 @@ export function Badge({ tone, children, className, style: override, ...rest }: B
     <span
       style={{ ...style, ...override }}
       className={cn(
-        'inline-flex items-center gap-[5px] whitespace-nowrap rounded-full border border-line',
+        'inline-flex items-center gap-[5px] whitespace-nowrap rounded-sm border border-line',
         'bg-wash-2 px-2 py-0.5 text-[11.5px] font-medium text-ink-2',
         className,
       )}

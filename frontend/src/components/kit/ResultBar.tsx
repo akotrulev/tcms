@@ -52,13 +52,13 @@ export function ResultBar({ className, ...counts }: ResultBarProps) {
     <span
       role="img"
       aria-label={describe(counts, total)}
-      className={cn('flex h-1.5 min-w-[110px] gap-0.5 overflow-hidden rounded-[3px] bg-field', className)}
+      className={cn('flex h-1.5 min-w-[110px] gap-0.5 overflow-hidden rounded-sm bg-field', className)}
     >
       {segments.map((segment) => (
         <i
           key={segment.key}
           data-fill={segment.key}
-          className={cn('block h-full rounded-[1px] first:rounded-l-[3px] last:rounded-r-[3px]', segment.className)}
+          className={cn('block h-full rounded-xs first:rounded-l-sm last:rounded-r-sm', segment.className)}
           style={{ width: `${(segment.count / total) * 100}%` }}
         />
       ))}

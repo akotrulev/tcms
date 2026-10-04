@@ -105,7 +105,7 @@ function PersonRow({
       </div>
 
       <div
-        className="relative h-[22px] overflow-hidden rounded-[5px] bg-wash-1"
+        className="relative h-[22px] overflow-hidden rounded-md bg-wash-1"
         data-testid={`${rowTestId}.Track`}
       >
         {person.absences.map((absence) => {
@@ -114,7 +114,7 @@ function PersonRow({
           return (
             <span
               key={absence.id}
-              className="absolute top-[4px] h-[14px] rounded-[3px] bg-line-strong"
+              className="absolute top-[4px] h-[14px] rounded-sm bg-line-strong"
               style={{ left: `${span.left}%`, width: `${span.width}%` }}
               aria-label={`Absent ${formatDate(absence.startsOn)} to ${formatDate(absence.endsOn)}`}
               data-testid={`${rowTestId}.Absence.${absence.id}`}
@@ -161,7 +161,7 @@ function AllocationBar({
 
   return (
     <span
-      className="absolute top-[4px] flex h-[14px] items-center overflow-hidden rounded-[3px] px-1.5 text-[10px] font-medium whitespace-nowrap text-rail"
+      className="absolute top-[4px] flex h-[14px] items-center overflow-hidden rounded-sm px-1.5 text-[10px] font-medium whitespace-nowrap text-rail"
       style={{
         left: `${span.left}%`,
         width: `${span.width}%`,

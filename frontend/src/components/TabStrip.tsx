@@ -48,7 +48,7 @@ export function TabStrip({
     <nav
       aria-label={label}
       data-testid={testId}
-      className="mb-3 flex flex-wrap gap-0.5 rounded-[8px] bg-wash-1 p-0.5"
+      className="mb-3 flex flex-wrap gap-0.5 rounded-lg bg-wash-1 p-0.5"
     >
       {tabs.map((tab) => (
         <NavLink

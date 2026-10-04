@@ -386,7 +386,7 @@ function CapacityTile({ state }: { state: UseQueryResult<SelfCapacity> }) {
     <DataRegion
       testId={`${TEST_ID}.Kpi.Capacity.Region`}
       state={{ ...state, refetch: () => void state.refetch() }}
-      skeleton={<Skeleton className="h-[84px] rounded-[8px]" />}
+      skeleton={<Skeleton className="h-[84px] rounded-lg" />}
     >
       {(loaded) => (
         <KpiTile
@@ -426,7 +426,7 @@ function KpiTile({
   return (
     <section
       data-testid={testId}
-      className="rounded-[8px] border border-line bg-panel px-[15px] py-[13px]"
+      className="rounded-lg border border-line bg-panel px-[15px] py-[13px]"
     >
       <span className="block font-mono text-[26px] leading-[1.1] font-medium tracking-[-.02em] tabular-nums text-ink">
         {value}

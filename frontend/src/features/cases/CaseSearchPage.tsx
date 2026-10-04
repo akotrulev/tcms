@@ -371,7 +371,7 @@ function Pager({
         <select
           value={size}
           onChange={(event) => onSize(Number(event.target.value))}
-          className="rounded-[5px] border border-line bg-field px-1.5 py-0.5 font-mono text-[12px] text-ink-2"
+          className="rounded-md border border-line bg-field px-1.5 py-0.5 font-mono text-[12px] text-ink-2"
           data-testid={`${TestId}.Pager.Size`}
         >
           {[25, 50, 100].map((option) => (
@@ -448,7 +448,7 @@ function EnumFilter({
             }
           : undefined
       }
-      className="inline-flex items-center gap-1.5 rounded-[5px] border border-line px-2.5 py-[3px] font-sans text-[12px] text-ink-2"
+      className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-[3px] font-sans text-[12px] text-ink-2"
     >
       <DropdownMenu>
         <DropdownMenuTrigger

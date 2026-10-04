@@ -65,7 +65,7 @@ export function RoadmapView({
   const roadmap = useRoadmap(projectId);
 
   return (
-    <section className="overflow-hidden rounded-[8px] border border-line bg-panel">
+    <section className="overflow-hidden rounded-lg border border-line bg-panel">
       <DataRegion
         testId={`${TEST_ID}.Content`}
         state={{ ...roadmap, refetch: () => void roadmap.refetch() }}
@@ -331,7 +331,7 @@ function UnscheduledLane({
                 key={epic.key}
                 to={`/issues/${encodeURIComponent(epic.key)}`}
                 data-testid={`${TEST_ID}.Undated.${epic.key}`}
-                className="rounded-[5px] border border-dashed border-line px-[9px] py-[3px] text-[12px] text-ink-2 no-underline hover:border-line-strong hover:text-ink"
+                className="rounded-md border border-dashed border-line px-[9px] py-[3px] text-[12px] text-ink-2 no-underline hover:border-line-strong hover:text-ink"
               >
                 {`${epic.title} — no dates`}
               </RouterLink>
@@ -364,7 +364,7 @@ function Track({
   return (
     <div
       className={cn(
-        'relative h-[22px] rounded-[4px]',
+        'relative h-[22px] rounded-sm',
         recessed ? 'bg-wash-1' : 'bg-transparent',
       )}
     >
@@ -413,7 +413,7 @@ function Bar({
       title={label}
       aria-label={label}
       className={cn(
-        'absolute top-[3px] flex h-4 items-center overflow-hidden rounded-[3px] px-1.5',
+        'absolute top-[3px] flex h-4 items-center overflow-hidden rounded-sm px-1.5',
         'text-[11px] whitespace-nowrap text-ink no-underline',
         'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-given',
       )}
@@ -433,7 +433,7 @@ function Glyph({ tone, children }: { tone: 'release' | 'epic'; children: React.R
   return (
     <span
       aria-hidden
-      className="inline-flex size-[18px] flex-none items-center justify-center rounded-[4px] font-mono text-[10px] font-semibold text-ink"
+      className="inline-flex size-[18px] flex-none items-center justify-center rounded-sm font-mono text-[10px] font-semibold text-ink"
       style={{
         backgroundColor: `color-mix(in oklab, ${BAR_TONES[tone]} 30%, transparent)`,
       }}

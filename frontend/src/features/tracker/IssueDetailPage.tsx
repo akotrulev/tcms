@@ -309,7 +309,7 @@ function IssueBody({ issue }: { issue: ReturnType<typeof useIssue>['data'] & {} 
                   <span
                     key={watcher.id}
                     data-testid={`${TEST_ID}.Watchers.Item`}
-                    className="rounded-[5px] border border-line px-[9px] py-[3px] text-[12px] text-ink-2"
+                    className="rounded-md border border-line px-[9px] py-[3px] text-[12px] text-ink-2"
                   >
                     {watcher.displayName}
                   </span>

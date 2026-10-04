@@ -160,7 +160,7 @@ export function PlanStatisticsPage() {
                   setParams(next, { replace: true });
                 }}
                 data-testid="PlanStats.AggregationSelect"
-                className="w-full rounded-[8px] border border-line bg-field px-2.5 py-1.5 text-[12.5px] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]"
+                className="w-full rounded-lg border border-line bg-field px-2.5 py-1.5 text-[12.5px] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]"
               >
                 {Object.entries(aggregationLabels).map(([value, label]) => (
                   <option key={value} value={value}>
@@ -185,7 +185,7 @@ export function PlanStatisticsPage() {
         aria-label="Plan"
         // `.lens` — the render kit's only tab idiom. This screen drew underline tabs, which the
         // kit does not have, so the product had two ways of saying "pick a view".
-        className="mb-4 inline-flex max-w-full gap-0.5 overflow-x-auto rounded-[8px] bg-wash-1 p-0.5"
+        className="mb-4 inline-flex max-w-full gap-0.5 overflow-x-auto rounded-lg bg-wash-1 p-0.5"
         data-testid="PlanStats.Tabs"
       >
         {PLAN_TABS.map((id) => (
@@ -997,8 +997,8 @@ function ResultLegend({ counts }: { counts: PlanStatistics['counts'] }) {
             style={entry.color ? { backgroundColor: entry.color } : undefined}
             className={
               entry.color
-                ? 'block size-2.5 rounded-[1px]'
-                : 'block size-2.5 rounded-[1px] border border-line-strong bg-field'
+                ? 'block size-2.5 rounded-xs'
+                : 'block size-2.5 rounded-xs border border-line-strong bg-field'
             }
           />
           {entry.label} <Identifier variant="muted">{formatCount(entry.count)}</Identifier>

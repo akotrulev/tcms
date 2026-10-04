@@ -330,7 +330,7 @@ function BoardPanel({
 
   return (
     <section
-      className="rounded-[10px] border border-line bg-panel"
+      className="rounded-xl border border-line bg-panel"
       data-testid={testId}
       aria-label={board.name}
     >
@@ -673,7 +673,7 @@ function LabelsPanel({
 
   return (
     <section
-      className="rounded-[10px] border border-line bg-panel"
+      className="rounded-xl border border-line bg-panel"
       data-testid={`${TEST_ID}.Labels`}
       aria-label="Labels"
     >
@@ -778,7 +778,7 @@ function LabelRow({
   const dirty = name.trim() !== label.name && name.trim() !== '';
 
   return (
-    <li className="flex flex-wrap items-center gap-2 rounded-[8px] border border-line bg-paper px-2.5 py-2">
+    <li className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-paper px-2.5 py-2">
       <span
         className="rounded-full px-2 py-0.5 text-[11px] text-ink"
         style={{ background: labelFill(label.color) }}

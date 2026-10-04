@@ -268,7 +268,7 @@ function IssueForm({
               {quickType && (
                 <span
                   data-testid={`${TEST_ID}.Quick.Type`}
-                  className="inline-flex items-center gap-1.5 rounded-[5px] border border-line px-[9px] py-[3px] text-[12px] text-ink-2"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-line px-[9px] py-[3px] text-[12px] text-ink-2"
                 >
                   <TypeIcon type={quickType} />
                   {quickType.name}
@@ -498,7 +498,7 @@ function IssueForm({
       <aside className="flex flex-col gap-4">
         <Panel title="Where this lands" testId={`${TEST_ID}.Lands`}>
           {chosen?.level === 'STORY' && form.watch('parentKey') ? (
-            <div className="flex items-start gap-2 rounded-[6px] border border-line p-2.5">
+            <div className="flex items-start gap-2 rounded-md border border-line p-2.5">
               <span className="text-[13px] text-ink">
                 {epics.find((epic) => epic.key === form.watch('parentKey'))?.title
                   ?? form.watch('parentKey')}

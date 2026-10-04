@@ -157,7 +157,7 @@ export function Panel({
     <section
       data-testid={testId}
       className={
-        plain ? undefined : 'overflow-hidden rounded-[8px] border border-line bg-panel'
+        plain ? undefined : 'overflow-hidden rounded-lg border border-line bg-panel'
       }
     >
       {(title || actions) && (

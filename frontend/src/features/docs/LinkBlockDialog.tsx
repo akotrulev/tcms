@@ -42,12 +42,12 @@ const PICKABLE: readonly SourceType[] = ['TEST_CASE', 'SUITE'];
 const TestIdPrefix = 'Docs.Block.LinkDialog';
 
 const FIELD =
-  'w-full rounded-[8px] border border-line bg-field px-3 py-1.5 text-left text-[13px] text-ink ' +
+  'w-full rounded-lg border border-line bg-field px-3 py-1.5 text-left text-[13px] text-ink ' +
   'placeholder:text-ink-4 focus-visible:outline-2 focus-visible:outline-offset-2 ' +
   'focus-visible:outline-[color:var(--color-given)]';
 
 const POPOVER =
-  'absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-[8px] border border-line bg-panel p-1 ' +
+  'absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-line bg-panel p-1 ' +
   'shadow-e3';
 
 const OPTION =
@@ -202,7 +202,7 @@ export function LinkBlockDialog({
           <div
             role="group"
             aria-label="What is being linked"
-            className="inline-flex w-fit gap-0.5 rounded-[8px] bg-wash-1 p-0.5"
+            className="inline-flex w-fit gap-0.5 rounded-lg bg-wash-1 p-0.5"
           >
             {PICKABLE.map((value) => (
               <button

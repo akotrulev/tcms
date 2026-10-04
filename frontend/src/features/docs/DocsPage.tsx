@@ -287,7 +287,7 @@ export function DocsPage() {
       {/* The render's `.split.three`: the tree, the reading column, and the page's own facts. */}
       <div className="flex flex-col items-start gap-4 lg:flex-row">
         <aside
-          className="w-full shrink-0 rounded-[8px] border border-line bg-panel p-3 lg:w-[260px]"
+          className="w-full shrink-0 rounded-lg border border-line bg-panel p-3 lg:w-[260px]"
           data-testid="Docs.TreePanel"
         >
           <h2 className={SECTION_HEADING}>{searchQuery ? 'Results' : 'Pages'}</h2>
@@ -389,7 +389,7 @@ export function DocsPage() {
             </DataRegion>
           ) : (
             <p
-              className="m-0 rounded-[8px] border border-line bg-panel p-4 text-[13px] text-ink-3"
+              className="m-0 rounded-lg border border-line bg-panel p-4 text-[13px] text-ink-3"
               data-testid="Docs.NoSelection"
             >
               {(pages.data?.length ?? 0) === 0
@@ -448,7 +448,7 @@ function DocsSearchField({
         data-testid="Docs.Search.Input"
         placeholder={count === undefined ? 'Search documentation' : `Filter ${count} pages`}
         className={
-          'w-full rounded-[8px] border border-line bg-field py-1.5 pr-8 pl-8 text-[12.5px] ' +
+          'w-full rounded-lg border border-line bg-field py-1.5 pr-8 pl-8 text-[12.5px] ' +
           'text-ink placeholder:text-ink-4 focus-visible:outline-2 focus-visible:outline-offset-2 ' +
           'focus-visible:outline-[color:var(--color-given)]'
         }
@@ -660,7 +660,7 @@ function PageView({
     <DocumentSurface
       measure="prose"
       data-testid="Docs.Content"
-      className="rounded-[8px] border border-line"
+      className="rounded-lg border border-line"
     >
       {/*
         Rule 2: chrome is a strip ABOVE the document and a strip below it, never a row inside the
@@ -744,7 +744,7 @@ function PageFacts({ page }: { page: DocPage }) {
   }
 
   return (
-    <aside className="w-full shrink-0 rounded-[8px] border border-line bg-panel p-4 xl:w-[280px]">
+    <aside className="w-full shrink-0 rounded-lg border border-line bg-panel p-4 xl:w-[280px]">
       {coverable.length > 0 && (
         <section className="mb-5">
           <h2 className={SECTION_HEADING}>
@@ -1033,7 +1033,7 @@ function BlockView({
         'target:outline-[color:var(--color-action-primary)]',
         isHeading ? 'mt-6 mb-1' : 'mb-4',
         opened
-          && 'rounded-[6px] border border-[color:var(--color-steel-line)] bg-[color:var(--color-steel-glow)] p-3.5',
+          && 'rounded-md border border-[color:var(--color-steel-line)] bg-[color:var(--color-steel-glow)] p-3.5',
       )}
     >
       {opened && (
@@ -1121,7 +1121,7 @@ function BlockLinks({
             }
             data-testid="Docs.Block.Links.Item.Source"
             className={
-              'inline-flex items-center gap-1.5 rounded-[5px] border border-line px-2.5 py-[3px] ' +
+              'inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-[3px] ' +
               'text-[12px] text-ink-2 no-underline hover:border-line-strong hover:bg-wash-1 hover:text-ink'
             }
           >

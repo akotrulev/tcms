@@ -26,7 +26,7 @@ import { cva } from 'class-variance-authority';
  * case the loud one and invert the page's hierarchy by omission.
  */
 export const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-[7px] rounded-[8px] font-sans font-medium ' +
+  'inline-flex items-center justify-center gap-[7px] rounded-lg font-sans font-medium ' +
     'transition-colors cursor-pointer whitespace-nowrap ' +
     'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)] ' +
     'disabled:pointer-events-none disabled:opacity-45',

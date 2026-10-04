@@ -92,6 +92,7 @@ const PROJECT = {
   archived: false,
   caseCount: 0,
   myRole: 'Test Lead',
+  color: 'project-1',
 };
 
 /** What `POST /api-tokens` answers — the one response in this contract carrying a credential. */

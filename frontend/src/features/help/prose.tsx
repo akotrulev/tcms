@@ -59,7 +59,7 @@ export function List({ items, ordered }: { items: ReactNode[]; ordered?: boolean
 /** Inline monospace, for a command, a path, an environment variable or a permission key. */
 export function Code({ children }: { children: ReactNode }) {
   return (
-    <code className="rounded-[3px] bg-wash-2 px-1 py-px font-mono text-[12.5px] whitespace-nowrap text-ink">
+    <code className="rounded-sm bg-wash-2 px-1 py-px font-mono text-[12.5px] whitespace-nowrap text-ink">
       {children}
     </code>
   );
@@ -73,7 +73,7 @@ export function Code({ children }: { children: ReactNode }) {
  */
 export function Terminal({ children }: { children: string }) {
   return (
-    <div className="mb-4 rounded-[8px] border border-line bg-field">
+    <div className="mb-4 rounded-lg border border-line bg-field">
       <ScrollX>
         <pre className="m-0 px-4 py-3 font-mono text-[12.5px] leading-[1.6] text-ink-2">{children}</pre>
       </ScrollX>

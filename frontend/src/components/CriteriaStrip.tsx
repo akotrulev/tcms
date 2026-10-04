@@ -121,7 +121,7 @@ export function CriteriaStrip({
               <TooltipTrigger asChild>
                 <span
                   data-testid={`${composedTestId}.Mark`}
-                  className="h-1 w-3.5 shrink-0 rounded-[1px]"
+                  className="h-1 w-3.5 shrink-0 rounded-xs"
                   style={{
                     backgroundColor: criterionColor(state),
                     // A grey mark on a grey row is invisible at 4px, and "invisible" would read

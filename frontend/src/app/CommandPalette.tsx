@@ -127,7 +127,7 @@ export function CommandPalette({ projectId }: { projectId: string | undefined })
           */}
           <kbd
             aria-hidden
-            className="ml-auto hidden shrink-0 rounded-[3px] border border-line px-1 font-mono text-[10px] lg:inline"
+            className="ml-auto hidden shrink-0 rounded-sm border border-line px-1 font-mono text-[10px] lg:inline"
           >
             ⌘K
           </kbd>

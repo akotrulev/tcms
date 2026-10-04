@@ -14,7 +14,7 @@ function DialogContent({ className, children, ...props }: ComponentProps<typeof 
       <DialogPrimitive.Content
         className={cn(
           'fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 ' +
-            'rounded-[8px] border border-line bg-panel p-6 shadow-e3 ' +
+            'rounded-xl border border-line bg-raised p-6 shadow-e3 ' +
             'focus-visible:outline-none',
           className,
         )}

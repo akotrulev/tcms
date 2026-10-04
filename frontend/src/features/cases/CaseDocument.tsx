@@ -331,7 +331,7 @@ export function CaseDocument({
             onClick={addTag}
             data-testid={`${testIdPrefix}.Document.AddTag`}
             className={cn(
-              'rounded-[5px] border border-dashed border-line-strong px-[7px] py-0.5',
+              'rounded-md border border-dashed border-line-strong px-[7px] py-0.5',
               'font-mono text-[12px] text-ink-4 hover:border-line-strong hover:text-ink-2',
               'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
             )}

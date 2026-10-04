@@ -315,8 +315,8 @@ export function RateCardDialog({ open, slot, unset, onClose }: RateCardDialogPro
               */}
               {pickersPending ?
                 <div className="flex flex-col gap-2" data-testid={`${TEST_ID}.Entries.Loading`}>
-                  <Skeleton className="h-16 rounded-[8px]" />
-                  <Skeleton className="h-16 rounded-[8px]" />
+                  <Skeleton className="h-16 rounded-lg" />
+                  <Skeleton className="h-16 rounded-lg" />
                 </div>
               : <ul className="m-0 flex list-none flex-col gap-3 p-0" data-testid={`${TEST_ID}.Entries`}>
                 {entries.fields.map((field, index) => {
@@ -325,7 +325,7 @@ export function RateCardDialog({ open, slot, unset, onClose }: RateCardDialogPro
                   return (
                     <li
                       key={field.id}
-                      className="grid grid-cols-1 items-start gap-2 rounded-[8px] border border-line p-2.5 md:grid-cols-[130px_minmax(0,1fr)_110px_140px_auto]"
+                      className="grid grid-cols-1 items-start gap-2 rounded-lg border border-line p-2.5 md:grid-cols-[130px_minmax(0,1fr)_110px_140px_auto]"
                       data-testid={`${TEST_ID}.Entry.${index}`}
                     >
                       <Field label="Applies to" htmlFor={`rce-scope-${index}`} error={row?.scope?.message}>

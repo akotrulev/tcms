@@ -83,7 +83,7 @@ export function ReleaseListPage() {
         }
       />
 
-      <section className="overflow-hidden rounded-[8px] border border-line bg-panel">
+      <section className="overflow-hidden rounded-lg border border-line bg-panel">
         <DataRegion
           testId={`${TEST_ID}.Content`}
           state={{ ...releases, refetch: () => void releases.refetch() }}

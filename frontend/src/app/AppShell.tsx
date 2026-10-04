@@ -638,7 +638,7 @@ function RailLink({
           className={cn(
             // `.rail .n` in the render kit: an inset pill, `6px 10px`, 5px radius, 9px gap —
             // and the active state is the tinted fill ALONE.
-            'relative flex items-center rounded-[5px] py-1.5 text-[13px]',
+            'relative flex items-center rounded-md py-1.5 text-[13px]',
             collapsed ? 'justify-center gap-0 px-0' : 'justify-start gap-[9px] px-2.5',
             isActive ? 'bg-steel/12 font-medium text-ink' : 'text-ink-2 hover:bg-wash-1',
           )}
@@ -715,7 +715,7 @@ function RailFolder({
                 aria-label={folder.label}
                 data-testid={`Nav.Folder.${folder.label.replace(/[^A-Za-z]/g, '')}`}
                 className={cn(
-                  'relative flex w-full cursor-pointer items-center justify-center rounded-[5px] ' +
+                  'relative flex w-full cursor-pointer items-center justify-center rounded-md ' +
                     'border-0 bg-transparent py-1.5 text-[13px]',
                   holdsActive ? 'bg-steel/12 text-ink' : 'text-ink-2 hover:bg-wash-1',
                 )}
@@ -760,7 +760,7 @@ function RailFolder({
         aria-controls={listId}
         data-testid={`Nav.Folder.${folder.label.replace(/[^A-Za-z]/g, '')}`}
         className={cn(
-          'relative flex w-full cursor-pointer items-center justify-start gap-[9px] rounded-[5px] ' +
+          'relative flex w-full cursor-pointer items-center justify-start gap-[9px] rounded-md ' +
             'border-0 bg-transparent px-2.5 py-1.5 text-left text-[13px]',
           holdsActive ? 'text-ink' : 'text-ink-2 hover:bg-wash-1',
         )}

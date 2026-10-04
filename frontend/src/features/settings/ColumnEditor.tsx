@@ -110,7 +110,7 @@ export function ColumnEditor({
           {columns.map((column) => (
             <section
               key={column.rowId}
-              className="flex w-[212px] flex-none flex-col gap-2 rounded-[8px] border border-line bg-paper p-2.5"
+              className="flex w-[212px] flex-none flex-col gap-2 rounded-lg border border-line bg-paper p-2.5"
               data-testid={`${testId}.Column.${column.name}`}
               aria-label={column.name || 'Unnamed column'}
             >
@@ -251,7 +251,7 @@ export function ColumnEditor({
 
       {coverage.unclaimed.length > 0 && (
         <div
-          className="flex flex-wrap items-center gap-1.5 rounded-[8px] border border-line bg-wash-1 px-2.5 py-2"
+          className="flex flex-wrap items-center gap-1.5 rounded-lg border border-line bg-wash-1 px-2.5 py-2"
           data-testid={`${testId}.Unclaimed`}
         >
           <span className="text-[11.5px] text-ink-3">On no column:</span>

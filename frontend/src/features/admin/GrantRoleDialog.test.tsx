@@ -74,7 +74,7 @@ const users = [
 ]
 
 const projects = [
-  { id: PROJECT, key: 'OLB', name: 'Acme Online Banking', description: null, archived: false, caseCount: 0, myRole: 'Test Lead' },
+  { id: PROJECT, key: 'OLB', name: 'Acme Online Banking', description: null, archived: false, caseCount: 0, myRole: 'Test Lead', color: 'project-1' },
 ]
 
 /**

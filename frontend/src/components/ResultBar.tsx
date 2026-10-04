@@ -117,7 +117,7 @@ export function DenominatorToggle({
           aria-pressed={value === option}
           data-testid={`${testId}.${option}`}
           className={cn(
-            'cursor-pointer rounded-[5px] border px-2 py-0.5 font-sans text-[12px] text-ink',
+            'cursor-pointer rounded-md border px-2 py-0.5 font-sans text-[12px] text-ink',
             'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
             value === option
               ? 'border-steel bg-wash-3 font-semibold'

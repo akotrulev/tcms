@@ -300,7 +300,7 @@ function ValueRow({
     <li className="list-none">
       <div
         style={{ paddingLeft: depth * 22 }}
-        className="group flex items-center gap-2 rounded-[5px] py-1.5 pr-1 text-[13px] hover:bg-wash-1"
+        className="group flex items-center gap-2 rounded-md py-1.5 pr-1 text-[13px] hover:bg-wash-1"
         data-testid={ValueRowTestId}
       >
         {depth > 0 && <CornerDownRight aria-hidden className="size-3.5 shrink-0 text-ink-4" />}

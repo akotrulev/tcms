@@ -198,7 +198,7 @@ function Generator({
       onSubmit={(event) => void submit(event)}
       noValidate
       aria-busy={issue.isPending}
-      className="mb-4 rounded-[8px] border border-line bg-wash-1 p-4"
+      className="mb-4 rounded-lg border border-line bg-wash-1 p-4"
       data-testid={TestId}
     >
       <h4 className="mb-1 text-[14px] font-semibold text-ink">Generate one now</h4>

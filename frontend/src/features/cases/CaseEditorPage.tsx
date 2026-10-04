@@ -415,7 +415,7 @@ function StartCard({
       disabled={disabled}
       data-testid={testId}
       className={cn(
-        'flex cursor-pointer flex-col items-start rounded-[8px] border border-line bg-panel p-3.5 text-left',
+        'flex cursor-pointer flex-col items-start rounded-lg border border-line bg-panel p-3.5 text-left',
         'hover:border-line-strong focus-visible:outline-2 focus-visible:outline-offset-2',
         'focus-visible:outline-[color:var(--color-given)]',
         'disabled:cursor-not-allowed disabled:opacity-45',
@@ -1802,11 +1802,11 @@ function CaseEditorForm({
 }
 
 const SELECT_CLASS =
-  'w-full cursor-pointer rounded-[8px] border border-line bg-field px-2 py-1 text-[13px] text-ink ' +
+  'w-full cursor-pointer rounded-lg border border-line bg-field px-2 py-1 text-[13px] text-ink ' +
   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]';
 
 const INPUT_CLASS =
-  'w-full rounded-[8px] border border-line bg-field px-2 py-1 text-[13px] text-ink ' +
+  'w-full rounded-lg border border-line bg-field px-2 py-1 text-[13px] text-ink ' +
   'placeholder:text-ink-4 ' +
   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]';
 

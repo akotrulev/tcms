@@ -37,7 +37,7 @@ export function ImportStepper({ current, testId }: { current: 1 | 2 | 3 | 4; tes
               aria-current={live ? 'step' : undefined}
               data-testid={`${testId}.Step${position}`}
               className={cn(
-                'flex items-center gap-2 rounded-[7px] border px-2.5 py-1',
+                'flex items-center gap-2 rounded-md border px-2.5 py-1',
                 live && 'border-[color:var(--color-given)] text-ink',
                 done && 'border-line text-ink-2',
                 !live && !done && 'border-line text-ink-4',

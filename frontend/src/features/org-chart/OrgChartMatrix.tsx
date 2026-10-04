@@ -148,7 +148,7 @@ function Cell({ assignment }: { assignment: OrgChartAssignment | undefined }) {
     return (
       <span
         data-testid="OrgChart.Matrix.Cell.Empty"
-        className="grid h-[30px] place-items-center rounded-[5px] font-mono text-[11px] text-ink-4"
+        className="grid h-[30px] place-items-center rounded-md font-mono text-[11px] text-ink-4"
       >
         —
       </span>
@@ -162,7 +162,7 @@ function Cell({ assignment }: { assignment: OrgChartAssignment | undefined }) {
     <span
       data-testid="OrgChart.Matrix.Cell"
       className={cn(
-        'flex flex-col items-center gap-px rounded-[5px] border px-2 py-1 text-center',
+        'flex flex-col items-center gap-px rounded-md border px-2 py-1 text-center',
         VIA_FILL[assignment.via],
       )}
     >

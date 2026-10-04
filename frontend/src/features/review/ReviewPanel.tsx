@@ -346,7 +346,7 @@ function Assignees({
                 */
                 <span
                   data-testid="Review.Assignee"
-                  className="inline-flex items-center gap-1.5 rounded-[5px] border border-line px-2.5 py-[3px] text-[12px] text-ink-2"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-[3px] text-[12px] text-ink-2"
                 >
                   {assignee.team ? (
                     <Users aria-hidden className="size-3 text-ink-4" />
@@ -480,7 +480,7 @@ function AssignForm({
           onClick={() => setOpen((current) => !current)}
           data-testid="Review.Assign.Choice"
           className={
-            'flex w-full items-center justify-between gap-2 rounded-[8px] border border-line ' +
+            'flex w-full items-center justify-between gap-2 rounded-lg border border-line ' +
             'bg-field px-3 py-1.5 text-left text-[13px] text-ink disabled:cursor-not-allowed ' +
             'disabled:opacity-45 focus-visible:outline-2 focus-visible:outline-offset-2 ' +
             'focus-visible:outline-[color:var(--color-given)]'
@@ -495,7 +495,7 @@ function AssignForm({
             <div
               id="Review.Assign.Options"
               role="listbox"
-              className="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-[8px] border border-line bg-panel p-1 shadow-e3"
+              className="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-line bg-panel p-1 shadow-e3"
             >
               {options.length === 0 ? (
                 <p className="m-0 px-2.5 py-1.5 text-[12.5px] text-ink-4">

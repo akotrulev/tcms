@@ -340,7 +340,7 @@ function GroupCard({
   const remove = (reference: Reference) => onChange(removeReference(draft, group, reference));
 
   return (
-    <div className="border border-line rounded-[8px] p-3" data-testid={section ? 'PlanCases.Section' : 'PlanCases.Unsectioned'}>
+    <div className="border border-line rounded-lg p-3" data-testid={section ? 'PlanCases.Section' : 'PlanCases.Unsectioned'}>
       <div className="flex flex-col gap-3">
         <div className="flex gap-2 items-center flex-wrap">
           {section ? (

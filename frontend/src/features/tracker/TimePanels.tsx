@@ -112,7 +112,7 @@ function StoryTimeBody({ rollup, issueKey }: { rollup: TimeRollup; issueKey: str
       <RouterLink
         to="/timesheets"
         data-testid={`${TEST_ID}.Log`}
-        className="self-start rounded-[6px] border border-line px-2.5 py-1 text-[12px] text-ink-2 no-underline hover:border-line-strong hover:text-ink"
+        className="self-start rounded-md border border-line px-2.5 py-1 text-[12px] text-ink-2 no-underline hover:border-line-strong hover:text-ink"
       >
         {`Log time against ${issueKey}`}
       </RouterLink>

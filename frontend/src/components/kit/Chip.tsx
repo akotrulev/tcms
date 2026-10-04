@@ -49,7 +49,7 @@ export function Chip({
     : undefined;
 
   const pill = cn(
-    'inline-flex items-center gap-1.5 rounded-[5px] border border-line px-[9px] py-[3px]',
+    'inline-flex items-center gap-1.5 rounded-full border border-line px-[9px] py-[3px]',
     'font-sans text-[12px] text-ink-2',
     variant === 'add' && 'border-dashed text-ink-4',
     className,

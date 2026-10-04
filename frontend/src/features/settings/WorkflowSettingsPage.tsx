@@ -213,7 +213,7 @@ function WorkflowEditor({
   return (
     <div className="grid max-w-[1180px] gap-3.5 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="flex flex-col gap-3.5">
-        <section className="rounded-[10px] border border-line bg-panel" data-testid={`${TEST_ID}.Statuses`}>
+        <section className="rounded-xl border border-line bg-panel" data-testid={`${TEST_ID}.Statuses`}>
           <div className="flex flex-wrap items-center gap-2.5 border-b border-line px-3.5 py-2.5">
             <h2 className="m-0 text-[13.5px] font-semibold text-ink">Statuses, in order</h2>
             <Identifier variant="muted">{String(statuses.length)}</Identifier>
@@ -399,7 +399,7 @@ function StatusRow({
 }) {
   return (
     <div
-      className="flex flex-wrap items-center gap-2.5 rounded-[8px] border border-line bg-paper px-2.5 py-2"
+      className="flex flex-wrap items-center gap-2.5 rounded-lg border border-line bg-paper px-2.5 py-2"
       data-testid={`${TEST_ID}.Row`}
     >
       <span className="w-4 font-mono text-[11px] text-ink-4">{index + 1}</span>
@@ -568,7 +568,7 @@ function RemovalPanel({
 
   return (
     <section
-      className="rounded-[10px] border border-[color:var(--color-warning)]/35 bg-panel"
+      className="rounded-xl border border-[color:var(--color-warning)]/35 bg-panel"
       data-testid={`${TEST_ID}.Removal`}
     >
       <div className="flex flex-wrap items-center gap-2.5 border-b border-line px-3.5 py-2.5">
@@ -725,7 +725,7 @@ function AllowedMoves({
   const saved = statuses.filter((status): status is DraftStatus & { id: string } => status.id !== null);
 
   return (
-    <section className="rounded-[10px] border border-line bg-panel" data-testid={`${TEST_ID}.Moves`}>
+    <section className="rounded-xl border border-line bg-panel" data-testid={`${TEST_ID}.Moves`}>
       <div className="border-b border-line px-3.5 py-2.5">
         <h2 className="m-0 text-[13.5px] font-semibold text-ink">Allowed moves</h2>
       </div>

@@ -121,7 +121,7 @@ function AssistantRow({ assistant }: { assistant: Assistant }) {
   return (
     <div
       data-testid={`${TEST_ID}.Row`}
-      className="flex flex-col gap-2.5 rounded-[8px] border border-line p-3"
+      className="flex flex-col gap-2.5 rounded-lg border border-line p-3"
     >
       <div className="flex flex-wrap items-center gap-2">
         <Identifier variant="strong" testId={`${TEST_ID}.Row.Name`}>

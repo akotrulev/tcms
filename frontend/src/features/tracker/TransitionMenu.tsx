@@ -114,7 +114,7 @@ export function TransitionMenu({
             key={status.id}
             data-testid={`${testId}.${status.id}`}
             className={cn(
-              'flex items-center gap-2 rounded-[6px] border border-line px-2.5 py-1.5',
+              'flex items-center gap-2 rounded-md border border-line px-2.5 py-1.5',
               !allowed && !here && 'opacity-55',
             )}
           >

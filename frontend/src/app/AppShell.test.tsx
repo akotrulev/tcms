@@ -53,6 +53,7 @@ const project = (id: string, key: string, name: string): Project => ({
   archived: false,
   caseCount: 0,
   myRole: 'Viewer',
+  color: 'project-1',
 })
 
 const PROJECTS = [project(OLB, 'OLB', 'Online Banking'), project(MOB, 'MOB', 'Mobile App')]

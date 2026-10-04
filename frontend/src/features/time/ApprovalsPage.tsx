@@ -314,7 +314,7 @@ function PersonPanel({
               {showing ? 'Hide entries' : `Show ${plural(period.entries.length, 'entry')}`}
             </Button>
             {showing && (
-              <div className="mt-2 overflow-hidden rounded-[8px] border border-line">
+              <div className="mt-2 overflow-hidden rounded-lg border border-line">
                 <EntryTable
                   entries={period.entries}
                   testId={`${TEST_ID}.Person.Table`}

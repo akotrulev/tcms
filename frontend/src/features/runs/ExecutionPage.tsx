@@ -1546,7 +1546,7 @@ function StepLine({
           : undefined
       }
       className={cn(
-        'grid grid-cols-[26px_1fr] gap-3 rounded-[5px] py-[7px]',
+        'grid grid-cols-[26px_1fr] gap-3 rounded-md py-[7px]',
         // The current step is the only one at full ink, and the ones ahead stay legible — a
         // tester reads ahead to know what is coming, so nothing here is hidden.
         current && '-mx-3 bg-[color-mix(in_oklab,var(--color-steel)_12%,transparent)] px-3',
@@ -1621,7 +1621,7 @@ function StepLine({
                     // A fixed square rather than text-sized padding: four marks per step,
                     // fifteen steps, and a ragged right edge makes the column unscannable — the
                     // tester is aiming down it, not reading it.
-                    'grid h-6 w-[30px] cursor-pointer place-items-center rounded-[3px] border',
+                    'grid h-6 w-[30px] cursor-pointer place-items-center rounded-sm border',
                     'border-line font-mono text-[11px] font-semibold text-ink-3',
                     'hover:border-line-strong hover:text-ink',
                     'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',

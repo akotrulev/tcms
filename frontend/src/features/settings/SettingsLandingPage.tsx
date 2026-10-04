@@ -121,7 +121,7 @@ function SectionCard({
   return (
     <section
       data-testid={`Settings.Card.${slug}`}
-      className="rounded-[8px] border border-line bg-panel p-3"
+      className="rounded-lg border border-line bg-panel p-3"
     >
       <h2 className="m-0 flex items-center gap-2 text-[13px] font-semibold">
         <Icon aria-hidden className="size-4 shrink-0 text-ink-3" />

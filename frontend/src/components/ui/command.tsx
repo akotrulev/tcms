@@ -15,7 +15,7 @@ function Command({ className, ...props }: ComponentProps<typeof CommandPrimitive
   return (
     <CommandPrimitive
       className={cn(
-        'flex w-full flex-col overflow-hidden rounded-[8px] bg-panel text-ink',
+        'flex w-full flex-col overflow-hidden rounded-xl bg-raised text-ink',
         className,
       )}
       {...props}
@@ -70,7 +70,7 @@ function CommandItem({ className, ...props }: ComponentProps<typeof CommandItemP
   return (
     <CommandItemPrimitive
       className={cn(
-        'relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 ' +
+        'relative flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 ' +
           'text-[13px] text-ink-2 outline-none data-[selected=true]:bg-wash-2 ' +
           'data-[selected=true]:text-ink data-[disabled=true]:pointer-events-none ' +
           'data-[disabled=true]:opacity-45',

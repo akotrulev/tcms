@@ -27,7 +27,7 @@ export function Tile({ label, value, detail, alert, onClick, className, ...rest 
       onClick={onClick}
       style={alert ? { borderColor: 'color-mix(in oklab, var(--color-failed) 26%, transparent)' } : undefined}
       className={cn(
-        'rounded-[8px] border border-line bg-panel px-[15px] py-[13px] text-left hover:border-line-strong',
+        'rounded-lg border border-line bg-panel px-[15px] py-[13px] text-left hover:border-line-strong',
         className,
       )}
       {...rest}
@@ -80,7 +80,7 @@ export function HBar({ label, value, fraction, passed, failed, blocked, untested
             />
           ))
         ) : (
-          <i style={{ width: `${(fraction ?? 0) * 100}%` }} className="block h-full rounded-[1px] bg-steel" />
+          <i style={{ width: `${(fraction ?? 0) * 100}%` }} className="block h-full rounded-xs bg-steel" />
         )}
       </span>
       <span className="text-right font-mono text-[11.5px] tabular-nums text-ink-3">{value}</span>
@@ -111,7 +111,7 @@ export function Sparkline({ points, className, ...rest }: SparklineProps) {
             height: `${(point.value / max) * 100}%`,
             backgroundColor: point.highlighted ? undefined : 'color-mix(in oklab, var(--color-steel) 12%, transparent)',
           }}
-          className={cn('block min-h-[2px] flex-1 rounded-t-[1px]', point.highlighted && 'bg-steel')}
+          className={cn('block min-h-[2px] flex-1 rounded-t-xs', point.highlighted && 'bg-steel')}
         />
       ))}
     </div>

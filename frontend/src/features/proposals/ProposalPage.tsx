@@ -383,7 +383,7 @@ function ClaimedRequirementCard({
     <div
       data-testid="Proposal.Verifies.Item"
       className={cn(
-        'flex flex-col gap-1.5 rounded-[6px] border p-2.5',
+        'flex flex-col gap-1.5 rounded-md border p-2.5',
         gone
           ? 'border-[color:color-mix(in_oklab,var(--color-blocked)_34%,transparent)]'
           : 'border-line',

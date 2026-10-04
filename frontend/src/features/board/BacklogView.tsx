@@ -313,7 +313,7 @@ export function BacklogView({ projectId }: { projectId: string }) {
 
       <section
         data-testid={`${TEST_ID}.Panel`}
-        className="rounded-[8px] border border-line bg-panel"
+        className="rounded-lg border border-line bg-panel"
       >
         <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2.5">
           <h2 className="m-0 text-[13px] font-semibold text-ink">Backlog</h2>
@@ -420,7 +420,7 @@ export function BacklogView({ projectId }: { projectId: string }) {
                   <div
                     data-testid={`${TEST_ID}.DragOverlay`}
                     className={cn(
-                      'flex items-center gap-2 rounded-[5px] border border-line-strong bg-panel',
+                      'flex items-center gap-2 rounded-md border border-line-strong bg-panel',
                       'px-2.5 py-2 text-[13px] text-ink shadow-e3',
                     )}
                   >
@@ -807,7 +807,7 @@ function BulkBar({
   return (
     <div
       data-testid={`${TEST_ID}.Bulk`}
-      className="mb-3 rounded-[8px] border border-line bg-panel px-3 py-2.5"
+      className="mb-3 rounded-lg border border-line bg-panel px-3 py-2.5"
     >
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="m-0 text-[13px] font-semibold text-ink" data-testid={`${TEST_ID}.Bulk.Count`}>

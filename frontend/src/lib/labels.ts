@@ -14,6 +14,7 @@ import type {
   BudgetBasis,
   ClientStatus,
   CycleTimeMeasuredFrom,
+  ProjectColor,
   InvoiceStatus,
   RateCardScope,
   AggregationPolicy,
@@ -1456,3 +1457,14 @@ export const flowBandLabels = {
 
 /** The four keys of a `CumulativeFlowPoint` that carry a count, in the order they stack. */
 export type FlowBandKey = 'notStarted' | 'inFlight' | 'done' | 'beforeCurrentStatus';
+
+export const projectColorLabels = {
+  'project-1': 'Steel',
+  'project-2': 'Indigo',
+  'project-3': 'Teal',
+  'project-4': 'Green',
+  'project-5': 'Olive',
+  'project-6': 'Amber',
+  'project-7': 'Rust',
+  'project-8': 'Plum',
+} as const satisfies Record<ProjectColor, string>;

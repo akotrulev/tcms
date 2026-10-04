@@ -295,7 +295,7 @@ export function WorkTablePage() {
         The switcher. Real links, not buttons: a view is an address, and the query string travels
         with it — which is the whole of D34's "switching views never loses the filter".
       */}
-      <nav aria-label="Work views" className="mb-3 flex flex-wrap gap-0.5 rounded-[8px] bg-wash-1 p-0.5">
+      <nav aria-label="Work views" className="mb-3 flex flex-wrap gap-0.5 rounded-lg bg-wash-1 p-0.5">
         {(boards.data ?? []).map((board) => {
           const to = new URLSearchParams(params);
           to.set('view', 'board');
