@@ -5,7 +5,6 @@ import { SkipToContentLink } from '../components/SkipToContentLink';
 import { ShellFrameProvider } from './shellFrame';
 import { useActiveProject } from './shellNav';
 import { TopBar } from './TopBar';
-import { TopStripProvider } from './topStripSlot';
 
 /**
  * The persistent application shell: one 48px top bar over the content (023 §3).
@@ -27,7 +26,6 @@ export function AppShell() {
   const mainRef = useRouteFocus<HTMLElement>();
 
   return (
-    <TopStripProvider>
       <ShellFrameProvider
         value={{
           projectId: activeProjectId,
@@ -50,6 +48,5 @@ export function AppShell() {
           </main>
         </div>
       </ShellFrameProvider>
-    </TopStripProvider>
   );
 }

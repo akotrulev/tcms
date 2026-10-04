@@ -1,7 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { ReactNode } from 'react'
-import { Route, Routes, useLocation } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { api } from '../api/client'
 import type { PermissionKey, Project } from '../api/types'
@@ -10,7 +9,6 @@ import { createTestQueryClient } from '../test/queryClient'
 import { TestProviders } from '../test/TestProviders'
 import { AppShell } from './AppShell'
 import { NAV } from './nav'
-import { TopStripSlot } from './topStripSlot'
 
 /**
  * The shell's navigation affordances, after the rail became one 48px top bar (023 N1).
@@ -627,46 +625,5 @@ describe('AppShell — the user menu (021 R11, 023 §3)', () => {
     expect(version).toHaveTextContent(`TCMS ${__APP_VERSION__}`)
     const signOut = screen.getByTestId('TopBar.SignOutButton')
     expect(version.compareDocumentPosition(signOut) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-  })
-})
-
-/**
- * The top strip's slot (007 T7 Step 0) — **the target left with the rail (023 N1)**, and the
- * provider stays until P1 moves the four pages that still use `TopStripSlot`. With no target the slot
- * renders its children in place, which is what keeps a page's Save button from disappearing.
- */
-describe('AppShell top-strip slot', () => {
-  function renderWithSlot(children: ReactNode) {
-    mockReads([])
-
-    return render(
-      <TestProviders client={createTestQueryClient()} route={`/projects/${OLB}/cases/new`} userId="user-1">
-        <Routes>
-          <Route element={<AppShell />}>
-            <Route path="/projects/:projectId/cases/new" element={children} />
-          </Route>
-        </Routes>
-      </TestProviders>,
-    )
-  }
-
-  it('renders a page’s commit bar in place, inside main, now that the bar has no slot', async () => {
-    renderWithSlot(
-      <TopStripSlot>
-        <button type="button" data-testid="Page.Save">Save</button>
-      </TopStripSlot>,
-    )
-
-    const save = await screen.findByTestId('Page.Save')
-    expect(save.closest('main')).not.toBeNull()
-    expect(save.closest('header')).toBeNull()
-  })
-
-  it('renders the page inside main, under the one bar', async () => {
-    renderWithSlot(<p>Just a page</p>)
-
-    const page = await screen.findByText('Just a page')
-    expect(page.closest('main#main-content')).not.toBeNull()
-    expect(screen.getAllByRole('banner')).toHaveLength(1)
   })
 })

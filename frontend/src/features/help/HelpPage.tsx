@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Link as RouterLink, Navigate, useParams } from 'react-router-dom';
 import { useAnnounce } from '../../a11y/useAnnounce';
 import { DocumentSurface } from '../../components/kit';
+import { PageStrip } from '../../components/PageStrip';
 import { cn } from '../../lib/cn';
 import { helpSections, findHelpSection, type HelpSection } from './sections';
 
@@ -48,11 +49,14 @@ export function HelpPage() {
   if (!section) return <Navigate to={`/help/${helpSections[0]!.id}`} replace />;
 
   return (
-    <div className="flex flex-col items-start gap-6 md:flex-row" data-testid="HelpPage">
+    <>
       <title>{`Help — ${section.title} · TCMS`}</title>
-      <Contents current={section.id} />
-      <SectionBody section={section} />
-    </div>
+      <PageStrip title="User guide" testId="Help.Strip" />
+      <div className="flex flex-col items-start gap-6 md:flex-row" data-testid="HelpPage">
+        <Contents current={section.id} />
+        <SectionBody section={section} />
+      </div>
+    </>
   );
 }
 
@@ -69,7 +73,7 @@ function Contents({ current }: { current: string }) {
     <nav
       aria-label="Help contents"
       data-testid="Help.Contents"
-      className="w-full shrink-0 md:sticky md:top-4 md:w-[232px]"
+      className="w-full shrink-0 md:sticky md:top-28 md:w-[232px]"
     >
       <h2 className="mb-2 px-3 font-mono text-[11px] font-medium uppercase tracking-[.07em] text-ink-4">
         Contents

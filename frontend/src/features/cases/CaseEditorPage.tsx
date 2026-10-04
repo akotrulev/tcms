@@ -51,8 +51,8 @@ import {
 import { DataRegion } from '../../components/DataRegion';
 import { Banner, RailRow } from '../../components/kit';
 import { Button, Switch, Textarea } from '../../components/ui';
+import { PageStrip } from '../../components/PageStrip';
 import { PermissionGate } from '../../components/PermissionGate';
-import { TopStripSlot } from '../../app/topStripSlot';
 import { useAnnounce } from '../../a11y/useAnnounce';
 import { NEW_CASE_DEFAULTS } from '../../lib/caseDefaults';
 import { cn } from '../../lib/cn';
@@ -415,7 +415,7 @@ function StartCard({
       disabled={disabled}
       data-testid={testId}
       className={cn(
-        'flex cursor-pointer flex-col items-start rounded-lg border border-line bg-panel p-3.5 text-left',
+        'flex cursor-pointer flex-col items-start rounded-lg border border-line bg-raised shadow-e1 p-3.5 text-left',
         'hover:border-line-strong focus-visible:outline-2 focus-visible:outline-offset-2',
         'focus-visible:outline-[color:var(--color-given)]',
         'disabled:cursor-not-allowed disabled:opacity-45',
@@ -981,10 +981,8 @@ function CaseEditorForm({
   };
 
   /*
-    The browser-tab title and the arrival announcement, raised here rather than by `PageHeader` —
-    which this screen no longer has, because rule 1 of the design language forbids a page `<h1>`
-    that repeats the rail's active item. React 19 hoists a bare `<title>`, so both halves of what
-    the header did for accessibility survive its removal; what goes is the heading nobody needed.
+    The browser-tab title and the arrival announcement, raised here rather than by `PageHeader`,
+    because the strip is a bare `PageStrip` and the announcement is this screen's own.
   */
   const pageTitle = mode === 'edit' ? `Edit ${existing?.key ?? 'case'}` : 'New test case';
   const announce = useAnnounce();
@@ -1028,19 +1026,21 @@ function CaseEditorForm({
       {/*
         THE COMMIT BAR, IN THE TOP STRIP (007 §0 item 7).
 
-        Beside the breadcrumb, where the render puts it, rather than in a sticky bar of its own at
-        the foot of the document. Two things go with the move: the page `<h1>` (rule 1 — no page
-        heading repeating the rail's active item) and the second horizontal band of chrome the
-        footer bar was. `TopStripSlot` renders in place when there is no shell above it, so the
-        Save button cannot vanish because of where the page was mounted.
+        In the page strip's actions (023 P1), rather than in a sticky bar of its own at the foot of
+        the document: Save and the draft status are the commit bar, and the strip is where every
+        page keeps its commit. The strip renders in place, so the Save button cannot vanish because
+        of where the page was mounted.
       */}
-      <TopStripSlot>
-        {/*
+      {/*
           ~~The breadcrumb the removed `PageHeader` used to draw, in the strip the render puts it
           in — the only way back to the list that is not the rail.~~ → **superseded (021 R2): the
           shell draws it, in the header, on every route.** The strip keeps the commit bar, which is
           what the render puts here that no other screen has.
         */}
+      <PageStrip
+        testId={`${TestIdPrefix}.Strip`}
+        title={pageTitle}
+        actions={
         <div className="flex items-center gap-2" data-testid={`${TestIdPrefix}.CommitBar`}>
           <div className="hidden min-w-0 max-w-[420px] flex-1 md:block">
             <CaseDraftStatus
@@ -1090,7 +1090,8 @@ function CaseEditorForm({
             )}
           </PermissionGate>
         </div>
-      </TopStripSlot>
+        }
+      />
 
       <div className="flex min-w-0 flex-1 flex-col lg:flex-row">
         {/*

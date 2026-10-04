@@ -20,7 +20,6 @@ import {
   useUnlinkCaseExternal,
 } from '../../api/queries';
 import { HeaderActions } from '../../app/HeaderActions';
-import { TopStripSlot } from '../../app/topStripSlot';
 import { AttachmentsPanel } from '../../components/AttachmentList';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
@@ -34,6 +33,7 @@ import {
   type ProcedureKeyword,
 } from '../../components/kit';
 import { LinkRelationshipControl } from '../../components/LinkRelationshipControl';
+import { PageStrip } from '../../components/PageStrip';
 import { PermissionGate } from '../../components/PermissionGate';
 import { UnlinkDialog } from '../../components/UnlinkDialog';
 import {
@@ -183,7 +183,6 @@ export function CaseDetailPage() {
       <DataRegion testId="CaseDetail.Content" state={{ ...testCase, refetch: () => void testCase.refetch() }}>
         {(data) => (
           <>
-            <TopStripSlot>
               {/*
                 One row, and it does not wrap. It used to be `flex flex-wrap` inside a header the
                 shell fixes at 52px and states does not collapse, so it wrapped THROUGH the header:
@@ -218,6 +217,9 @@ export function CaseDetailPage() {
                 forbids is *removing* the affordance, not putting it one click away; the entries the
                 rail genuinely hides are the nine on `/account/access`, and none of them is here.
               */}
+              <PageStrip
+                testId="CaseDetail.Strip"
+                actions={
               <HeaderActions
                 data-testid="CaseDetail.Actions"
                 overflow={
@@ -316,7 +318,8 @@ export function CaseDetailPage() {
                   }
                 </PermissionGate>
               </HeaderActions>
-            </TopStripSlot>
+                }
+              />
 
             {/*
               Mounted only while confirming, so the dialog's own reset-on-open effect starts from a
@@ -725,7 +728,7 @@ function LifecycleMenu({
           <div
             role="menu"
             data-testid="CaseDetail.StatusMenu"
-            className="absolute right-0 z-50 mt-1 min-w-[200px] rounded-lg border border-line bg-panel p-1 shadow-e3"
+            className="absolute right-0 z-50 mt-1 min-w-[200px] rounded-xl border border-line bg-raised p-1 shadow-e3"
           >
             {moves.map((option) => (
               <PermissionGate

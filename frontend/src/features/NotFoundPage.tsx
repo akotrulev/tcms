@@ -1,6 +1,7 @@
 import { FolderX } from 'lucide-react';
 import { Link as RouterLink } from 'react-router-dom';
 
+import { PageHeader } from '../components/PageHeader';
 import { buttonVariants } from '../components/ui';
 
 /**
@@ -19,10 +20,10 @@ import { buttonVariants } from '../components/ui';
  */
 export function NotFoundPage() {
   return (
+    <>
+    <PageHeader title="Page not found" testId="NotFound.Header" />
     <div className="mx-auto max-w-[56ch] px-[34px] py-[52px] text-center" data-testid="NotFound">
-      <title>Page not found · TCMS</title>
       <FolderX aria-hidden className="mx-auto mb-3.5 size-[34px] text-ink-4" />
-      <h1 className="mb-[7px] text-[16px] font-semibold text-ink-2">Page not found</h1>
       <p className="mb-[18px] text-[13.5px] leading-[1.6] text-ink-4">
         That address doesn't match anything here. The case, plan, or run it pointed at may have been
         deleted or moved to another project — keys are per project, so the same number in another
@@ -36,5 +37,6 @@ export function NotFoundPage() {
         Go to projects
       </RouterLink>
     </div>
+    </>
   );
 }

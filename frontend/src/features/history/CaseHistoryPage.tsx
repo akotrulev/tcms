@@ -4,13 +4,14 @@ import { useAnnounce } from '../../a11y/useAnnounce';
 import type { CaseHistoryResponse } from '../../api/queries';
 import type { ExecutionHistoryEntry, StatusKind, VersionMarker } from '../../api/types';
 import { useCase, useCaseHistory } from '../../api/queries';
-import { TopStripSlot } from '../../app/topStripSlot';
+import { PageStrip } from '../../components/PageStrip';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import {
   Badge,
   Banner,
   RailRow,
+  Segmented,
   Timeline,
   TimelineEvent,
   type BadgeTone,
@@ -59,10 +60,8 @@ export function CaseHistoryPage() {
   const history = useCaseHistory(projectId, caseId, scope);
 
   /*
-    The tab title and the arrival announcement, raised here because this screen has no
-    `PageHeader` (007 T11, following T7): design language rule 1 puts the crumb and the lens in the
-    top strip and gives the width to the timeline, and `renders/02-record-as-document.html` panel E
-    draws no page heading at all.
+    The tab title and the arrival announcement, raised here because the strip's title is the fixed
+    word "History" while the tab names the case.
   */
   const pageTitle = testCase.data ? `History · ${testCase.data.key}` : 'Execution history';
   const announce = useAnnounce();
@@ -74,41 +73,32 @@ export function CaseHistoryPage() {
     <div className="flex min-h-full flex-col">
       <title>{`${pageTitle} · TCMS`}</title>
 
-      <TopStripSlot>
-        {/*
-          THE SCOPE LENS. Both readings are legitimate — *current version* answers "is this test
-          passing as it stands", *all versions* answers "has this area ever been stable" — so the
-          pair sits in the strip as the render's `.lens`, and the choice stays in the URL where
-          every other filter in this product lives.
-        */}
-        <div className="flex items-center gap-0.5 rounded-md border border-line p-0.5">
-          {(
-            [
-              { value: 'CURRENT_VERSION' as const, label: 'Current version' },
-              { value: 'ALL_VERSIONS' as const, label: 'All versions' },
-            ]
-          ).map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              aria-pressed={scope === option.value}
-              onClick={() => {
-                const next = new URLSearchParams(params);
-                next.set('scope', option.value);
-                setParams(next, { replace: true });
-              }}
-              data-testid={`CaseHistory.Scope.${option.value}`}
-              className={
-                'rounded-sm px-2.5 py-1 text-[12px] focus-visible:outline-2 focus-visible:outline-offset-[-2px] ' +
-                'focus-visible:outline-[color:var(--color-given)] ' +
-                (scope === option.value ? 'bg-wash-3 text-ink' : 'text-ink-3 hover:text-ink-2')
-              }
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </TopStripSlot>
+      {/*
+        THE SCOPE LENS. Both readings are legitimate — *current version* answers "is this test
+        passing as it stands", *all versions* answers "has this area ever been stable" — so the
+        pair sits in the strip's views, and the choice stays in the URL where every other filter in
+        this product lives.
+      */}
+      <PageStrip
+        testId="CaseHistory.Strip"
+        title="History"
+        views={
+          <Segmented
+            label="History scope"
+            testId="CaseHistory.Scope"
+            value={scope}
+            options={[
+              { value: 'CURRENT_VERSION', label: 'Current version' },
+              { value: 'ALL_VERSIONS', label: 'All versions' },
+            ]}
+            onChange={(value) => {
+              const next = new URLSearchParams(params);
+              next.set('scope', value);
+              setParams(next, { replace: true });
+            }}
+          />
+        }
+      />
 
       <DataRegion testId="CaseHistory.Content" state={{ ...history, refetch: () => void history.refetch() }}>
         {(data) => <HistoryBody data={data} projectId={projectId} scope={scope} />}

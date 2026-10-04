@@ -15,7 +15,7 @@ import type {
 } from '../../api/types';
 import { useExecution, useRun, useStatuses, useSubmitResult } from '../../api/queries';
 import { HeaderActions } from '../../app/HeaderActions';
-import { TopStripSlot } from '../../app/topStripSlot';
+import { PageStrip } from '../../components/PageStrip';
 import { DataRegion } from '../../components/DataRegion';
 import {
   Badge,
@@ -23,6 +23,7 @@ import {
   DocumentSurface,
   DocumentTitle,
   ProcedureLine,
+  Segmented,
   type BadgeTone,
   type ProcedureKeyword,
 } from '../../components/kit';
@@ -167,8 +168,7 @@ export function ExecutionPage() {
         region on purpose, because a tester whose case failed to load still needs the layout
         switch. The trail is the shell's now and is outside the page entirely.
       */}
-      <TopStripSlot>
-        {/*
+      {/*
           One row, and it does not wrap. `flex-wrap` inside a header the shell fixes at 52px does
           not wrap inside it — at 1280px the audit found the `Case 5 of 10 · TC-5 v1` indicator
           clipped off the TOP of the viewport and the Focus/Split/Grid control spilling below the
@@ -178,6 +178,10 @@ export function ExecutionPage() {
           before the layout control does, because the control is the thing a tester reaches for and
           the count is the thing they can also read from the queue.
         */}
+      <PageStrip
+        testId="Execution.Strip"
+        views={<ModeSwitch mode={mode} onChange={setMode} />}
+        actions={
         <HeaderActions data-testid="Execution.TopStrip">
           {/*
             **One cluster, not five controls** — which is what `HeaderActions`' two-child cap is
@@ -234,9 +238,9 @@ export function ExecutionPage() {
               <ElapsedSince startedAt={run.data.startedAt} />
             )}
           </span>
-          <ModeSwitch mode={mode} onChange={setMode} />
         </HeaderActions>
-      </TopStripSlot>
+        }
+      />
 
       <Workspace
         mode={mode}
@@ -451,39 +455,17 @@ function GridBlockedDialog({
  *  small, fixed, and the tester switches between them often enough that a click to open a menu is
  *  a click too many. */
 function ModeSwitch({ mode, onChange }: { mode: ExecutionMode; onChange: (next: ExecutionMode) => void }) {
-  const hints = {
-    focus: 'Focus — one case at a time, nothing else on screen',
-    split: 'Split — the run’s cases beside the one you are running',
-    grid: 'Grid — every case in one table, for a pass you already know the answers to',
-  } satisfies Record<ExecutionMode, string>;
-
   return (
-    <div role="group" aria-label="Execution layout" className="inline-flex gap-0.5 rounded-md bg-wash-1 p-0.5">
-      {EXECUTION_MODES.map((option) => {
-        const active = option === mode;
-        return (
-          <button
-            key={option}
-            type="button"
-            title={hints[option]}
-            onClick={() => onChange(option)}
-            aria-pressed={active}
-            // Derived from the mode itself rather than a lookup table, so a fourth mode cannot
-            // silently share a locator with a third (`test-ids` rule 7).
-            data-testid={`Execution.Mode.${option}`}
-            className={cn(
-              'cursor-pointer rounded-md px-2.5 py-1 text-[12px] capitalize',
-              'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
-              // Weight and background, not colour alone — the active-state rule the rail and the
-              // nav already follow.
-              active ? 'bg-panel font-medium text-ink shadow-e1' : 'text-ink-3 hover:text-ink',
-            )}
-          >
-            {option}
-          </button>
-        );
-      })}
-    </div>
+    <Segmented
+      label="Execution layout"
+      testId="Execution.Mode"
+      value={mode}
+      onChange={onChange}
+      options={EXECUTION_MODES.map((option) => ({
+        value: option,
+        label: option.charAt(0).toUpperCase() + option.slice(1),
+      }))}
+    />
   );
 }
 

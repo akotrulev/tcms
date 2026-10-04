@@ -19,6 +19,7 @@ import {
   DocumentTitle,
   ProcedureLine,
 } from '../../components/kit';
+import { PageStrip } from '../../components/PageStrip';
 import { PermissionGate } from '../../components/PermissionGate';
 import { ScrollX } from '../../components/ScrollX';
 import { Button, Textarea } from '../../components/ui';
@@ -77,11 +78,9 @@ export function ProposalPage() {
     accept.error instanceof ApiError ? (accept.error.fieldErrors ?? null) : null;
 
   /*
-    The tab title and the arrival announcement, raised here because this screen has no
-    `PageHeader` — 007 T11, following T7. Design language rule 1 forbids a page `<h1>` repeating
-    what the document below already says, and on this screen the proposal's title *is* the
-    document's title. React 19 hoists a bare `<title>`, so the two things the header did that
-    nothing else does survive its removal.
+    The tab title and the arrival announcement, raised here because the strip carries no title:
+    the proposal's title *is* the document's title, drawn once by `DocumentTitle`. The strip holds
+    the trail only — Accept and Reject stay in the aside, under the evidence they judge.
   */
   const pageTitle = proposal.data ? `${proposal.data.title} · Generated case` : 'Generated case';
   const announce = useAnnounce();
@@ -92,6 +91,8 @@ export function ProposalPage() {
   return (
     <div className="flex min-h-full flex-col">
       <title>{`${pageTitle} · TCMS`}</title>
+
+      <PageStrip testId="Proposal.Strip" />
 
       <DataRegion
         testId="Proposal.Detail"

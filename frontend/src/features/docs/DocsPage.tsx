@@ -1,7 +1,6 @@
 import { Link2, Plus, Search, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { useAnnounce } from '../../a11y/useAnnounce';
 import type {
   BlockLink,
   DocPage,
@@ -30,6 +29,7 @@ import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { Badge, Banner, DocumentSurface, ResultBar } from '../../components/kit';
 import { LinkRelationshipControl } from '../../components/LinkRelationshipControl';
+import { PageHeader } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
 import { TabStrip } from '../../components/TabStrip';
 import { TABS } from '../../app/nav';
@@ -99,16 +99,6 @@ export function DocsPage() {
   const project = useProject(projectId);
   const pages = useDocPages(projectId);
   const page = useDocPage(projectId, pageId);
-
-  /*
-    ~~Raised by `PageHeader`.~~ → superseded by 007 T14, which replaced that header with the
-    render's own top strip. Kept rather than dropped: a route change that announces nothing leaves
-    a screen-reader user on a page they have no way to know has changed.
-  */
-  const announce = useAnnounce();
-  useEffect(() => {
-    announce('Documentation page loaded');
-  }, [announce]);
 
   /*
     A8 — the case somebody arrived here to claim coverage for.
@@ -190,39 +180,37 @@ export function DocsPage() {
         reader had to guess which one held the CLI instructions. Both ends move: this is
         `Documents`, and the help entry is `User guide`.
       */}
-      <title>{project.data ? `Documents · ${project.data.name} · TCMS` : 'Documents · TCMS'}</title>
-
-      <header className="mb-3 flex flex-wrap items-start gap-3 border-b border-line pb-3">
-        <div className="min-w-0 flex-1">
-          <h1 className="m-0 text-[19px] font-semibold tracking-[-.018em] text-ink">Documents</h1>
-          <p className="m-0 mt-1 max-w-[74ch] text-[13px] text-ink-3">
-            Specifications live here. Cases link to individual blocks, and each block shows what
-            verifies it.
-          </p>
-        </div>
-
-        <PermissionGate projectId={projectId} permission="doc:edit">
-          {({ allowed }) => (
-            <Button
-              variant="primary"
-              size="sm"
-              disabled={!allowed}
-              onClick={() => setCreating(true)}
-              data-testid="Docs.NewPage"
-            >
-              <Plus aria-hidden className="size-3.5" />
-              New page
-            </Button>
-          )}
-        </PermissionGate>
-      </header>
-
       {/*
-        Pages · Artifacts (021 §1). The artifact register was its own rail row under `Project`; it
+        Pages · Artifacts (the strip's views) (021 §1). The artifact register was its own rail row under `Project`; it
         is a document the project keeps, so it is a view of this screen rather than a sibling of
         the settings screens.
       */}
-      <TabStrip tabs={TABS.docs} projectId={projectId} label="Document views" testId="Docs.Tabs" />
+      <PageHeader
+        title="Documents"
+        documentTitle={project.data ? `Documents · ${project.data.name}` : 'Documents'}
+        announcement="Documentation page loaded"
+        subtitle="Specifications live here. Cases link to individual blocks, and each block shows what verifies it."
+        testId="Docs.Header"
+        views={
+          <TabStrip tabs={TABS.docs} projectId={projectId} label="Document views" testId="Docs.Tabs" />
+        }
+        actions={
+          <PermissionGate projectId={projectId} permission="doc:edit">
+            {({ allowed }) => (
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={!allowed}
+                onClick={() => setCreating(true)}
+                data-testid="Docs.NewPage"
+              >
+                <Plus aria-hidden className="size-3.5" />
+                New page
+              </Button>
+            )}
+          </PermissionGate>
+        }
+      />
 
       {/*
         The carried case, named. It is a banner rather than a highlighted control somewhere in the
@@ -287,7 +275,7 @@ export function DocsPage() {
       {/* The render's `.split.three`: the tree, the reading column, and the page's own facts. */}
       <div className="flex flex-col items-start gap-4 lg:flex-row">
         <aside
-          className="w-full shrink-0 rounded-lg border border-line bg-panel p-3 lg:w-[260px]"
+          className="w-full shrink-0 rounded-xl border border-line bg-panel p-3 lg:w-[260px]"
           data-testid="Docs.TreePanel"
         >
           <h2 className={SECTION_HEADING}>{searchQuery ? 'Results' : 'Pages'}</h2>
@@ -389,7 +377,7 @@ export function DocsPage() {
             </DataRegion>
           ) : (
             <p
-              className="m-0 rounded-lg border border-line bg-panel p-4 text-[13px] text-ink-3"
+              className="m-0 rounded-xl border border-line bg-panel p-4 text-[13px] text-ink-3"
               data-testid="Docs.NoSelection"
             >
               {(pages.data?.length ?? 0) === 0
@@ -744,7 +732,7 @@ function PageFacts({ page }: { page: DocPage }) {
   }
 
   return (
-    <aside className="w-full shrink-0 rounded-lg border border-line bg-panel p-4 xl:w-[280px]">
+    <aside className="w-full shrink-0 rounded-xl border border-line bg-panel p-4 xl:w-[280px]">
       {coverable.length > 0 && (
         <section className="mb-5">
           <h2 className={SECTION_HEADING}>

@@ -47,7 +47,7 @@ const FIELD =
   'focus-visible:outline-[color:var(--color-given)]';
 
 const POPOVER =
-  'absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-line bg-panel p-1 ' +
+  'absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-line bg-raised p-1 ' +
   'shadow-e3';
 
 const OPTION =

@@ -7,11 +7,11 @@ panels of cards whose face leads with identity and ends with the card's test res
 a colour, which its key chip carries; it never fills a canvas. No route moves. The project colour is
 the plan's one contract change (§3a).
 
-**Status:** A1, A2, K1, K2, N1, B1, B2 and B3 built 2026-10-04 (nothing run, per the plan's single gate). A1: the contract, both
+**Status:** A1, A2, K1, K2, N1, B1, B2, B3 and P1 built 2026-10-04 (nothing run, per the plan's single gate). A1: the contract, both
 generated copies, both fixture factories. A2: `V15__project_color.sql`, `Project.color`, the create
 default, `PUT /projects/{projectId}/color`, and their tests. K1: the surface ladder (`bg-bar`,
 `bg-raised`), the radius codemod (106 files) and its check, the overlay primitives on the ladder, and
-the project palette with `projectColorFill` and its contrast check. K2: `PageStrip`, `PageHeader` on it, `Segmented`, `TabStrip` on its helpers, `FilterStrip`'s popover and `openFilters`; every consumer test of a `FilterStrip` picker is still red until B2, P2, P3 and P4. N1: the 48px `TopBar` (launcher, switcher with coloured key chips, project tabs and More, search, Create, My work, theme, user menu with the version) replaced the rail, drawer and footer, and `AppShell.test.tsx` is rewritten against it; the four `TopStripSlot` pages render in place until P1. B1: `BoardCardFace` redrawn per §6.1 (identity row, priority for CRITICAL/HIGH, dot-and-name labels, cases row, 3px edge bar via a new `ResultBar` `variant="edge"`), pointer drag on the card with the keyboard drag on the grip, the click that ends a drag swallowed; `BoardCardFace.test.tsx` extended and two `ProjectBoardView.test.tsx` assertions updated (nothing run). B2: `/projects/:id/work` opens with one strip (`BoardPicker` lead with door badges, five view links, `WorkStripActions` portal carrying each view's Filter and the board's `GroupMenu`); `+ Add`, the GroupBy select, Configure and the keyboard banner are gone and the foot line carries the sentence; `WorkTablePage`, `ProjectBoardView` and `BacklogView` tests rewritten through `openFilters` (nothing run). B3: columns are panels (`ColumnHeader` with count, WIP pill, summed linked-case health and the door `+` on the first-status column; the lane cells, band bar and sub-bar on the §6.3 classes; one board-wide `doneOpen` toggled from the Done header, collapsed lanes showing `n done`); `sumLinkedCases` added; `ProjectBoardView.test.tsx` and `linkedCases.test.ts` extended (nothing run). Next: P1. The server now serves
+the project palette with `projectColorFill` and its contrast check. K2: `PageStrip`, `PageHeader` on it, `Segmented`, `TabStrip` on its helpers, `FilterStrip`'s popover and `openFilters`; every consumer test of a `FilterStrip` picker is still red until B2, P2, P3 and P4. N1: the 48px `TopBar` (launcher, switcher with coloured key chips, project tabs and More, search, Create, My work, theme, user menu with the version) replaced the rail, drawer and footer, and `AppShell.test.tsx` is rewritten against it; the four `TopStripSlot` pages render in place until P1. B1: `BoardCardFace` redrawn per §6.1 (identity row, priority for CRITICAL/HIGH, dot-and-name labels, cases row, 3px edge bar via a new `ResultBar` `variant="edge"`), pointer drag on the card with the keyboard drag on the grip, the click that ends a drag swallowed; `BoardCardFace.test.tsx` extended and two `ProjectBoardView.test.tsx` assertions updated (nothing run). B2: `/projects/:id/work` opens with one strip (`BoardPicker` lead with door badges, five view links, `WorkStripActions` portal carrying each view's Filter and the board's `GroupMenu`); `+ Add`, the GroupBy select, Configure and the keyboard banner are gone and the foot line carries the sentence; `WorkTablePage`, `ProjectBoardView` and `BacklogView` tests rewritten through `openFilters` (nothing run). B3: columns are panels (`ColumnHeader` with count, WIP pill, summed linked-case health and the door `+` on the first-status column; the lane cells, band bar and sub-bar on the §6.3 classes; one board-wide `doneOpen` toggled from the Done header, collapsed lanes showing `n done`); `sumLinkedCases` added; `ProjectBoardView.test.tsx` and `linkedCases.test.ts` extended (nothing run). P1: the nine document-mode pages open with `PageStrip`, `app/topStripSlot.tsx` and `TopStripProvider` are gone, `AppShell.test.tsx`'s slot tests deleted, panel-role pass over `cases`/`docs` (nothing run). Next: P2. The server now serves
 `color` and answers the colour endpoint; all of it is unverified until C1. The design was approved on 2026-10-04 on a canvas:
 <https://claude.ai/artifact/5LuW51YtnVNKWHZ4mV6Xbj>. `Main` is the board screen with the new shell,
 and `CardStates` is the card in six states, in both themes. The canvas is the user's private artifact,
@@ -71,48 +71,9 @@ Run them in order, one session each. Each block is complete on its own. Every ga
 only C1 runs one. No prompt pushes, and none starts the local stack. C1 may *use* a stack that is
 already running and must not start one.
 
-A1, A2, K1, K2, N1, B1, B2 and B3 have landed; every block below is live.
+A1, A2, K1, K2, N1, B1, B2, B3 and P1 have landed; every block below is live.
 
 ---
-
-### P1 — document-mode pages onto the strip (fe-react, fe)
-
-````
-You are `fe-react`. Task P1 of docs/plans/023-one-design-language.md: move the nine document-mode
-pages onto `PageStrip` and delete `app/topStripSlot.tsx`.
-
-Deliverable: the nine pages in §7.1 open with `PageStrip`.
-`grep -rn "topStripSlot\|TopStripSlot\|TopStripTarget\|TopStripProvider" frontend/src` returns
-nothing, and `app/topStripSlot.tsx` is deleted.
-
-House rules for this plan: current branch only, never create one; no subagents; stage only your
-files; do not push. **Gate: none** — this plan gates once, in C1. Do not run `npm run build`, `lint`,
-`test:run`, `test:smoke`, `tsc` or any targeted test, locally or on shanks.
-
-Read, in this order:
-1. CLAUDE.md — "Test-harness rules" (the cited-files rule bites here).
-2. The plan: §2 (A2, A4), §4, §7.1, D2, task P1, and "Close-out — every task".
-3. K2's and N1's "As built" notes. N1 already deleted `TopStripTarget` and rewrote `AppShell.test.tsx`'s
-   slot tests to assert `TopStripSlot` renders in place inside `main`; delete those two tests with the slot.
-4. frontend/src/components/PageStrip.tsx and frontend/src/app/HeaderActions.tsx.
-5. For each page in §7.1's table, the region the table names (line numbers drift, so locate by
-   content). Then each page's test, searching for `Nav.TopStrip`, `TopStripSlot` and heading
-   queries.
-
-Build (the bullets of task P1, in order).
-
-Traps:
-- `DocumentTitle` is already the h1 on CaseDetail, Execution and Proposal. Those strips pass no
-  `title`.
-- The case editor's Save and draft status are its commit bar (design language rule 1). They move into
-  the strip's actions. They never go into a footer.
-- `grep -rn "topStripSlot\|TopStripSlot\|TopStripTarget\|TopStripProvider" frontend/src` must
-  return nothing when you finish, comments included, or `citedFiles.test.ts` reddens the packages
-  job.
-
-Commit: `feat(design): document-mode pages open with the strip; the top-strip slot retired (023 P1)`.
-Close out per the plan's "Close-out — every task" before you stop.
-````
 
 ### P2 — index and analytics pages (fe-react, fe)
 
@@ -1440,6 +1401,12 @@ big pages ~16k; ProposalPage, DocPageEditor, DocsPage, HelpPage and NotFound ~10
 - The panel-role pass (§5.5) over `features/cases`, `history`, `runs/ExecutionPage.tsx`,
   `proposals/ProposalPage.tsx`, `docs`, `help`.
 - **Not in P1:** the index pages' `TabStrip`s (P2).
+
+**As built (2026-10-04):**
+- `CaseDetailPage`: `PageStrip testId="CaseDetail.Strip"` (no title) with the unchanged `HeaderActions` as `actions`. `CaseEditorPage`: `PageStrip title={pageTitle}` ("New test case" / "Edit TC-n"), the draft status, version note, Cancel and Save in `actions` (`${TestIdPrefix}.CommitBar` kept). `CaseHistoryPage`: `title="History"`, scope toggle → `Segmented testId="CaseHistory.Scope"` (testids unchanged). `ExecutionPage`: no title, the indicator cluster in `actions`, `ModeSwitch` rewritten on `Segmented` in `views` (labels now "Focus/Split/Grid"; testids `Execution.Mode.<mode>` unchanged; the per-mode `title` hints are gone, `Segmented` has no such prop). `ProposalPage`: bare `PageStrip testId="Proposal.Strip"` (trail only) — it has no header actions, Accept/Reject stay in the aside. `DocPageEditorPage`: `title={page.title}`, key as `meta`, Discard/Save in `actions`. `DocsPage`: `PageHeader` with `views={<TabStrip …docs/>}`, New page in `actions`; its own `useAnnounce` effect replaced by `announcement`. `HelpPage`: `PageStrip title="User guide"`; Contents sticky offset `md:top-4` → `md:top-28` to clear the sticky strip. `NotFoundPage`: `PageHeader title="Page not found"` (its own `<title>`/h1 removed).
+- `topStripSlot.tsx` deleted, `TopStripProvider` removed from `AppShell.tsx`, the whole `AppShell top-strip slot` describe (both tests) deleted with unused imports; `grep` for the four names over `frontend/src` returns nothing. `docs/specs/2026-09-06-navigation-ia-redesign-brief.md` still names `topStripSlot` (a superseded brief, not scanned by `citedFiles`) — C1's spec pass.
+- Panel-role pass: asides, empty-state boxes and untitled sections → `rounded-xl` in `DocsPage`, `DocPageEditorPage`, `FeatureImportPage` (P2 folder, done here since the grep hit it); the case actions menu and `LinkBlockDialog` dropdown → overlay `bg-raised rounded-xl`; the editor's starter tile → `bg-raised shadow-e1`.
+- Unverified: nothing ran. No page test was changed — none queried `Nav.TopStrip`, `TopStripSlot` or the moved headings; C1 will show whether `ExecutionPage`/`HelpPage`/`DocsPage` tests break on the strip's new `h1`/names.
 
 ### P2 — index and analytics pages
 

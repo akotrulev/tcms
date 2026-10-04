@@ -11,6 +11,7 @@ import { useUnsavedWork } from '../../auth/useSessionRecovery';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { Banner, DocumentSurface } from '../../components/kit';
+import { PageStrip } from '../../components/PageStrip';
 import { Button, Textarea } from '../../components/ui';
 import {
   DropdownMenu,
@@ -285,15 +286,18 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
 
   return (
     <form onSubmit={submit} noValidate aria-busy={isSubmitting}>
-      <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-line pb-3">
-        <Identifier variant="muted">{page.key}</Identifier>
-        <span className="flex-1" />
-        {/*
+      {/*
           Discard leaves this editor for the page it was editing, so it is a real `<Link>` wearing
           the button's classes rather than an `onClick` that calls `navigate` — which is what earns
           it middle-click, ⌘-click and copy-link, the same rule `features/reports/ReportJobRow.tsx`
           states for its view control.
         */}
+      <PageStrip
+        testId={`${TestIdPrefix}.Strip`}
+        title={page.title}
+        meta={<Identifier variant="muted">{page.key}</Identifier>}
+        actions={
+          <>
         <Button asChild data-testid={`${TestIdPrefix}.Cancel`}>
           <RouterLink to={`/projects/${projectId}/docs/${page.id}`}>Discard</RouterLink>
         </Button>
@@ -305,7 +309,9 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
         >
           {isSubmitting ? 'Saving…' : `Save · v${page.currentVersionNo + 1}`}
         </Button>
-      </div>
+          </>
+        }
+      />
 
       <div className="flex flex-col items-start gap-4 xl:flex-row">
         <DocumentSurface
@@ -588,7 +594,7 @@ export function DocPageEditor({ projectId, page }: { projectId: string; page: Do
           </div>
         </DocumentSurface>
 
-        <aside className="w-full shrink-0 rounded-lg border border-line bg-panel p-4 xl:w-[280px]">
+        <aside className="w-full shrink-0 rounded-xl border border-line bg-panel p-4 xl:w-[280px]">
           {linkedCases.size > 0 && (
             <section className="mb-5">
               <h2 className={SECTION_HEADING}>
