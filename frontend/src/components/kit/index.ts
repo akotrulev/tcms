@@ -4,6 +4,13 @@ export { Combobox, COMBOBOX_FIELD, type ComboboxProps } from './Combobox';
 export { MultiPicker, type MultiPickerProps } from './MultiPicker';
 export { Badge, type BadgeProps, type BadgeTone } from './Badge';
 export { Chip, type ChipProps } from './Chip';
+export {
+  Segmented,
+  segmentTrackClass,
+  segmentItemClass,
+  type SegmentedProps,
+  type SegmentedOption,
+} from './Segmented';
 export { TableFoot, type TableFootProps } from './TableFoot';
 export { FilterStrip, type FilterStripProps, type AppliedFilter } from './FilterStrip';
 export { Banner, type BannerProps, type BannerTone } from './Banner';

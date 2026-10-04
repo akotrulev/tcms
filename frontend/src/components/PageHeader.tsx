@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from 'react';
 import { useAnnounce } from '../a11y/useAnnounce';
 import { cn } from '../lib/cn';
+import { PageStrip } from './PageStrip';
 
 /**
  * One page-header treatment, and a title on every route.
@@ -45,6 +46,8 @@ export function PageHeader({
   actions,
   meta,
   announcement,
+  views,
+  lead,
   testId,
 }: {
   title: ReactNode;
@@ -65,6 +68,10 @@ export function PageHeader({
    * rendered, is the shape that cannot race with itself.
    */
   announcement?: string;
+  /** A TabStrip, a Segmented or a ui/tabs list, drawn in the strip. */
+  views?: ReactNode;
+  /** Replaces the visible title; the title stays as the page's visually hidden h1. */
+  lead?: ReactNode;
   testId: string;
 }) {
   const tabTitle = documentTitle ?? (typeof title === 'string' ? title : undefined);
@@ -84,40 +91,18 @@ export function PageHeader({
   }, [announcement, tabTitle, announce]);
 
   return (
-    <header data-testid={testId} className="mb-6">
+    <>
       {tabTitle && <title>{`${tabTitle} · TCMS`}</title>}
-
-      <div className="flex flex-col items-stretch gap-4 md:flex-row md:items-start">
-        <div className="min-w-0 flex-1">
-          <h1
-            className="m-0 text-[22px] leading-[1.25] font-[620] tracking-[-.02em] text-balance text-ink"
-            data-testid={`${testId}.Title`}
-          >
-            {title}
-          </h1>
-          {meta && (
-            <div
-              className="mt-2 flex flex-wrap items-center gap-3"
-              data-testid={`${testId}.Meta`}
-            >
-              {meta}
-            </div>
-          )}
-          {subtitle && (
-            <p className="mt-2 mb-0 max-w-[74ch] text-[13px] text-ink-2">{subtitle}</p>
-          )}
-        </div>
-
-        {actions && (
-          <div
-            className="flex shrink-0 flex-wrap gap-2"
-            data-testid={`${testId}.Actions`}
-          >
-            {actions}
-          </div>
-        )}
-      </div>
-    </header>
+      <PageStrip
+        title={title}
+        lead={lead}
+        subtitle={subtitle}
+        meta={meta}
+        views={views}
+        actions={actions}
+        testId={testId}
+      />
+    </>
   );
 }
 
@@ -153,19 +138,17 @@ export function Panel({
   /** Heading kept, surface dropped — for a block inside a document column or a rail. */
   plain?: boolean;
 }) {
+  const bare = plain === true;
   return (
     <section
       data-testid={testId}
-      className={
-        plain ? undefined : 'overflow-hidden rounded-lg border border-line bg-panel'
-      }
+      className={bare ? undefined : 'overflow-hidden rounded-xl border border-line bg-panel'}
     >
       {(title || actions) && (
         <div
           className={cn(
             'flex items-center justify-between gap-2',
-            plain ? 'mb-2' : 'border-b border-line',
-            plain ? '' : dense ? 'px-3 py-2' : 'px-4 py-3',
+            bare ? 'mb-2' : 'border-b border-line px-4 py-2.5',
           )}
         >
           {typeof title === 'string' ? (
@@ -176,7 +159,7 @@ export function Panel({
           {actions && <div className="flex items-center gap-1">{actions}</div>}
         </div>
       )}
-      <div className={plain ? '' : dense ? '' : 'p-4'}>{children}</div>
+      <div className={bare ? '' : dense ? 'p-3' : 'p-4'}>{children}</div>
     </section>
   );
 }

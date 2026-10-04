@@ -7,11 +7,11 @@ panels of cards whose face leads with identity and ends with the card's test res
 a colour, which its key chip carries; it never fills a canvas. No route moves. The project colour is
 the plan's one contract change (§3a).
 
-**Status:** A1, A2 and K1 built 2026-10-04 (nothing run, per the plan's single gate). A1: the contract, both
+**Status:** A1, A2, K1 and K2 built 2026-10-04 (nothing run, per the plan's single gate). A1: the contract, both
 generated copies, both fixture factories. A2: `V15__project_color.sql`, `Project.color`, the create
 default, `PUT /projects/{projectId}/color`, and their tests. K1: the surface ladder (`bg-bar`,
 `bg-raised`), the radius codemod (106 files) and its check, the overlay primitives on the ladder, and
-the project palette with `projectColorFill` and its contrast check. Next: K2. The server now serves
+the project palette with `projectColorFill` and its contrast check. K2: `PageStrip`, `PageHeader` on it, `Segmented`, `TabStrip` on its helpers, `FilterStrip`'s popover and `openFilters`; every consumer test of a `FilterStrip` picker is still red until B2, P2, P3 and P4. Next: N1. The server now serves
 `color` and answers the colour endpoint; all of it is unverified until C1. The design was approved on 2026-10-04 on a canvas:
 <https://claude.ai/artifact/5LuW51YtnVNKWHZ4mV6Xbj>. `Main` is the board screen with the new shell,
 and `CardStates` is the card in six states, in both themes. The canvas is the user's private artifact,
@@ -71,60 +71,9 @@ Run them in order, one session each. Each block is complete on its own. Every ga
 only C1 runs one. No prompt pushes, and none starts the local stack. C1 may *use* a stack that is
 already running and must not start one.
 
-A1, A2 and K1 have landed; every block below is live.
+A1, A2, K1 and K2 have landed; every block below is live.
 
 ---
-
-### K2 — the page strip, the segmented control, the filter popover (fe-react, fe)
-
-````
-You are `fe-react`. Task K2 of docs/plans/023-one-design-language.md: build the three shared pieces
-every screen will open with. They are `PageStrip` (and `PageHeader` on top of it), the segmented
-control, and `FilterStrip` with its pickers behind a popover.
-
-Deliverable: `PageStrip` and `Segmented` exist with tests; `PageHeader` renders a `PageStrip` and
-keeps every testid and duty; `TabStrip` draws on the segment helpers; `FilterStrip`'s pickers sit in a
-popover opened by `${testid}.Open`; `openFilters` exists.
-
-House rules for this plan: current branch only, never create one; no subagents; stage only your
-files; do not push. **Gate: none** — this plan gates once, in C1. Do not run `npm run build`, `lint`,
-`test:run`, `test:smoke`, `tsc` or any targeted test, locally or on shanks.
-
-Read, in this order:
-1. CLAUDE.md — "Frontend" and "Test-harness rules" (contract fixtures, `createTestQueryClient`, the
-   cited-files rule).
-2. The plan: §2 (A2, A5, A8, A9), §4, §5.4, D2, D3, D6, task K2, and "Close-out — every task".
-3. K1's "As built" note in task K1 (the token names it landed).
-4. frontend/src/components/PageHeader.tsx (whole file — `PageHeader` and `Panel`, and every testid
-   they emit; keep each one).
-5. frontend/src/components/TabStrip.tsx, frontend/src/components/kit/FilterStrip.tsx,
-   frontend/src/components/kit/Chip.tsx, frontend/src/components/kit/index.ts,
-   frontend/src/components/ui/popover.tsx.
-6. frontend/src/app/routeMeta.ts — `Crumb`, `CrumbContext`, `crumbsFor()`, and three `ROUTE_META`
-   entries (a section root, a record page, an outside-the-project page) to see what the first two
-   crumbs link to. Then frontend/src/app/ShellBreadcrumbs.tsx, which your trail replaces.
-7. frontend/src/components/kit/kitRules.test.tsx — the "filter strip" describe.
-
-Build (the bullets of task K2, in order): `app/shellFrame.tsx`, `components/PageStrip.tsx`,
-`PageHeader` onto it, `Panel` restyled, `components/kit/Segmented.tsx` with its exported class
-helpers, `TabStrip` onto them, `FilterStrip`'s popover, `src/test/filters.ts`'s `openFilters`, and
-the tests listed in the task.
-
-Traps:
-- `PageStrip` renders an `<h1>` only when it is given a `title`. A document-mode page whose
-  `DocumentTitle` is already the h1 passes no title, and two h1s is the defect to avoid.
-- The trail drops the crumb linking to `/` and the crumb linking to the project root, because the top
-  bar states both. It also drops the last crumb, which is the page the title already names. Derive
-  this from what `ROUTE_META` produces, not from string positions.
-- Moving the pickers into a Radix `Popover` takes them out of the DOM until it opens. Every existing
-  test that reaches a picker directly breaks. Fix only kitRules.test.tsx here; the consumers' tests
-  are B2's, P2's and P3's (listed in "Not in K2").
-- `TabStrip` loses its `mb-3`: from P2 on it sits inside the strip. Until then it draws flush, which
-  is expected.
-
-Commit: `feat(design): the page strip, the segmented control and the filter popover (023 K2)`.
-Close out per the plan's "Close-out — every task" before you stop.
-````
 
 ### N1 — the shell (fe-react, fe)
 
@@ -1216,6 +1165,12 @@ which only a record can. K1 built the record, so a caller writes `projectColorFi
 N1's prompt and §3's row are rewritten to match. Reading two: a function wrapping the record, rejected
 as a wrapper with one caller shape.
 
+**D20 — `FilterStrip`'s trigger is `variant="ghost"`, and a summary with no pickers stays inline
+(K2).** §5.5 wrote `variant="secondary"`, which `buttonVariants` does not have; `ghost` is its
+bordered outline and the default, so K2 used it rather than add a variant for one caller. Reading two:
+add `secondary`. Also, §5.5 puts `summary` in the popover as a footnote; with no `pickers` there is
+no popover, so the summary renders inline as before rather than vanishing.
+
 ## Answered questions (2026-10-04)
 
 **O1 — Should My work carry a count in the top bar?** No. An icon link only (D13).
@@ -1401,6 +1356,19 @@ plan §2, §4, §5.4, §5.5, D2, D3, D6 and the task 13k; `PageHeader.tsx`, `Tab
   and BacklogView (B2); CaseFilterBar and CaseSearch (P2); DirectoryFilters and CalendarView (P3);
   AuditLog (P4). Also not here: moving any `TabStrip` into a strip (P1, P2), and the shell providing
   the frame (N1).
+- **As built (2026-10-04):** `app/shellFrame.tsx` exports `ShellFrameProvider` (prop `value`, not
+  spread props), `useShellFrame()` and the `ShellFrame` type. `PageStrip` is a `<header>` with the
+  trail, h1, `.Meta`, `.Views` and `.Actions` testids; the trail drops crumbs whose `to` is `/` or
+  matches `^/projects/[^/]+$`, plus the last crumb, so it is derived from `crumbsFor`'s output and
+  `PageStrip.test.tsx` pins it on the case-history route (`Test cases / Case`). `PageHeader` emits
+  `<title>` beside the strip in a fragment and gained `views` and `lead`; `Panel` is
+  `rounded-xl` with `px-4 py-2.5` bars and `p-3` when `dense`. `Segmented`, `segmentTrackClass` and
+  `segmentItemClass` are in `components/kit/Segmented.tsx` and the kit index; `TabStrip` uses them
+  and lost `mb-3`. `FilterStrip` lost `mb-3` too, and its popover content carries
+  `${testid}.Popover`, which `openFilters(user, testId)` in `test/filters.ts` awaits and returns.
+  Two divergences, see D20. Built but unverified: nothing ran. C1 should watch `PageHeader`
+  consumers' tests, which now need a Router for the trail, and any test that queried
+  `${testId}` as a `div`.
 
 ### N1 — the shell
 

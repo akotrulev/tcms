@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Badge } from './Badge';
 import { Chip } from './Chip';
 import { FilterStrip } from './FilterStrip';
+import { openFilters } from '../../test/filters';
 import { RailRow } from './RailRow';
 import { ResultBar } from './ResultBar';
 import { TableFoot } from './TableFoot';
@@ -146,6 +147,32 @@ describe('the filter strip (rule 2, and §5\'s chip)', () => {
     // the escape hatch to the chips would leave that reader on an empty list with no way off it.
     render(<FilterStrip applied={[]} summary="0 cases" onClear={vi.fn()} data-testid="Cases.Filters" />);
     expect(screen.getByRole('button', { name: 'Clear filters' })).toBeInTheDocument();
+  });
+
+  it('keeps its pickers behind the Filter button until it is opened', async () => {
+    const user = userEvent.setup();
+    render(
+      <FilterStrip
+        pickers={<button type="button">Status picker</button>}
+        applied={[]}
+        data-testid="Cases.Filters"
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Status picker' })).not.toBeInTheDocument();
+    await openFilters(user, 'Cases.Filters');
+    expect(screen.getByRole('button', { name: 'Status picker' })).toBeInTheDocument();
+  });
+
+  it('counts the applied filters on the Filter button', () => {
+    const applied = ['a', 'b', 'c'].map((key) => ({ key, label: key, onRemove: vi.fn() }));
+    render(
+      <FilterStrip
+        pickers={<span>picker</span>}
+        applied={applied}
+        data-testid="Cases.Filters"
+      />,
+    );
+    expect(screen.getByTestId('Cases.Filters.Open')).toHaveTextContent(String(applied.length));
   });
 
   it('never renders a value the reader has not chosen', () => {

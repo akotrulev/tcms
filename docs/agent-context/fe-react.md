@@ -14,6 +14,7 @@ fabricates a **population rather than a failure**, and the first to gate a Compa
 non-credential key.)
 
 **Session log**
+- 2026-10-04 — 023 K2: new seams `app/shellFrame.tsx`, `components/PageStrip.tsx` (trail = ancestors only), `components/kit/Segmented.tsx` (+ class helpers used by `TabStrip`), `FilterStrip` pickers behind a popover (`${testid}.Open`, `.Popover`), `test/filters.ts` `openFilters`. Nothing run (plan gates in C1).
 - 2026-09-07 — 022 T4: `ProposalPage`'s *Claimed requirements* panel and its four tests,
   `useVerifiedRequirements` + `docPageQueryOptions` in `api/queries/documentation.ts`, the
   `ProposalLink` type, the help guide's five processes and four carriers, `features.md`'s *A page as

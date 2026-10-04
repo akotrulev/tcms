@@ -1,7 +1,8 @@
+import { ListFilter } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { cn } from '../../lib/cn';
-import { Button } from '../ui';
+import { Button, Popover, PopoverContent, PopoverTrigger } from '../ui';
 import { Chip } from './Chip';
 
 /**
@@ -66,10 +67,32 @@ export function FilterStrip({
   return (
     <div
       data-testid={rest['data-testid']}
-      className={cn('mb-3 flex flex-wrap items-center gap-2 text-[12.5px]', className)}
+      className={cn('flex flex-wrap items-center gap-2 text-[12.5px]', className)}
     >
       {search}
-      {pickers}
+      {pickers && (
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" size="sm" data-testid={`${testId}.Open`}>
+              <ListFilter aria-hidden className="size-3.5" />
+              Filter
+              {applied.length > 0 && (
+                <span className="rounded-full bg-steel px-1.5 font-mono text-[10.5px] leading-[15px] text-rail">
+                  {applied.length}
+                </span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-[320px] p-3" data-testid={`${testId}.Popover`}>
+            <div className="flex flex-col gap-2.5 [&_select]:w-full [&_[role=combobox]]:w-full">
+              {pickers}
+            </div>
+            {summary && (
+              <p className="mt-3 mb-0 border-t border-line pt-2 text-[11.5px] text-ink-3">{summary}</p>
+            )}
+          </PopoverContent>
+        </Popover>
+      )}
       {applied.map((filter) => (
         <Chip
           key={filter.key}
@@ -81,7 +104,7 @@ export function FilterStrip({
           {filter.label}
         </Chip>
       ))}
-      {summary && <span className="ml-auto tabular-nums text-ink-4">{summary}</span>}
+      {!pickers && summary && <span className="ml-auto tabular-nums text-ink-4">{summary}</span>}
       {onClear && (
         <Button variant="ghost" size="sm" onClick={onClear} data-testid={`${testId}.Clear`}>
           Clear filters

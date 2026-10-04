@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import type { TabEntry } from '../app/nav';
 import { cn } from '../lib/cn';
+import { segmentItemClass, segmentTrackClass } from './kit/Segmented';
 
 /**
  * The segmented strip that carries the five screens which used to be rail rows (021 §1, §2.6).
@@ -48,7 +49,7 @@ export function TabStrip({
     <nav
       aria-label={label}
       data-testid={testId}
-      className="mb-3 flex flex-wrap gap-0.5 rounded-lg bg-wash-1 p-0.5"
+      className={cn(segmentTrackClass, 'flex-wrap')}
     >
       {tabs.map((tab) => (
         <NavLink
@@ -66,10 +67,7 @@ export function TabStrip({
                 mean computing the match twice.
               */
               aria-current={isActive ? 'page' : undefined}
-              className={cn(
-                'flex items-center gap-1.5 rounded-md px-[11px] py-1 text-[12px] font-medium',
-                isActive ? 'bg-panel text-ink shadow-e1' : 'bg-transparent text-ink-3 hover:text-ink-2',
-              )}
+              className={segmentItemClass(isActive)}
             >
               {tab.label}
             </span>
