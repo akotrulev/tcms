@@ -26,8 +26,16 @@ export interface ResultBarProps {
   skipped?: number;
   /** Rendered as the empty remainder of the track, never as a fill. */
   untested?: number;
+  /**
+   * `edge` is the board card's form: 3px, flush to the card's bottom edge, 1px gaps, square ends.
+   * The same four fills and the same empty track for `untested` — only the geometry differs.
+   */
+  variant?: 'bar' | 'edge';
   className?: string;
+  'data-testid'?: string;
 }
+
+type Counts = Pick<ResultBarProps, 'passed' | 'failed' | 'blocked' | 'skipped' | 'untested'>;
 
 const FILLS = [
   { key: 'passed', className: 'bg-[color:var(--color-passed)]' },
@@ -36,7 +44,13 @@ const FILLS = [
   { key: 'skipped', className: 'bg-[color:var(--color-skipped)]' },
 ] as const;
 
-export function ResultBar({ className, ...counts }: ResultBarProps) {
+export function ResultBar({
+  className,
+  variant = 'bar',
+  'data-testid': testId,
+  ...counts
+}: ResultBarProps) {
+  const edge = variant === 'edge';
   const total =
     (counts.passed ?? 0) +
     (counts.failed ?? 0) +
@@ -52,13 +66,22 @@ export function ResultBar({ className, ...counts }: ResultBarProps) {
     <span
       role="img"
       aria-label={describe(counts, total)}
-      className={cn('flex h-1.5 min-w-[110px] gap-0.5 overflow-hidden rounded-sm bg-field', className)}
+      data-testid={testId}
+      className={cn(
+        'flex overflow-hidden',
+        edge ? 'absolute inset-x-0 bottom-0 h-[3px] gap-px bg-wash-3' : 'h-1.5 min-w-[110px] gap-0.5 rounded-sm bg-field',
+        className,
+      )}
     >
       {segments.map((segment) => (
         <i
           key={segment.key}
           data-fill={segment.key}
-          className={cn('block h-full rounded-xs first:rounded-l-sm last:rounded-r-sm', segment.className)}
+          className={cn(
+            'block h-full',
+            !edge && 'rounded-xs first:rounded-l-sm last:rounded-r-sm',
+            segment.className,
+          )}
           style={{ width: `${(segment.count / total) * 100}%` }}
         />
       ))}
@@ -71,7 +94,7 @@ export function ResultBar({ className, ...counts }: ResultBarProps) {
  * label rather than being hidden. An empty total reads as "Never run" — the one place
  * `--color-untested` still speaks, as ink rather than as a fill.
  */
-function describe(counts: Omit<ResultBarProps, 'className'>, total: number): string {
+function describe(counts: Counts, total: number): string {
   if (total === 0) return 'Never run';
   const parts = [
     counts.passed ? `${counts.passed} passed` : null,

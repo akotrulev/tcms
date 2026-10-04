@@ -394,7 +394,7 @@ describe('the card face', () => {
 
     const card = await screen.findByTestId('ProjectBoard.Lane.none.Cell.In Progress.Card.PRJ-121')
     expect(within(card).getByText('checkout')).toBeInTheDocument()
-    expect(within(card).getByText('3/5 sub-tasks')).toBeInTheDocument()
+    expect(within(card).getByTestId(/Subtasks$/)).toHaveTextContent('3/5 sub-tasks')
     expect(within(card).getByText('12h')).toBeInTheDocument()
     // The overdue date is a word plus a date, never a colour alone — and the name is on the avatar
     // for a screen reader rather than only in its initials.
@@ -437,7 +437,7 @@ describe('keyboard parity with the pointer', () => {
 
       Tested through the MENU rather than through a simulated `@dnd-kit` keyboard drag: the menu is
       the path a real keyboard user takes, and a jsdom drag would assert `@dnd-kit`'s behaviour
-      instead of this screen's. The Tab step from the card's drag handle is what proves the trigger is
+      instead of this screen's. The Tab steps from the card's drag handle, past the title, are what prove the trigger is
       in the tab order; everything after it is keys only.
 
       Radix skips a disabled item in the roving order, so opening focuses the first LEGAL column —
@@ -466,6 +466,8 @@ describe('keyboard parity with the pointer', () => {
 
     const card = await screen.findByTestId('ProjectBoard.Lane.none.Cell.Backlog.Card.PRJ-201')
     within(card).getByTestId(/DragHandle$/).focus()
+    await user.tab()
+    expect(within(card).getByTestId(/Title$/)).toHaveFocus()
     await user.tab()
     expect(screen.getByRole('button', { name: 'Move PRJ-201' })).toHaveFocus()
 
@@ -861,12 +863,12 @@ describe('Blocked (021 §2.7)', () => {
       ],
     })
 
-  it('reads ⛔ from the status it came from, so nobody claims a card that is not theirs', async () => {
+  it('reads “from <status>” beside the blocked mark, so nobody claims a card that is not theirs', async () => {
     renderView(blockedCard(), PM_COLUMNS)
 
     expect(
       await screen.findByTestId('ProjectBoard.Lane.none.Cell.Blocked.Card.PRJ-152.BlockedFrom'),
-    ).toHaveTextContent('⛔ from Ready')
+    ).toHaveTextContent('from Ready')
   })
 
   it('offers Unblock and moves the card to blockedFromStatus', async () => {

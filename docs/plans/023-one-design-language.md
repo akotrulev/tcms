@@ -7,11 +7,11 @@ panels of cards whose face leads with identity and ends with the card's test res
 a colour, which its key chip carries; it never fills a canvas. No route moves. The project colour is
 the plan's one contract change (§3a).
 
-**Status:** A1, A2, K1, K2 and N1 built 2026-10-04 (nothing run, per the plan's single gate). A1: the contract, both
+**Status:** A1, A2, K1, K2, N1 and B1 built 2026-10-04 (nothing run, per the plan's single gate). A1: the contract, both
 generated copies, both fixture factories. A2: `V15__project_color.sql`, `Project.color`, the create
 default, `PUT /projects/{projectId}/color`, and their tests. K1: the surface ladder (`bg-bar`,
 `bg-raised`), the radius codemod (106 files) and its check, the overlay primitives on the ladder, and
-the project palette with `projectColorFill` and its contrast check. K2: `PageStrip`, `PageHeader` on it, `Segmented`, `TabStrip` on its helpers, `FilterStrip`'s popover and `openFilters`; every consumer test of a `FilterStrip` picker is still red until B2, P2, P3 and P4. N1: the 48px `TopBar` (launcher, switcher with coloured key chips, project tabs and More, search, Create, My work, theme, user menu with the version) replaced the rail, drawer and footer, and `AppShell.test.tsx` is rewritten against it; the four `TopStripSlot` pages render in place until P1. Next: B1. The server now serves
+the project palette with `projectColorFill` and its contrast check. K2: `PageStrip`, `PageHeader` on it, `Segmented`, `TabStrip` on its helpers, `FilterStrip`'s popover and `openFilters`; every consumer test of a `FilterStrip` picker is still red until B2, P2, P3 and P4. N1: the 48px `TopBar` (launcher, switcher with coloured key chips, project tabs and More, search, Create, My work, theme, user menu with the version) replaced the rail, drawer and footer, and `AppShell.test.tsx` is rewritten against it; the four `TopStripSlot` pages render in place until P1. B1: `BoardCardFace` redrawn per §6.1 (identity row, priority for CRITICAL/HIGH, dot-and-name labels, cases row, 3px edge bar via a new `ResultBar` `variant="edge"`), pointer drag on the card with the keyboard drag on the grip, the click that ends a drag swallowed; `BoardCardFace.test.tsx` extended and two `ProjectBoardView.test.tsx` assertions updated (nothing run). Next: B2. The server now serves
 `color` and answers the colour endpoint; all of it is unverified until C1. The design was approved on 2026-10-04 on a canvas:
 <https://claude.ai/artifact/5LuW51YtnVNKWHZ4mV6Xbj>. `Main` is the board screen with the new shell,
 and `CardStates` is the card in six states, in both themes. The canvas is the user's private artifact,
@@ -71,55 +71,9 @@ Run them in order, one session each. Each block is complete on its own. Every ga
 only C1 runs one. No prompt pushes, and none starts the local stack. C1 may *use* a stack that is
 already running and must not start one.
 
-A1, A2, K1, K2 and N1 have landed; every block below is live.
+A1, A2, K1, K2, N1 and B1 have landed; every block below is live.
 
 ---
-
-### B1 — the card face (fe-react, fe)
-
-````
-You are `fe-react`. Task B1 of docs/plans/023-one-design-language.md: redraw the board card per
-§6.1. Its face leads with key, type and assignee, carries labels as dot-and-name, and ends with its
-linked-case result as a 3px edge bar. The whole card drags by pointer; the grip drags by keyboard.
-
-Deliverable: `BoardCardFace` draws §6.1. `BoardCardFace.test.tsx` covers:
-  - the three linked-case zeroes;
-  - priority shown for CRITICAL/HIGH only;
-  - the edge bar absent at `total === 0`;
-  - the grip as a named, focusable keyboard activator;
-  - a drag that began on the title not navigating.
-
-House rules for this plan: current branch only, never create one; no subagents; stage only your
-files; do not push. **Gate: none** — this plan gates once, in C1. Do not run `npm run build`, `lint`,
-`test:run`, `test:smoke`, `tsc` or any targeted test, locally or on shanks.
-
-Read, in this order:
-1. CLAUDE.md — "Test-harness rules".
-2. The plan: §2 (A10), §6.1, D7, D9, task B1, and "Close-out — every task".
-3. frontend/src/features/board/BoardCardFace.tsx (whole) and BoardCardFace.test.tsx.
-4. frontend/src/features/board/linkedCases.ts — the three zeroes; your copy must keep all three.
-5. frontend/src/components/kit/ResultBar.tsx — its props and the untested-is-the-empty-track rule.
-6. frontend/src/features/board/MoveToMenu.tsx (props only), ReadinessSignals.tsx (props only),
-   frontend/src/features/tracker/AiEligibleMarker.tsx (props only), frontend/src/lib/labels.ts
-   (`priorityLabels`), frontend/src/lib/statusColors.ts (`labelFill`).
-7. frontend/src/features/board/ProjectBoardView.tsx — `useSensors` and `<DragOverlay>` only.
-8. @dnd-kit/core's `useDraggable` — `setActivatorNodeRef` and the shape of `listeners`. Query
-   context7 for the installed version rather than recalling it.
-
-Build (the bullets of task B1, in order).
-
-Traps:
-- After a pointer drag that began on the title, the browser still fires `click` on the link and
-  navigates away. Suppress the click that ends a drag, and test it.
-- The grip stays in the tab order with an accessible name, even when it is only visible on hover or
-  focus.
-- A card with `linkedCases: null` draws no cases row and no edge bar (not served). `total === 0`
-  draws "no cases linked" and no bar. A summary with nothing executed reads "0/n run", never failing.
-- Priority shows for CRITICAL and HIGH only. A colour is never the only statement: the word is drawn.
-
-Commit: `feat(board): the card face — identity first, the test result last (023 B1)`.
-Close out per the plan's "Close-out — every task" before you stop.
-````
 
 ### B2 — the Work strip (fe-react, fe)
 
@@ -194,6 +148,7 @@ Read, in this order:
 6. frontend/src/features/board/Swimlane.tsx — the cell grid, the band bar, the sub-bar, the Done
    strip.
 7. frontend/src/features/board/linkedCases.ts and frontend/src/components/kit/ResultBar.tsx.
+   `ResultBar` already has `variant="edge"` (B1); the column's 4px bar is the default variant.
 8. The workflow read in frontend/src/api/queries/ (the hook WorkTablePage uses for
    `workflow.data.statuses`) and `BoardConfig.columns[].statuses` in frontend/src/api/types.ts.
 9. ProjectBoardView.test.tsx — the column-header, Done-strip and keyboard-walk describes.
@@ -1129,6 +1084,15 @@ component file exporting plain hooks loses Fast Refresh, which this lint gate wa
 two: keep them in `AppShell.tsx` and pass `allows` down as a prop, rejected as threading one value
 through four components. Cost: none for behaviour; the file the gate reasoning lived in changed.
 
+**D22 — The card's Tab order is grip, title, menu; two `ProjectBoardView.test.tsx` assertions moved (B1).**
+§6.1 puts the title above the cases row and the menu trigger, so the menu is no longer the grip's next
+tab stop. The keyboard-walk test now tabs past the title. `Subtasks` now reads `3/5` beside an icon with
+an sr-only " sub-tasks", so its test asserts the testid's text, and `BlockedFrom` drops the `⛔`
+glyph for the `Ban` icon, so it reads "from Ready". Reading two: keep the menu first in the DOM and
+position it visually; rejected, because DOM order is the tab order and the reading order. Cost: none
+for behaviour. Also: the `DragOverlay` classes (`shadow-e3 ring-2 ring-steel`) live in the face's own
+`overlay` branch, so `ProjectBoardView.tsx` did not change.
+
 ## Answered questions (2026-10-04)
 
 **O1 — Should My work carry a count in the top bar?** No. An icon link only (D13).
@@ -1420,6 +1384,20 @@ rewritten and `ResultBar`'s edge variant ~7k; the test rewritten ~3k; read-back 
 - `components/kit/ResultBar.tsx`: an `edge` variant if the bar cannot draw §6.1's form as it is.
 - `ProjectBoardView.tsx`: the `DragOverlay` copy's classes only.
 - **Not in B1:** the columns and the strip (B2, B3).
+
+- **As built (2026-10-04):** nothing run, per the gate. `BoardCardFace.tsx` draws §6.1 rows 1–6; every
+  existing testid kept, `.Priority` and `.ResultEdge` added. `ResultBar` gained `variant="edge"` and a
+  `data-testid` prop (`components/kit/ResultBar.tsx`); the edge passes `untested = total - passing -
+  failing - blocked`, so a not-run case is track, never a fill. Drag: `onPointerDown` on the article
+  (reset of the swallow flag, then dnd-kit's listener); the grip gets `setActivatorNodeRef`,
+  `attributes` and `onKeyDown`. The swallow is a capture-phase `onClickCapture` keyed on a ref set
+  while `isDragging` and cleared on the next pointerdown or 300ms after the drag ends (so a later
+  keyboard Enter on the link is not eaten); the plan's "ref set in `onDragStart`" had no route to a
+  card, and `isDragging` is the same signal. An immobile card (an epic) keeps its sentence in its own
+  line instead of a hover-only slot, so the reason stays visible. Tests: `BoardCardFace.test.tsx` now
+  has the three zeroes, the edge bar's fills and absence, priority, the grip, and the drag-then-click
+  (written against jsdom's `PointerEvent` and a 5px sensor; **the pointer and keyboard drag tests are
+  the likeliest to need a fix at C1**). See D22 for the two `ProjectBoardView.test.tsx` edits.
 
 ### B2 — the Work strip
 
