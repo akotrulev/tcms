@@ -11000,6 +11000,44 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /projects/{projectId}/color:
+    parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+    put:
+      tags: [projects]
+      operationId: setProjectColor
+      summary: Set the colour this project's key chip is drawn in
+      description: |
+        Requires `project:settings` on this project, the key `PUT /projects/{projectId}/client`
+        checks.
+
+        **One field, and it is the target state.** Sending the colour the project already has is a
+        no-op that answers `200`.
+
+        **It is its own endpoint and not a field on the settings document, and that is a decision
+        (023 D17, after 018 D-d).** `ProjectSettingsUpdate` is a full replacement whose absent
+        booleans mean "off", so a save from a screen that does not offer the colour would have to
+        either reset it or invent a reading of its absence. A single field on its own path has no
+        absence to misread.
+
+        The value is a design-token name, never a hex (`Label.color`'s argument): the palette can
+        be re-tuned without touching a stored value. A value outside `ProjectColor` answers `400`
+        with a field error on `color`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectColorUpdate' }
+      responses:
+        '200':
+          description: The project as it now stands
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /projects/{projectId}/settings/client-options:
     parameters: [{ $ref: '#/components/parameters/ProjectId' }]
     get:
@@ -12984,7 +13022,7 @@ components:
     # ----------------------------------------------------------- project ---
     Project:
       type: object
-      required: [id, key, name, archived, caseCount, myRole]
+      required: [id, key, name, archived, caseCount, myRole, color]
       properties:
         id: { type: string, format: uuid }
         key:
@@ -13010,6 +13048,13 @@ components:
             fully writable**: the flag is a label for a picker to render, not a lock, and omitting
             such a project from the list would make it unreachable rather than marked.
         caseCount: { type: integer }
+        color:
+          allOf: [{ $ref: '#/components/schemas/ProjectColor' }]
+          description: |
+            The colour this project's key chip is drawn in. **Required**: the server assigns one
+            when a project is created without it, and every project that predates the field was
+            given one, so no reader handles a missing colour (023 D17). It is set through
+            `PUT /projects/{projectId}/color`.
         myRole:
           type: string
           nullable: true
@@ -13062,6 +13107,11 @@ components:
             A whole client product or engagement, not a feature area. "Payments" is a Feature
             value or a suite folder, never a project (plan §1).
         description: { type: string, nullable: true, maxLength: 2000 }
+        color:
+          allOf: [{ $ref: '#/components/schemas/ProjectColor' }]
+          description: |
+            Optional. Absent means the server assigns one, so a create that does not care still
+            gets a coloured project (023 D17). Omit it rather than sending `null`.
         clientId:
           type: string
           format: uuid
@@ -13076,6 +13126,23 @@ components:
             referential integrity is not subject to RLS, so the service reads the client back
             through RLS before writing (plan 018 D-l). A constraint violation would be both the
             wrong status and an oracle for what exists in another client's tenancy.
+
+    ProjectColor:
+      type: string
+      enum: [project-1, project-2, project-3, project-4, project-5, project-6, project-7, project-8]
+      example: project-1
+      description: |
+        A design-token name, not a hex value: the palette is the frontend's to re-tune, and a
+        stored `#RRGGBB` would have to be migrated when it is (the argument `Label.color` makes
+        for `label-1` … `label-10`). It colours a project's key chip and nothing else (023 D5).
+
+    ProjectColorUpdate:
+      type: object
+      required: [color]
+      description: |
+        The body of `PUT /projects/{projectId}/color`. One field, and it is the target state.
+      properties:
+        color: { $ref: '#/components/schemas/ProjectColor' }
 
     ProjectArchiveInput:
       type: object

@@ -12067,6 +12067,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/color": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set the colour this project's key chip is drawn in
+         * @description Requires `project:settings` on this project, the key `PUT /projects/{projectId}/client`
+         *     checks.
+         *
+         *     **One field, and it is the target state.** Sending the colour the project already has is a
+         *     no-op that answers `200`.
+         *
+         *     **It is its own endpoint and not a field on the settings document, and that is a decision
+         *     (023 D17, after 018 D-d).** `ProjectSettingsUpdate` is a full replacement whose absent
+         *     booleans mean "off", so a save from a screen that does not offer the colour would have to
+         *     either reset it or invent a reading of its absence. A single field on its own path has no
+         *     absence to misread.
+         *
+         *     The value is a design-token name, never a hex (`Label.color`'s argument): the palette can
+         *     be re-tuned without touching a stored value. A value outside `ProjectColor` answers `400`
+         *     with a field error on `color`.
+         */
+        put: operations["setProjectColor"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/settings/client-options": {
         parameters: {
             query?: never;
@@ -13369,6 +13405,13 @@ export interface components {
             archived: boolean;
             caseCount: number;
             /**
+             * @description The colour this project's key chip is drawn in. **Required**: the server assigns one
+             *     when a project is created without it, and every project that predates the field was
+             *     given one, so no reader handles a missing colour (023 D17). It is set through
+             *     `PUT /projects/{projectId}/color`.
+             */
+            color: components["schemas"]["ProjectColor"];
+            /**
              * @description The caller's role on this project, or null when they hold no project grant.
              *     Company membership conveys authentication and ZERO project visibility, so a
              *     listed project always carries a grant — but Viewer is the default, never
@@ -13415,6 +13458,11 @@ export interface components {
             name: string;
             description?: string | null;
             /**
+             * @description Optional. Absent means the server assigns one, so a create that does not care still
+             *     gets a coloured project (023 D17). Omit it rather than sending `null`.
+             */
+            color?: components["schemas"]["ProjectColor"];
+            /**
              * Format: uuid
              * @description The client this project is for, optional and `null` when it is internal —
              *     `project-new.html`'s Client field, which is itself rendered only when the company has
@@ -13427,6 +13475,18 @@ export interface components {
              *     wrong status and an oracle for what exists in another client's tenancy.
              */
             clientId?: string | null;
+        };
+        /**
+         * @description A design-token name, not a hex value: the palette is the frontend's to re-tune, and a
+         *     stored `#RRGGBB` would have to be migrated when it is (the argument `Label.color` makes
+         *     for `label-1` … `label-10`). It colours a project's key chip and nothing else (023 D5).
+         * @example project-1
+         * @enum {string}
+         */
+        ProjectColor: "project-1" | "project-2" | "project-3" | "project-4" | "project-5" | "project-6" | "project-7" | "project-8";
+        /** @description The body of `PUT /projects/{projectId}/color`. One field, and it is the target state. */
+        ProjectColorUpdate: {
+            color: components["schemas"]["ProjectColor"];
         };
         /**
          * @description The body of `PUT /projects/{projectId}/archive`. One field, and it is the target state
@@ -27343,6 +27403,36 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ProjectClientInput"];
+            };
+        };
+        responses: {
+            /** @description The project as it now stands */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    setProjectColor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectColorUpdate"];
             };
         };
         responses: {

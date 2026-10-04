@@ -91,6 +91,7 @@ export function project(overrides: Partial<Schemas['Project']> = {}): Schemas['P
     archived: false,
     caseCount: 3,
     myRole: 'Test Engineer',
+    color: 'project-1',
     ...overrides,
   };
 }

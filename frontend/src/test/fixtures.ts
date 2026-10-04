@@ -175,6 +175,7 @@ export function aProject(overrides: Partial<Project> = {}): Project {
     archived: false,
     caseCount: 0,
     myRole: 'Viewer',
+    color: 'project-1',
     ...overrides,
   }
 }

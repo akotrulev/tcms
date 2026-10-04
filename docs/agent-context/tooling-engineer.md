@@ -190,6 +190,7 @@ Trust this as a lead, not evidence; `CLAUDE.md`, `docs/specs/openapi.yaml` and
   double compared to the contract.
 
 ## Session log
+- 2026-10-04 · 023 A1: project colour in `openapi.yaml` (`ProjectColor`, `setProjectColor`), both schema copies regenerated, both `Project` fixtures carry `color`; `UNOFFERED` covers only catalogued schemas, no project entity, nothing added.
 - 2026-09-07 · delta (baseline `6a8db463` had been amended to `22f118b9`; the only tree difference
   was this file, so effectively TRUST) · 022 T3b: the adapters. **45 tools** (`tcms_process`),
   **94 CLI commands** (`process`, `doc adopt`, `spec import`), the `prompts` capability with
