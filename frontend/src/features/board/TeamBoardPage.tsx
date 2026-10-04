@@ -1,6 +1,4 @@
-import { useEffect } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
-import { useAnnounce } from '../../a11y/useAnnounce';
 import { ApiError } from '../../api/client';
 import { useTeamBoard, useTeams } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
@@ -86,16 +84,6 @@ export function TeamBoardPage() {
   const team = teams.data?.find((row) => row.id === teamId);
 
   /*
-    ~~Raised by `PageHeader`.~~ → superseded by 007 T13's top strip; kept here for the reason
-    `MyWorkPage` records. It names the team once it is known, so the second announcement is the
-    useful one rather than a repeat.
-  */
-  const announce = useAnnounce();
-  useEffect(() => {
-    announce(team ? `${team.name} board page loaded` : 'Team board page loaded');
-  }, [announce, team]);
-
-  /*
     **The one refusal this screen has to word itself.**
 
     The server's 404 is empty-bodied and indistinguishable across its three causes on purpose (§6t:
@@ -118,28 +106,12 @@ export function TeamBoardPage() {
 
   return (
     <div>
-      <title>{team ? `Board · ${team.name} · TCMS` : 'Team board · TCMS'}</title>
-
-      {/*
-        No breadcrumbs. The honest ancestor would be `/admin/teams`, and a crumb pointing there
-        would tell a member who may open this board that they came from a screen whose every
-        control refuses them. The "Back to teams" affordance lives on the 404 instead, where it is
-        the answer to a question the reader is actually asking.
-      */}
-      <header
-        data-testid="TeamBoard.Header"
-        className="mb-3 flex flex-wrap items-start gap-3 border-b border-line pb-3"
-      >
-        <div className="min-w-0 flex-1">
-          <h1 className="m-0 text-[19px] font-semibold tracking-[-.018em] text-ink">
-            {team ? `${team.name} — board` : 'Team board'}
-          </h1>
-          <p className="m-0 mt-1 max-w-[74ch] text-[13px] text-ink-3">
-            Work assigned to this team’s members, in every project you can see. Somebody with
-            different project access will see a different set.
-          </p>
-        </div>
-      </header>
+      <PageHeader
+        testId="TeamBoard.Header"
+        title={team ? `${team.name} — board` : 'Team board'}
+        documentTitle={team ? `Board · ${team.name}` : 'Team board'}
+        subtitle="Work assigned to this team’s members, in every project you can see. Somebody with different project access will see a different set."
+      />
 
       {missing ? (
         <div role="alert">

@@ -3,9 +3,8 @@ import { useStaffingCapacity } from '../../api/queries';
 import { useCanInCompany } from '../../auth/useCan';
 import { DataRegion, GridSkeleton } from '../../components/DataRegion';
 import { PageHeader, Panel } from '../../components/PageHeader';
-import { Badge } from '../../components/kit';
+import { Badge, Segmented } from '../../components/kit';
 import { Button } from '../../components/ui';
-import { NativeSelect } from '../../components/ui/native-select';
 import { formatDate, plural } from '../../lib/format';
 import { AllocationTimeline } from './AllocationTimeline';
 import { FreeCapacityPanel } from './FreeCapacityPanel';
@@ -93,21 +92,25 @@ export function StaffingPage() {
             `Company view · ${formatDate(window.from)} – ${formatDate(window.to)}`
           : 'Who is allocated where, who is over-booked, and who has room.'
         }
+        views={
+          allowed ?
+            <Segmented<Range>
+              label="Range"
+              testId={`${TEST_ID}.Range`}
+              value={rangeOf(from, to)}
+              onChange={setRange}
+              options={[
+                { value: 'default', label: 'Next 3 months' },
+                { value: 'month', label: 'This month' },
+                { value: '6m', label: 'Next 6 months' },
+                { value: '12m', label: 'Next 12 months' },
+              ]}
+            />
+          : null
+        }
         actions={
           allowed ?
             <>
-              <NativeSelect
-                aria-label="Range"
-                className="w-[168px]"
-                value={rangeOf(from, to)}
-                onChange={(event) => setRange(event.target.value as Range)}
-                data-testid={`${TEST_ID}.Range`}
-              >
-                <option value="default">Next 3 months</option>
-                <option value="month">This month</option>
-                <option value="6m">Next 6 months</option>
-                <option value="12m">Next 12 months</option>
-              </NativeSelect>
               {/*
                 Disabled rather than absent, and the title says which screen has the write. See the
                 file header: `staffing:allocate` is PROJECT scope and this page names no project.

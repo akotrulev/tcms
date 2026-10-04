@@ -13,7 +13,7 @@ import {
 } from '../../api/queries';
 import type { IssueTypeRef } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
-import { Panel } from '../../components/PageHeader';
+import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
 import { Banner, Chip } from '../../components/kit';
 import { Field } from '../../components/kit/Field';
@@ -82,27 +82,17 @@ export function IssueNewPage() {
 
   return (
     <div>
-      <title>{project.data ? `Add work · ${project.data.name} · TCMS` : 'Add work · TCMS'}</title>
-
-      <header
-        data-testid={`${TEST_ID}.Header`}
-        className="mb-3 flex flex-wrap items-start gap-3 border-b border-line pb-3"
-      >
-        <div className="min-w-0 flex-1">
-          <h1
-            data-testid={`${TEST_ID}.Header.Title`}
-            className="m-0 text-[19px] font-semibold tracking-[-.018em] text-ink"
-          >
-            Add work
-          </h1>
-          <p className="m-0 mt-1 max-w-[74ch] text-[13px] text-ink-3">
-            Quick add is one field. Everything else is optional and stays out of the way.
-          </p>
-        </div>
-        <Button size="sm" asChild>
-          <RouterLink to={`/projects/${projectId}/work`}>Cancel</RouterLink>
-        </Button>
-      </header>
+      <PageHeader
+        testId={`${TEST_ID}.Header`}
+        title="Add work"
+        documentTitle={project.data ? `Add work · ${project.data.name}` : 'Add work'}
+        subtitle="Quick add is one field. Everything else is optional and stays out of the way."
+        actions={
+          <Button size="sm" asChild>
+            <RouterLink to={`/projects/${projectId}/work`}>Cancel</RouterLink>
+          </Button>
+        }
+      />
 
       {/*
         **The whole form is inside the workflow's region.** The types are the project's own rows,

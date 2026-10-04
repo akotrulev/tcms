@@ -7,11 +7,11 @@ panels of cards whose face leads with identity and ends with the card's test res
 a colour, which its key chip carries; it never fills a canvas. No route moves. The project colour is
 the plan's one contract change (§3a).
 
-**Status:** A1, A2, K1, K2, N1, B1, B2, B3, P1 and P2 built 2026-10-04 (nothing run, per the plan's single gate). A1: the contract, both
+**Status:** A1, A2, K1, K2, N1, B1, B2, B3, P1, P2 and P3 built 2026-10-04 (nothing run, per the plan's single gate). A1: the contract, both
 generated copies, both fixture factories. A2: `V15__project_color.sql`, `Project.color`, the create
 default, `PUT /projects/{projectId}/color`, and their tests. K1: the surface ladder (`bg-bar`,
 `bg-raised`), the radius codemod (106 files) and its check, the overlay primitives on the ladder, and
-the project palette with `projectColorFill` and its contrast check. K2: `PageStrip`, `PageHeader` on it, `Segmented`, `TabStrip` on its helpers, `FilterStrip`'s popover and `openFilters`; every consumer test of a `FilterStrip` picker is still red until B2, P2, P3 and P4. N1: the 48px `TopBar` (launcher, switcher with coloured key chips, project tabs and More, search, Create, My work, theme, user menu with the version) replaced the rail, drawer and footer, and `AppShell.test.tsx` is rewritten against it; the four `TopStripSlot` pages render in place until P1. B1: `BoardCardFace` redrawn per §6.1 (identity row, priority for CRITICAL/HIGH, dot-and-name labels, cases row, 3px edge bar via a new `ResultBar` `variant="edge"`), pointer drag on the card with the keyboard drag on the grip, the click that ends a drag swallowed; `BoardCardFace.test.tsx` extended and two `ProjectBoardView.test.tsx` assertions updated (nothing run). B2: `/projects/:id/work` opens with one strip (`BoardPicker` lead with door badges, five view links, `WorkStripActions` portal carrying each view's Filter and the board's `GroupMenu`); `+ Add`, the GroupBy select, Configure and the keyboard banner are gone and the foot line carries the sentence; `WorkTablePage`, `ProjectBoardView` and `BacklogView` tests rewritten through `openFilters` (nothing run). B3: columns are panels (`ColumnHeader` with count, WIP pill, summed linked-case health and the door `+` on the first-status column; the lane cells, band bar and sub-bar on the §6.3 classes; one board-wide `doneOpen` toggled from the Done header, collapsed lanes showing `n done`); `sumLinkedCases` added; `ProjectBoardView.test.tsx` and `linkedCases.test.ts` extended (nothing run). P1: the nine document-mode pages open with `PageStrip`, `app/topStripSlot.tsx` and `TopStripProvider` are gone, `AppShell.test.tsx`'s slot tests deleted, panel-role pass over `cases`/`docs` (nothing run). P2: every `TabStrip` is in its page's `PageHeader views`; FeatureImport, SuiteHistory, RunDetail, Analytics' window pickers and Proposals' status tabs are `Segmented`; Plan statistics is `ui/tabs` (Radix `Tabs` root around the page, the list in `views`); case search's box and pickers are a `FilterStrip`; `CaseFilterBar`'s tests and `CaseSearchPage.test.tsx` reach pickers through `openFilters` (nothing run). Next: P3. The server now serves
+the project palette with `projectColorFill` and its contrast check. K2: `PageStrip`, `PageHeader` on it, `Segmented`, `TabStrip` on its helpers, `FilterStrip`'s popover and `openFilters`; every consumer test of a `FilterStrip` picker is still red until B2, P2, P3 and P4. N1: the 48px `TopBar` (launcher, switcher with coloured key chips, project tabs and More, search, Create, My work, theme, user menu with the version) replaced the rail, drawer and footer, and `AppShell.test.tsx` is rewritten against it; the four `TopStripSlot` pages render in place until P1. B1: `BoardCardFace` redrawn per §6.1 (identity row, priority for CRITICAL/HIGH, dot-and-name labels, cases row, 3px edge bar via a new `ResultBar` `variant="edge"`), pointer drag on the card with the keyboard drag on the grip, the click that ends a drag swallowed; `BoardCardFace.test.tsx` extended and two `ProjectBoardView.test.tsx` assertions updated (nothing run). B2: `/projects/:id/work` opens with one strip (`BoardPicker` lead with door badges, five view links, `WorkStripActions` portal carrying each view's Filter and the board's `GroupMenu`); `+ Add`, the GroupBy select, Configure and the keyboard banner are gone and the foot line carries the sentence; `WorkTablePage`, `ProjectBoardView` and `BacklogView` tests rewritten through `openFilters` (nothing run). B3: columns are panels (`ColumnHeader` with count, WIP pill, summed linked-case health and the door `+` on the first-status column; the lane cells, band bar and sub-bar on the §6.3 classes; one board-wide `doneOpen` toggled from the Done header, collapsed lanes showing `n done`); `sumLinkedCases` added; `ProjectBoardView.test.tsx` and `linkedCases.test.ts` extended (nothing run). P1: the nine document-mode pages open with `PageStrip`, `app/topStripSlot.tsx` and `TopStripProvider` are gone, `AppShell.test.tsx`'s slot tests deleted, panel-role pass over `cases`/`docs` (nothing run). P2: every `TabStrip` is in its page's `PageHeader views`; FeatureImport, SuiteHistory, RunDetail, Analytics' window pickers and Proposals' status tabs are `Segmented`; Plan statistics is `ui/tabs` (Radix `Tabs` root around the page, the list in `views`); case search's box and pickers are a `FilterStrip`; `CaseFilterBar`'s tests and `CaseSearchPage.test.tsx` reach pickers through `openFilters` (nothing run). P3: IssueNew, IssueDetail, MyWork, TeamBoard and OrgChart open with `PageHeader`; Staffing's range is a `Segmented` in `views`; the shared `Panel` gained `flush`, `count`, `hint` and `foot` and MyWork's local one is gone; AwaitingYou, ProjectOverview's five titled sections, the Projects tiles (with `ProjectKeyChip`), ReadinessPanels' and Timesheet's tiles sit on the ladder; `DirectoryPage.test.tsx` and `StaffingPage.test.tsx` updated (nothing run). Next: P4. The server now serves
 `color` and answers the colour endpoint; all of it is unverified until C1. The design was approved on 2026-10-04 on a canvas:
 <https://claude.ai/artifact/5LuW51YtnVNKWHZ4mV6Xbj>. `Main` is the board screen with the new shell,
 and `CardStates` is the card in six states, in both themes. The canvas is the user's private artifact,
@@ -71,50 +71,9 @@ Run them in order, one session each. Each block is complete on its own. Every ga
 only C1 runs one. No prompt pushes, and none starts the local stack. C1 may *use* a stack that is
 already running and must not start one.
 
-A1, A2, K1, K2, N1, B1, B2, B3, P1 and P2 have landed; every block below is live.
+A1, A2, K1, K2, N1, B1, B2, B3, P1, P2 and P3 have landed; every block below is live.
 
 ---
-
-### P3 — work, people and project pages (fe-react, fe)
-
-````
-You are `fe-react`. Task P3 of docs/plans/023-one-design-language.md: put the six bespoke headers in
-this family onto `PageHeader`, and the panels and tiles of the work, people and project screens onto
-the ladder.
-
-Deliverable: IssueNew, IssueDetail, MyWork, TeamBoard, OrgChart and the Staffing range use
-`PageHeader`/`Segmented` per §7.3. MyWork has no local `Panel`. AwaitingYou's tiles and
-ProjectOverview's sections sit on the ladder. The Projects page's tiles carry each project's coloured
-key chip. DirectoryFilters' tests use `openFilters`.
-
-House rules for this plan: current branch only, never create one; no subagents; stage only your
-files; do not push. **Gate: none** — this plan gates once, in C1. Do not run `npm run build`, `lint`,
-`test:run`, `test:smoke`, `tsc` or any targeted test, locally or on shanks.
-
-Read, in this order:
-1. CLAUDE.md — "Test-harness rules".
-2. The plan: §2 (A3, A4), §3a, §5.5, §7.3, task P3, and "Close-out — every task".
-3. K2's "As built" note; frontend/src/components/PageHeader.tsx (`PageHeader`, `Panel`); N1's
-   `app/ProjectSwitcher.tsx`, for the key chip you reuse rather than redraw.
-4. For each page in §7.3's table, the region it names (locate by content), and its test's heading
-   and testid queries.
-5. The FilterStrip consumers' tests in this family: frontend/src/features/staffing/ (DirectoryFilters)
-   and frontend/src/features/releases/CalendarView.test.tsx if it reaches the strip. Use
-   `openFilters`. B2 already moved CalendarView's `FilterStrip` into `WorkStripActions`; it has no
-   pickers, so it has no Filter button and its test needs no `openFilters`.
-
-Build (the bullets of task P3, in order).
-
-Traps:
-- `PageHeader` emits `<title>` and announces the page on arrival. A bespoke header you replace must
-  not keep its own `<title>` element too.
-- MyWorkPage has a local `Panel` function. Replace it with the shared one; do not export a second.
-- The panel-role grep finds candidates, not verdicts. A bordered box that is a FORM FIELD group or a
-  TABLE wrapper is not a panel. Leave those.
-
-Commit: `feat(design): work, people and project pages on the strip and the ladder (023 P3)`.
-Close out per the plan's "Close-out — every task" before you stop.
-````
 
 ### P4 — settings, admin, account, imports, audit, clients, billing (fe-react, fe)
 
@@ -176,6 +135,11 @@ plan is in `docs/plans/implemented/`.
 
 House rules for this plan: current branch only, never create one; no subagents; stage only your
 files; do not push — end by telling the user the branch is ready to push.
+
+P3 landed: the shared `Panel` (`components/PageHeader.tsx`) now takes `flush` (no body padding, for a
+table or a body that pads itself), `count` and `hint` (beside a string title) and `foot` (a closing
+line over a hairline). Use them rather than a local panel. Every `PageHeader` consumer's test needs a
+Router for the trail.
 
 Read, in this order:
 1. CLAUDE.md — "Run the gates on shanks", "What CI does", "Test-harness rules"; then
@@ -947,6 +911,12 @@ on a suite with no runs, where it changes nothing.
 `TabsContent` per tab would unmount a draft. Reading two: `forceMount` panels with `hidden`; rejected
 as a rewrite of `PlanForm`. Cost: four tabs' `aria-controls` name no element.
 
+**D28 — The shared `Panel` grew `flush`, `count`, `hint` and `foot` instead of MyWork keeping a local one (P3).**
+§7.3 says MyWork's local `Panel` becomes the shared one, but the shared one padded its body and had no
+count, hint or foot, all of which MyWork's four panels use. Reading two: wrap each body in negative
+margins, or keep the local `Panel` — rejected, the second breaks the task. Cost: four props on a shared
+component, each earned by a second caller (ProjectOverview's panels use `count`, `hint`, `flush`).
+
 ## Answered questions (2026-10-04)
 
 **O1 — Should My work carry a count in the top bar?** No. An icon link only (D13).
@@ -1432,6 +1402,19 @@ churn ×1.2.
   files), `org-chart`, `projects`, `releases`, `staffing`, `time`.
 - **Not in P3:** `WorkTablePage`, `ProjectBoardView`, `BoardCardFace`, `ColumnHeader`, `Swimlane`
   (B1–B3).
+- **As built (2026-10-04):** IssueNew, MyWork, TeamBoard and OrgChart are `PageHeader` with their
+  existing `.Header` testids; IssueDetail's `PageHeader` sits in `IssueBody` (type, key, status, AI
+  marker, overdue and the `Issue ancestors` nav in `meta`; Watch in `actions`), and the page's own
+  `<title>` renders only until the issue loads. The local `useAnnounce` effects in MyWork, TeamBoard,
+  OrgChart and IssueDetail are gone, because `PageHeader` announces (IssueDetail passes `announcement`).
+  Staffing's range is `Segmented` (`Staffing.Range`, options `Staffing.Range.<value>`);
+  `StaffingPage.test.tsx` clicks `Staffing.Range.6m`. `DirectoryPage.test.tsx` opens the popover with
+  `openFilters`; CalendarView's test needed nothing. Panel-role pass: untitled OrgChart aside →
+  `rounded-xl`; ReadinessPanels and Timesheet tiles → cards; CalendarView, RoadmapView and
+  ReleaseListPage wrappers are table wrappers and BacklogView/BoardPage belong to B2/B3 — left. See D28.
+  Built but unverified: nothing ran; C1 should watch MyWork's, ProjectOverview's and AwaitingYou's
+  tests (the panel heading is now 13px in a `div` beside the `h2`, `Backlog.Title` kept) and any test
+  that queried a `<title>` of IssueDetail by the loaded issue.
 
 ### P4 — settings, admin, account, imports, audit, clients, billing
 

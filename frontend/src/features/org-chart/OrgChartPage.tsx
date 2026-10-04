@@ -1,5 +1,3 @@
-import { useEffect } from 'react';
-import { useAnnounce } from '../../a11y/useAnnounce';
 import { useOrgChart } from '../../api/queries';
 import { DataRegion } from '../../components/DataRegion';
 import { ScrollX } from '../../components/ScrollX';
@@ -39,26 +37,13 @@ export function OrgChartPage() {
   const chart = useOrgChart();
   const state = { ...chart, refetch: () => void chart.refetch() };
 
-  const announce = useAnnounce();
-  useEffect(() => {
-    announce('Org chart page loaded');
-  }, [announce]);
-
   return (
     <div>
-      <title>Org chart · TCMS</title>
-
-      <header
-        data-testid="OrgChart"
-        className="mb-3 flex flex-wrap items-start gap-3 border-b border-line pb-3"
-      >
-        <div className="min-w-0 flex-1">
-          <h1 className="m-0 text-[19px] font-semibold tracking-[-.018em] text-ink">Org chart</h1>
-          <p className="m-0 mt-1 max-w-[74ch] text-[13px] text-ink-3">
-            The company's people and teams, and what they can do on your projects.
-          </p>
-        </div>
-      </header>
+      <PageHeader
+        testId="OrgChart"
+        title="Org chart"
+        subtitle="The company's people and teams, and what they can do on your projects."
+      />
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         <section className="min-w-0" data-testid="OrgChart.Matrix" aria-label="People and projects">
@@ -94,7 +79,7 @@ export function OrgChartPage() {
           </DataRegion>
         </section>
 
-        <aside className="flex flex-col rounded-lg border border-line bg-panel">
+        <aside className="flex flex-col rounded-xl border border-line bg-panel">
           <section className="border-b border-line p-4" data-testid="OrgChart.Teams">
             <h2 className="m-0 mb-3 text-[11px] font-semibold uppercase tracking-[.08em] text-ink-3">
               Teams

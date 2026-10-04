@@ -2,6 +2,7 @@ import { Link as RouterLink } from 'react-router-dom';
 import { useBoardDoors, useBoardsOf, usePendingProposalCounts } from '../../api/queries';
 import type { BoardCard, BoardIssueCard } from '../../api/types';
 import { useCurrentUserId } from '../../auth/useAuth';
+import { Panel } from '../../components/PageHeader';
 import { cn } from '../../lib/cn';
 import { plural } from '../../lib/format';
 
@@ -117,25 +118,19 @@ export function AwaitingYou({ rows }: { rows: readonly BoardCard[] }) {
   const counted =
     reviews.length + tiles.length + blockedKeys.length + (proposalsWaiting > 0 ? 1 : 0);
 
-  /*
-    The section is written out here rather than reusing `MyWorkPage`'s local `Panel`: importing it
-    would make the two files import each other, and the shared `components/PageHeader` panel is a
-    different shape from the three panels this strip sits above. The classes are that local
-    panel's, so the four sections on this screen read as one set.
-  */
   return (
-    <section
-      className="mb-3.5 rounded-xl border border-line bg-panel"
-      data-testid={TEST_ID}
-    >
-      <div className="flex flex-wrap items-center gap-2.5 border-b border-line px-3.5 py-2.5">
-        <h2 className="m-0 text-[13.5px] font-semibold text-ink">Awaiting you</h2>
+    <div className="mb-3.5">
+    <Panel
+      dense
+      title="Awaiting you"
+      testId={TEST_ID}
+      actions={
         <span className="text-[11.5px] text-ink-4" data-testid={`${TEST_ID}.Hint`}>
           {counted === 0 ? 'nothing is stuck on you' : 'the awaiting-you count, never a total'}
         </span>
-      </div>
-
-      <div className="flex flex-wrap gap-2.5 p-3">
+      }
+    >
+      <div className="flex flex-wrap gap-2.5">
         {reviews.length > 0 && (
           <Tile
             testId={`${TEST_ID}.Reviews`}
@@ -200,14 +195,12 @@ export function AwaitingYou({ rows }: { rows: readonly BoardCard[] }) {
       </div>
 
       {counted === 0 && (
-        <p
-          data-testid={`${TEST_ID}.None`}
-          className="m-0 border-t border-line px-3 py-2 text-[12px] text-ink-4"
-        >
+        <p data-testid={`${TEST_ID}.None`} className="m-0 mt-2.5 text-[12px] text-ink-4">
           No review, no card at a board&rsquo;s door and no proposal is waiting on you right now.
         </p>
       )}
-    </section>
+    </Panel>
+    </div>
   );
 }
 
@@ -239,7 +232,7 @@ function Tile({
     </>
   );
   const className = cn(
-    'flex min-w-[180px] flex-1 flex-col gap-0.5 rounded-lg border border-line bg-paper px-3 py-2.5',
+    'flex min-w-[180px] flex-1 flex-col gap-0.5 rounded-lg border border-line bg-raised px-3 py-2.5 shadow-e1',
     to !== undefined
       && 'no-underline hover:border-line-strong focus-visible:outline-2'
       + ' focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',

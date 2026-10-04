@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from 'react';
 import { useAnnounce } from '../a11y/useAnnounce';
 import { cn } from '../lib/cn';
+import { Identifier } from './Identifier';
 import { PageStrip } from './PageStrip';
 
 /**
@@ -129,12 +130,24 @@ export function Panel({
   testId,
   dense,
   plain,
+  flush,
+  count,
+  hint,
+  foot,
 }: {
   title?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
   testId?: string;
   dense?: boolean;
+  /** The body takes no padding of its own — for a table or a list that draws its own rows. */
+  flush?: boolean;
+  /** A quantity set beside a string title, in the identity face. */
+  count?: number;
+  /** A muted aside beside a string title. */
+  hint?: string;
+  /** A closing line under the body, over a hairline. */
+  foot?: ReactNode;
   /** Heading kept, surface dropped — for a block inside a document column or a rail. */
   plain?: boolean;
 }) {
@@ -152,14 +165,23 @@ export function Panel({
           )}
         >
           {typeof title === 'string' ? (
-            <h2 className="m-0 text-[13px] font-semibold tracking-[-.01em] text-ink">{title}</h2>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h2 className="m-0 text-[13px] font-semibold tracking-[-.01em] text-ink">{title}</h2>
+              {count !== undefined && <Identifier variant="muted">{String(count)}</Identifier>}
+              {hint && <span className="text-[11.5px] text-ink-4">{hint}</span>}
+            </div>
           ) : (
             title
           )}
           {actions && <div className="flex items-center gap-1">{actions}</div>}
         </div>
       )}
-      <div className={bare ? '' : dense ? 'p-3' : 'p-4'}>{children}</div>
+      <div className={bare || flush ? '' : dense ? 'p-3' : 'p-4'}>{children}</div>
+      {foot && !bare && (
+        <div className="border-t border-line px-4 py-2.5 text-[11.5px] leading-[1.55] text-ink-4">
+          {foot}
+        </div>
+      )}
     </section>
   );
 }

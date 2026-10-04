@@ -231,7 +231,7 @@ describe('Company staffing', () => {
 
     // The URL is the question; the select reflects it rather than owning it.
     await screen.findByTestId('Staffing.Timeline')
-    await userEvent.selectOptions(screen.getByTestId('Staffing.Range'), '6m')
+    await userEvent.click(screen.getByTestId('Staffing.Range.6m'))
 
     // Whatever bounds the option produced, both parameters are now on the URL — which is the
     // property that makes the range shareable and the query key move with it.

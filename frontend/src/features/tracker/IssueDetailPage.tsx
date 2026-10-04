@@ -1,6 +1,4 @@
-import { useEffect } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
-import { useAnnounce } from '../../a11y/useAnnounce';
 import {
   useIssue,
   useIssueTimeRollup,
@@ -11,7 +9,7 @@ import {
 import { useCurrentUserId } from '../../auth/useAuth';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
-import { Panel } from '../../components/PageHeader';
+import { PageHeader, Panel } from '../../components/PageHeader';
 import { Badge } from '../../components/kit';
 import { Button } from '../../components/ui';
 import { formatDate, formatDateTime, formatHours } from '../../lib/format';
@@ -50,15 +48,9 @@ const TEST_ID = 'Issue';
 export function IssueDetailPage() {
   const { key = '' } = useParams();
   const issue = useIssue(key);
-  const announce = useAnnounce();
-
-  useEffect(() => {
-    if (issue.data) announce(`${issue.data.key} ${issue.data.title} loaded`);
-  }, [issue.data, announce]);
-
   return (
     <div>
-      <title>{issue.data ? `${issue.data.key} ${issue.data.title} · TCMS` : `${key} · TCMS`}</title>
+      {!issue.data && <title>{`${key} · TCMS`}</title>}
 
       <DataRegion
         testId={`${TEST_ID}.Content`}
@@ -104,56 +96,13 @@ function IssueBody({ issue }: { issue: ReturnType<typeof useIssue>['data'] & {} 
 
   return (
     <>
-      <header
-        data-testid={`${TEST_ID}.Header`}
-        className="mb-4 flex flex-wrap items-start gap-3 border-b border-line pb-3"
-      >
-        <div className="min-w-0 flex-1">
-          {/*
-            ~~The breadcrumb trail.~~ → **superseded (021 R2): the shell owns the trail**, and what
-            is left here is the half the shell cannot build.
-
-            `/issues/:key` carries no project segment, so `routeMeta.ts` can name the issue and
-            nothing above it: which project this issue belongs to, and which epic or story it hangs
-            off, are both in the ISSUE, which the header has not read. So this row survives as what
-            it uniquely is — the way back into the project's board, and the ancestor above this
-            card — and it stops repeating the key the trail already shows and the `<h1>` says next.
-
-            Labelled `Issue ancestors` rather than `Breadcrumb` deliberately: two `navigation`
-            landmarks both called Breadcrumb, one in the header and one here, is a screen reader
-            being told the same region exists twice.
-          */}
-          <nav
-            aria-label="Issue ancestors"
-            className="mb-1.5 flex flex-wrap items-center gap-2 text-[12.5px]"
-          >
-            <RouterLink
-              to={`/projects/${issue.projectId}/work`}
-              className="text-ink-3 no-underline hover:text-ink-2"
-              data-testid={`${TEST_ID}.Header.Breadcrumb`}
-            >
-              Work
-            </RouterLink>
-            {/*
-              The ancestor, when there is one — an epic for a story, a story for a sub-task. It is
-              a crumb rather than a Details row because it is how the reader got here and how they
-              get back out, which is the only thing a breadcrumb is for.
-            */}
-            {issue.parentKey && (
-              <>
-                <span className="text-ink-4">/</span>
-                <RouterLink
-                  to={`/issues/${encodeURIComponent(issue.parentKey)}`}
-                  className="text-ink-3 no-underline hover:text-ink-2"
-                  data-testid={`${TEST_ID}.Header.Parent`}
-                >
-                  {issue.parentKey}
-                </RouterLink>
-              </>
-            )}
-          </nav>
-
-          <div className="mb-1.5 flex flex-wrap items-center gap-2">
+      <PageHeader
+        testId={`${TEST_ID}.Header`}
+        title={issue.title}
+        documentTitle={`${issue.key} ${issue.title}`}
+        announcement={`${issue.key} ${issue.title} loaded`}
+        meta={
+          <>
             <TypeIcon type={issue.type} data-testid={`${TEST_ID}.Header.Type`} />
             <Identifier variant="muted">{issue.key}</Identifier>
             <StatusBadge status={issue.status} data-testid={`${TEST_ID}.Header.Status`} />
@@ -163,22 +112,33 @@ function IssueBody({ issue }: { issue: ReturnType<typeof useIssue>['data'] & {} 
               data-testid={`${TEST_ID}.Header.AiEligible`}
             />
             {issue.overdue && <Badge tone="failed">overdue</Badge>}
-          </div>
-
-          <h1
-            data-testid={`${TEST_ID}.Header.Title`}
-            className="m-0 text-[22px] leading-[1.25] font-[620] tracking-[-.02em] text-balance text-ink"
-          >
-            {issue.title}
-          </h1>
-        </div>
-
-        <div className="flex shrink-0 flex-wrap gap-2">
-          {/*
-            Idempotent in both directions, which is why it is a PUT with a boolean: the star has
-            two states and the request says which one the person wants, not which one they think it
-            is in — so a double press cannot toggle twice.
-          */}
+            <nav
+              aria-label="Issue ancestors"
+              className="flex flex-wrap items-center gap-2 text-[12.5px]"
+            >
+              <RouterLink
+                to={`/projects/${issue.projectId}/work`}
+                className="text-ink-3 no-underline hover:text-ink-2"
+                data-testid={`${TEST_ID}.Header.Breadcrumb`}
+              >
+                Work
+              </RouterLink>
+              {issue.parentKey && (
+                <>
+                  <span className="text-ink-4">/</span>
+                  <RouterLink
+                    to={`/issues/${encodeURIComponent(issue.parentKey)}`}
+                    className="text-ink-3 no-underline hover:text-ink-2"
+                    data-testid={`${TEST_ID}.Header.Parent`}
+                  >
+                    {issue.parentKey}
+                  </RouterLink>
+                </>
+              )}
+            </nav>
+          </>
+        }
+        actions={
           <Button
             size="sm"
             disabled={watch.isPending}
@@ -188,8 +148,9 @@ function IssueBody({ issue }: { issue: ReturnType<typeof useIssue>['data'] & {} 
           >
             {watching ? '★ Watching' : '☆ Watch'}
           </Button>
-        </div>
-      </header>
+        }
+      />
+
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
         <div className="flex flex-col gap-4">

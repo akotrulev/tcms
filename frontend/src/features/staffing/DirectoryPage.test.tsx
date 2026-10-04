@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
 import type { PermissionKey, PersonCapacity, Skill } from '../../api/types'
 import { aPersonCapacity, aSkill, aUserRef } from '../../test/fixtures'
+import { openFilters } from '../../test/filters'
 import { heldPermissions } from '../../test/permissions'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
@@ -124,7 +125,9 @@ describe('Skills directory', () => {
     renderPage()
 
     await screen.findByTestId('Directory.Person.u-mira')
-    await userEvent.selectOptions(screen.getByTestId('Directory.Filters.Skill'), 'sk-java')
+    const user = userEvent.setup()
+    await openFilters(user, 'Directory.Filters')
+    await user.selectOptions(screen.getByTestId('Directory.Filters.Skill'), 'sk-java')
 
     // The chip is the URL rendered back, not a second copy of the choice held beside it.
     expect(await screen.findByTestId('Directory.Filters.Applied.skill:sk-java')).toHaveTextContent(

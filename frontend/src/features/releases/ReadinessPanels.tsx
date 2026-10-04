@@ -65,7 +65,7 @@ export function ReadinessTiles({
     <div className="mb-4 grid gap-3 md:grid-cols-3">
       <section
         data-testid={`${testId}.Stories`}
-        className="rounded-lg border border-line bg-panel px-[15px] py-[13px]"
+        className="rounded-lg border border-line bg-raised px-[15px] py-[13px] shadow-e1"
       >
         <TileHead label="Stories" value={`${stories.done} / ${stories.total}`} />
         <TallMeter
@@ -90,7 +90,7 @@ export function ReadinessTiles({
 
       <section
         data-testid={`${testId}.Tests`}
-        className="rounded-lg border border-line bg-panel px-[15px] py-[13px]"
+        className="rounded-lg border border-line bg-raised px-[15px] py-[13px] shadow-e1"
       >
         <TileHead
           label="Linked test cases"
@@ -130,7 +130,7 @@ export function ReadinessTiles({
 
       <section
         data-testid={`${testId}.Scope`}
-        className="rounded-lg border border-line bg-panel px-[15px] py-[13px]"
+        className="rounded-lg border border-line bg-raised px-[15px] py-[13px] shadow-e1"
       >
         <TileHead label="Scope change" value={`+${scopeAddedAfterCreation}`} />
         <TallMeter

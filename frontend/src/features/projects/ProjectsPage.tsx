@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom';
 import { useClients, useProjects } from '../../api/queries';
+import { ProjectKeyChip } from '../../app/ProjectSwitcher';
 import { useCanInCompany } from '../../auth/useCan';
 import { DataRegion } from '../../components/DataRegion';
-import { Identifier } from '../../components/Identifier';
 import { Badge, HBar } from '../../components/kit';
 import { PageHeader } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
@@ -264,13 +264,13 @@ export function ProjectsPage() {
                 key={project.id}
                 to={`/projects/${project.id}`}
                 data-testid="Projects.Card"
-                className="block h-full rounded-lg border border-line bg-panel p-4 no-underline transition-colors hover:border-steel/35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]"
+                className="block h-full rounded-lg border border-line bg-raised p-4 shadow-e1 no-underline transition-colors hover:border-steel/35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]"
               >
-                <span className="mb-2 flex items-baseline gap-2">
+                <span className="mb-2 flex items-center gap-2">
+                  <ProjectKeyChip project={project} />
                   <span className="text-[15px] font-semibold tracking-[-.015em] text-ink">
                     {project.name}
                   </span>
-                  <Identifier variant="muted">{project.key}</Identifier>
                   {/*
                     The archived marker, and the reason the list is not filtered instead: the
                     server returns retired projects deliberately, because omitting them would

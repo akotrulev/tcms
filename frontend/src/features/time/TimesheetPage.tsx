@@ -426,7 +426,7 @@ function KpiTile({
   return (
     <section
       data-testid={testId}
-      className="rounded-lg border border-line bg-panel px-[15px] py-[13px]"
+      className="rounded-lg border border-line bg-raised px-[15px] py-[13px] shadow-e1"
     >
       <span className="block font-mono text-[26px] leading-[1.1] font-medium tracking-[-.02em] tabular-nums text-ink">
         {value}

@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
-import { useAnnounce } from '../../a11y/useAnnounce';
 import { useCurrentTimesheetPeriod, useMyCapacity, useMyWork } from '../../api/queries';
 import type { BoardCard, TimesheetPeriod } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
+import { PageHeader, Panel } from '../../components/PageHeader';
 import { Identifier } from '../../components/Identifier';
 import {
   Badge,
@@ -122,36 +122,13 @@ export function MyWorkPage() {
   const items = useMyWork();
   const [noting, setNoting] = useState<Annotatable | null>(null);
 
-  /*
-    ~~Raised by `PageHeader`.~~ → superseded by 007 T13, which replaced that header with the
-    render's top strip. Kept rather than dropped: a route change that announces nothing leaves a
-    screen-reader user on a page they have no way to know has changed.
-  */
-  const announce = useAnnounce();
-  useEffect(() => {
-    announce('My work page loaded');
-  }, [announce]);
-
   return (
     <div>
-      <title>My work · TCMS</title>
-
-      {/*
-        No breadcrumbs, unlike every project screen: this route has no ancestor. A single crumb
-        reading "My work" above a title reading "My work" is chrome that says nothing twice.
-      */}
-      <header
-        data-testid={`${TEST_ID}.Header`}
-        className="mb-3 flex flex-wrap items-start gap-3 border-b border-line pb-3"
-      >
-        <div className="min-w-0 flex-1">
-          <h1 className="m-0 text-[19px] font-semibold tracking-[-.018em] text-ink">My work</h1>
-          <p className="m-0 mt-1 max-w-[74ch] text-[13px] text-ink-3">
-            Everything assigned to you, across every project you can see — executions to record,
-            reviews you have been asked for, and your own issues.
-          </p>
-        </div>
-      </header>
+      <PageHeader
+        testId={`${TEST_ID}.Header`}
+        title="My work"
+        subtitle="Everything assigned to you, across every project you can see — executions to record, reviews you have been asked for, and your own issues."
+      />
 
       <DataRegion
         testId={`${TEST_ID}.Content`}
@@ -212,6 +189,7 @@ function MyWorkBody({
       <div className="grid gap-3.5 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="flex flex-col gap-3.5">
         <Panel
+          flush
           title="Assigned issues"
           count={issues.length}
           testId={`${TEST_ID}.Issues`}
@@ -270,6 +248,7 @@ function MyWorkBody({
         </Panel>
 
         <Panel
+          flush
           title="Test executions & reviews"
           count={queue.length}
           testId={`${TEST_ID}.Queue`}
@@ -324,6 +303,7 @@ function MyWorkBody({
         <ThisPeriodPanel />
 
         <Panel
+          flush
           title="My notes"
           hint="private to me"
           testId={`${TEST_ID}.Notes`}
@@ -502,7 +482,7 @@ function ThisPeriodPanel() {
   const period = useCurrentTimesheetPeriod(today);
 
   return (
-    <Panel title="This period" testId={`${TEST_ID}.Period`}>
+    <Panel flush title="This period" testId={`${TEST_ID}.Period`}>
       <div className="px-3.5 py-3.5">
         <DataRegion
           testId={`${TEST_ID}.Period.Region`}
@@ -647,38 +627,6 @@ function PeriodMeter({ logged, capacity }: { logged: number; capacity: number })
         : `${percent}% of your capacity`}
       </span>
     </div>
-  );
-}
-
-function Panel({
-  title,
-  count,
-  hint,
-  foot,
-  testId,
-  children,
-}: {
-  title: string;
-  count?: number;
-  hint?: string;
-  foot?: string;
-  testId: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="rounded-xl border border-line bg-panel" data-testid={testId}>
-      <div className="flex flex-wrap items-center gap-2.5 border-b border-line px-3.5 py-2.5">
-        <h2 className="m-0 text-[13.5px] font-semibold text-ink">{title}</h2>
-        {count !== undefined && <Identifier variant="muted">{String(count)}</Identifier>}
-        {hint && <span className="text-[11.5px] text-ink-4">{hint}</span>}
-      </div>
-      <div>{children}</div>
-      {foot && (
-        <div className="border-t border-line px-3.5 py-2.5">
-          <span className="text-[11.5px] leading-[1.55] text-ink-4">{foot}</span>
-        </div>
-      )}
-    </section>
   );
 }
 

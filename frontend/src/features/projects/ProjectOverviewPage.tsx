@@ -19,7 +19,7 @@ import type {
 } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
-import { PageHeader } from '../../components/PageHeader';
+import { PageHeader, Panel } from '../../components/PageHeader';
 import { PermissionGate } from '../../components/PermissionGate';
 import {
   Badge,
@@ -470,11 +470,12 @@ function EpicsPanel({
   const capped = rows.length > EPIC_COMPLETION_LIMIT;
 
   return (
-    <section className="rounded-xl border border-line bg-panel" data-testid={`${TEST_ID}.Epics`}>
-      <div className="flex flex-wrap items-center gap-2.5 border-b border-line px-3.5 py-2.5">
-        <h2 className="m-0 text-[13.5px] font-semibold text-ink">Epics</h2>
-        <Identifier variant="muted">{String(rows.length)}</Identifier>
-        <span className="flex-1" />
+    <Panel
+      flush
+      title="Epics"
+      count={rows.length}
+      testId={`${TEST_ID}.Epics`}
+      actions={
         <PermissionGate projectId={projectId} permission="issue:create">
           {({ allowed }) =>
             allowed ? (
@@ -489,7 +490,8 @@ function EpicsPanel({
             )
           }
         </PermissionGate>
-      </div>
+      }
+    >
 
       <DataRegion
         testId={`${TEST_ID}.Epics.Region`}
@@ -537,7 +539,7 @@ function EpicsPanel({
           </span>
         </div>
       )}
-    </section>
+    </Panel>
   );
 }
 
@@ -611,19 +613,28 @@ function BacklogPanel({
   const solo = epics.data !== undefined && epics.data.length === 0;
 
   return (
-    <section className="rounded-xl border border-line bg-panel" data-testid={`${TEST_ID}.Backlog`}>
-      <div className="flex flex-wrap items-center gap-2.5 border-b border-line px-3.5 py-2.5">
-        <h2 className="m-0 text-[13.5px] font-semibold text-ink" data-testid={`${TEST_ID}.Backlog.Title`}>
-          {solo ? 'Quick tasks' : 'Unscheduled backlog'}
-        </h2>
-        <span className="text-[11.5px] text-ink-4">
-          {solo ? 'no epic, no story, no ceremony' : 'no epic'}
-        </span>
-        <span className="flex-1" />
+    <Panel
+      flush
+      testId={`${TEST_ID}.Backlog`}
+      title={
+        <div className="flex flex-wrap items-center gap-2.5">
+          <h2
+            className="m-0 text-[13px] font-semibold tracking-[-.01em] text-ink"
+            data-testid={`${TEST_ID}.Backlog.Title`}
+          >
+            {solo ? 'Quick tasks' : 'Unscheduled backlog'}
+          </h2>
+          <span className="text-[11.5px] text-ink-4">
+            {solo ? 'no epic, no story, no ceremony' : 'no epic'}
+          </span>
+        </div>
+      }
+      actions={
         <Button asChild size="sm" data-testid={`${TEST_ID}.Backlog.All`}>
           <RouterLink to={`/projects/${projectId}/work`}>Open work table</RouterLink>
         </Button>
-      </div>
+      }
+    >
 
       <DataRegion
         testId={`${TEST_ID}.Backlog.Region`}
@@ -655,7 +666,7 @@ function BacklogPanel({
           </Table>
         )}
       </DataRegion>
-    </section>
+    </Panel>
   );
 }
 
@@ -719,15 +730,16 @@ function NextReleasePanel({ projectId }: { projectId: string }) {
   const { releases, release, readiness } = useNextRelease(projectId);
 
   return (
-    <section className="rounded-xl border border-line bg-panel" data-testid={`${TEST_ID}.Release`}>
-      <div className="flex flex-wrap items-center gap-2.5 border-b border-line px-3.5 py-2.5">
-        <h2 className="m-0 text-[13.5px] font-semibold text-ink">Next release</h2>
-        <span className="flex-1" />
-        {/* The mockup's `All releases` button. Ungated, like the rail entry it duplicates. */}
+    <Panel
+      flush
+      title="Next release"
+      testId={`${TEST_ID}.Release`}
+      actions={
         <Button asChild size="sm" data-testid={`${TEST_ID}.Release.All`}>
           <RouterLink to={`/projects/${projectId}/releases`}>All releases</RouterLink>
         </Button>
-      </div>
+      }
+    >
 
       {/*
         The region wraps the list read, not the readiness one. Readiness is a **second, dependent**
@@ -794,7 +806,7 @@ function NextReleasePanel({ projectId }: { projectId: string }) {
           .
         </span>
       </div>
-    </section>
+    </Panel>
   );
 }
 
@@ -1013,11 +1025,7 @@ function BudgetBurnPanel({ projectId }: { projectId: string }) {
   if (burn.isPending || burn.data?.basis === null) return null;
 
   return (
-    <section className="rounded-xl border border-line bg-panel" data-testid={`${TEST_ID}.Budget`}>
-      <div className="flex items-center gap-2.5 border-b border-line px-3.5 py-2.5">
-        <h2 className="m-0 text-[13.5px] font-semibold text-ink">Budget burn</h2>
-        <span className="text-[11.5px] text-ink-4">hours, no rates</span>
-      </div>
+    <Panel flush title="Budget burn" hint="hours, no rates" testId={`${TEST_ID}.Budget`}>
 
       <DataRegion
         testId={`${TEST_ID}.Budget.Region`}
@@ -1051,7 +1059,7 @@ function BudgetBurnPanel({ projectId }: { projectId: string }) {
           </div>
         )}
       </DataRegion>
-    </section>
+    </Panel>
   );
 }
 
@@ -1077,11 +1085,7 @@ function TestHealthPanel({
   dashboard: ReturnType<typeof useDashboard>;
 }) {
   return (
-    <section className="rounded-xl border border-line bg-panel" data-testid={`${TEST_ID}.TestHealth`}>
-      <div className="flex flex-wrap items-center gap-2.5 border-b border-line px-3.5 py-2.5">
-        <h2 className="m-0 text-[13.5px] font-semibold text-ink">Test health</h2>
-        <span className="text-[11.5px] text-ink-4">latest run per case</span>
-      </div>
+    <Panel flush title="Test health" hint="latest run per case" testId={`${TEST_ID}.TestHealth`}>
 
       <DataRegion
         testId={`${TEST_ID}.TestHealth.Region`}
@@ -1089,7 +1093,7 @@ function TestHealthPanel({
       >
         {(data) => <TestHealthBody data={data} projectId={projectId} />}
       </DataRegion>
-    </section>
+    </Panel>
   );
 }
 
