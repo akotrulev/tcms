@@ -74,9 +74,8 @@ export function IngestionsPage() {
         title="CI results"
         documentTitle={project.data ? `CI results · ${project.data.name}` : 'CI results'}
         subtitle="Reports your pipeline has posted, and what each one matched. A test that matched nothing recorded no result — bind it to a case here and every later build finds it."
+        views={<TabStrip tabs={TABS.runs} projectId={projectId} label="Test run views" testId="Runs.Tabs" />}
       />
-
-      <TabStrip tabs={TABS.runs} projectId={projectId} label="Test run views" testId="Runs.Tabs" />
 
       <section data-testid="Ingestions.Panel" className="mb-6">
         <DataRegion

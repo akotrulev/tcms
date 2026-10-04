@@ -1,7 +1,6 @@
 import { FileText, Trash2, Upload } from 'lucide-react';
-import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
+import { useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
-import { useAnnounce } from '../../a11y/useAnnounce';
 import { ApiError } from '../../api/client';
 import { useFeatureImport, useProject, useSuites } from '../../api/queries';
 import type {
@@ -14,8 +13,9 @@ import type {
 } from '../../api/types';
 import { DataRegion, GridSkeleton } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
-import { Badge, Banner, type BadgeTone } from '../../components/kit';
+import { Badge, Banner, Segmented, type BadgeTone } from '../../components/kit';
 import { Field } from '../../components/kit/Field';
+import { PageHeader } from '../../components/PageHeader';
 import { Button } from '../../components/ui';
 import { NativeSelect } from '../../components/ui/native-select';
 import { cn } from '../../lib/cn';
@@ -105,16 +105,6 @@ export function FeatureImportPage() {
 
   const folderInput = useRef<HTMLInputElement | null>(null);
   const fileInput = useRef<HTMLInputElement | null>(null);
-
-  /*
-    ~~Raised by `PageHeader`.~~ → superseded by 007 T14, which replaced that header with the
-    render's own top strip. Kept rather than dropped: a route change that announces nothing leaves
-    a screen-reader user on a page they have no way to know has changed.
-  */
-  const announce = useAnnounce();
-  useEffect(() => {
-    announce('Import feature files page loaded');
-  }, [announce]);
 
   /*
     Any change to what would be SENT discards the plan on screen, and resets the mutation with it.
@@ -225,49 +215,44 @@ export function FeatureImportPage() {
 
   return (
     <div>
-      <title>
-        {project.data
-          ? `Import feature files · ${project.data.name} · TCMS`
-          : 'Import feature files · TCMS'}
-      </title>
-
-      <header className="mb-3 flex flex-wrap items-center gap-2 border-b border-line pb-3">
-        <div className="min-w-0 flex-1">
-          <h1 className="m-0 text-[19px] font-semibold tracking-[-.018em] text-ink">
-            Import feature files
-          </h1>
-        </div>
-
-        {/* The render's quiet promise beside the two buttons, so it is read at the moment of
-            deciding rather than in a paragraph above the fold. */}
-        <span className="text-[12px] text-ink-4">Nothing is written until you import</span>
-        <Button asChild size="sm" data-testid="FeatureImport.BackToCases">
-          <RouterLink to={`/projects/${projectId}/cases`}>Cancel</RouterLink>
-        </Button>
-        <Button
-          size="sm"
-          disabled={files.length === 0 || refusals.length > 0 || importer.isPending}
-          onClick={() => void send('PREVIEW')}
-          data-testid="FeatureImport.Preview"
-        >
-          Preview
-        </Button>
-        {/*
-          **The button counts what it will do.** *"A verb with no quantity is the same button
-          whether it writes nothing or rewrites a suite."* The quantity is the rows it would
-          WRITE — creates plus updates — because that is the blast radius; the skipped rows are
-          named in the caption beside the totals, where they belong.
-        */}
-        <Button
-          variant="primary"
-          size="sm"
-          disabled={!canApply || importer.isPending}
-          onClick={() => void send('APPLY')}
-          data-testid="FeatureImport.Apply"
-        >
-          {plan ? `Import ${plural(willWrite, 'scenario')}` : 'Import'}
-        </Button>
-      </header>
+      <PageHeader
+        testId="FeatureImport.Header"
+        title="Import feature files"
+        documentTitle={
+          project.data ? `Import feature files · ${project.data.name}` : 'Import feature files'
+        }
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[12px] text-ink-4">Nothing is written until you import</span>
+            <Button asChild size="sm" data-testid="FeatureImport.BackToCases">
+              <RouterLink to={`/projects/${projectId}/cases`}>Cancel</RouterLink>
+            </Button>
+            <Button
+              size="sm"
+              disabled={files.length === 0 || refusals.length > 0 || importer.isPending}
+              onClick={() => void send('PREVIEW')}
+              data-testid="FeatureImport.Preview"
+            >
+              Preview
+            </Button>
+            {/*
+              **The button counts what it will do.** *"A verb with no quantity is the same button
+              whether it writes nothing or rewrites a suite."* The quantity is the rows it would
+              WRITE — creates plus updates — because that is the blast radius; the skipped rows are
+              named in the caption beside the totals, where they belong.
+            */}
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={!canApply || importer.isPending}
+              onClick={() => void send('APPLY')}
+              data-testid="FeatureImport.Apply"
+            >
+              {plan ? `Import ${plural(willWrite, 'scenario')}` : 'Import'}
+            </Button>
+          </div>
+        }
+      />
 
       {plan && !plan.applied && !canApply && (
         <p className="mt-0 mb-3 text-[13px] text-ink-3" data-testid="FeatureImport.NothingToApply">
@@ -489,38 +474,19 @@ export function FeatureImportPage() {
             <p className="mt-3 mb-1 text-[12px] text-ink-4">
               A scenario whose case already exists
             </p>
-            <div
-              role="group"
-              aria-label="What to do with a scenario that already has a case"
-              className="inline-flex gap-0.5 rounded-lg bg-wash-1 p-0.5"
-            >
-              {(
-                [
-                  { value: 'SKIP', label: 'Leave it alone' },
-                  { value: 'UPDATE', label: 'Rewrite it from the file' },
-                ] as const
-              ).map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  aria-pressed={onExisting === option.value}
-                  onClick={() => {
-                    discardPlan();
-                    setOnExisting(option.value);
-                  }}
-                  data-testid={`FeatureImport.OnExisting.${option.value}`}
-                  className={cn(
-                    'cursor-pointer rounded-md border-0 px-[11px] py-1 text-[12px] font-medium',
-                    'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-given)]',
-                    onExisting === option.value
-                      ? 'bg-panel text-ink shadow-e1'
-                      : 'bg-transparent text-ink-3 hover:text-ink-2',
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+            <Segmented
+              label="What to do with a scenario that already has a case"
+              testId="FeatureImport.OnExisting"
+              value={onExisting}
+              onChange={(next) => {
+                discardPlan();
+                setOnExisting(next);
+              }}
+              options={[
+                { value: 'SKIP', label: 'Leave it alone' },
+                { value: 'UPDATE', label: 'Rewrite it from the file' },
+              ]}
+            />
           </section>
         </aside>
 

@@ -53,9 +53,8 @@ export function SuiteListPage() {
         title="Test cases"
         documentTitle={project.data ? `Suites · ${project.data.name}` : 'Suites'}
         subtitle="A suite is a flat, named collection — not a folder in a tree. Its members are the cases filed in it, added to it, or carrying one of its tags."
+        views={<TabStrip tabs={TABS.cases} projectId={projectId} label="Test case views" testId="Cases.Tabs" />}
       />
-
-      <TabStrip tabs={TABS.cases} projectId={projectId} label="Test case views" testId="Cases.Tabs" />
 
       <section data-testid="Suites.Panel">
         <DataRegion

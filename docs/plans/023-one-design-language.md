@@ -7,11 +7,11 @@ panels of cards whose face leads with identity and ends with the card's test res
 a colour, which its key chip carries; it never fills a canvas. No route moves. The project colour is
 the plan's one contract change (§3a).
 
-**Status:** A1, A2, K1, K2, N1, B1, B2, B3 and P1 built 2026-10-04 (nothing run, per the plan's single gate). A1: the contract, both
+**Status:** A1, A2, K1, K2, N1, B1, B2, B3, P1 and P2 built 2026-10-04 (nothing run, per the plan's single gate). A1: the contract, both
 generated copies, both fixture factories. A2: `V15__project_color.sql`, `Project.color`, the create
 default, `PUT /projects/{projectId}/color`, and their tests. K1: the surface ladder (`bg-bar`,
 `bg-raised`), the radius codemod (106 files) and its check, the overlay primitives on the ladder, and
-the project palette with `projectColorFill` and its contrast check. K2: `PageStrip`, `PageHeader` on it, `Segmented`, `TabStrip` on its helpers, `FilterStrip`'s popover and `openFilters`; every consumer test of a `FilterStrip` picker is still red until B2, P2, P3 and P4. N1: the 48px `TopBar` (launcher, switcher with coloured key chips, project tabs and More, search, Create, My work, theme, user menu with the version) replaced the rail, drawer and footer, and `AppShell.test.tsx` is rewritten against it; the four `TopStripSlot` pages render in place until P1. B1: `BoardCardFace` redrawn per §6.1 (identity row, priority for CRITICAL/HIGH, dot-and-name labels, cases row, 3px edge bar via a new `ResultBar` `variant="edge"`), pointer drag on the card with the keyboard drag on the grip, the click that ends a drag swallowed; `BoardCardFace.test.tsx` extended and two `ProjectBoardView.test.tsx` assertions updated (nothing run). B2: `/projects/:id/work` opens with one strip (`BoardPicker` lead with door badges, five view links, `WorkStripActions` portal carrying each view's Filter and the board's `GroupMenu`); `+ Add`, the GroupBy select, Configure and the keyboard banner are gone and the foot line carries the sentence; `WorkTablePage`, `ProjectBoardView` and `BacklogView` tests rewritten through `openFilters` (nothing run). B3: columns are panels (`ColumnHeader` with count, WIP pill, summed linked-case health and the door `+` on the first-status column; the lane cells, band bar and sub-bar on the §6.3 classes; one board-wide `doneOpen` toggled from the Done header, collapsed lanes showing `n done`); `sumLinkedCases` added; `ProjectBoardView.test.tsx` and `linkedCases.test.ts` extended (nothing run). P1: the nine document-mode pages open with `PageStrip`, `app/topStripSlot.tsx` and `TopStripProvider` are gone, `AppShell.test.tsx`'s slot tests deleted, panel-role pass over `cases`/`docs` (nothing run). Next: P2. The server now serves
+the project palette with `projectColorFill` and its contrast check. K2: `PageStrip`, `PageHeader` on it, `Segmented`, `TabStrip` on its helpers, `FilterStrip`'s popover and `openFilters`; every consumer test of a `FilterStrip` picker is still red until B2, P2, P3 and P4. N1: the 48px `TopBar` (launcher, switcher with coloured key chips, project tabs and More, search, Create, My work, theme, user menu with the version) replaced the rail, drawer and footer, and `AppShell.test.tsx` is rewritten against it; the four `TopStripSlot` pages render in place until P1. B1: `BoardCardFace` redrawn per §6.1 (identity row, priority for CRITICAL/HIGH, dot-and-name labels, cases row, 3px edge bar via a new `ResultBar` `variant="edge"`), pointer drag on the card with the keyboard drag on the grip, the click that ends a drag swallowed; `BoardCardFace.test.tsx` extended and two `ProjectBoardView.test.tsx` assertions updated (nothing run). B2: `/projects/:id/work` opens with one strip (`BoardPicker` lead with door badges, five view links, `WorkStripActions` portal carrying each view's Filter and the board's `GroupMenu`); `+ Add`, the GroupBy select, Configure and the keyboard banner are gone and the foot line carries the sentence; `WorkTablePage`, `ProjectBoardView` and `BacklogView` tests rewritten through `openFilters` (nothing run). B3: columns are panels (`ColumnHeader` with count, WIP pill, summed linked-case health and the door `+` on the first-status column; the lane cells, band bar and sub-bar on the §6.3 classes; one board-wide `doneOpen` toggled from the Done header, collapsed lanes showing `n done`); `sumLinkedCases` added; `ProjectBoardView.test.tsx` and `linkedCases.test.ts` extended (nothing run). P1: the nine document-mode pages open with `PageStrip`, `app/topStripSlot.tsx` and `TopStripProvider` are gone, `AppShell.test.tsx`'s slot tests deleted, panel-role pass over `cases`/`docs` (nothing run). P2: every `TabStrip` is in its page's `PageHeader views`; FeatureImport, SuiteHistory, RunDetail, Analytics' window pickers and Proposals' status tabs are `Segmented`; Plan statistics is `ui/tabs` (Radix `Tabs` root around the page, the list in `views`); case search's box and pickers are a `FilterStrip`; `CaseFilterBar`'s tests and `CaseSearchPage.test.tsx` reach pickers through `openFilters` (nothing run). Next: P3. The server now serves
 `color` and answers the colour endpoint; all of it is unverified until C1. The design was approved on 2026-10-04 on a canvas:
 <https://claude.ai/artifact/5LuW51YtnVNKWHZ4mV6Xbj>. `Main` is the board screen with the new shell,
 and `CardStates` is the card in six states, in both themes. The canvas is the user's private artifact,
@@ -71,51 +71,9 @@ Run them in order, one session each. Each block is complete on its own. Every ga
 only C1 runs one. No prompt pushes, and none starts the local stack. C1 may *use* a stack that is
 already running and must not start one.
 
-A1, A2, K1, K2, N1, B1, B2, B3 and P1 have landed; every block below is live.
+A1, A2, K1, K2, N1, B1, B2, B3, P1 and P2 have landed; every block below is live.
 
 ---
-
-### P2 — index and analytics pages (fe-react, fe)
-
-````
-You are `fe-react`. Task P2 of docs/plans/023-one-design-language.md: put every `TabStrip` into its
-page's strip. Move the bespoke toggles onto `Segmented`, or onto `ui/tabs` where a toggle swaps
-panels. Give case search a `FilterStrip`, and fix the panel roles in these screens.
-
-Deliverable: every `TabStrip` sits in its page's `PageHeader views`. The toggles in §7.2's table
-(FeatureImport, SuiteHistory, RunDetail, Analytics) and Proposals' Radix tabs are `Segmented`. Plan
-statistics is `ui/tabs`. Case search's input is a `FilterStrip search`. CaseFilterBar's tests reach
-pickers through `openFilters`.
-
-House rules for this plan: current branch only, never create one; no subagents; stage only your
-files; do not push. **Gate: none** — this plan gates once, in C1. Do not run `npm run build`, `lint`,
-`test:run`, `test:smoke`, `tsc` or any targeted test, locally or on shanks.
-
-Read, in this order:
-1. CLAUDE.md — "Test-harness rules".
-2. The plan: §2 (A3, A4, A8, A9), §5.5, §7.2, D6, D15, task P2, and "Close-out — every task".
-3. K2's and P1's "As built" notes.
-4. frontend/src/components/kit/Segmented.tsx, frontend/src/components/TabStrip.tsx,
-   frontend/src/components/ui/tabs.tsx.
-5. For each page in §7.2's table, the region it names (locate by content), and its test, searching
-   for the toggle's testids and `getByRole('button', { pressed` queries.
-6. frontend/src/features/cases/CaseFilterBar.tsx and its test. Use `openFilters` from
-   frontend/src/test/filters.ts.
-
-Build (the bullets of task P2, in order).
-
-Traps:
-- A toggle that FILTERS a list is `Segmented` (buttons, `aria-pressed`). A control that swaps PANELS
-  with tab semantics is `ui/tabs`. A choice that is an ADDRESS is `TabStrip` (links). Keep each
-  control's semantics; change only its look.
-- `CaseFilterBar` puts facet pickers (their own popovers) inside the Filter popover. Check that
-  Escape closes the inner one first and that focus returns to the trigger.
-- The Proposals screen has two strips today: TabStrip `cases` plus Radix Waiting/Accepted/Rejected.
-  The first goes in `views`; the second stays a page-level `Segmented` under the strip.
-
-Commit: `feat(design): index and analytics pages — views in the strip, one segmented control (023 P2)`.
-Close out per the plan's "Close-out — every task" before you stop.
-````
 
 ### P3 — work, people and project pages (fe-react, fe)
 
@@ -974,6 +932,21 @@ two: keep them as shortcuts that flip the same board-wide boolean; rejected, bec
 one switch is the ambiguity D12 removed. Cost: the per-lane test that clicked "Expand the Done column
 of the … lane" now clicks `${testId}.DoneToggle`.
 
+**D25 — Analytics' window pickers stay on their figures as `Segmented` (P2).** §7.2 says "toggle :242
+→ `Segmented` in `views`". The two toggles are 7/30/90 days for cycle time and weeks for flow, one
+per figure, so the strip has no single window to hold. Reading two: lift both into `views`, which
+needs two labelled groups in one strip over figures that are below the fold. Rejected: a window
+belongs beside the figure it windows. Cost: the strip carries only the page's actions.
+
+**D26 — SuiteHistory's denominator state moves to the page (P2).** The toggle belongs in `views`, and
+`PageHeader` is rendered by the page, not by the body that owned the state. Cost: the toggle shows
+on a suite with no runs, where it changes nothing.
+
+**D27 — Plan statistics' `TabsContent` wraps Progress only (P2).** D15 puts the page on `ui/tabs`, but
+`PlanForm` renders the other tabs' bodies itself and stays mounted for all of them (§97), so a
+`TabsContent` per tab would unmount a draft. Reading two: `forceMount` panels with `hidden`; rejected
+as a rewrite of `PlanForm`. Cost: four tabs' `aria-controls` name no element.
+
 ## Answered questions (2026-10-04)
 
 **O1 — Should My work carry a count in the top bar?** No. An icon link only (D13).
@@ -1427,6 +1400,17 @@ read-back 6k; churn ×1.2.
 - The panel-role pass over `features/cases`, `plans`, `runs`, `ingestion`, `reports`, `artifacts`,
   `proposals`, `analytics`.
 - **Not in P2:** the settings subnav (P4).
+
+**As built (2026-10-04):**
+- Six `TabStrip` pages (`CaseListPage`, `SuiteListPage`, `RunListPage`, `RunSchedulePage`, `IngestionsPage`, `ArtifactsPage`) and `ProposalsPage` pass it as `views`; the "tab keeps its URL" comments above the old placements went with them. `DocsPage` was P1's. `grep -rn "<TabStrip" frontend/src` now finds only `views={…}` props.
+- `ProposalsPage`: Radix tabs → `Segmented testId="Proposals.Tabs"` in a `mb-3` row under the strip; the options keep `Proposals.Tab.<STATUS>` and the counts ride in the label (`withCount`). There is no `TabsContent` any more, so the test's `getByRole('tab', …)` is `getByRole('button', …)`.
+- `FeatureImportPage`: bespoke `<header>` and `<title>` → `PageHeader` (Cancel, Preview, Import and the "Nothing is written" note in `actions`); its own `useAnnounce` effect went because `PageHeader` announces. The "what to do with an existing case" segment → `Segmented testId="FeatureImport.OnExisting"` (item testids unchanged).
+- `SuiteHistoryPage`: the denominator state moved up from `SuiteHistoryBody` into the page so the toggle can sit in `views`; the body takes `denominator` as a prop. The toggle is drawn even when the suite has no runs yet. `RunDetailPage`: three `Chip` filters → `Segmented testId="RunDetail.Filter"`, same testids, `setSelection([])` kept.
+- `PlanStatisticsPage`: the page is a Radix `Tabs` root; `TabsList` is in `views`; only the Progress region is a `TabsContent`. The form spine (`PlanForm`) renders every other tab's content itself and stays mounted for all tabs (§97), so those tabs' `aria-controls` points at nothing. `PlanForm.test.tsx` clicks `PlanStats.Tab.*` and is unchanged.
+- `CaseSearchPage`: box and the three facet menus are one `FilterStrip data-testid="CaseSearch.Filters"`; picker testids (`CaseSearch.Lifecycle|Automation|Priority` and `.<KEY>`) are unchanged, `.Remove` is gone (chips carry removal). New test in `CaseSearchPage.test.tsx`. `CaseFilterBar` already held its 4 facets, 3 selects, tag input and Unfiled in the popover (K2); its tests now open it, and one new test pins Escape closing the facet menu before the popover and focus returning to `Cases.Filters.Open`.
+- Panel-role pass over the eight folders: one hit (`ExecutionGrid`'s table wrapper, left); `CaseDocument`'s absolute link popup → overlay `bg-raised rounded-xl`. Asides in `cases`/`runs`/`proposals` are P1's and are full-height rails, not panels.
+- Not done, see D25: Analytics' two window pickers are `Segmented` in place, not in `views`.
+- Unverified: nothing ran. C1 should watch the Escape/focus test (Radix layering in jsdom), `PlanForm.test.tsx` under Radix `Tabs`, and any test that queried `RunDetail.Filter.*` as a chip.
 
 ### P3 — work, people and project pages
 

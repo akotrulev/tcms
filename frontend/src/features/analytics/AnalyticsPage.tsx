@@ -14,6 +14,7 @@ import {
 import { DataRegion } from '../../components/DataRegion';
 import { PageHeader } from '../../components/PageHeader';
 import { FigurePanel } from '../../components/kit/FigurePanel';
+import { Segmented } from '../../components/kit';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -233,24 +234,14 @@ function WindowPicker({
   return (
     <div className="mb-1.5 flex items-center gap-2 text-[11.5px] text-ink-4">
       <span>{label}</span>
-      <span className="flex items-center gap-1">
-        {options.map((option) => (
-          <button
-            key={option}
-            type="button"
-            onClick={() => onChange(option)}
-            aria-pressed={option === value}
-            className={
-              option === value ?
-                'rounded-md border border-steel-line bg-field px-1.5 py-0.5 font-mono tabular-nums text-ink-2'
-              : 'rounded-md border border-transparent px-1.5 py-0.5 font-mono tabular-nums hover:text-ink-3'
-            }
-          >
-            {option}
-          </button>
-        ))}
-        <span>{unit}</span>
-      </span>
+      <Segmented
+        label={`${label} in ${unit}`}
+        testId={`${TEST_ID}.Window.${unit}`}
+        value={String(value)}
+        onChange={(next) => onChange(Number(next))}
+        options={options.map((option) => ({ value: String(option), label: String(option) }))}
+      />
+      <span>{unit}</span>
     </div>
   );
 }

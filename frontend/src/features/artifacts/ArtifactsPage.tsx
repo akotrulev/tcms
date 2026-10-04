@@ -38,6 +38,7 @@ export function ArtifactsPage() {
         title="Artifacts"
         documentTitle={project.data ? `Artifacts · ${project.data.name}` : 'Artifacts'}
         subtitle="Strategy, environment, test data and sign-off documents. Plan artifacts sit alongside the project's, which they inherit."
+        views={<TabStrip tabs={TABS.docs} projectId={projectId} label="Document views" testId="Docs.Tabs" />}
         actions={
           <div className="flex items-center gap-2">
             <select
@@ -79,12 +80,6 @@ export function ArtifactsPage() {
           </div>
         }
       />
-
-      {/*
-        Pages · Artifacts (021 §1). The register was a rail row under `Project`; it is a document
-        the project keeps, so it belongs beside the pages rather than beside the settings screens.
-      */}
-      <TabStrip tabs={TABS.docs} projectId={projectId} label="Document views" testId="Docs.Tabs" />
 
       {registering && (
         <RegisterArtifactDialog

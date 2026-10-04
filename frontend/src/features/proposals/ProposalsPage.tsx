@@ -5,6 +5,7 @@ import type { ProposalStatus } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
 import {
   Badge,
+  Segmented,
   Table,
   TableBody,
   TableCell,
@@ -15,7 +16,6 @@ import {
 import { PageHeader } from '../../components/PageHeader';
 import { TabStrip } from '../../components/TabStrip';
 import { TABS } from '../../app/nav';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui';
 import { formatCount, formatDateTime } from '../../lib/format';
 import { proposalStatusLabels } from '../../lib/labels';
 import { VerdictChip } from './VerdictChip';
@@ -83,95 +83,83 @@ export function ProposalsPage() {
         title="Proposals"
         documentTitle={project.data ? `Proposals · ${project.data.name}` : 'Proposals'}
         subtitle="Cases an agent has proposed. Nothing here is in the repository yet — accepting one creates it exactly as writing it by hand would, with you as its author."
+        views={<TabStrip tabs={TABS.cases} projectId={projectId} label="Test case views" testId="Cases.Tabs" />}
       />
 
-      <TabStrip tabs={TABS.cases} projectId={projectId} label="Test case views" testId="Cases.Tabs" />
-
       <section data-testid="Proposals.Panel">
-        <Tabs
-          value={status}
-          onValueChange={(next) => {
-            // Replace rather than push: flipping between tabs is looking around, not navigating,
-            // and a back button that walks three tabs backwards is the version everybody hates.
-            setParams(readStatus(next) === 'PENDING' ? {} : { status: next }, { replace: true });
-          }}
-          data-testid="Proposals.Tabs"
-        >
-          <TabsList className="mb-3">
-            <TabsTrigger value="PENDING" data-testid="Proposals.Tab.PENDING">
-              Waiting
-              <TabCount total={waiting.data?.total} />
-            </TabsTrigger>
-            <TabsTrigger value="ACCEPTED" data-testid="Proposals.Tab.ACCEPTED">
-              Accepted
-              <TabCount total={accepted.data?.total} />
-            </TabsTrigger>
-            <TabsTrigger value="REJECTED" data-testid="Proposals.Tab.REJECTED">
-              Rejected
-              <TabCount total={rejected.data?.total} />
-            </TabsTrigger>
-          </TabsList>
+        <div className="mb-3">
+          <Segmented
+            label="Proposal status"
+            testId="Proposals.Tabs"
+            value={status}
+            onChange={(next) => {
+              setParams(next === 'PENDING' ? {} : { status: next }, { replace: true });
+            }}
+            options={[
+              { value: 'PENDING', label: withCount('Waiting', waiting.data?.total), testId: 'Proposals.Tab.PENDING' },
+              { value: 'ACCEPTED', label: withCount('Accepted', accepted.data?.total), testId: 'Proposals.Tab.ACCEPTED' },
+              { value: 'REJECTED', label: withCount('Rejected', rejected.data?.total), testId: 'Proposals.Tab.REJECTED' },
+            ]}
+          />
+        </div>
 
-          <TabsContent value={status}>
-            <DataRegion
-              testId="Proposals.List"
-              state={{ ...proposals, refetch: () => void proposals.refetch() }}
-              isEmpty={(page) => page.items.length === 0}
-              empty={emptyFor(status)}
-            >
-              {(page) => (
-                <Table data-testid="Proposals.Grid">
-                  <TableHead>
-                    <TableRow>
-                      <TableHeaderCell>Proposed case</TableHeaderCell>
-                      <TableHeaderCell className="w-[260px]">Grounding</TableHeaderCell>
-                      <TableHeaderCell align="right" className="w-[90px]">
-                        Steps
-                      </TableHeaderCell>
-                      <TableHeaderCell className="w-[220px]">Filed by</TableHeaderCell>
-                      <TableHeaderCell className="w-[180px]">Filed</TableHeaderCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {page.items.map((row) => (
-                      <TableRow key={row.id} data-testid="Proposals.Row">
-                        <TableCell variant="title">
-                          <RouterLink
-                            to={`/projects/${projectId}/generated-cases/${row.id}`}
-                            className="text-steel underline-offset-4 hover:underline"
-                            data-testid="Proposals.Open"
-                          >
-                            {row.title}
-                          </RouterLink>
-                          {status !== 'PENDING' && (
-                            <Badge tone="plain" className="ml-2">
-                              {proposalStatusLabels[row.status]}
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <VerdictChip verdict={row.verdict} source={row.verdictSource} />
-                        </TableCell>
-                        <TableCell align="right" className="font-mono tabular-nums">
-                          {row.stepCount}
-                        </TableCell>
-                        <TableCell>
-                          <FiledBy
-                            name={row.createdBy?.displayName ?? null}
-                            byAgent={row.filedByAgent}
-                          />
-                        </TableCell>
-                        <TableCell className="font-mono text-[12px] tabular-nums text-ink-4">
-                          {formatDateTime(row.createdAt)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </DataRegion>
-          </TabsContent>
-        </Tabs>
+        <DataRegion
+          testId="Proposals.List"
+          state={{ ...proposals, refetch: () => void proposals.refetch() }}
+          isEmpty={(page) => page.items.length === 0}
+          empty={emptyFor(status)}
+        >
+          {(page) => (
+            <Table data-testid="Proposals.Grid">
+              <TableHead>
+                <TableRow>
+                  <TableHeaderCell>Proposed case</TableHeaderCell>
+                  <TableHeaderCell className="w-[260px]">Grounding</TableHeaderCell>
+                  <TableHeaderCell align="right" className="w-[90px]">
+                    Steps
+                  </TableHeaderCell>
+                  <TableHeaderCell className="w-[220px]">Filed by</TableHeaderCell>
+                  <TableHeaderCell className="w-[180px]">Filed</TableHeaderCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {page.items.map((row) => (
+                  <TableRow key={row.id} data-testid="Proposals.Row">
+                    <TableCell variant="title">
+                      <RouterLink
+                        to={`/projects/${projectId}/generated-cases/${row.id}`}
+                        className="text-steel underline-offset-4 hover:underline"
+                        data-testid="Proposals.Open"
+                      >
+                        {row.title}
+                      </RouterLink>
+                      {status !== 'PENDING' && (
+                        <Badge tone="plain" className="ml-2">
+                          {proposalStatusLabels[row.status]}
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <VerdictChip verdict={row.verdict} source={row.verdictSource} />
+                    </TableCell>
+                    <TableCell align="right" className="font-mono tabular-nums">
+                      {row.stepCount}
+                    </TableCell>
+                    <TableCell>
+                      <FiledBy
+                        name={row.createdBy?.displayName ?? null}
+                        byAgent={row.filedByAgent}
+                      />
+                    </TableCell>
+                    <TableCell className="font-mono text-[12px] tabular-nums text-ink-4">
+                      {formatDateTime(row.createdAt)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </DataRegion>
       </section>
     </div>
   );
@@ -243,8 +231,6 @@ function emptyFor(status: ProposalStatus) {
   };
 }
 
-/** The count beside a tab's label — absent, not zero, until the server has said a number. */
-function TabCount({ total }: { total: number | undefined }) {
-  if (total === undefined) return null;
-  return <span className="ml-1.5 tabular-nums text-ink-3">{formatCount(total)}</span>;
+function withCount(label: string, total: number | undefined): string {
+  return total === undefined ? label : `${label} ${formatCount(total)}`;
 }

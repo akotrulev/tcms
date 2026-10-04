@@ -53,6 +53,7 @@ export function RunListPage() {
         title="Test runs"
         documentTitle={project.data ? `Test runs · ${project.data.name}` : 'Test runs'}
         subtitle="Every pass over a plan, manual or ingested from CI."
+        views={<TabStrip tabs={TABS.runs} projectId={projectId} label="Test run views" testId="Runs.Tabs" />}
         actions={
           /*
             `run:create` is the widest write gate in the product — every role but Viewer holds it,
@@ -74,14 +75,6 @@ export function RunListPage() {
           </PermissionGate>
         }
       />
-
-      {/*
-        Runs · Schedules · CI results (021 §1). `Schedules` was an ORPHAN — a shipped feature with
-        no rail entry and no inbound link from any screen, reachable only by typing the URL — and
-        `CI results` was a rail row of its own. Both are views of "what has run here", so they are
-        tabs on the screen they extend rather than two more rows in a rail.
-      */}
-      <TabStrip tabs={TABS.runs} projectId={projectId} label="Test run views" testId="Runs.Tabs" />
 
       {creating && (
         <RunCreateDialog

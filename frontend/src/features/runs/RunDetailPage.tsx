@@ -6,8 +6,8 @@ import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import {
   Badge,
-  Chip,
   ResultBar,
+  Segmented,
   Table,
   TableBody,
   TableCell,
@@ -455,31 +455,23 @@ function RunBody({ data, projectId, runId }: { data: TestRunDetail; projectId: s
       <section data-testid="RunDetail.Executions">
         {/* Filters in one row under the toolbar — rule 2, and the render's `.filters` strip. */}
         <div className="mb-3 flex flex-wrap items-center gap-1.5">
-          {(
-            [
-              { value: 'ALL' as const, label: `All ${formatCount(executions.length)}` },
-              { value: 'TODO' as const, label: `Not run ${formatCount(data.counts.notRun)}` },
+          <Segmented
+            label="Show executions"
+            testId="RunDetail.Filter"
+            value={filter}
+            onChange={(next) => {
+              setFilter(next);
+              setSelection([]);
+            }}
+            options={[
+              { value: 'ALL', label: `All ${formatCount(executions.length)}` },
+              { value: 'TODO', label: `Not run ${formatCount(data.counts.notRun)}` },
               {
-                value: 'FAILED' as const,
+                value: 'FAILED',
                 label: `Needs attention ${formatCount(data.counts.failed + data.counts.blocked)}`,
               },
-            ]
-          ).map((option) => (
-            <Chip
-              key={option.value}
-              selected={filter === option.value}
-              aria-pressed={filter === option.value}
-              onClick={() => {
-                // The chips swap which rows are in view, and a selection holding ids that are
-                // no longer on screen is a bulk act over rows the person cannot see.
-                setFilter(option.value);
-                setSelection([]);
-              }}
-              data-testid={`RunDetail.Filter.${option.value}`}
-            >
-              {option.label}
-            </Chip>
-          ))}
+            ]}
+          />
           <span className="ml-auto text-[12px] text-ink-4">
             <span className="font-mono tabular-nums text-ink-2">{formatCount(sorted.length)}</span>{' '}
             of {formatCount(executions.length)} executions

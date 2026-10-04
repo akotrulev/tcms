@@ -418,7 +418,7 @@ export function CaseDocument({
           <div
             data-testid={`${testIdPrefix}.Document.Suggestions`}
             style={{ top: popup.top, left: popup.left }}
-            className="absolute z-30 w-[min(520px,100%)] overflow-hidden rounded-md border border-line-strong bg-panel py-1 shadow-e3"
+            className="absolute z-30 w-[min(520px,100%)] overflow-hidden rounded-xl border border-line bg-raised py-1 shadow-e3"
           >
             {options.map((option, index) => (
               <div

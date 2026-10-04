@@ -47,7 +47,7 @@ import {
   TableRow,
 } from '../../components/kit';
 import { FigurePanel } from '../../components/kit/FigurePanel';
-import { Button, Textarea } from '../../components/ui';
+import { Button, Tabs, TabsContent, TabsList, TabsTrigger, Textarea } from '../../components/ui';
 import { criterionColor, criterionState, type Denominator } from '../../lib/results';
 import { StatusChip } from '../../components/StatusChip';
 import { describeError } from '../../lib/describeError';
@@ -112,7 +112,7 @@ export function PlanStatisticsPage() {
   const statistics = usePlanStatistics(projectId, planId, aggregation);
 
   return (
-    <div>
+    <Tabs value={tab} onValueChange={selectTab}>
       <PageHeader
         testId="PlanStats.Header"
         title={plan.data?.name ?? 'Test plan'}
@@ -136,6 +136,15 @@ export function PlanStatisticsPage() {
           )
         }
         subtitle={plan.data?.description}
+        views={
+          <TabsList aria-label="Plan" data-testid="PlanStats.Tabs" className="max-w-full overflow-x-auto">
+            {PLAN_TABS.map((id) => (
+              <TabsTrigger key={id} value={id} data-testid={`PlanStats.Tab.${id}`}>
+                {planTabLabels[id]}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        }
         actions={
           <div className="flex flex-col items-end gap-2">
             {plan.data && (
@@ -174,40 +183,6 @@ export function PlanStatisticsPage() {
       />
 
       {/*
-        A tablist of real buttons rather than a tab widget. The panels these tabs select are not
-        siblings of the list — the form spine below renders one, the statistics region renders
-        another — so a component that owns both halves would have to be given a hole to render
-        through. `role="tab"` with `aria-selected` is what a screen reader needs, and it is the
-        whole of what the widget was adding.
-      */}
-      <div
-        role="tablist"
-        aria-label="Plan"
-        // `.lens` — the render kit's only tab idiom. This screen drew underline tabs, which the
-        // kit does not have, so the product had two ways of saying "pick a view".
-        className="mb-4 inline-flex max-w-full gap-0.5 overflow-x-auto rounded-lg bg-wash-1 p-0.5"
-        data-testid="PlanStats.Tabs"
-      >
-        {PLAN_TABS.map((id) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={tab === id}
-            onClick={() => selectTab(id)}
-            data-testid={`PlanStats.Tab.${id}`}
-            className={
-              tab === id
-                ? 'cursor-pointer whitespace-nowrap rounded-md bg-panel px-[11px] py-1 text-[12px] font-medium text-ink shadow-e1 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)]'
-                : 'cursor-pointer whitespace-nowrap rounded-md px-[11px] py-1 text-[12px] font-medium text-ink-3 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)]'
-            }
-          >
-            {planTabLabels[id]}
-          </button>
-        ))}
-      </div>
-
-      {/*
         Progress keeps its own lifecycle and is the one tab outside the form: it is a report, it
         holds no draft, and it must keep working for a reader with no write permission at all —
         this page is what gets pasted into a release thread, and turning it into a form must not put
@@ -228,11 +203,11 @@ export function PlanStatisticsPage() {
         <PlanForm key={plan.data.id} projectId={projectId} planId={planId} plan={plan.data} tab={tab} />
       )}
 
-      {tab === 'progress' && (
+      <TabsContent value="progress">
         <DataRegion testId="PlanStats.Content" state={{ ...statistics, refetch: () => void statistics.refetch() }}>
           {(data) => <StatisticsBody data={data} projectId={projectId} aggregation={aggregation} />}
         </DataRegion>
-      )}
+      </TabsContent>
 
       {/*
         Below the report rather than above it. A plan's sign-off is the release-readiness signature
@@ -250,7 +225,7 @@ export function PlanStatisticsPage() {
           currentVersionNo={plan.data?.currentVersionNo}
         />
       </div>
-    </div>
+    </Tabs>
   );
 }
 

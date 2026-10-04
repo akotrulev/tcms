@@ -134,6 +134,7 @@ export function CaseListPage() {
             ? `Scoped to ${selectedSuite.name} — cases filed here, added here, or carrying one of its tags.`
             : 'Everything in this project. Pick a suite to narrow it, or filter below.'
         }
+        views={<TabStrip tabs={TABS.cases} projectId={projectId} label="Test case views" testId="Cases.Tabs" />}
         actions={
           <div className="flex gap-2">
             {/*
@@ -180,13 +181,6 @@ export function CaseListPage() {
           </div>
         }
       />
-
-      {/*
-        Cases · Suites · Proposals (021 §1). Two of the three were rail rows until this task and one
-        had no presence at all; a tab keeps its own URL, so the active one is read from the route
-        rather than stored and every pasted link still lands.
-      */}
-      <TabStrip tabs={TABS.cases} projectId={projectId} label="Test case views" testId="Cases.Tabs" />
 
       <div className="flex flex-col items-start gap-4 md:flex-row">
         {/* The tree is its own region — its failure must not empty the grid beside it. */}

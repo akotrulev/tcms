@@ -11,6 +11,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  Segmented,
   TableHead,
   TableHeaderCell,
   TableRow,
@@ -40,6 +41,7 @@ export function SuiteHistoryPage() {
   const history = useSuiteHistory(projectId, suiteId);
 
   const suite = suites.data?.find((s) => s.id === suiteId);
+  const [denominator, setDenominator] = useState<Denominator>('EXECUTED');
 
   return (
     <div>
@@ -47,6 +49,21 @@ export function SuiteHistoryPage() {
         testId="SuiteHistory.Header"
         title={`${suite?.name ?? 'Suite'} — execution history`}
         documentTitle={suite ? `History · ${suite.key}` : 'Suite history'}
+        views={
+          <span className="flex items-center gap-1.5 text-[12px] text-ink-4">
+            Pass rate as a share of
+            <Segmented
+              label="Pass rate as a share of"
+              testId="SuiteHistory.Denominator"
+              value={denominator}
+              onChange={setDenominator}
+              options={[
+                { value: 'EXECUTED', label: 'what ran' },
+                { value: 'TOTAL', label: 'the whole suite' },
+              ]}
+            />
+          </span>
+        }
         meta={
           suite && (
             <>
@@ -78,6 +95,7 @@ export function SuiteHistoryPage() {
             markers={data.versionMarkers}
             computedAt={data.computedAt}
             projectId={projectId}
+            denominator={denominator}
           />
         )}
       </DataRegion>
@@ -90,13 +108,14 @@ function SuiteHistoryBody({
   markers,
   computedAt,
   projectId,
+  denominator,
 }: {
   entries: SuiteRunSummary[];
   markers: VersionMarker[];
   computedAt: string | null;
   projectId: string;
+  denominator: Denominator;
 }) {
-  const [denominator, setDenominator] = useState<Denominator>('EXECUTED');
 
   // Newest first, with the run key as a unique tiebreaker.
   const sorted = [...entries].sort(
@@ -117,8 +136,8 @@ function SuiteHistoryBody({
   return (
     <div className="flex flex-col gap-3">
       {/*
-        THE CHROME IS A STRIP, not a panel header — design language rule 2. The staleness line and
-        the arithmetic toggle sit in one row above the table, and the table itself is the subject
+        THE CHROME IS A STRIP, not a panel header — design language rule 2. The staleness line sits
+        in a row above the table and the arithmetic toggle in the page strip, and the table itself is the subject
         with nothing wrapped around it (rule 1).
 
         How old these sums are (§101). Since the counts come from the `suite_run_summary` rollup
@@ -134,28 +153,6 @@ function SuiteHistoryBody({
         <span className="text-[12px] text-ink-4" data-testid="SuiteHistory.ComputedAt">
           {formatComputedAt(computedAt)}
           {computedAt && ' — updated every 15 minutes'}
-        </span>
-
-        <span className="ml-auto flex items-center gap-1.5 text-[12px] text-ink-4">
-          Pass rate as a share of
-          <span className="flex items-center gap-0.5 rounded-md border border-line p-0.5">
-            {(['EXECUTED', 'TOTAL'] as const).map((option) => (
-              <button
-                key={option}
-                type="button"
-                aria-pressed={denominator === option}
-                onClick={() => setDenominator(option)}
-                data-testid={`SuiteHistory.Denominator.${option}`}
-                className={
-                  'rounded-sm px-2 py-0.5 text-[11.5px] focus-visible:outline-2 ' +
-                  'focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)] ' +
-                  (denominator === option ? 'bg-wash-3 text-ink' : 'text-ink-3 hover:text-ink-2')
-                }
-              >
-                {option === 'EXECUTED' ? 'what ran' : 'the whole suite'}
-              </button>
-            ))}
-          </span>
         </span>
       </div>
 

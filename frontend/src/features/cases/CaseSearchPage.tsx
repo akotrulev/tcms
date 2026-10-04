@@ -1,4 +1,4 @@
-import { Search, X } from 'lucide-react';
+import { ChevronDown, Search } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { Link as RouterLink } from 'react-router-dom';
 import { isSearchable, useCaseSearch, useProjects } from '../../api/queries';
@@ -6,12 +6,14 @@ import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import {
   Badge,
+  FilterStrip,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeaderCell,
   TableRow,
+  type AppliedFilter,
 } from '../../components/kit';
 import { PageHeader } from '../../components/PageHeader';
 import {
@@ -157,6 +159,37 @@ export function CaseSearchPage() {
     setParams(next, { replace: true });
   };
 
+  const appliedFilters = (
+    key: string,
+    label: string,
+    labels: Record<string, string>,
+    selected: string[],
+  ): AppliedFilter[] =>
+    selected.map((value) => ({
+      key: `${key}:${value}`,
+      label: `${label} \u00b7 ${labels[value] ?? value}`,
+      onRemove: () =>
+        setMultiParam(
+          key,
+          selected.filter((item) => item !== value),
+        ),
+    }));
+
+  const applied: AppliedFilter[] = [
+    ...appliedFilters('lifecycleStatus', 'Status', lifecycleLabels, lifecycleStatus),
+    ...appliedFilters('automationStatus', 'Automation', automationLabels, automationStatus),
+    ...appliedFilters('priority', 'Priority', priorityLabels, priority),
+  ];
+
+  const clearEnumFilters = () => {
+    const next = new URLSearchParams(params);
+    next.delete('lifecycleStatus');
+    next.delete('automationStatus');
+    next.delete('priority');
+    next.delete('page');
+    setParams(next, { replace: true });
+  };
+
   return (
     <div>
       <PageHeader
@@ -167,46 +200,50 @@ export function CaseSearchPage() {
       />
 
       <div>
-        <div className="relative mb-3 max-w-[760px]">
-          <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-4" />
-          <Input
-            value={q}
-            onChange={(event) => setParam('q', event.target.value)}
-            placeholder="Title, description, or a case key such as TC-412"
-            className="min-h-10 pl-9 text-[14px]"
-            data-testid={`${TestId}.Query`}
-            aria-label="Search cases"
-          />
-        </div>
-
-        {/*
-          One row of chips under the box — design language rule 2, and rule 3's *a quiet control is
-          still a control*: every one is a real button with a name and a focus ring, and an applied
-          filter carries its own remove, so a table filtered to nothing always names what emptied it.
-        */}
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <EnumFilter
-            testId={`${TestId}.Lifecycle`}
-            label="Status"
-            labels={lifecycleLabels}
-            selected={lifecycleStatus}
-            onChange={(next) => setMultiParam('lifecycleStatus', next)}
-          />
-          <EnumFilter
-            testId={`${TestId}.Automation`}
-            label="Automation"
-            labels={automationLabels}
-            selected={automationStatus}
-            onChange={(next) => setMultiParam('automationStatus', next)}
-          />
-          <EnumFilter
-            testId={`${TestId}.Priority`}
-            label="Priority"
-            labels={priorityLabels}
-            selected={priority}
-            onChange={(next) => setMultiParam('priority', next)}
-          />
-        </div>
+        <FilterStrip
+          data-testid={`${TestId}.Filters`}
+          className="mb-3"
+          search={
+            <div className="relative w-full max-w-[420px]">
+              <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-4" />
+              <Input
+                value={q}
+                onChange={(event) => setParam('q', event.target.value)}
+                placeholder="Title, description, or a case key such as TC-412"
+                className="h-8 pl-9"
+                data-testid={`${TestId}.Query`}
+                aria-label="Search cases"
+              />
+            </div>
+          }
+          pickers={
+            <>
+              <EnumFilter
+                testId={`${TestId}.Lifecycle`}
+                label="Status"
+                labels={lifecycleLabels}
+                selected={lifecycleStatus}
+                onChange={(next) => setMultiParam('lifecycleStatus', next)}
+              />
+              <EnumFilter
+                testId={`${TestId}.Automation`}
+                label="Automation"
+                labels={automationLabels}
+                selected={automationStatus}
+                onChange={(next) => setMultiParam('automationStatus', next)}
+              />
+              <EnumFilter
+                testId={`${TestId}.Priority`}
+                label="Priority"
+                labels={priorityLabels}
+                selected={priority}
+                onChange={(next) => setMultiParam('priority', next)}
+              />
+            </>
+          }
+          applied={applied}
+          onClear={applied.length > 0 ? clearEnumFilters : undefined}
+        />
 
         {!isSearchable(filters) ? (
           /*
@@ -427,61 +464,33 @@ function EnumFilter({
   selected: string[];
   onChange: (next: string[]) => void;
 }) {
-  const applied = selected.length > 0;
-  const summary = applied
-    ? selected.length === 1
-      ? `${label} \u00b7 ${labels[selected[0]!] ?? selected[0]}`
-      : `${label} \u00b7 ${selected.length} selected`
-    : label;
-
   const toggle = (key: string) =>
     onChange(selected.includes(key) ? selected.filter((value) => value !== key) : [...selected, key]);
 
   return (
-    <span
-      style={
-        applied
-          ? {
-              borderColor: 'color-mix(in oklab, var(--color-steel) 22%, transparent)',
-              backgroundColor: 'color-mix(in oklab, var(--color-steel) 12%, transparent)',
-              color: 'var(--color-steel)',
-            }
-          : undefined
-      }
-      className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-[3px] font-sans text-[12px] text-ink-2"
-    >
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          className="inline-flex items-center text-inherit focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)]"
-          data-testid={testId}
-        >
-          {summary}
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
-          {Object.entries(labels).map(([key, text]) => (
-            <DropdownMenuCheckboxItem
-              key={key}
-              checked={selected.includes(key)}
-              onCheckedChange={() => toggle(key)}
-              onSelect={(event) => event.preventDefault()}
-              data-testid={`${testId}.${key}`}
-            >
-              {text}
-            </DropdownMenuCheckboxItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-      {applied && (
-        <button
-          type="button"
-          onClick={() => onChange([])}
-          aria-label={`Remove ${label} filter`}
-          className="text-ink-4 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--color-given)]"
-          data-testid={`${testId}.Remove`}
-        >
-          <X aria-hidden className="size-3" />
-        </button>
-      )}
-    </span>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button size="sm" data-testid={testId} aria-label={`Filter by ${label.toLowerCase()}`}>
+          {label}
+          {selected.length > 0 && (
+            <span className="tabular-nums text-ink-3">{formatCount(selected.length)}</span>
+          )}
+          <ChevronDown aria-hidden className="size-3.5 text-ink-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {Object.entries(labels).map(([key, text]) => (
+          <DropdownMenuCheckboxItem
+            key={key}
+            checked={selected.includes(key)}
+            onCheckedChange={() => toggle(key)}
+            onSelect={(event) => event.preventDefault()}
+            data-testid={`${testId}.${key}`}
+          >
+            {text}
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

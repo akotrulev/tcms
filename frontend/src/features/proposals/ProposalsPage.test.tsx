@@ -168,7 +168,7 @@ describe('ProposalsPage', () => {
     renderPage()
     await screen.findAllByTestId('Proposals.Row')
 
-    await userEvent.click(screen.getByRole('tab', { name: /Accepted/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Accepted/ }))
 
     expect(await screen.findByText('Nothing accepted yet')).toBeInTheDocument()
     expect(get).toHaveBeenCalledWith(

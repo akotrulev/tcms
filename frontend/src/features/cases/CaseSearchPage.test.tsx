@@ -4,6 +4,7 @@ import { useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
 import { aCaseSearchHit, aProject } from '../../test/fixtures'
+import { openFilters } from '../../test/filters'
 import { createTestQueryClient } from '../../test/queryClient'
 import { drivingAFailedRead } from '../../test/renderFailures'
 import { TestProviders } from '../../test/TestProviders'
@@ -161,6 +162,21 @@ describe('CaseSearchPage', () => {
     await waitFor(() =>
       expect(screen.getByTestId('Where')).toHaveTextContent('q=refund'),
     )
+  })
+
+  it('reaches the facet pickers through the Filter popover and keeps the choice in the URL', async () => {
+    const user = userEvent.setup()
+    mockReads()
+    renderPage('/search?q=refund')
+
+    await openFilters(user, 'CaseSearch.Filters')
+    await user.click(screen.getByTestId('CaseSearch.Priority'))
+    await user.click(await screen.findByTestId('CaseSearch.Priority.HIGH'))
+
+    await waitFor(() =>
+      expect(screen.getByTestId('Where')).toHaveTextContent('priority=HIGH'),
+    )
+    expect(screen.getByTestId('CaseSearch.Filters.Open')).toHaveTextContent('1')
   })
 
   it('renders the failure in place when the search fails', async () => {

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ClassificationDimension, Facet } from '../../api/types';
+import { openFilters } from '../../test/filters';
 import { CaseFilterBar } from './CaseFilterBar';
 import type { CaseFilterState } from './useCaseFilters';
 
@@ -78,10 +79,12 @@ describe('the case filter strip shows what was chosen, not what exists', () => {
     expect(screen.queryByTestId(/Cases\.Filters\.Applied\./)).not.toBeInTheDocument();
   });
 
-  it('does not put the vocabulary on the screen', () => {
+  it('does not put the vocabulary on the screen', async () => {
     // The defect this replaced: four labelled chip groups listing every value of every facet,
     // Health alone being eleven chips over two rows. The values live behind a closed menu now.
     renderBar();
+    expect(screen.queryByTestId('Cases.Filters.Health')).not.toBeInTheDocument();
+    await openFilters(userEvent.setup(), 'Cases.Filters');
     expect(screen.queryByText('Not linked to any spec')).not.toBeInTheDocument();
     expect(screen.getByTestId('Cases.Filters.Health')).toBeInTheDocument();
   });
@@ -104,10 +107,29 @@ describe('the case filter strip shows what was chosen, not what exists', () => {
   it('offers the values behind one closed control per facet', async () => {
     const setFilter = vi.fn();
     renderBar({ state: makeState({ setFilter }) });
+    const user = userEvent.setup();
 
-    await userEvent.click(screen.getByTestId('Cases.Filters.Status'));
-    await userEvent.click(await screen.findByTestId('Cases.Filters.Status.APPROVED'));
+    await openFilters(user, 'Cases.Filters');
+    await user.click(screen.getByTestId('Cases.Filters.Status'));
+    await user.click(await screen.findByTestId('Cases.Filters.Status.APPROVED'));
     expect(setFilter).toHaveBeenCalledWith('lifecycleStatus', ['APPROVED']);
+  });
+
+  it('closes a facet menu before the popover on Escape, and returns focus to Filter', async () => {
+    renderBar();
+    const user = userEvent.setup();
+
+    await openFilters(user, 'Cases.Filters');
+    await user.click(screen.getByTestId('Cases.Filters.Status'));
+    await screen.findByTestId('Cases.Filters.Status.APPROVED');
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByTestId('Cases.Filters.Status.APPROVED')).not.toBeInTheDocument();
+    expect(screen.getByTestId('Cases.Filters.Popover')).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByTestId('Cases.Filters.Popover')).not.toBeInTheDocument();
+    expect(screen.getByTestId('Cases.Filters.Open')).toHaveFocus();
   });
 });
 
@@ -136,8 +158,9 @@ describe('rule 4 — nothing configured, nothing shown', () => {
     expect(screen.getByTestId('Cases.Filters.Clear')).toBeInTheDocument();
   });
 
-  it('drops a classification select whose dimension nobody has configured', () => {
+  it('drops a classification select whose dimension nobody has configured', async () => {
     renderBar({ dimensions: [] });
+    await openFilters(userEvent.setup(), 'Cases.Filters');
     expect(screen.queryByTestId('Cases.Filters.Feature')).not.toBeInTheDocument();
   });
 });
