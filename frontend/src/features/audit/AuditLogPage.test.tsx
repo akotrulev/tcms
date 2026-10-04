@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
 import type { AuditEvent, PermissionKey } from '../../api/types'
 import { AT, aProject, anAuditEvent } from '../../test/fixtures'
+import { openFilters } from '../../test/filters'
 import { heldPermissions } from '../../test/permissions'
 import { createTestQueryClient } from '../../test/queryClient'
 import { TestProviders } from '../../test/TestProviders'
@@ -186,7 +187,9 @@ describe('AuditLogPage', () => {
     renderProjectTrail()
     await screen.findAllByTestId('Audit.Row')
 
-    await userEvent.type(screen.getByTestId('Audit.Filter.Action'), 'case.created')
+    const user = userEvent.setup()
+    await openFilters(user, 'Audit.Filters')
+    await user.type(screen.getByTestId('Audit.Filter.Action'), 'case.created')
 
     // Filtering in the client would page over rows the reader never asked for, so the total and
     // the pager would both be counts of the wrong set.
@@ -205,7 +208,9 @@ describe('AuditLogPage', () => {
     renderProjectTrail('/projects/p1/audit?action=case.created')
 
     await screen.findAllByTestId('Audit.Row')
+    await openFilters(userEvent.setup(), 'Audit.Filters')
     expect(screen.getByTestId('Audit.Filter.Action')).toHaveValue('case.created')
+    expect(screen.getByTestId('Audit.Filters.Applied.action')).toHaveTextContent('case.created')
     expect(requested[0]).toContain('action=case.created')
   })
 

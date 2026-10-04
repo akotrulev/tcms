@@ -114,6 +114,7 @@ export function TrackerSettingsPage() {
   return (
     <div>
       <PageHeader
+        views={<SettingsSubnav projectId={projectId} />}
         testId={`${TestId}.Header`}
         title="Issue tracker"
         documentTitle={project.data ? `Issue tracker · ${project.data.name}` : 'Issue tracker'}
@@ -134,8 +135,6 @@ export function TrackerSettingsPage() {
           </PermissionGate>
         }
       />
-
-      <SettingsSubnav projectId={projectId} />
 
       {adding && <BindingDialog projectId={projectId} onClose={() => setAdding(false)} />}
       {deleting && (

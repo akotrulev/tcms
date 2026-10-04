@@ -76,6 +76,7 @@ export function ClassificationSettingsPage() {
   return (
     <div>
       <PageHeader
+        views={<SettingsSubnav projectId={projectId} />}
         testId="Classification.Header"
         title="Classification"
         documentTitle={
@@ -83,8 +84,6 @@ export function ClassificationSettingsPage() {
         }
         subtitle="The axes a test case is classified on. Feature belongs to this project; Test Type, Test Level and Execution Phase are shared by every project in the company."
       />
-
-      <SettingsSubnav projectId={projectId} />
 
       <DataRegion
         testId="Classification.Dimensions"

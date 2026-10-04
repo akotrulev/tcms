@@ -115,6 +115,7 @@ export function ProjectAccessPage() {
   return (
     <div>
       <PageHeader
+        views={<SettingsSubnav projectId={projectId} />}
         testId="ProjectAccess.Header"
         title="Access & roles"
         documentTitle={
@@ -143,13 +144,6 @@ export function ProjectAccessPage() {
           </PermissionGate>
         }
       />
-
-      {/*
-        One of the eleven settings sections (021 §5), and one of the three whose route is not under
-        `/settings/` — no route moved. The subnav is what keeps it reachable from its siblings now
-        that the rail carries one `Settings` row instead of eleven.
-      */}
-      <SettingsSubnav projectId={projectId} />
 
       {/* Conditionally mounted, like every other create dialog in this app: a form mounted behind
           `open={false}` keeps one component instance — and therefore one set of field state and

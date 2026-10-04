@@ -6,13 +6,14 @@ import {
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query';
-import { api } from '../client';
+import { TIMEOUTS, api } from '../client';
 import type {
   CaseStatus,
   ClassificationDimension,
   ClassificationValue,
   ClassificationValueInput,
   Project,
+  ProjectColor,
   ProjectInput,
   UserRef,
 } from '../types';
@@ -89,6 +90,31 @@ export function useSetProjectArchived(
   return useMutation({
     mutationFn: (archived: boolean) =>
       api.put<Project>(`${base(projectId)}/archive`, { archived }),
+    onSuccess: (project) => {
+      client.setQueryData(keys.project(projectId), project);
+      void client.invalidateQueries({ queryKey: keys.projects });
+    },
+  });
+}
+
+/**
+ * Sets a project's colour — `PUT /projects/{projectId}/color`, one field, the target state.
+ *
+ * It is a path of its own for 018 D-d's reason: a colour has no safe absent reading, so it is not a
+ * field of the settings document. The response is the server's own `Project`, so the detail cache
+ * is written from it, and the whole list is invalidated because the switcher and the Projects page
+ * read their chip from the list.
+ *
+ * `meta: { handled: true }`: the Colour panel puts the failure beside the control it concerns.
+ */
+export function useSetProjectColor(
+  projectId: string,
+): UseMutationResult<Project, Error, ProjectColor> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (color: ProjectColor) =>
+      api.put<Project>(`${base(projectId)}/color`, { color }, { timeoutMs: TIMEOUTS.interactive }),
+    meta: { handled: true },
     onSuccess: (project) => {
       client.setQueryData(keys.project(projectId), project);
       void client.invalidateQueries({ queryKey: keys.projects });

@@ -1,10 +1,11 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../api/client'
 import type { BudgetBurn, IssueTypeRef, PermissionKey, ProjectWorkflow } from '../../api/types'
-import { issueLevels } from '../../lib/labels'
+import { issueLevels, projectColorLabels } from '../../lib/labels'
+import { drivingAFailedWrite } from '../../test/renderFailures'
 import { TestProviders } from '../../test/TestProviders'
 import { createTestQueryClient } from '../../test/queryClient'
 import { heldPermissions } from '../../test/permissions'
@@ -423,5 +424,67 @@ describe('Track time on this project', () => {
     mockReads(SEEDED_TYPES, ['project:read'])
     renderPage()
     await waitFor(() => expect(screen.getByTestId('GeneralSettings.trackTime')).toBeDisabled())
+  })
+})
+
+describe('The project colour', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('is a radio group of the eight palette names, with the current one checked', async () => {
+    mockReads(SEEDED_TYPES, ['project:read', 'project:settings'])
+    renderPage()
+
+    const group = await screen.findByRole('radiogroup', { name: 'Project colour' })
+    const radios = within(group).getAllByRole('radio')
+    expect(radios.map((radio) => radio.getAttribute('value'))).toEqual(
+      Object.keys(projectColorLabels),
+    )
+    expect(within(group).getByRole('radio', { name: 'Steel' })).toBeChecked()
+    expect(within(group).getByRole('radio', { name: 'Plum' })).not.toBeChecked()
+  })
+
+  it('saves the chosen colour through its own endpoint', async () => {
+    mockReads(SEEDED_TYPES, ['project:read', 'project:settings'])
+    const put = vi
+      .spyOn(api, 'put')
+      .mockResolvedValue(aProject({ id: PROJECT_ID, color: 'project-6' }) as never)
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('radio', { name: 'Amber' }))
+
+    await waitFor(() =>
+      expect(put).toHaveBeenCalledWith(
+        '/projects/p1/color',
+        { color: 'project-6' },
+        expect.anything(),
+      ),
+    )
+  })
+
+  it('is disabled with the permission that would enable it, not hidden', async () => {
+    mockReads()
+    renderPage()
+
+    const group = await screen.findByRole('radiogroup', { name: 'Project colour' })
+    for (const radio of within(group).getAllByRole('radio')) expect(radio).toBeDisabled()
+    expect(screen.getByTestId('GeneralSettings.Colour.Refused')).toHaveTextContent('project:settings')
+  })
+
+  it('says so when the save fails, and keeps the server’s colour checked', async () => {
+    mockReads(SEEDED_TYPES, ['project:read', 'project:settings'])
+    drivingAFailedWrite()
+    vi.spyOn(api, 'put').mockRejectedValue(new Error('boom'))
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('radio', { name: 'Rust' }))
+
+    expect(await screen.findByTestId('GeneralSettings.Colour.Failed')).toHaveTextContent(
+      'did not save',
+    )
+    expect(screen.getByRole('radio', { name: 'Steel' })).toBeChecked()
   })
 })

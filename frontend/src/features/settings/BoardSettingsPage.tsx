@@ -106,6 +106,7 @@ export function BoardSettingsPage() {
   return (
     <div>
       <PageHeader
+        views={<SettingsSubnav projectId={projectId} />}
         testId={`${TEST_ID}.Header`}
         title="Boards"
         documentTitle={project.data ? `Boards · ${project.data.name}` : 'Boards'}
@@ -126,8 +127,6 @@ export function BoardSettingsPage() {
           </PermissionGate>
         }
       />
-
-      <SettingsSubnav projectId={projectId} />
 
       <div className="mb-4 max-w-[960px]" data-testid={`${TEST_ID}.Note`}>
         <Banner tone="neutral">

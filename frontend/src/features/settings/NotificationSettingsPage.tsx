@@ -122,6 +122,7 @@ export function NotificationSettingsPage() {
   return (
     <div>
       <PageHeader
+        views={<SettingsSubnav projectId={projectId} />}
         testId={`${TestId}.Header`}
         title="Notifications"
         documentTitle={project.data ? `Notifications · ${project.data.name}` : 'Notifications'}
@@ -149,8 +150,6 @@ export function NotificationSettingsPage() {
           </PermissionGate>
         }
       />
-
-      <SettingsSubnav projectId={projectId} />
 
       {/* Conditionally mounted, like every other write dialog in this area, so each one opens with a
           fresh draft rather than the last row's (§54). */}

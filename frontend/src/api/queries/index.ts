@@ -51,6 +51,7 @@ export {
   useProjects,
   useRetireClassificationValue,
   useSetProjectArchived,
+  useSetProjectColor,
   useStatuses,
   useUpdateClassificationValue,
 } from './projects';

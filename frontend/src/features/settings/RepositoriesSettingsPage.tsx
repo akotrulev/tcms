@@ -76,6 +76,7 @@ export function RepositoriesSettingsPage() {
         `Repositories` named the one thing on the screen it was not about. The route is unchanged.
       */}
       <PageHeader
+        views={<SettingsSubnav projectId={projectId} />}
         testId={`${TEST_ID}.Header`}
         title="Code repositories"
         documentTitle={
@@ -90,8 +91,6 @@ export function RepositoriesSettingsPage() {
           : undefined
         }
       />
-
-      <SettingsSubnav projectId={projectId} />
 
       <Banner tone="neutral" className="mb-4" data-testid={`${TEST_ID}.Note`}>
         <span>

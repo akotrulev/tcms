@@ -7,11 +7,11 @@ panels of cards whose face leads with identity and ends with the card's test res
 a colour, which its key chip carries; it never fills a canvas. No route moves. The project colour is
 the plan's one contract change (§3a).
 
-**Status:** A1, A2, K1, K2, N1, B1, B2, B3, P1, P2 and P3 built 2026-10-04 (nothing run, per the plan's single gate). A1: the contract, both
+**Status:** A1, A2, K1, K2, N1, B1, B2, B3, P1, P2, P3 and P4 built 2026-10-04 (nothing run, per the plan's single gate). A1: the contract, both
 generated copies, both fixture factories. A2: `V15__project_color.sql`, `Project.color`, the create
 default, `PUT /projects/{projectId}/color`, and their tests. K1: the surface ladder (`bg-bar`,
 `bg-raised`), the radius codemod (106 files) and its check, the overlay primitives on the ladder, and
-the project palette with `projectColorFill` and its contrast check. K2: `PageStrip`, `PageHeader` on it, `Segmented`, `TabStrip` on its helpers, `FilterStrip`'s popover and `openFilters`; every consumer test of a `FilterStrip` picker is still red until B2, P2, P3 and P4. N1: the 48px `TopBar` (launcher, switcher with coloured key chips, project tabs and More, search, Create, My work, theme, user menu with the version) replaced the rail, drawer and footer, and `AppShell.test.tsx` is rewritten against it; the four `TopStripSlot` pages render in place until P1. B1: `BoardCardFace` redrawn per §6.1 (identity row, priority for CRITICAL/HIGH, dot-and-name labels, cases row, 3px edge bar via a new `ResultBar` `variant="edge"`), pointer drag on the card with the keyboard drag on the grip, the click that ends a drag swallowed; `BoardCardFace.test.tsx` extended and two `ProjectBoardView.test.tsx` assertions updated (nothing run). B2: `/projects/:id/work` opens with one strip (`BoardPicker` lead with door badges, five view links, `WorkStripActions` portal carrying each view's Filter and the board's `GroupMenu`); `+ Add`, the GroupBy select, Configure and the keyboard banner are gone and the foot line carries the sentence; `WorkTablePage`, `ProjectBoardView` and `BacklogView` tests rewritten through `openFilters` (nothing run). B3: columns are panels (`ColumnHeader` with count, WIP pill, summed linked-case health and the door `+` on the first-status column; the lane cells, band bar and sub-bar on the §6.3 classes; one board-wide `doneOpen` toggled from the Done header, collapsed lanes showing `n done`); `sumLinkedCases` added; `ProjectBoardView.test.tsx` and `linkedCases.test.ts` extended (nothing run). P1: the nine document-mode pages open with `PageStrip`, `app/topStripSlot.tsx` and `TopStripProvider` are gone, `AppShell.test.tsx`'s slot tests deleted, panel-role pass over `cases`/`docs` (nothing run). P2: every `TabStrip` is in its page's `PageHeader views`; FeatureImport, SuiteHistory, RunDetail, Analytics' window pickers and Proposals' status tabs are `Segmented`; Plan statistics is `ui/tabs` (Radix `Tabs` root around the page, the list in `views`); case search's box and pickers are a `FilterStrip`; `CaseFilterBar`'s tests and `CaseSearchPage.test.tsx` reach pickers through `openFilters` (nothing run). P3: IssueNew, IssueDetail, MyWork, TeamBoard and OrgChart open with `PageHeader`; Staffing's range is a `Segmented` in `views`; the shared `Panel` gained `flush`, `count`, `hint` and `foot` and MyWork's local one is gone; AwaitingYou, ProjectOverview's five titled sections, the Projects tiles (with `ProjectKeyChip`), ReadinessPanels' and Timesheet's tiles sit on the ladder; `DirectoryPage.test.tsx` and `StaffingPage.test.tsx` updated (nothing run). Next: P4. The server now serves
+the project palette with `projectColorFill` and its contrast check. K2: `PageStrip`, `PageHeader` on it, `Segmented`, `TabStrip` on its helpers, `FilterStrip`'s popover and `openFilters`; every consumer test of a `FilterStrip` picker is still red until B2, P2, P3 and P4. N1: the 48px `TopBar` (launcher, switcher with coloured key chips, project tabs and More, search, Create, My work, theme, user menu with the version) replaced the rail, drawer and footer, and `AppShell.test.tsx` is rewritten against it; the four `TopStripSlot` pages render in place until P1. B1: `BoardCardFace` redrawn per §6.1 (identity row, priority for CRITICAL/HIGH, dot-and-name labels, cases row, 3px edge bar via a new `ResultBar` `variant="edge"`), pointer drag on the card with the keyboard drag on the grip, the click that ends a drag swallowed; `BoardCardFace.test.tsx` extended and two `ProjectBoardView.test.tsx` assertions updated (nothing run). B2: `/projects/:id/work` opens with one strip (`BoardPicker` lead with door badges, five view links, `WorkStripActions` portal carrying each view's Filter and the board's `GroupMenu`); `+ Add`, the GroupBy select, Configure and the keyboard banner are gone and the foot line carries the sentence; `WorkTablePage`, `ProjectBoardView` and `BacklogView` tests rewritten through `openFilters` (nothing run). B3: columns are panels (`ColumnHeader` with count, WIP pill, summed linked-case health and the door `+` on the first-status column; the lane cells, band bar and sub-bar on the §6.3 classes; one board-wide `doneOpen` toggled from the Done header, collapsed lanes showing `n done`); `sumLinkedCases` added; `ProjectBoardView.test.tsx` and `linkedCases.test.ts` extended (nothing run). P1: the nine document-mode pages open with `PageStrip`, `app/topStripSlot.tsx` and `TopStripProvider` are gone, `AppShell.test.tsx`'s slot tests deleted, panel-role pass over `cases`/`docs` (nothing run). P2: every `TabStrip` is in its page's `PageHeader views`; FeatureImport, SuiteHistory, RunDetail, Analytics' window pickers and Proposals' status tabs are `Segmented`; Plan statistics is `ui/tabs` (Radix `Tabs` root around the page, the list in `views`); case search's box and pickers are a `FilterStrip`; `CaseFilterBar`'s tests and `CaseSearchPage.test.tsx` reach pickers through `openFilters` (nothing run). P3: IssueNew, IssueDetail, MyWork, TeamBoard and OrgChart open with `PageHeader`; Staffing's range is a `Segmented` in `views`; the shared `Panel` gained `flush`, `count`, `hint` and `foot` and MyWork's local one is gone; AwaitingYou, ProjectOverview's five titled sections, the Projects tiles (with `ProjectKeyChip`), ReadinessPanels' and Timesheet's tiles sit on the ladder; `DirectoryPage.test.tsx` and `StaffingPage.test.tsx` updated (nothing run). P4: the 12 hosts render `SettingsSubnav` (segment helpers) in `PageHeader views`; AccountSecurity is a `PageHeader`; the audit filters are a `FilterStrip` (`Audit.Filters`) with chips; General's sections are `Panel`s and a Colour radio group saves through `useSetProjectColor`; three tile/card boxes moved to the card role (nothing run). Next: C1. The server now serves
 `color` and answers the colour endpoint; all of it is unverified until C1. The design was approved on 2026-10-04 on a canvas:
 <https://claude.ai/artifact/5LuW51YtnVNKWHZ4mV6Xbj>. `Main` is the board screen with the new shell,
 and `CardStates` is the card in six states, in both themes. The canvas is the user's private artifact,
@@ -71,54 +71,9 @@ Run them in order, one session each. Each block is complete on its own. Every ga
 only C1 runs one. No prompt pushes, and none starts the local stack. C1 may *use* a stack that is
 already running and must not start one.
 
-A1, A2, K1, K2, N1, B1, B2, B3, P1, P2 and P3 have landed; every block below is live.
+A1, A2, K1, K2, N1, B1, B2, B3, P1, P2, P3 and P4 have landed; the one block below is live.
 
 ---
-
-### P4 — settings, admin, account, imports, audit, clients, billing (fe-react, fe)
-
-````
-You are `fe-react`. Task P4 of docs/plans/023-one-design-language.md: make the settings subnav a
-segmented row in the strip, move Account security onto `PageHeader`, make the audit filter row a
-`FilterStrip`, and put the panels of the settings, admin and account screens onto the ladder.
-
-Deliverable: `SettingsSubnav` renders in its 12 hosts' `PageHeader views` on the segment
-helpers. AccountSecurity uses `PageHeader`. The audit filter row is a `FilterStrip` with its pickers
-in the popover. GeneralSettings' sections are `Panel`s, one of them the project colour picker, which
-saves through `PUT /projects/{projectId}/color`. The panel-role pass is clean over §7.4's folders.
-
-House rules for this plan: current branch only, never create one; no subagents; stage only your
-files; do not push. **Gate: none** — this plan gates once, in C1. Do not run `npm run build`, `lint`,
-`test:run`, `test:smoke`, `tsc` or any targeted test, locally or on shanks.
-
-Read, in this order:
-1. CLAUDE.md — "Test-harness rules".
-2. The plan: §2 (A3, A4, A8, A9), §3a, §5.5, §7.4, D6, D17, task P4, and "Close-out — every task".
-   Then A2's "As built" note (the permission the endpoint checks).
-3. K2's "As built" note; frontend/src/components/kit/Segmented.tsx (`segmentTrackClass`,
-   `segmentItemClass`); frontend/src/components/PageHeader.tsx.
-4. frontend/src/features/settings/SettingsSubnav.tsx and frontend/src/features/settings/useSettingsSections.ts.
-5. For each page in §7.4's table, the region it names (locate by content), and its test.
-6. frontend/src/api/queries/ — the projects file and `keys.ts` (add the mutation to the existing
-   factory, never a second one), and the client mutation `PUT …/client` uses, as the pattern.
-
-Build (the bullets of task P4, in order).
-
-Traps:
-- The subnav's sections are filtered by permission (`useSettingsSections`). A section the caller
-  cannot read is absent, as before.
-- The audit page serves two scopes, and its subnav shows only at project scope. Keep that.
-- A refused screen renders read-only with the permission's id and a holder's name (rule 7). The strip
-  does not change that.
-- The colour picker is a real radio group: eight visually hidden `<input type="radio">` with labelled
-  swatches, keyboard-operable, disabled with its reason without the permission. The swatch's name
-  comes from `projectColorLabels`; colour is never its only statement.
-- A saved colour must repaint the switcher at once: invalidate the projects list key the switcher
-  reads.
-
-Commit: `feat(design): settings, admin and account on the strip and the ladder (023 P4)`.
-Close out per the plan's "Close-out — every task" before you stop.
-````
 
 ### C1 — help copy, the specs, the gate, the walk (fe-react, fe)
 
@@ -140,6 +95,10 @@ P3 landed: the shared `Panel` (`components/PageHeader.tsx`) now takes `flush` (n
 table or a body that pads itself), `count` and `hint` (beside a string title) and `foot` (a closing
 line over a hairline). Use them rather than a local panel. Every `PageHeader` consumer's test needs a
 Router for the trail.
+
+P4 landed: `AuditLogPage.test.tsx` reaches its three inputs through `openFilters(user, 'Audit.Filters')`; the
+new `SettingsSubnav.test.tsx` and four Colour tests in `GeneralSettingsPage.test.tsx` (`api.put` called with
+`('/projects/p1/color', { color }, expect.anything())`) have never run, so read them first if red.
 
 Read, in this order:
 1. CLAUDE.md — "Run the gates on shanks", "What CI does", "Test-harness rules"; then
@@ -1441,6 +1400,33 @@ mutation hook and the picker with its test created 7k; read-back 6k; churn ×1.2
 - The panel-role pass over `features/settings`, `admin`, `account`, `imports`, `audit`, `clients`,
   `billing`.
 - **Not in P4:** help copy (C1).
+- **As built (2026-10-04):** `SettingsSubnav` is a `<nav>` on `segmentTrackClass` + `segmentItemClass`
+  (`max-w-full overflow-x-auto`, items `shrink-0 whitespace-nowrap`), testids unchanged, and each of
+  the 12 hosts passes it as `views` (the audit page only at project scope: `scope === 'project' ?
+  <SettingsSubnav/> : undefined`); the comment blocks that justified the old placement went with the
+  lines. `AccountSecurityPage` is `PageHeader testId="AccountSecurity.Header"` over an unchanged body
+  (the outer `data-testid="AccountSecurity"` div now wraps strip and body, because the strip is
+  full-bleed). `AuditLogPage`: a `FilterStrip` (`Audit.Filters`, `.Open`, `.Popover`) holding the
+  three existing `Field`s and one applied chip per set filter (`Audit.Filters.Applied.action|after|
+  before`); the page-size select was already in `Pager`, the table foot, so nothing moved there.
+  `GeneralSettingsPage`: Identity, Client, Closing work, Time, Issue types and Danger zone are `Panel`s
+  (`flush` + `foot` where the old markup had a hairline footer); new `ColourPanel` (a `radiogroup`
+  "Project colour" of eight sr-only radios, 24px `rounded-md` swatches, name from `projectColorLabels`,
+  a check on the chosen one, `PermissionGate project:settings` with a "Needs project:settings"
+  line when refused, `.Colour.Failed` alert on a failed save). `useSetProjectColor` in
+  `api/queries/projects.ts` (exported from the barrel): `PUT /projects/{id}/color`,
+  `TIMEOUTS.interactive`, `meta.handled`, writes the detail cache and invalidates `keys.projects`.
+  Panel-role pass: the grep over the seven folders found three `rounded-lg … bg-panel` boxes
+  (`SettingsLandingPage` section cards, `BillingSlot` and `ImportReportPage` stat tiles), all now
+  `bg-raised shadow-e1` cards; the four remaining `rounded-xl bg-panel` boxes with bespoke title bars
+  (`WorkflowSettingsPage` removal, `CoverageMatrix`, two in `BoardSettingsPage`) were left: they are on the
+  ladder already and their titles carry badges and buttons. Tests: `AuditLogPage.test.tsx` through
+  `openFilters`, new `SettingsSubnav.test.tsx` (current section, gated sections absent/present), four
+  Colour tests in `GeneralSettingsPage.test.tsx` (group, save, refused, failed write). Built but
+  unverified: nothing ran. C1 should watch the reindented `AccountSecurityPage` body, `Panel`'s
+  `overflow-hidden` against the General panels' selects, and any test that queried a Settings
+  section `h2` by its old 13.5px markup. Evidence: `frontend/src/api/queries/projects.ts`
+  (`useSetProjectColor`), `frontend/src/features/settings/GeneralSettingsPage.tsx` (`ColourPanel`).
 
 ### C1 — help copy, the specs, the gate, the walk
 

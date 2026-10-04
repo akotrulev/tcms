@@ -2,21 +2,21 @@ import { Bot, ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useCompanyAuditEvents, useProjectAuditEvents } from '../../api/queries';
-import type { AuditEvent } from '../../api/types';
+import type { AuditEvent, AuditFilters } from '../../api/types';
 import { groupByBulkOperation, type AuditGroup } from './auditGrouping';
 import { useCan, useCanInCompany } from '../../auth/useCan';
 import { DataRegion, GridSkeleton } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
 import { PageHeader } from '../../components/PageHeader';
 import { SettingsSubnav } from '../settings/SettingsSubnav';
-import { Timeline, TimelineEvent } from '../../components/kit';
+import { FilterStrip, Timeline, TimelineEvent, type AppliedFilter } from '../../components/kit';
 import { Field } from '../../components/kit/Field';
 import { Button, Input } from '../../components/ui';
 import { NativeSelect } from '../../components/ui/native-select';
-import { formatAge, formatCount, formatDateTime, plural } from '../../lib/format';
+import { formatAge, formatCount, formatDate, formatDateTime, plural } from '../../lib/format';
 import { useAnnouncedResults } from '../../a11y/useAnnouncedResults';
 import { auditActionLabel, auditTargetTypeLabel } from '../../lib/labels';
-import { useAuditFilters } from './useAuditFilters';
+import { useAuditFilters, type AuditFilterKey } from './useAuditFilters';
 
 /**
  * **The audit trail** (§242) — what happened here, and who did it.
@@ -105,6 +105,7 @@ export function AuditLogPage() {
   return (
     <div>
       <PageHeader
+        views={scope === 'project' ? <SettingsSubnav projectId={projectId ?? ''} /> : undefined}
         testId="Audit.Header"
         title={title}
         documentTitle={scope === 'project' ? 'Project audit' : 'Company audit'}
@@ -114,14 +115,6 @@ export function AuditLogPage() {
             : 'Every recorded act in this company, newest first — this project’s and every other’s.'
         }
       />
-
-      {/*
-        The project trail is one of the eleven settings sections (021 §5); the COMPANY trail is a
-        rail row under `Administration` and belongs to no project, so it gets no subnav. One
-        component, two scopes, and this is the one place the two now render differently above the
-        fold.
-      */}
-      {scope === 'project' && <SettingsSubnav projectId={projectId ?? ''} />}
 
       {!allowed ? (
         <section data-testid="Audit.Denied">
@@ -140,47 +133,55 @@ export function AuditLogPage() {
             usable — the reader can narrow or clear and try again without a reload. DataRegion's
             own header states the rule.
           */}
-          <div className="mb-4 flex flex-wrap gap-3" data-testid="Audit.Filters">
-            <Field label="Action" htmlFor="audit-action" className="w-[220px]">
-              <Input
-                id="audit-action"
-                placeholder="case.updated"
-                value={filters.action ?? ''}
-                onChange={(event) => setFilter('action', event.target.value || undefined)}
-                data-testid="Audit.Filter.Action"
-              />
-            </Field>
-            <Field label="From" htmlFor="audit-after" className="w-[170px]">
-              <Input
-                id="audit-after"
-                type="date"
-                value={(filters.occurredAfter ?? '').slice(0, 10)}
-                onChange={(event) =>
-                  // A date control gives a day; the contract wants an instant. Widen to the whole
-                  // day at both ends so "4th to 9th" includes both, which is what a person means.
-                  setFilter(
-                    'occurredAfter',
-                    event.target.value ? `${event.target.value}T00:00:00Z` : undefined,
-                  )
-                }
-                data-testid="Audit.Filter.After"
-              />
-            </Field>
-            <Field label="To" htmlFor="audit-before" className="w-[170px]">
-              <Input
-                id="audit-before"
-                type="date"
-                value={(filters.occurredBefore ?? '').slice(0, 10)}
-                onChange={(event) =>
-                  setFilter(
-                    'occurredBefore',
-                    event.target.value ? `${event.target.value}T23:59:59Z` : undefined,
-                  )
-                }
-                data-testid="Audit.Filter.Before"
-              />
-            </Field>
-          </div>
+          <FilterStrip
+            className="mb-4"
+            data-testid="Audit.Filters"
+            applied={appliedAuditFilters(filters, setFilter)}
+            onClear={hasActiveFilters ? clearFilters : undefined}
+            pickers={
+              <>
+                <Field label="Action" htmlFor="audit-action">
+                  <Input
+                    id="audit-action"
+                    placeholder="case.updated"
+                    value={filters.action ?? ''}
+                    onChange={(event) => setFilter('action', event.target.value || undefined)}
+                    data-testid="Audit.Filter.Action"
+                  />
+                </Field>
+                <Field label="From" htmlFor="audit-after">
+                  <Input
+                    id="audit-after"
+                    type="date"
+                    value={(filters.occurredAfter ?? '').slice(0, 10)}
+                    onChange={(event) =>
+                      // A date control gives a day; the contract wants an instant. Widen to the whole
+                      // day at both ends so "4th to 9th" includes both, which is what a person means.
+                      setFilter(
+                        'occurredAfter',
+                        event.target.value ? `${event.target.value}T00:00:00Z` : undefined,
+                      )
+                    }
+                    data-testid="Audit.Filter.After"
+                  />
+                </Field>
+                <Field label="To" htmlFor="audit-before">
+                  <Input
+                    id="audit-before"
+                    type="date"
+                    value={(filters.occurredBefore ?? '').slice(0, 10)}
+                    onChange={(event) =>
+                      setFilter(
+                        'occurredBefore',
+                        event.target.value ? `${event.target.value}T23:59:59Z` : undefined,
+                      )
+                    }
+                    data-testid="Audit.Filter.Before"
+                  />
+                </Field>
+              </>
+            }
+          />
 
           <section data-testid="Audit.Panel">
             <DataRegion
@@ -239,6 +240,35 @@ export function AuditLogPage() {
       )}
     </div>
   );
+}
+
+function appliedAuditFilters(
+  filters: AuditFilters,
+  setFilter: (key: AuditFilterKey, value: string | undefined) => void,
+): AppliedFilter[] {
+  const applied: AppliedFilter[] = [];
+  if (filters.action) {
+    applied.push({
+      key: 'action',
+      label: `Action · ${filters.action}`,
+      onRemove: () => setFilter('action', undefined),
+    });
+  }
+  if (filters.occurredAfter) {
+    applied.push({
+      key: 'after',
+      label: `From · ${formatDate(filters.occurredAfter)}`,
+      onRemove: () => setFilter('occurredAfter', undefined),
+    });
+  }
+  if (filters.occurredBefore) {
+    applied.push({
+      key: 'before',
+      label: `To · ${formatDate(filters.occurredBefore)}`,
+      onRemove: () => setFilter('occurredBefore', undefined),
+    });
+  }
+  return applied;
 }
 
 /**

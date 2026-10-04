@@ -1,3 +1,4 @@
+import { Check } from 'lucide-react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import {
   useProject,
@@ -5,6 +6,7 @@ import {
   useProjectSettings,
   useProjectWorkflow,
   useSetProjectArchived,
+  useSetProjectColor,
   useProjectClientOptions,
   useSetProjectClient,
   useUpdateProjectSettings,
@@ -12,7 +14,7 @@ import {
 import type { BudgetBurn, IssueTypeRef, Project, ProjectSettings } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
 import { Identifier } from '../../components/Identifier';
-import { PageHeader } from '../../components/PageHeader';
+import { PageHeader, Panel } from '../../components/PageHeader';
 import { SettingsSubnav } from './SettingsSubnav';
 import { PermissionGate } from '../../components/PermissionGate';
 import { Badge, Banner } from '../../components/kit';
@@ -20,11 +22,14 @@ import { SettingRow } from '../../components/kit/SettingRow';
 import { Button, Switch } from '../../components/ui';
 import { useCan, useCanInCompany } from '../../auth/useCan';
 import { formatHours } from '../../lib/format';
-import { issueLevels } from '../../lib/labels';
+import { issueLevels, projectColorLabels } from '../../lib/labels';
+import { projectColorFill } from '../../lib/projectColors';
 import { fullSettingsUpdate } from './settingsUpdate';
 import { TypeIcon } from '../tracker/TypeIcon';
 
 const TEST_ID = 'GeneralSettings';
+
+const PROJECT_COLORS = Object.keys(projectColorLabels) as (keyof typeof projectColorLabels)[];
 
 /**
  * `settings-general.html`, minus what M1 has no data for (011 D-f).
@@ -86,13 +91,12 @@ export function GeneralSettingsPage() {
   return (
     <div>
       <PageHeader
+        views={<SettingsSubnav projectId={projectId} />}
         testId={`${TEST_ID}.Header`}
         title="General"
         documentTitle={project.data ? `Settings · ${project.data.name}` : 'Project settings'}
         subtitle="What this project is called, what prefixes its issues, and the kinds of issue it holds."
       />
-
-      <SettingsSubnav projectId={projectId} />
 
       <div className="grid max-w-[1180px] gap-3.5 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="flex flex-col gap-3.5">
@@ -101,6 +105,13 @@ export function GeneralSettingsPage() {
             state={{ ...project, refetch: () => void project.refetch() }}
           >
             {(current) => <IdentityPanel project={current} />}
+          </DataRegion>
+
+          <DataRegion
+            testId={`${TEST_ID}.Colour`}
+            state={{ ...project, refetch: () => void project.refetch() }}
+          >
+            {(current) => <ColourPanel projectId={projectId} project={current} />}
           </DataRegion>
 
           <DataRegion
@@ -174,14 +185,17 @@ function ClosingWorkPanel({
   const save = useUpdateProjectSettings(projectId);
 
   return (
-    <section
-      className="rounded-xl border border-line bg-panel"
-      data-testid={`${TEST_ID}.Closing.Panel`}
+    <Panel
+      testId={`${TEST_ID}.Closing.Panel`}
+      title="Closing work"
+      flush
+      foot={
+        <>
+          A new project ships with this <strong>off</strong>, so a one-person company is not
+          dead-ended by a rule written for a team.
+        </>
+      }
     >
-      <div className="border-b border-line px-3.5 py-2.5">
-        <h2 className="m-0 text-[13.5px] font-semibold text-ink">Closing work</h2>
-      </div>
-
       <div className="px-3.5">
         <SettingRow
           label="Require review to close issues"
@@ -213,13 +227,7 @@ function ClosingWorkPanel({
         </div>
       )}
 
-      <div className="border-t border-line px-3.5 py-2.5">
-        <span className="text-[11.5px] leading-[1.55] text-ink-4">
-          A new project ships with this <strong>off</strong>, so a one-person company is not
-          dead-ended by a rule written for a team.
-        </span>
-      </div>
-    </section>
+    </Panel>
   );
 }
 
@@ -269,14 +277,18 @@ function TimePanel({
   const save = useUpdateProjectSettings(projectId);
 
   return (
-    <section
-      className="rounded-xl border border-line bg-panel"
-      data-testid={`${TEST_ID}.Time.Panel`}
+    <Panel
+      testId={`${TEST_ID}.Time.Panel`}
+      title="Time"
+      flush
+      foot={
+        <>
+          A budget is a ceiling, not a switch: hours are recorded against this project whether it
+          has one or not, and a project with none is in an ordinary state rather than an
+          unfinished one.
+        </>
+      }
     >
-      <div className="border-b border-line px-3.5 py-2.5">
-        <h2 className="m-0 text-[13.5px] font-semibold text-ink">Time</h2>
-      </div>
-
       <div className="px-3.5">
         <SettingRow
           label="Track time on this project"
@@ -310,14 +322,7 @@ function TimePanel({
         </div>
       )}
 
-      <div className="border-t border-line px-3.5 py-2.5">
-        <span className="text-[11.5px] leading-[1.55] text-ink-4">
-          A budget is a ceiling, not a switch: hours are recorded against this project whether it
-          has one or not, and a project with none is in an ordinary state rather than an unfinished
-          one.
-        </span>
-      </div>
-    </section>
+    </Panel>
   );
 }
 
@@ -425,11 +430,8 @@ function ClientPanel({
   if ((options.data?.length ?? 0) === 0) return null;
 
   return (
-    <section className="rounded-xl border border-line bg-panel" data-testid={`${TEST_ID}.Client.Panel`}>
-      <div className="border-b border-line px-3.5 py-2.5">
-        <h2 className="m-0 text-[13.5px] font-semibold text-ink">Client</h2>
-      </div>
-      <div className="px-3.5 py-3">
+    <Panel testId={`${TEST_ID}.Client.Panel`} title="Client" dense>
+      <div>
         <select
           className="w-full max-w-sm rounded-md border border-line bg-panel px-2.5 py-1.5 text-[13px] text-ink disabled:opacity-60"
           value={project.client?.id ?? ''}
@@ -451,17 +453,103 @@ function ClientPanel({
           project with no client is not marked as missing one anywhere in the product.
         </p>
       </div>
-    </section>
+    </Panel>
+  );
+}
+
+/**
+ * The project's colour — the chip the switcher and the Projects page draw it on (023 §3a).
+ *
+ * <h2>A real radio group</h2>
+ *
+ * Eight visually hidden radios under labelled swatches, so the arrow keys, the group's name and the
+ * checked state all come from the platform. The colour is never the only statement: each swatch
+ * carries its name from `projectColorLabels`, and the chosen one a check.
+ *
+ * <h2>Saved on choosing, through its own endpoint</h2>
+ *
+ * `PUT /projects/{projectId}/color` takes one field (023 D17), so it does not travel in the settings
+ * document. The chosen swatch follows the click while the request is in flight and falls back to
+ * what the server holds if it fails. Without `project:settings` the group is disabled and the
+ * sentence says which key and why, as the Danger zone beside it does.
+ */
+function ColourPanel({ projectId, project }: { projectId: string; project: Project }) {
+  const save = useSetProjectColor(projectId);
+  const chosen = save.isPending && save.variables ? save.variables : project.color;
+
+  return (
+    <Panel
+      testId={`${TEST_ID}.Colour.Panel`}
+      title="Colour"
+      foot="It marks this project’s key in the project switcher and on the Projects page. It never fills a page."
+    >
+      <PermissionGate projectId={projectId} permission="project:settings" wrapper="block">
+        {({ allowed }) => (
+          <div className="flex flex-col gap-2.5">
+            <div
+              role="radiogroup"
+              aria-label="Project colour"
+              className="flex flex-wrap gap-x-4 gap-y-2.5"
+              data-testid={`${TEST_ID}.Colour.Group`}
+            >
+              {PROJECT_COLORS.map((color) => (
+                <label
+                  key={color}
+                  className="flex cursor-pointer items-center gap-2 text-[12.5px] text-ink-2 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
+                >
+                  <input
+                    type="radio"
+                    name="project-color"
+                    value={color}
+                    className="peer sr-only"
+                    checked={chosen === color}
+                    disabled={!allowed || save.isPending}
+                    onChange={() => save.mutate(color)}
+                    data-testid={`${TEST_ID}.Colour.${color}`}
+                  />
+                  <span
+                    aria-hidden
+                    className="grid size-6 shrink-0 place-items-center rounded-md text-white ring-offset-2 ring-offset-panel peer-checked:ring-2 peer-checked:ring-ink peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[color:var(--color-given)]"
+                    style={{ backgroundColor: projectColorFill[color] }}
+                  >
+                    {chosen === color && <Check className="size-3.5" />}
+                  </span>
+                  {projectColorLabels[color]}
+                </label>
+              ))}
+            </div>
+
+            {!allowed && (
+              <span className="text-[12px] text-ink-4" data-testid={`${TEST_ID}.Colour.Refused`}>
+                Needs <Identifier variant="muted">project:settings</Identifier> on this project.
+              </span>
+            )}
+
+            {save.isError && (
+              <Banner tone="bad" data-testid={`${TEST_ID}.Colour.Failed`}>
+                <span role="alert">The colour did not save. It shows what the server holds.</span>
+              </Banner>
+            )}
+          </div>
+        )}
+      </PermissionGate>
+    </Panel>
   );
 }
 
 function IdentityPanel({ project }: { project: Project }) {
   return (
-    <section className="rounded-xl border border-line bg-panel" data-testid={`${TEST_ID}.Identity.Panel`}>
-      <div className="border-b border-line px-3.5 py-2.5">
-        <h2 className="m-0 text-[13.5px] font-semibold text-ink">Identity</h2>
-      </div>
-
+    <Panel
+      testId={`${TEST_ID}.Identity.Panel`}
+      title="Identity"
+      flush
+      foot={
+        <span data-testid={`${TEST_ID}.Identity.ReadOnly`}>
+          Neither field can be changed from here — the API has no rename, so this panel shows what
+          the project is rather than a form that would discard what you typed.
+        </span>
+      }
+    >
       <dl className="m-0 grid gap-4 p-3.5 sm:grid-cols-[120px_minmax(0,1fr)]">
         <dt className="text-[12.5px] text-ink-3">Name</dt>
         <dd className="m-0 text-[13.5px] text-ink" data-testid={`${TEST_ID}.Identity.Name`}>
@@ -478,14 +566,7 @@ function IdentityPanel({ project }: { project: Project }) {
           </p>
         </dd>
       </dl>
-
-      <div className="border-t border-line px-3.5 py-2.5">
-        <span className="text-[11.5px] leading-[1.55] text-ink-4" data-testid={`${TEST_ID}.Identity.ReadOnly`}>
-          Neither field can be changed from here — the API has no rename, so this panel shows what
-          the project is rather than a form that would discard what you typed.
-        </span>
-      </div>
-    </section>
+    </Panel>
   );
 }
 
@@ -518,12 +599,18 @@ function completionBadge(type: IssueTypeRef): string {
 
 function IssueTypesPanel({ types }: { types: readonly IssueTypeRef[] }) {
   return (
-    <section className="rounded-xl border border-line bg-panel" data-testid={`${TEST_ID}.Types.Panel`}>
-      <div className="flex flex-wrap items-center gap-2.5 border-b border-line px-3.5 py-2.5">
-        <h2 className="m-0 text-[13.5px] font-semibold text-ink">Issue types</h2>
-        <Identifier variant="muted">{String(types.length)}</Identifier>
-      </div>
-
+    <Panel
+      testId={`${TEST_ID}.Types.Panel`}
+      title="Issue types"
+      count={types.length}
+      flush
+      foot={
+        <span data-testid={`${TEST_ID}.Types.Foot`}>
+          Tasks created before the upgrade are still called <strong>Task</strong>. Nothing you typed
+          changed meaning underneath you.
+        </span>
+      }
+    >
       <div>
         {types.map((type) => (
           <div
@@ -562,13 +649,7 @@ function IssueTypesPanel({ types }: { types: readonly IssueTypeRef[] }) {
         their rows were relabelled to the STORY-level `Task` type, so the word on their screen means
         what it meant before. This sentence is the only place the product says so.
       */}
-      <div className="border-t border-line px-3.5 py-2.5">
-        <span className="text-[11.5px] leading-[1.55] text-ink-4" data-testid={`${TEST_ID}.Types.Foot`}>
-          Tasks created before the upgrade are still called <strong>Task</strong>. Nothing you typed
-          changed meaning underneath you.
-        </span>
-      </div>
-    </section>
+    </Panel>
   );
 }
 
@@ -593,12 +674,8 @@ function DangerZone({ projectId, archived }: { projectId: string; archived: bool
   const setArchived = useSetProjectArchived(projectId);
 
   return (
-    <section className="rounded-xl border border-line bg-panel" data-testid={`${TEST_ID}.Danger.Panel`}>
-      <div className="border-b border-line px-3.5 py-2.5">
-        <h2 className="m-0 text-[13.5px] font-semibold text-ink">Danger zone</h2>
-      </div>
-
-      <div className="flex flex-col gap-2.5 p-3.5">
+    <Panel testId={`${TEST_ID}.Danger.Panel`} title="Danger zone">
+      <div className="flex flex-col gap-2.5">
         <p className="m-0 max-w-[62ch] text-[12.5px] leading-[1.55] text-ink-3">
           Archiving hides the project from lists and marks it retired. Nothing is deleted, its keys
           stay resolvable, and this button brings it back.
@@ -632,6 +709,6 @@ function DangerZone({ projectId, archived }: { projectId: string; archived: bool
           )}
         </PermissionGate>
       </div>
-    </section>
+    </Panel>
   );
 }

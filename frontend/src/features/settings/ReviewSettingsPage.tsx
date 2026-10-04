@@ -78,13 +78,12 @@ export function ReviewSettingsPage() {
         all and what approval requires.
       */}
       <PageHeader
+        views={<SettingsSubnav projectId={projectId} />}
         testId="ReviewSettings.Header"
         title="Review policy"
         documentTitle={project.data ? `Review policy · ${project.data.name}` : 'Review policy'}
         subtitle="Whether cases, suites and plans go through review before they count as authoritative — and what approval requires when they do. Review is off by default."
       />
-
-      <SettingsSubnav projectId={projectId} />
 
       <DataRegion
         testId="ReviewSettings.Region"

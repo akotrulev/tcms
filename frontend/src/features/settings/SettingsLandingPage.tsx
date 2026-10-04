@@ -77,13 +77,12 @@ export function SettingsLandingPage() {
   return (
     <div>
       <PageHeader
+        views={<SettingsSubnav projectId={projectId} />}
         testId="Settings.Header"
         title="Settings"
         documentTitle={project.data ? `Settings · ${project.data.name}` : 'Settings'}
         subtitle="What is configured in this project, and by whom."
       />
-
-      <SettingsSubnav projectId={projectId} />
 
       <div
         data-testid="Settings.Cards"
@@ -121,7 +120,7 @@ function SectionCard({
   return (
     <section
       data-testid={`Settings.Card.${slug}`}
-      className="rounded-lg border border-line bg-panel p-3"
+      className="rounded-lg border border-line bg-raised p-3 shadow-e1"
     >
       <h2 className="m-0 flex items-center gap-2 text-[13px] font-semibold">
         <Icon aria-hidden className="size-4 shrink-0 text-ink-3" />

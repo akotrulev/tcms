@@ -86,13 +86,12 @@ export function WorkflowSettingsPage() {
   return (
     <div>
       <PageHeader
+        views={<SettingsSubnav projectId={projectId} />}
         testId={`${TEST_ID}.Header`}
         title="Workflow"
         documentTitle={project.data ? `Workflow · ${project.data.name}` : 'Workflow'}
         subtitle="The statuses an issue in this project can be in, the order they read in, and which of them mean done."
       />
-
-      <SettingsSubnav projectId={projectId} />
 
       <div className="mb-4 max-w-[960px]" data-testid={`${TEST_ID}.CompletionNote`}>
         <Banner tone="neutral">

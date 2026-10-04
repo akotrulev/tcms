@@ -13,6 +13,7 @@ import { ApiError } from '../../api/client';
 import { useAuth } from '../../auth/useAuth';
 import type { SocialIdentity, SocialProvider } from '../../api/types';
 import { DataRegion } from '../../components/DataRegion';
+import { PageHeader } from '../../components/PageHeader';
 import { Banner } from '../../components/kit';
 import { Field } from '../../components/kit/Field';
 import { SettingGroup, SettingRow } from '../../components/kit/SettingRow';
@@ -85,18 +86,14 @@ export function AccountSecurityPage() {
   const [confirming, setConfirming] = useState<SocialProvider | null>(null);
 
   return (
-    <div className="flex max-w-[820px] flex-col gap-4" data-testid={TestIdPrefix}>
-      <title>Security · TCMS</title>
-      {/*
-        This page raises its own `<title>` and heading rather than taking `PageHeader`: it sits
-        outside every project and company segment, so it has no breadcrumb trail to render, and it
-        is the one screen in the product that is about the reader rather than about the work.
-      */}
-      <header>
-        <h1 className="text-[19px] font-semibold tracking-[-.01em] text-ink">Security</h1>
-        <p className="mt-1 text-[13px] text-ink-3">How you sign in to this account.</p>
-      </header>
+    <div data-testid={TestIdPrefix}>
+      <PageHeader
+        testId={`${TestIdPrefix}.Header`}
+        title="Security"
+        subtitle="How you sign in to this account."
+      />
 
+      <div className="flex max-w-[820px] flex-col gap-4">
       {welcome && (
         <Banner tone="neutral" data-testid={`${TestIdPrefix}.Welcome`}>
           <span className="flex flex-wrap items-center gap-3">
@@ -181,6 +178,7 @@ export function AccountSecurityPage() {
         error={unlink.error}
         reset={unlink.reset}
       />
+      </div>
     </div>
   );
 }
