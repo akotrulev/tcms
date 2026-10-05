@@ -1,5 +1,7 @@
 # Time — Implementation Plan (009 module M6)
 
+**Status (filed 2026-10-05):** Delivered — module M6, done 2026-09-04 @ `3471358c`. Unticked checkboxes below are not open work. Any `Status`, task table or checkbox below this line is the plan's history, not its state.
+
 **Date:** 2026-09-04 · **Written by:** `ep-writing-plans`
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `ep-executing-plans` to implement this plan
@@ -47,7 +49,7 @@ the gates on `shanks` through `~/bin/tcms-remote` after reading
 ````text
 You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory —
 this task is the `ts` stack, so /tooling-engineer with tool-cli-builder and tool-mcp-builder.
-Run task T1 of docs/plans/016-time.md.
+Run task T1 of docs/plans/implemented/016-time.md.
 
 Read, in this order: 016's header, its "Decisions this plan takes" section (all ten — D-b, D-d and
 D-e decide what is in this contract and what is deliberately not), and its T1 block, which carries
@@ -99,7 +101,7 @@ cli/dist/main.js help` lists the six time verbs.
 ````text
 You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory —
 this task is the database, so /data-architect with data-postgresql and data-migrations.
-Run task T2 of docs/plans/016-time.md.
+Run task T2 of docs/plans/implemented/016-time.md.
 
 Read, in this order: 016's "The two numbers this plan takes" section, its decisions D-a, D-b, D-c,
 D-g and D-h (they are why each table and each CHECK is shaped the way it is), and its T2 block,
@@ -147,7 +149,7 @@ subject_id as the fourth polymorphic reference in the schema with the orphan cos
 You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory —
 this task is the backend, so /be-java with be-java-database-code, be-java-unit-testing and
 qa-permission-testing-java.
-Run task T3 of docs/plans/016-time.md. This is the largest task in the plan.
+Run task T3 of docs/plans/implemented/016-time.md. This is the largest task in the plan.
 
 Read, in this order: 016's decisions D-c, D-d, D-e, D-f, D-h and D-i (D-i decides who may approve a
 period and is the one a reader will get wrong), then its T3 block, which carries the package-info,
@@ -203,7 +205,7 @@ TimeMoneyBoundaryTest and TimeWritesNoIssueFactTest are green; ArchUnit is green
 You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory —
 this task is the SPA, so /fe-react with fe-react-forms, fe-react-data-fetching and
 fe-react-component-testing.
-Run task T4 of docs/plans/016-time.md.
+Run task T4 of docs/plans/implemented/016-time.md.
 
 Read, in this order: 016's decisions D-b, D-d, D-i and D-j (D-j is why a KPI tile is missing and
 must stay missing), then its T4 block, which carries the keys, the labels and the fault arm in full.
@@ -266,7 +268,7 @@ rejecting requires a note before the dialog will submit.
 ````text
 You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory —
 this task is the SPA plus the module's documentation close-out, so /fe-react.
-Run task T5 of docs/plans/016-time.md. This is the last task in the module, and the close-out rides
+Run task T5 of docs/plans/implemented/016-time.md. This is the last task in the module, and the close-out rides
 with it rather than taking a session of its own — this session is the only one that knows what
 actually landed and what is built-but-unverified.
 
@@ -334,7 +336,7 @@ Gates — all three stacks, because this is the module's last task:
 
 Commits — TWO, in this order:
 1. the frontend files plus docs/features.md
-2. docs/plans/009-project-management-expansion-modules.md ALONE, message `docs(plan): M6 done`
+2. docs/plans/implemented/009-project-management-expansion-modules.md ALONE, message `docs(plan): M6 done`
 
 Done when: approved hours appear on the story, the epic and the work table; the Track-time toggle
 saves; every gate is green; and 009's status table, its M6 section and the M7/M8 prompts are true
@@ -987,7 +989,7 @@ matter here.
 
 ```bash
 git add docs/specs/openapi.yaml docs/specs/2026-08-08-mcp-tool-and-command-surface.md \
-        docs/plans/016-time.md \
+        docs/plans/implemented/016-time.md \
         frontend/src/api/schema.d.ts frontend/src/features/help/sections.tsx \
         packages/client/src/schema.ts packages/client/src/test/fixtures.ts \
         packages/cli/src/reads.ts packages/cli/src/writes.ts packages/cli/src/writeConformance.test.ts \
@@ -1889,7 +1891,7 @@ closed out. All gates green.
 - Modify: `frontend/src/features/tracker/` — the story, epic and work-table screens
 - Modify: `frontend/src/features/dashboard/` — My Work
 - Modify: `frontend/src/features/settings/` — the general settings page
-- Modify: `docs/features.md`, `docs/plans/009-project-management-expansion-modules.md`
+- Modify: `docs/features.md`, `docs/plans/implemented/009-project-management-expansion-modules.md`
 
 - [ ] **Step 1: The story Time panel**
 
@@ -1951,7 +1953,7 @@ Per the hand-off protocol:
 5. **Commit this document alone.**
 
 ```bash
-git add docs/plans/009-project-management-expansion-modules.md
+git add docs/plans/implemented/009-project-management-expansion-modules.md
 git commit -m "docs(plan): M6 done"
 ```
 

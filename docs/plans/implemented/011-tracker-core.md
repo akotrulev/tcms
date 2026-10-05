@@ -1,5 +1,7 @@
 # Tracker Core Implementation Plan — module M1 of 009
 
+**Status (filed 2026-10-05):** Delivered — module M1, done 2026-08-31 @ `8bf37408` (V3 + V4, since absorbed into V1). Unticked checkboxes below are not open work. Any `Status`, task table or checkbox below this line is the plan's history, not its state.
+
 **Date:** 2026-08-30 · **Written by:** `ep-writing-plans`
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `ep-executing-plans` to implement this plan
@@ -4337,7 +4339,7 @@ actually landed, and the prompts of every module that depends on M1 are true aga
 **Depends on:** Part A
 
 **Files:**
-- Modify: `docs/features.md`, `docs/plans/009-project-management-expansion-modules.md`,
+- Modify: `docs/features.md`, `docs/plans/implemented/009-project-management-expansion-modules.md`,
   `frontend/src/features/help/sections.tsx`
 
 - [x] **Step 1: Run the whole gate, on `shanks`, before writing a word of this**
@@ -4543,7 +4545,7 @@ it names, and re-verifies nothing else.
 You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory —
 /be-java for this task.
 
-Execute T1 of docs/plans/011-tracker-core.md. Read, in this order: that plan's "Decisions taken
+Execute T1 of docs/plans/implemented/011-tracker-core.md. Read, in this order: that plan's "Decisions taken
 before the tasks" section in full (nine decisions, two of them owner-confirmed — D-a and D-c decide
 what you are about to write), then "How this plan is cut", then T1 itself.
 
@@ -4592,7 +4594,7 @@ Work on the current branch. Check with `git rev-parse --abbrev-ref HEAD`; do not
 You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory —
 /data-postgresql and /data-migrations for this task, under the data-architect agent.
 
-Execute T2 of docs/plans/011-tracker-core.md — four parts, four commits. Read that plan's
+Execute T2 of docs/plans/implemented/011-tracker-core.md — four parts, four commits. Read that plan's
 "Decisions taken before the tasks" (especially D-b, which is owner-confirmed and reverses what plan
 009 asked for), then T2's four parts.
 
@@ -4651,7 +4653,7 @@ Then:
 You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory —
 /be-java plus be-java-database-code and be-java-unit-testing.
 
-Execute T3 of docs/plans/011-tracker-core.md — two parts. This is the largest task in the module and
+Execute T3 of docs/plans/implemented/011-tracker-core.md — two parts. This is the largest task in the module and
 it is budgeted AT the 150k cap. If you run out, the seam is between Part A and Part B: commit Part A
 and stop, saying so. Do not hand half of it to another agent.
 
@@ -4698,7 +4700,7 @@ Then:
 ````text
 You are working in the tcms repo. Read CLAUDE.md first; /be-java is mandatory.
 
-Execute T4 of docs/plans/011-tracker-core.md — two parts. Read the plan's "Decisions" (D-e is this
+Execute T4 of docs/plans/implemented/011-tracker-core.md — two parts. Read the plan's "Decisions" (D-e is this
 task's whole shape) and T4's two parts.
 
 READ backend/src/main/java/com/tcms/work/package-info.java IN FULL BEFORE TOUCHING ANYTHING. It is 97
@@ -4751,7 +4753,7 @@ Then:
 You are working in the tcms repo. Read CLAUDE.md first; the tooling-engineer agent with
 tool-cli-builder, tool-mcp-builder and tool-capability-contract.
 
-Execute T5 of docs/plans/011-tracker-core.md. Read the plan's decision D-d and T5 itself.
+Execute T5 of docs/plans/implemented/011-tracker-core.md. Read the plan's decision D-d and T5 itself.
 
 CORRECT THE COUNT BEFORE YOU START. Plan 009 says "the six work-item verbs in packages/cli and
 packages/mcp". That counts nothing in the tree. What actually exists is four sites:
@@ -4793,7 +4795,7 @@ Then:
 ````text
 You are working in the tcms repo. Read CLAUDE.md first; /fe-react is mandatory for every screen.
 
-Execute T6 of docs/plans/011-tracker-core.md — two parts, budgeted AT the 150k cap. If you run out,
+Execute T6 of docs/plans/implemented/011-tracker-core.md — two parts, budgeted AT the 150k cap. If you run out,
 the seam is between Part A and Part B: commit Part A and stop, saying so.
 
 Read: the plan's decision D-f (which lists, per screen, every element that belongs to a LATER module
@@ -4845,7 +4847,7 @@ Then:
 ````text
 You are working in the tcms repo. Read CLAUDE.md first; /fe-react is mandatory for every screen.
 
-Execute T7 of docs/plans/011-tracker-core.md — two parts, budgeted AT the 150k cap. Part A is the
+Execute T7 of docs/plans/implemented/011-tracker-core.md — two parts, budgeted AT the 150k cap. Part A is the
 task that closes the module's "a person can now …". If you run out, the seam is after the two settings
 screens.
 

@@ -1,7 +1,9 @@
 # 004 — Issue tracker integration (Jira · Azure DevOps): plan of action (be · db · fe)
 
+**Status (filed 2026-10-05):** Delivered — through plan 006: B1 `3ba1555f` (all eleven paths), B4 `fcb1ad61` (the integration module, V72–V74 since absorbed into V1), B6 `2c0e1214` (the UI); gated green in B7 `6932ebeb`. Phase 4 (sync-back) was deleted by D8, not deferred. Unverified: no real Jira or Azure DevOps instance has been connected; transport is proven against `MockRestServiceServer` and the `tracker-fake` profile only. Any `Status`, task table or checkbox below this line is the plan's history, not its state.
+
 **Status:** proposed, nothing implemented · **Date:** 2026-08-28 · **Revision 5**
-**Answers:** the standing Phase 2 line in [`docs/features.md`](../features.md) — *"Issue tracker
+**Answers:** the standing Phase 2 line in [`docs/features.md`](../../features.md) — *"Issue tracker
 integration (Jira, GitHub Issues, GitLab Issues, Azure DevOps) — link cases ↔ issues, one-click
 defect creation from a failed step, status sync-back, inline status hover-cards"* — **narrowed by the
 product to link + preview + one-click defect creation, with no status sync-back.**

@@ -1,5 +1,7 @@
 # 008 — Closing the renders-vs-implementation audit
 
+**Status (filed 2026-10-05):** Delivered — all nineteen tasks landed on 2026-08-30 and every gate passed (Results, below); the audit's round 2 (`26095681`) records what closed. Unverified: no browser pass at either width or scheme, so the four layout findings (1.3, 2.1, 3.2, 4.1) are fixed in mechanism, not seen in pixels; T1's seed exit code has not been driven against a rebuilt image. Findings 1.4 and 1.12 are blocked on the contract and 6.4 was declined — each recorded in the Results. Any `Status`, task table or checkbox below this line is the plan's history, not its state.
+
 **Date:** 2026-08-30 · **Written by:** `ep-writing-plans` · **Status:** proposed, nothing implemented
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `ep-executing-plans` to implement this plan
@@ -7,7 +9,7 @@
 > checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Resolve all 34 findings in
-[`docs/audits/2026-08-30-renders-vs-implementation.md`](../audits/2026-08-30-renders-vs-implementation.md)
+[`docs/audits/2026-08-30-renders-vs-implementation.md`](../../audits/2026-08-30-renders-vs-implementation.md)
 — by moving the build to the render where the render is right, and by amending the spec where the
 render is wrong (plan 007 §4's rule).
 
@@ -2678,7 +2680,7 @@ own results section written.
 
 **Files:**
 - Modify: `docs/audits/2026-08-30-renders-vs-implementation.md` (a round-2 column, not a rewrite)
-- Modify: `docs/plans/008-render-audit-remediation.md` (§ Results)
+- Modify: `docs/plans/implemented/008-render-audit-remediation.md` (§ Results)
 
 - [ ] **Step 1: Sync and run the four gates on `shanks`**
 
@@ -2760,7 +2762,7 @@ prove it compiles, not that it works.
 - [ ] **Step 7: Commit and push**
 
 ```bash
-git add docs/audits/2026-08-30-renders-vs-implementation.md docs/plans/008-render-audit-remediation.md
+git add docs/audits/2026-08-30-renders-vs-implementation.md docs/plans/implemented/008-render-audit-remediation.md
 git commit -m "docs(audit): round 2 — what the render remediation fixed, and what is still open"
 git push
 ```

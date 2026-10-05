@@ -273,7 +273,7 @@ company and no row, and withholding it would tell a caller nothing except that i
 ### 3.0b `tcms_process`, the prompts, and the four arms 022 added (022 T3b)
 
 Added by the agent-facing-processes slice
-([design](2026-09-07-agent-specification-formatter.md), [plan](../plans/022-agent-spec-formatter.md)).
+([design](2026-09-07-agent-specification-formatter.md), [plan](../plans/implemented/022-agent-spec-formatter.md)).
 `tcms_shape` answered *what does one of these look like*; **nothing answered *in what order are
 they written***, and the order is where this surface is actually got wrong — a page is written,
 cases are proposed against blocks whose ids only that write's response carries, and a plan adopts
@@ -942,7 +942,7 @@ in `COMMANDS` as two reads and this table is what says why the other three never
 ### 3.8 The time verbs (016 T1) — four tools, because the gates split two ways twice
 
 Plan 016 (M6). Eleven operations over ten path items, tagged `time`.
-[The plan](../plans/016-time.md) carries the decisions; what follows is only what they do to this
+[The plan](../plans/implemented/016-time.md) carries the decisions; what follows is only what they do to this
 surface.
 
 **Rows 29 and 30 of §3's table were missing before this slice** — 013 T4 shipped
@@ -1004,7 +1004,7 @@ D-b). Adding it later is one member of an enum and one line of a `CHECK`.
 ### 3.9 The staffing verbs (017 T1) — three tools, because the gates split by SCOPE
 
 Plan 017 (M7). Fifteen operations over twelve path items, tagged `staffing`.
-[The plan](../plans/017-staffing.md) carries the decisions; what follows is only what they do to
+[The plan](../plans/implemented/017-staffing.md) carries the decisions; what follows is only what they do to
 this surface.
 
 **The split here is not two keys, it is two SCOPES**, which is a sharper line than §3.8's and the
@@ -1073,7 +1073,7 @@ holding a capacity figure will otherwise try.
 ### 3.10 The client verbs (018 T1) — two tools, and the first tool §2 lets span two keys
 
 Plan 018 (Mc). Eight operations over five path items, tagged `clients`.
-[The plan](../plans/018-clients.md) carries the decisions; what follows is only what they do to
+[The plan](../plans/implemented/018-clients.md) carries the decisions; what follows is only what they do to
 this surface.
 
 | Tool | Gate | Arms / reads |
@@ -1131,7 +1131,7 @@ table for them with the amounts absent. Those columns are M8's.
 
 Plan 019 (M8). Twelve operations over twelve path items, eleven tagged `billing` and one — the
 client rollup — tagged `clients` because the tag names the screen a reader is on.
-[The plan](../plans/019-billing.md) carries the decisions; what follows is only what they do to this
+[The plan](../plans/implemented/019-billing.md) carries the decisions; what follows is only what they do to this
 surface.
 
 | Tool | Gate | Arms / reads |
@@ -1206,7 +1206,7 @@ a person — the Billing entry is absent from their sidebar rather than greyed o
 ### 3.12 The analytics verbs (020 T1) — one tool, three arms, and no write side at all
 
 Plan 020 (M9), the last module of the expansion. Three operations over three path items, tagged
-`analytics`, **every one a read**. [The plan](../plans/020-delivery-analytics.md) carries the
+`analytics`, **every one a read**. [The plan](../plans/implemented/020-delivery-analytics.md) carries the
 decisions; what follows is only what they do to this surface.
 
 | Tool | Gate | Arms / reads |

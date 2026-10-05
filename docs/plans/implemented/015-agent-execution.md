@@ -1,5 +1,7 @@
 # M5 — Agent execution Implementation Plan
 
+**Status (filed 2026-10-05):** Delivered — module M5, done 2026-09-04 @ `4f3bbf8b`. Unticked checkboxes below are not open work. Any `Status`, task table or checkbox below this line is the plan's history, not its state.
+
 **Date:** 2026-09-03 · **Written by:** `ep-writing-plans`
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `ep-executing-plans` to implement this plan task-by-task, or `ep-delegate-to-subagents` to run its tasks through subagents. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -867,7 +869,7 @@ git commit -m "feat(agent): assistant profile, repositories, AI-eligible marker,
 
 ## Module close-out (after T5's gates are green)
 
-Per the 009 **Prompt hand-off protocol**, in its own commit `docs(plan): M5 done`, staging only `docs/plans/009-project-management-expansion-modules.md`:
+Per the 009 **Prompt hand-off protocol**, in its own commit `docs(plan): M5 done`, staging only `docs/plans/implemented/009-project-management-expansion-modules.md`:
 
 1. **Status table** — set M5's row to `done 2026-09-0N @ <sha>`, `V8` (matches the reservation — no strike-through needed).
 2. **Built and unverified** — list what the gates proved compiles but nobody clicked: the token-shown-once flow end to end, and (if applicable) A5's propose-and-accept write loop. ~~the refuse-to-close on a real project with the gate on, the agent-context fetch through a real Agent token~~ → **both were smoked in T4** against a stack built from this tree, through a real `/me/assistants` token, on both adapters: the queue, the context read, `attach-pr`, the 409 with its sentence, and A6's same-move-succeeds with the gate off. The transcript is in `acffef5e`'s commit body.

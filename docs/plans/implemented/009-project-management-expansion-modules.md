@@ -1,5 +1,7 @@
 # 009 — The project-management expansion, as vertical modules
 
+**Status (filed 2026-10-05):** Delivered — every module is `done` in the status table below: M0 `24f997bb` (plan 010) through M9 `ed299a79` (plan 020), with Mc `c7e504ff` (plan 018). Each module's own plan, filed beside this one, carries its built-but-unverified list. Any `Status`, task table or checkbox below this line is the plan's history, not its state.
+
 **Date:** 2026-08-30 · **Written by:** `ep-writing-plans`
 
 > **For agentic workers:** this document is a **roadmap of modules, not a task list.** Do not execute
@@ -1247,7 +1249,7 @@ first task in [009-execution-breakdown.md](009-execution-breakdown.md).
 [DONE 2026-08-30 @ 24f997bb — kept for the record, not for execution]
 You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
 (backend → /be-java with be-java-database-code and data-postgresql / data-migrations).
-Build module M0 — Foundation — of docs/plans/009-project-management-expansion-modules.md.
+Build module M0 — Foundation — of docs/plans/implemented/009-project-management-expansion-modules.md.
 
 Read, in this order: the M0 section of that plan, then "What every module carries" and "How a
 module is executed"; docs/specs/2026-08-30-project-management-expansion-scope.md §3, §7, D3, D28;
@@ -1296,7 +1298,7 @@ runs on an empty database.**
 ````text
 You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
 (/be-java + be-java-database-code + data-postgresql for the backend, /fe-react for every screen).
-Build module M1 — Tracker core — of docs/plans/009-project-management-expansion-modules.md.
+Build module M1 — Tracker core — of docs/plans/implemented/009-project-management-expansion-modules.md.
 
 Read, in this order: the M1 section of that plan, then "What every module carries" and "How a
 module is executed"; docs/specs/2026-08-30-project-management-expansion-scope.md §3, §4, D8, D11,
@@ -1312,7 +1314,7 @@ disagreement in your module plan.
 
 M0 reads `done` in the plan's status table (2026-08-30 @ 24f997bb) — that gate is satisfied.
 M1 runs FIRST, and takes `V3` and plan `011`. ~~Only Mc may run beside M1.~~ Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel".
-Your task list is docs/plans/009-execution-breakdown.md, phase 1.
+Your task list is docs/plans/implemented/009-execution-breakdown.md, phase 1.
 
 M0 landed on 2026-08-30 (`V2`, plan 010). What it gives you, and what it costs you:
 
@@ -1398,7 +1400,7 @@ place, because the M3 and M4 prompts below were rewritten from what it actually 
 ````text
 You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
 (/be-java for the backend, /fe-react for every screen, fe-react-accessibility for the board).
-Build module M2 — Board & backlog — of docs/plans/009-project-management-expansion-modules.md.
+Build module M2 — Board & backlog — of docs/plans/implemented/009-project-management-expansion-modules.md.
 
 Read, in this order: the M2 section of that plan (including the paragraph on a status created
 after a board exists), then "What every module carries" and "How a module is executed";
@@ -1410,7 +1412,7 @@ for the screen: every card has a `⋮ Move to…`, every rankable row a `↑ ↓
 tables scroll inside themselves. The plan and the scope spec are the source of truth for behaviour.
 
 Confirm M1 reads `done` in the status table before starting. ~~Only M6 or M7 may run beside M2.~~
-Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M2 runs SECOND; task list in docs/plans/009-execution-breakdown.md, phase 2.
+Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M2 runs SECOND; task list in docs/plans/implemented/009-execution-breakdown.md, phase 2.
 
 
 M1 landed 2026-08-31 (`V3`, plan 011-tracker-core.md, `8bf37408`). **What it actually built, which is
@@ -1520,7 +1522,7 @@ Then:
 You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
 (/be-java for the backend, /fe-react for every screen).
 Build module M3 — Releases, roadmap & readiness — of
-docs/plans/009-project-management-expansion-modules.md.
+docs/plans/implemented/009-project-management-expansion-modules.md.
 
 Read, in this order: the M3 section of that plan (the ReleaseSortKey move to `api` and the
 test_run.release_id FK decision are settled there — review R6), then "What every module carries"
@@ -1533,7 +1535,7 @@ no-client rendering, and test-cases.html for its new "verifies which stories" co
 on what a screen shows; the plan and scope spec on what the system does.
 
 Confirm M2 reads `done` in the status table before starting. ~~Only M6 or M7 may run beside M3.~~
-Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M3 runs THIRD; task list in docs/plans/009-execution-breakdown.md, phase 3.
+Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M3 runs THIRD; task list in docs/plans/implemented/009-execution-breakdown.md, phase 3.
 
 
 M2 landed 2026-09-01 (`V5`, plan 012-board-and-backlog.md). **What it actually built, and the five
@@ -1611,7 +1613,7 @@ Then:
 ````text
 You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
 (/be-java for the backend, /fe-react for every screen).
-Build module M4 — Jira offramp — of docs/plans/009-project-management-expansion-modules.md.
+Build module M4 — Jira offramp — of docs/plans/implemented/009-project-management-expansion-modules.md.
 
 Read, in this order: the M4 section of that plan — the importer is a `tracker.imports`
 sub-package with its own read client, the outbound adapters in integration/tracker are neither
@@ -1625,7 +1627,7 @@ spec for behaviour.
 
 Confirm M1 reads `done` in the status table before starting. ~~Only M7 may run beside M4.~~
 Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M4 runs FIFTH, AFTER M5 — so M4 takes `V7` and M5 takes `V6`, the reverse of what the
-status table originally reserved. Task list in docs/plans/009-execution-breakdown.md, phase 5.
+status table originally reserved. Task list in docs/plans/implemented/009-execution-breakdown.md, phase 5.
 
 
 M1 landed 2026-08-31 (`V3`, plan 011-tracker-core.md, `8bf37408`). **What it actually built, which is
@@ -1732,7 +1734,7 @@ Then:
 You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
 (/be-java for the backend, /fe-react for every screen, tooling:tool-mcp-builder and
 tool-cli-builder for the issue tool surface).
-Build module M5 — Agent execution — of docs/plans/009-project-management-expansion-modules.md.
+Build module M5 — Agent execution — of docs/plans/implemented/009-project-management-expansion-modules.md.
 
 Read, in this order: the M5 section of that plan (`release` in the fetch payload is nullable from
 the first contract — review R9), then "What every module carries" and "How a module is executed";
@@ -1748,7 +1750,7 @@ identity; actions attribute to "<person>, via <assistant>".
 
 Confirm M1 reads `done` in the status table before starting. ~~Only M7 may run beside M5.~~
 Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". ~~M5 runs FOURTH, BEFORE M4 — so M5 takes `V6` and M4 takes `V7`~~ → **M4 ran first anyway and took `V7` (2026-09-01, plan 014), so M5 takes `V8`.** `ls backend/src/main/resources/db/migration/` before writing a line: the directory is the authority and this column has now been corrected three times.
-Task list in docs/plans/009-execution-breakdown.md, phase 4.
+Task list in docs/plans/implemented/009-execution-breakdown.md, phase 4.
 
 
 M1 landed 2026-08-31 (`V3`, plan 011-tracker-core.md, `8bf37408`). **What it actually built, which is
@@ -1840,7 +1842,7 @@ for against what landed.
 ````text
 You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
 (/be-java for the backend, /fe-react for every screen).
-Build module M6 — Time — of docs/plans/009-project-management-expansion-modules.md.
+Build module M6 — Time — of docs/plans/implemented/009-project-management-expansion-modules.md.
 
 Read, in this order: the M6 column of the "M6 · M7 · M8" section of that plan — approved hours roll
 up as a `time`-owned projection that READS issue_fact and never writes it (review R10) — then "What
@@ -1853,7 +1855,7 @@ behaviour.
 
 Confirm M1 reads `done` in the status table before starting. ~~This module may run beside M2 or M3
 (it touches no tracker file).~~ Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M6 runs EIGHTH, after M7; task list in
-docs/plans/009-execution-breakdown.md, phase 8. M6 takes `V10`, not the `V8` the status table
+docs/plans/implemented/009-execution-breakdown.md, phase 8. M6 takes `V10`, not the `V8` the status table
 originally reserved — five modules and Mc land migrations before it.
 
 
@@ -1933,7 +1935,7 @@ Then:
 ````text
 You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
 (/be-java for the backend, /fe-react for every screen).
-Build module M7 — Staffing — of docs/plans/009-project-management-expansion-modules.md.
+Build module M7 — Staffing — of docs/plans/implemented/009-project-management-expansion-modules.md.
 
 Read, in this order: the M7 column of the "M6 · M7 · M8" section of that plan — it depends on M0
 only (review R11); utilisation (allocated vs logged) is out unless M6 reads `done` — then "What
@@ -1946,7 +1948,7 @@ behaviour.
 
 M0 reads `done` in the status table (2026-08-30 @ 24f997bb) — that gate is satisfied.
 ~~This module touches no tracker file and may run beside M2–M5.~~ Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M7 runs SEVENTH,
-after Mc; task list in docs/plans/009-execution-breakdown.md, phase 7. ~~M7 keeps `V9`.~~ → **M6 took
+after Mc; task list in docs/plans/implemented/009-execution-breakdown.md, phase 7. ~~M7 keeps `V9`.~~ → **M6 took
 `V9` on 2026-09-04**, ahead of both Mc and M7, because neither had started. `ls
 backend/src/main/resources/db/migration/` and take the next free number — the table's column has
 been wrong four times in five weeks and is a reservation, not a fact.
@@ -2030,7 +2032,7 @@ reader who wants to see what was asked for against what landed.
 ````text
 You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
 (/be-java for the backend, /fe-react for every screen).
-Build module M8 — Billing — of docs/plans/009-project-management-expansion-modules.md.
+Build module M8 — Billing — of docs/plans/implemented/009-project-management-expansion-modules.md.
 
 Read, in this order: the M8 column of the "M6 · M7 · M8" section of that plan and the paragraph
 under it on the money boundary, then "What every module carries" and "How a module is executed";
@@ -2043,7 +2045,7 @@ scope spec for behaviour.
 
 Confirm M6 AND Mc both read `done` in the status table before starting — **as of 2026-09-05 they
 both do**, M6 @ `3471358c` (plan 016) and Mc @ its own sha (plan 018). ~~Only M9 may run beside M8.~~
-Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M8 runs NINTH; task list in docs/plans/009-execution-breakdown.md, phase 9. **Mc's closure task has now
+Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M8 runs NINTH; task list in docs/plans/implemented/009-execution-breakdown.md, phase 9. **Mc's closure task has now
 rewritten this prompt** — the "What Mc actually built" section below is that rewrite, and it
 supersedes anything elsewhere in this block about clients.
 
@@ -2181,7 +2183,7 @@ Then:
 ````text
 You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
 (/be-java for the reporting types, /fe-react + the dataviz skill for the charts).
-Build module M9 — Delivery analytics — of docs/plans/009-project-management-expansion-modules.md.
+Build module M9 — Delivery analytics — of docs/plans/implemented/009-project-management-expansion-modules.md.
 
 Read, in this order: the M9 section of that plan — it has NO migration, which holds only because
 M1 put created_at / status_entered_at / done_at / release_assigned_at on issue_fact and M3 put
@@ -2193,7 +2195,7 @@ docs/specs/2026-08-30-project-management-expansion-user-stories.md; and the mock
 The mockup is the source of truth for the screen; the plan and scope spec for what is computed.
 
 Confirm M3 reads `done` in the status table before starting. ~~Only M8 may run beside M9.~~
-Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M9 runs LAST; task list in docs/plans/009-execution-breakdown.md, phase 10.
+Nothing runs beside it: one lane, decided 2026-08-30 — see "What can run in parallel". M9 runs LAST; task list in docs/plans/implemented/009-execution-breakdown.md, phase 10.
 
 **Utilisation LANDED with M7 on 2026-09-04 (@ 44f8d39a, plan 017) — do not build a second one.**
 It is `approved hours ÷ allocated capacity` (017 D-i), served on `PersonCapacity.utilisationPercent`
@@ -2235,7 +2237,7 @@ Then:
 ````text
 You are working in the tcms repo. Read CLAUDE.md first; the plugin skills it names are mandatory
 (/be-java + be-java-database-code for the backend, /fe-react for every screen).
-Build module Mc — Clients — of docs/plans/009-project-management-expansion-modules.md.
+Build module Mc — Clients — of docs/plans/implemented/009-project-management-expansion-modules.md.
 
 Read, in this order: the Mc section of that plan — the empty case is the acceptance criterion —
 then "What every module carries" and "How a module is executed";
@@ -2248,7 +2250,7 @@ it. The mockups are the source of truth for the screens; the plan and scope spec
 
 M0 reads `done` in the status table (2026-08-30 @ 24f997bb) — that gate is satisfied.
 
-Your task list is docs/plans/009-mc-clients-execution-breakdown.md — nine tasks in four phases,
+Your task list is docs/plans/implemented/009-mc-clients-execution-breakdown.md — nine tasks in four phases,
 cut against this checkout's real file paths. Read it before you plan. Two numbers in it are already
 corrected there and are worth repeating: Mc does NOT take V3 (M1 does) and does NOT take plan 011
 (M1 does); take the next free of each from disk, projected ~~V8~~ → V9 (the column shifted on

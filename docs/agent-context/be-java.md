@@ -9,7 +9,7 @@ Trust this as a lead, not evidence; `CLAUDE.md` and `docs/specs/*` outrank it.
 ## Build, run & test
 - `cd backend && ./gradlew build` is the gate (Testcontainers Postgres 17; no H2). Run it on
   `shanks` via `~/bin/tcms-remote` — standing directive; `ulimit -n 65535` first.
-- Batches under `docs/plans/006-build-batches.md` do **not** run gates until B7.
+- Batches under `docs/plans/implemented/006-build-batches.md` do **not** run gates until B7.
 
 ## Layout
 - Spring Modulith monolith, modules are packages under `com.tcms`; foundation modules `api ·

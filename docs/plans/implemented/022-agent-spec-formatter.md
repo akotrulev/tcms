@@ -1,6 +1,8 @@
 # 022 — Agent-facing processes and the specification formatter
 
-**Date:** 2026-09-07 · **Design:** [`docs/specs/2026-09-07-agent-specification-formatter.md`](../specs/2026-09-07-agent-specification-formatter.md) (read it first; §2–§5 are the spec, §7 is this table's source)
+**Status (filed 2026-10-05):** Delivered — T1 `7e49c48c`, T2 `58f972b3`, T3a `22f118b9`, T3b `e784e811`, T4 `323625a9` (2026-09-07). Unverified: nothing in `packages/` has been run against a live instance; every gate there is a double compared to `openapi.yaml`. Any `Status`, task table or checkbox below this line is the plan's history, not its state.
+
+**Date:** 2026-09-07 · **Design:** [`docs/specs/2026-09-07-agent-specification-formatter.md`](../../specs/2026-09-07-agent-specification-formatter.md) (read it first; §2–§5 are the spec, §7 is this table's source)
 
 **Goal:** an agent connected over MCP or the CLI can take a client specification, write it as a page
 in TCMS spec markdown, file proposals that name the blocks they verify, write a plan that adopts the

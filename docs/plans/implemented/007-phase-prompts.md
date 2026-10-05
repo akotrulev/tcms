@@ -1,5 +1,7 @@
 # 007 — Prompts for the remaining phases (T6–T17)
 
+**Status (filed 2026-10-05):** Delivered — every prompt here (T6–T17) has run; T17 `91c4bd6a` gated green on shanks. This file is the prompt companion to [007-render-design-implementation.md](007-render-design-implementation.md), filed with it. Any `Status`, task table or checkbox below this line is the plan's history, not its state.
+
 **Written 2026-08-29**, after T5 landed (`5a4d7226`). One prompt per task, grouped into waves. A
 wave's tasks own disjoint files and may run at the same time; the next wave starts only after the
 whole previous wave is on `master`.
@@ -29,7 +31,7 @@ git worktree add ../tcms-t9 -b lane/t9 master     # one per lane; delete after i
   and two lanes doing that overwrite each other.
 - **Landing:** each lane commits on its branch; land them onto `master` one at a time
   (`git rebase master` in the lane, then fast-forward).
-- Every prompt below ends by ticking its checkboxes in `docs/plans/007-render-design-implementation.md`
+- Every prompt below ends by ticking its checkboxes in `docs/plans/implemented/007-render-design-implementation.md`
   and recording anything the code disproved, struck through, the way T4 and T5 did.
 
 ---
@@ -39,7 +41,7 @@ git worktree add ../tcms-t9 -b lane/t9 master     # one per lane; delete after i
 ### T6 — Family 8, Threshold
 
 ```
-Execute T6 of docs/plans/007-render-design-implementation.md — read the plan's §0–§4, D1–D5, the
+Execute T6 of docs/plans/implemented/007-render-design-implementation.md — read the plan's §0–§4, D1–D5, the
 T1–T5 "what landed" notes, and the T6 section first; then docs/specs/2026-08-28-design-language.md
 and docs/specs/assets/renders/08-threshold.html with its tcms.css.
 
@@ -63,7 +65,7 @@ Then tick T6's checkboxes in the plan and note anything the code disproved.
 ### T9 — TanStack Table *(owns `package.json` this wave)*
 
 ```
-Execute T9 of docs/plans/007-render-design-implementation.md — read the plan's §1, D5, the T3 "what
+Execute T9 of docs/plans/implemented/007-render-design-implementation.md — read the plan's §1, D5, the T3 "what
 landed" note (the kit's Table exports), and the T9 section first; then the Table rule in
 docs/specs/2026-08-28-design-language.md §5 and the case table in
 docs/specs/assets/renders/01-index-tables.html.
@@ -98,7 +100,7 @@ beside it.
 ### T8 — Family 9, States, and the notification surface on sonner
 
 ```
-Execute T8 of docs/plans/007-render-design-implementation.md — read §1 (the notistack row), the
+Execute T8 of docs/plans/implemented/007-render-design-implementation.md — read §1 (the notistack row), the
 task-table note on why T8 runs before T7, and the full T8 section first; then
 docs/specs/2026-08-28-design-language.md §7 and docs/specs/assets/renders/09-states.html.
 
@@ -137,7 +139,7 @@ not change, and T13 says so if it must.
 ### T7 — The case editor, both frames
 
 ```
-Execute T7 of docs/plans/007-render-design-implementation.md — read §0 (the seven items), §4 (item
+Execute T7 of docs/plans/implemented/007-render-design-implementation.md — read §0 (the seven items), §4 (item
 6 is deferred: expectedOutcome and description stay), D5, the T3 and T5 "what landed" notes, and
 the full T7 section including Step 0 and the re-checked line references. Then the two specs it
 names — docs/specs/2026-08-28-case-authoring-redesign.md and 2026-08-28-case-authoring-rail.md,
@@ -172,7 +174,7 @@ at 1280px, as plan §5 asks.
 ### T10 — Family 1, Index & table
 
 ```
-Execute T10 of docs/plans/007-render-design-implementation.md — read D5, the T3 and T9 "what
+Execute T10 of docs/plans/implemented/007-render-design-implementation.md — read D5, the T3 and T9 "what
 landed" notes, and the T10 section; then docs/specs/2026-08-28-design-language.md §5 (Table) and
 §8, and docs/specs/assets/renders/01-index-tables.html.
 
@@ -198,7 +200,7 @@ Then tick T10's checkboxes.
 ### T13 — Family 4, Board & people
 
 ```
-Execute T13 of docs/plans/007-render-design-implementation.md — read D5, the T3 "what landed"
+Execute T13 of docs/plans/implemented/007-render-design-implementation.md — read D5, the T3 "what landed"
 note, §1 (x-tree-view is one file), and the T13 section; then
 docs/specs/2026-08-28-design-language.md §5 and docs/specs/assets/renders/04-board-and-people.html.
 
@@ -227,7 +229,7 @@ Then tick T13's checkboxes.
 ### T11 — Family 2, Record as document
 
 ```
-Execute T11 of docs/plans/007-render-design-implementation.md — read D1 (ReportView keeps its
+Execute T11 of docs/plans/implemented/007-render-design-implementation.md — read D1 (ReportView keeps its
 light surface; do not "fix" it), D5, the T3 and T7 "what landed" notes, and the T11 section; then
 docs/specs/2026-08-28-design-language.md §3 and §5 and
 docs/specs/assets/renders/02-record-as-document.html.
@@ -251,7 +253,7 @@ Then tick T11's checkboxes.
 ### T15 — Families 6 & 7, Analytics and Settings
 
 ```
-Execute T15 of docs/plans/007-render-design-implementation.md — read D5, the T3 note (Figure is
+Execute T15 of docs/plans/implemented/007-render-design-implementation.md — read D5, the T3 note (Figure is
 Tile/HBar/Sparkline), the T4 note (a refusal names the permission and the role — no person can be
 named on this codebase), and the full T15 section with its thirteen-screen list and split points;
 then docs/specs/2026-08-28-design-language.md §6 (computed, not judged: untested is the empty
@@ -285,7 +287,7 @@ Then tick T15's checkboxes.
 ### T12 — Family 3, Execution
 
 ```
-Execute T12 of docs/plans/007-render-design-implementation.md — read D5, the T5 note (the rail
+Execute T12 of docs/plans/implemented/007-render-design-implementation.md — read D5, the T5 note (the rail
 already collapses on /runs/:runId/executions/:executionId), the T11 note, and the T12 section;
 then docs/specs/2026-08-28-design-language.md §4–§5 and docs/specs/assets/renders/03-execution.html.
 
@@ -308,7 +310,7 @@ Then tick T12's checkboxes.
 ### T14 — Family 5, Authoring
 
 ```
-Execute T14 of docs/plans/007-render-design-implementation.md — read D5, the T3 and T11 notes,
+Execute T14 of docs/plans/implemented/007-render-design-implementation.md — read D5, the T3 and T11 notes,
 and the T14 section; then docs/specs/2026-08-28-design-language.md §3 (the 70ch prose measure)
 and docs/specs/assets/renders/05-authoring.html.
 
@@ -334,7 +336,7 @@ Then tick T14's checkboxes.
 ### T16 — MUI removed, preflight on
 
 ```
-Execute T16 of docs/plans/007-render-design-implementation.md — read D2, D3 (both citations and
+Execute T16 of docs/plans/implemented/007-render-design-implementation.md — read D2, D3 (both citations and
 the ownership table), D4, the T5 note (useColorScheme is the last @mui import; the 64px collapsed
 rail), plan §5, and the full T16 section.
 
@@ -361,7 +363,7 @@ Then tick T16's checkboxes.
 ### T17 — Gates on shanks and the bundle measurement
 
 ```
-Execute T17 of docs/plans/007-render-design-implementation.md — read the T17 section and
+Execute T17 of docs/plans/implemented/007-render-design-implementation.md — read the T17 section and
 docs/specs/shanks-runner-details.md first (BUILD FAILED with "Could not write XML test results"
 and zero assertion failures is an fd-limit problem: ulimit -n 65535).
 

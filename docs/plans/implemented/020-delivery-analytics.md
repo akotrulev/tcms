@@ -1,5 +1,7 @@
 # Delivery analytics (M9) Implementation Plan
 
+**Status (filed 2026-10-05):** Delivered — module M9, done 2026-09-06 @ `ed299a79`. Unticked checkboxes below are not open work. Any `Status`, task table or checkbox below this line is the plan's history, not its state.
+
 **Date:** 2026-09-06 · **Written by:** `ep-writing-plans`
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `ep-executing-plans` to implement this plan
@@ -66,7 +68,7 @@ before it stops, in place, with no changelog appended.
 ```
 You are `tooling-engineer` working in the tcms repo. Read CLAUDE.md first.
 
-Read, in this order: docs/plans/020-delivery-analytics.md §T1 and its "Decisions" section IN FULL —
+Read, in this order: docs/plans/implemented/020-delivery-analytics.md §T1 and its "Decisions" section IN FULL —
 D-b, D-c, D-d, D-e, D-f, D-i and D-m each decide a shape you will otherwise get wrong · CLAUDE.md ·
 docs/specs/openapi.yaml's `billing` block (added by 019 T1, the newest whole tag) and its
 `/time/rollup/epics/{key}` operation · packages/client/src/test/fixtures.ts around `invoice` and
@@ -141,7 +143,7 @@ Commit ONE commit, staging only: docs/specs/openapi.yaml, frontend/src/api/schem
 frontend/src/api/types.ts, packages/client/src/schema.ts, frontend/src/test/fixtures.ts,
 packages/client/src/test/fixtures.ts, packages/cli/src/*.ts, packages/mcp/src/*.ts,
 frontend/src/features/help/sections.tsx, docs/specs/2026-08-08-mcp-tool-and-command-surface.md,
-docs/plans/020-delivery-analytics.md. Message: `feat(analytics): the delivery-analytics contract,
+docs/plans/implemented/020-delivery-analytics.md. Message: `feat(analytics): the delivery-analytics contract,
 both clients, and the read verbs`.
 
 Gate, on shanks, per CLAUDE.md's standing directive — read docs/specs/shanks-runner-details.md
@@ -157,7 +159,7 @@ first: `~/bin/tcms-remote sync` then `~/bin/tcms-remote packages npm run build`,
 You are `be-java` working in the tcms repo. Read CLAUDE.md first, then load the
 `be-java-database-code` and `be-java-unit-testing` skills — both are mandatory for this task.
 
-Read, in this order: docs/plans/020-delivery-analytics.md §T2 and its "Decisions" section IN FULL —
+Read, in this order: docs/plans/implemented/020-delivery-analytics.md §T2 and its "Decisions" section IN FULL —
 D-a, D-b, D-c, D-d, D-e, D-f, D-g, D-h, D-i and D-n each decide a shape you will otherwise get
 wrong · CLAUDE.md · docs/specs/tenancy-invariants.md ·
 backend/src/main/java/com/tcms/tracker/release/ReadinessService.java, specifically its `SCOPE_ADDED`
@@ -263,7 +265,7 @@ backend/src/main/java/com/tcms/reporting/package-info.java,
 backend/src/test/java/com/tcms/reporting/analytics/**,
 backend/src/test/java/com/tcms/architecture/ReportingReadsAndNeverWritesTest.java,
 backend/src/test/java/com/tcms/architecture/NoVelocityAnywhereTest.java,
-docs/plans/020-delivery-analytics.md. Message: `feat(analytics): burn-up, cycle time and flow over
+docs/plans/implemented/020-delivery-analytics.md. Message: `feat(analytics): burn-up, cycle time and flow over
 issue_fact`.
 
 Gate, on shanks, per CLAUDE.md's standing directive — read docs/specs/shanks-runner-details.md
@@ -278,7 +280,7 @@ suite: `ulimit -n 65535; ./gradlew build`.
 You are `fe-react` working in the tcms repo. Read CLAUDE.md first, then load the `fe-react` skill,
 the `design-charts` skill and the `dataviz` skill — all three are mandatory for this task.
 
-Read, in this order: docs/plans/020-delivery-analytics.md §T3 and its "Decisions" section IN FULL —
+Read, in this order: docs/plans/implemented/020-delivery-analytics.md §T3 and its "Decisions" section IN FULL —
 D-c, D-d, D-e, D-i, D-j, D-k, D-l and D-m each decide a shape you will otherwise get wrong ·
 CLAUDE.md · docs/mockups/reports.html, THE SOURCE OF TRUTH FOR THIS SCREEN ·
 frontend/src/components/kit/Figure.tsx — read its header paragraph twice, it forbids the categorical
@@ -363,9 +365,9 @@ Close-out, and it is part of this task rather than a session of its own:
 Commit TWO commits: the screen (staging frontend/src/features/analytics/**,
 frontend/src/api/queries/analytics.ts, frontend/src/api/queries/index.ts,
 frontend/src/api/queries/keys.ts, frontend/src/lib/devFaults.ts, frontend/src/lib/labels.ts,
-frontend/src/app/router.tsx, frontend/src/app/AppShell.tsx, docs/plans/020-delivery-analytics.md),
+frontend/src/app/router.tsx, frontend/src/app/AppShell.tsx, docs/plans/implemented/020-delivery-analytics.md),
 message `feat(analytics): the delivery-analytics screen and its four figures`; then the close-out
-(staging docs/features.md, docs/plans/009-project-management-expansion-modules.md), message
+(staging docs/features.md, docs/plans/implemented/009-project-management-expansion-modules.md), message
 `docs(plan): M9 done — the last module, and what is built but unverified`.
 
 Gate, on shanks, per CLAUDE.md's standing directive — read docs/specs/shanks-runner-details.md
@@ -439,7 +441,7 @@ reconstruct it from: `issue_transition` is the **workflow allow-list** (`PRIMARY
 to_status_id)`, the legal moves), not a log of moves that happened, and `audit_event` belongs to
 another module and carries no retention guarantee a report may depend on.
 
-`docs/plans/009-execution-breakdown.md` `t45` predicted *"cycle time is per issue type from
+`docs/plans/implemented/009-execution-breakdown.md` `t45` predicted *"cycle time is per issue type from
 `status_entered_at` and `done_at`"*. That is the shape this decision corrects: over the set of issues
 that are done, that subtraction is approximately zero for every one of them.
 
@@ -1206,7 +1208,7 @@ git add docs/specs/openapi.yaml frontend/src/api/schema.d.ts frontend/src/api/ty
         packages/client/src/test/fixtures.ts packages/cli/src packages/mcp/src \
         frontend/src/features/help/sections.tsx \
         docs/specs/2026-08-08-mcp-tool-and-command-surface.md \
-        docs/plans/020-delivery-analytics.md
+        docs/plans/implemented/020-delivery-analytics.md
 git commit -m "feat(analytics): the delivery-analytics contract, both clients, and the read verbs"
 ```
 
@@ -2006,7 +2008,7 @@ git add backend/src/main/java/com/tcms/reporting/analytics \
         backend/src/test/java/com/tcms/reporting/analytics \
         backend/src/test/java/com/tcms/architecture/ReportingReadsAndNeverWritesTest.java \
         backend/src/test/java/com/tcms/architecture/NoVelocityAnywhereTest.java \
-        docs/plans/020-delivery-analytics.md
+        docs/plans/implemented/020-delivery-analytics.md
 git commit -m "feat(analytics): burn-up, cycle time and flow over issue_fact"
 ```
 
@@ -2037,7 +2039,7 @@ and plan 009's status table are closed.
 - Create: `frontend/src/app/noVelocity.test.ts` (the frontend half of D-h)
 - Create: `frontend/src/api/queries/analytics.ts`
 - Modify: `frontend/src/api/queries/{keys,index}.ts`, `frontend/src/lib/{devFaults,labels}.ts`, `frontend/src/app/{router,AppShell}.tsx`
-- Modify: `docs/features.md`, `docs/plans/009-project-management-expansion-modules.md`
+- Modify: `docs/features.md`, `docs/plans/implemented/009-project-management-expansion-modules.md`
 
 - [ ] **Step 1: The fault arm, before the feature it proves**
 
@@ -2273,7 +2275,7 @@ git add frontend/src/features/analytics frontend/src/api/queries/analytics.ts \
         frontend/src/api/queries/index.ts frontend/src/api/queries/keys.ts \
         frontend/src/lib/devFaults.ts frontend/src/lib/labels.ts \
         frontend/src/app/router.tsx frontend/src/app/AppShell.tsx \
-        docs/plans/020-delivery-analytics.md
+        docs/plans/implemented/020-delivery-analytics.md
 git commit -m "feat(analytics): the delivery-analytics screen and its four figures"
 ```
 
@@ -2293,7 +2295,7 @@ Per plan 009's [hand-off protocol](009-project-management-expansion-modules.md#p
    evidence: it read the directory, found `V1`–`V12`, and needed none.
 
 ```bash
-git add docs/features.md docs/plans/009-project-management-expansion-modules.md
+git add docs/features.md docs/plans/implemented/009-project-management-expansion-modules.md
 git commit -m "docs(plan): M9 done — the last module, and what is built but unverified"
 ```
 

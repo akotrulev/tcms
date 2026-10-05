@@ -1,5 +1,7 @@
 # Mc — Clients: execution breakdown
 
+**Status (filed 2026-10-05):** Delivered — superseded in execution by [018-clients.md](018-clients.md), which landed Mc at `c7e504ff` (2026-09-05). The unticked checkboxes below are not open work. Any `Status`, task table or checkbox below this line is the plan's history, not its state.
+
 The task cut for **Mc — Clients**, phase 6 of
 [009-execution-breakdown.md](009-execution-breakdown.md) and a module of
 [009-project-management-expansion-modules.md](009-project-management-expansion-modules.md).
@@ -424,7 +426,7 @@ Update docs/features.md by striking through the section Mc replaces and marking 
 **Files**
 
 - `docs/features.md`
-- `docs/plans/009-project-management-expansion-modules.md`
+- `docs/plans/implemented/009-project-management-expansion-modules.md`
 - `docs/plans/016-clients.md`
 
 ---

@@ -540,7 +540,7 @@ rail again.
 | Intended IA from the expansion mockups | `docs/mockups/assets/shell.js` (`buildRail`), `docs/mockups/README.md`, `docs/mockups/index.html` |
 | Screen renders (pattern families) | `docs/specs/assets/renders/` |
 | Prior audits incl. header-wrap and rail styling findings | `docs/audits/2026-08-30-renders-vs-implementation.md`, `…-styling.md`, `docs/audits/001-fe-react-conformance-r1.md` |
-| Module plans that shaped the IA | `docs/plans/009`–`020` |
+| Module plans that shaped the IA | `docs/plans/implemented/009`–`020` |
 
 ### The mockups' rail, for comparison
 

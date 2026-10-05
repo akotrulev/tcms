@@ -1,5 +1,7 @@
 # 009 — Execution breakdown: the project-management expansion, resequenced
 
+**Status (filed 2026-10-05):** Delivered — every phase (M1, M2, M3, M5, M4, Mc, M7, M6, M8, M9) has landed; the status of record is the table in [009-project-management-expansion-modules.md](009-project-management-expansion-modules.md). The unticked checkboxes below were never maintained and are not open work. Any `Status`, task table or checkbox below this line is the plan's history, not its state.
+
 The executable sequence for [009-project-management-expansion-modules.md](009-project-management-expansion-modules.md).
 The plan document is the authority on *what* each module contains; this file is the authority on **order, ownership
 and done-ness**. `Mc`'s nine-task detail lives in its own file —
@@ -25,7 +27,7 @@ resolved in this checkout**, verified by reading the tree rather than by trustin
 | `docs/mockups/` absent — *blocked 6 tasks across both runs* | **present, 51 files + `assets/`, all git-tracked.** `index.html` and every file named by a module section is there |
 | `docs/specs/2026-08-30-project-management-expansion-scope.md` | present, tracked |
 | `docs/specs/2026-08-30-project-management-expansion-user-stories.md` | present, tracked |
-| `docs/plans/009-project-management-expansion-modules.md` | present, tracked |
+| `docs/plans/implemented/009-project-management-expansion-modules.md` | present, tracked |
 | `docs/plans/010-*.md` (M0's own plan) | **`010-foundation.md` present** — so `011` is the next free plan number |
 | M0 unverified | **done.** Plan 009's status table reads `done 2026-08-30 @ 24f997bb`, and its M0 section already carries the closure: the V actually taken, the built-and-unverified list, and the lab click-through |
 
@@ -125,7 +127,7 @@ Write docs/plans/0NN-tracker-core.md (next free NNN) covering the work_item→is
 
 **Files**
 
-- `docs/plans/011-tracker-core.md`
+- `docs/plans/implemented/011-tracker-core.md`
 - `docs/specs/openapi.yaml`
 - `frontend/src/api/schema.d.ts`
 - `packages/client/src/schema.ts`
@@ -278,7 +280,7 @@ Write docs/plans/0NN-board-and-backlog.md, naming this as the hardest frontend i
 
 **Files**
 
-- `docs/plans/012-board-and-backlog.md`
+- `docs/plans/implemented/012-board-and-backlog.md`
 - `docs/specs/openapi.yaml`
 - `frontend/src/api/schema.d.ts`
 - `packages/client/src/schema.ts`
@@ -399,7 +401,7 @@ Write docs/plans/0NN-releases.md. Land the contract: /projects/{id}/releases, /r
 
 **Files**
 
-- `docs/plans/013-releases.md`
+- `docs/plans/implemented/013-releases.md`
 - `docs/specs/openapi.yaml`
 - `frontend/src/api/schema.d.ts`
 - `packages/client/src/schema.ts`
@@ -644,7 +646,7 @@ Write docs/plans/0NN-jira-offramp.md and close review R14 in it with the reason:
 - `packages/client/src/schema.ts`
 - `frontend/src/api/contractBodies.ts`
 - `packages/client/src/test/contractBodies.ts`
-- `docs/plans/009-project-management-expansion-modules.md`
+- `docs/plans/implemented/009-project-management-expansion-modules.md`
 
 ### `t25` · M4 — V6 import_run and import_dropped_field
 
@@ -759,7 +761,7 @@ two company screens, `T5` the project screen and the person page) and gave `T6` 
 figures M6 left absent plus the close-out, per the task-cutting rule that documentation rides with
 the last task.
 
-**Module plan:** [`docs/plans/017-staffing.md`](017-staffing.md) · **Migration:** ~~projected `V9`~~
+**Module plan:** [`docs/plans/implemented/017-staffing.md`](017-staffing.md) · **Migration:** ~~projected `V9`~~
 → **`V10`, taken 2026-09-04** — M6 landed ahead of this phase and spent `V9`.
 
 ### `t32` · M7 — module plan and the staffing contract commit
@@ -785,7 +787,7 @@ Write docs/plans/0NN-staffing.md. M7 depends on M0 only; ~~utilisation (allocate
 
 **Files**
 
-- `docs/plans/017-staffing.md`
+- `docs/plans/implemented/017-staffing.md`
 - `docs/specs/openapi.yaml`
 - `frontend/src/api/schema.d.ts`
 - `packages/client/src/schema.ts`
@@ -983,7 +985,7 @@ Write docs/plans/0NN-billing.md. Time and materials only (D24); AI-assistant usa
 
 **Files**
 
-- `docs/plans/019-billing.md`
+- `docs/plans/implemented/019-billing.md`
 - `docs/specs/openapi.yaml`
 - `frontend/src/api/schema.d.ts`
 - `packages/client/src/schema.ts`
@@ -1080,7 +1082,7 @@ Write docs/plans/0NN-delivery-analytics.md. First verify that issue_fact really 
 
 **Files**
 
-- `docs/plans/020-delivery-analytics.md`
+- `docs/plans/implemented/020-delivery-analytics.md`
 - `docs/specs/openapi.yaml`
 - `frontend/src/api/schema.d.ts`
 - `packages/client/src/schema.ts`

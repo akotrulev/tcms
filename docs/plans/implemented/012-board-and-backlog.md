@@ -1,5 +1,7 @@
 # Board & backlog — module M2 implementation plan
 
+**Status (filed 2026-10-05):** Delivered — module M2, done 2026-09-01 @ `95c9960b`. What is built but unverified is in *Built and unverified*, below. Any `Status`, task table or checkbox below this line is the plan's history, not its state.
+
 **Date:** 2026-08-31 · **Written by:** `ep-writing-plans`
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `ep-executing-plans` to implement this plan
@@ -847,11 +849,11 @@ three silent losses of committed work in this repository, with no conflict, no e
 You are working in the tcms repo, on the current branch (do not create one — check with
 `git rev-parse --abbrev-ref HEAD`). Read CLAUDE.md first.
 
-Run T1 of docs/plans/012-board-and-backlog.md — the board contract. Read the T1 task block for the
+Run T1 of docs/plans/implemented/012-board-and-backlog.md — the board contract. Read the T1 task block for the
 YAML; this prompt is what you need before you start.
 
 READ, IN THIS ORDER:
-  1. docs/plans/012-board-and-backlog.md — "Decisions this plan takes" (all of D-a..D-h) and the
+  1. docs/plans/implemented/012-board-and-backlog.md — "Decisions this plan takes" (all of D-a..D-h) and the
      T1 block. D-a, D-e and D-h are the three the contract encodes.
   2. docs/specs/openapi.yaml lines 8268-8800 — /board, /issues, /issues/{key}/transitions,
      /projects/{projectId}/workflow. Every operation you add sits beside these and copies their
@@ -901,11 +903,11 @@ prompt if the schema names or the endpoint shapes came out different from what T
 You are working in the tcms repo, on the current branch. Read CLAUDE.md first, then run
 /data-postgresql and /data-migrations — the plugin skills are mandatory, not decorative.
 
-Run T2 of docs/plans/012-board-and-backlog.md — the V5 migration. Read the T2 task block for the
+Run T2 of docs/plans/implemented/012-board-and-backlog.md — the V5 migration. Read the T2 task block for the
 SQL; this prompt is what you need before you start.
 
 READ, IN THIS ORDER:
-  1. docs/plans/012-board-and-backlog.md — "Two facts checked before this plan was written"
+  1. docs/plans/implemented/012-board-and-backlog.md — "Two facts checked before this plan was written"
      (the version is V5, and why), D-d (why rank is unconstrained NUMERIC), D-g, and the T2 block.
   2. backend/src/main/resources/db/migration/V3__tracker_core.sql — ALL of it, but especially
      lines 436-606, which is `tcms_seed_project_defaults`. You reproduce that function IN FULL.
@@ -962,14 +964,14 @@ COMMAND, not a skill: `Skill(be-java:be-java)` is how you invoke it; a plugin th
 is usually an install-path problem — `claude plugin list --json` and check `projectPath` against
 `pwd`, because `claude plugin list` prints every row as enabled and will not show you this.)
 
-Run T3 of docs/plans/012-board-and-backlog.md — board configuration. Read the T3 block for the code.
+Run T3 of docs/plans/implemented/012-board-and-backlog.md — board configuration. Read the T3 block for the code.
 
 T2 LANDED `V5__tracker_board.sql`, NOT `V4`. The six tables exist, forced-RLS, with the default board
 seeded per project. Two things came out of T2 that this task must not re-do — read D-k and D-l before
 you write anything.
 
 READ, IN THIS ORDER:
-  1. docs/plans/012-board-and-backlog.md — D-a (two boards, two meanings), D-e (no new permission),
+  1. docs/plans/implemented/012-board-and-backlog.md — D-a (two boards, two meanings), D-e (no new permission),
      D-g (the auto-claim is a direct call), D-k, D-l, D-m, and the T3 block.
   1b. backend/src/main/resources/db/migration/V5__tracker_board.sql — the tables you map. Section 1b
      is the trigger that already repairs a board when a status is deleted.
@@ -1046,12 +1048,12 @@ out different from the T1 contract, T4's and T6's prompts are the ones to fix.
 You are working in the tcms repo, on the current branch. Read CLAUDE.md first, then run /be-java,
 be-java-database-code and be-java-unit-testing.
 
-Run T4 of docs/plans/012-board-and-backlog.md — cards, rank and labels. Read the T4 block for the
+Run T4 of docs/plans/implemented/012-board-and-backlog.md — cards, rank and labels. Read the T4 block for the
 code. Write RankServiceTest FIRST and watch it fail: the rank arithmetic is the part of this task
 that can be subtly wrong rather than merely unwired.
 
 READ, IN THIS ORDER:
-  1. docs/plans/012-board-and-backlog.md — D-d (the rank), D-e (labels take no new permission),
+  1. docs/plans/implemented/012-board-and-backlog.md — D-d (the rank), D-e (labels take no new permission),
      D-k (the rank DEFAULT is a trigger, and why RankService must not re-implement it), D-m (the
      failures that are not yours, and how many of them YOU are expected to clear), D-n (T3's names,
      which are the ones you bind to), D-o and D-p (two traps T3 hit that you will too), and the T4
@@ -1150,10 +1152,10 @@ fix them there before you stop.
 You are working in the tcms repo, on the current branch. Read CLAUDE.md first, then run
 /tooling-engineer (tool-cli-builder and tool-mcp-builder are its sub-skills).
 
-Run T5 of docs/plans/012-board-and-backlog.md — the board verbs. Read the T5 block for the code.
+Run T5 of docs/plans/implemented/012-board-and-backlog.md — the board verbs. Read the T5 block for the code.
 
 READ, IN THIS ORDER:
-  1. docs/plans/012-board-and-backlog.md — the T5 block, including the recorded deviation: the M2
+  1. docs/plans/implemented/012-board-and-backlog.md — the T5 block, including the recorded deviation: the M2
      prompt puts the verbs in the contract commit; T1 landed the SURFACE DOC and this task lands
      the verbs, because folding them into T1 put that task at ~150k.
   2. docs/specs/2026-08-08-mcp-tool-and-command-surface.md — T1 wrote the rows you now implement.
@@ -1216,11 +1218,11 @@ You are working in the tcms repo, on the current branch. Read CLAUDE.md first, t
 and fe-react-data-fetching. (The orchestrator is a COMMAND, not a skill — `Skill(fe-react:fe-react)`
 returns "Unknown skill" is a documented trap and does NOT mean the plugins are unregistered.)
 
-Run T6 of docs/plans/012-board-and-backlog.md — the fault switch, the queries and the move logic.
+Run T6 of docs/plans/implemented/012-board-and-backlog.md — the fault switch, the queries and the move logic.
 NO SCREEN RENDERS IN THIS TASK, deliberately: the fault switch lands BEFORE the feature it proves.
 
 READ, IN THIS ORDER:
-  1. docs/plans/012-board-and-backlog.md — D-a, D-b (why columnsFor stays), D-c (the optimistic
+  1. docs/plans/implemented/012-board-and-backlog.md — D-a, D-b (why columnsFor stays), D-c (the optimistic
      split, and why it is not a contradiction), and the T6 block.
   2. docs/specs/2026-08-30-project-management-expansion-scope.md §12.4 — verbatim binding, and the
      reason the column move is NOT optimistic.
@@ -1289,7 +1291,7 @@ if either signature came out different, fix both prompts before you stop.
 You are working in the tcms repo, on the current branch. Read CLAUDE.md first, then run /fe-react,
 fe-react-accessibility, fe-react-component-testing and fe-react-animation.
 
-Run T7 of docs/plans/012-board-and-backlog.md — the project board. This is the hardest screen in
+Run T7 of docs/plans/implemented/012-board-and-backlog.md — the project board. This is the hardest screen in
 the whole expansion and the plan says so: swimlanes by epic, WIP breaches, keyboard parity with the
 pointer, and a `⋮ Move to…` on every card.
 
@@ -1298,7 +1300,7 @@ READ, IN THIS ORDER:
      line. Open docs/mockups/index.html and see it in the flow. The mockups are static renders on
      the app's own tokens (assets/tcms-mock.css mirrors frontend/src/index.css), so this is a
      translation into the kit and TanStack Query, NOT a redesign.
-  2. docs/plans/012-board-and-backlog.md — D-a, D-b, D-c, D-f (the four mockup elements that are
+  2. docs/plans/implemented/012-board-and-backlog.md — D-a, D-b, D-c, D-f (the four mockup elements that are
      deliberately NOT drawn), and the T7 block.
   3. frontend/src/features/board/BoardPage.tsx — the COMPOSITE board. Read it for how @dnd-kit is
      wired, where `announce` comes from, how a refusal is surfaced. DO NOT COPY IT into the new
@@ -1400,7 +1402,7 @@ ProjectBoardView that T8 imports, fix T8's prompt before you stop.
 You are working in the tcms repo, on the current branch. Read CLAUDE.md first, then run /fe-react,
 fe-react-routing, fe-react-ui-rules and fe-react-component-testing.
 
-Run T8 of docs/plans/012-board-and-backlog.md — the ranked backlog, and one filter across every
+Run T8 of docs/plans/implemented/012-board-and-backlog.md — the ranked backlog, and one filter across every
 view. This is the task that makes D34 true on screen.
 
 READ, IN THIS ORDER:
@@ -1408,7 +1410,7 @@ READ, IN THIS ORDER:
      "drag the ⠿ handle, or use ↑ / ↓ — both persist", and that every row has BOTH.
   2. docs/mockups/work-table.html and work-board.html — the tabbed Work entry all three share, and
      the identical filter strip on each. One filter, in the URL, across every view.
-  3. docs/plans/012-board-and-backlog.md — D-f (why there are no release sections), D-c (the rank
+  3. docs/plans/implemented/012-board-and-backlog.md — D-f (why there are no release sections), D-c (the rank
      drag is the one optimistic one), and the T8 block.
   4. frontend/src/features/tracker/WorkTablePage.tsx — one of the TWO filter useMemos you are
      extracting. Its comment carries D34's reasoning; the comment MOVES WITH IT.
@@ -1503,16 +1505,16 @@ task deferred anything else to M3, add it to D-f so T9's rewrite of the M3 promp
 You are working in the tcms repo, on the current branch. Read CLAUDE.md first, then run /fe-react
 and fe-react-component-testing.
 
-Run T9 of docs/plans/012-board-and-backlog.md — board settings, and the close-out of module M2.
+Run T9 of docs/plans/implemented/012-board-and-backlog.md — board settings, and the close-out of module M2.
 THIS IS THE LAST TASK IN THE MODULE and it carries the documentation, because this session is the
 only one that knows what actually landed and what is built-but-unverified.
 
 READ, IN THIS ORDER:
   1. docs/mockups/settings-boards.html — the source of truth. The coverage table at the bottom is
      the screen's point, not decoration.
-  2. docs/plans/012-board-and-backlog.md — the T9 block, "Built and unverified", and every D-*
+  2. docs/plans/implemented/012-board-and-backlog.md — the T9 block, "Built and unverified", and every D-*
      decision, because you are about to write them into 009's prompts.
-  3. docs/plans/009-project-management-expansion-modules.md — "Prompt hand-off protocol", and the
+  3. docs/plans/implemented/009-project-management-expansion-modules.md — "Prompt hand-off protocol", and the
      M3 and M4 prompt blocks you rewrite.
   4. frontend/src/features/settings/ — the existing settings pages and their subnav.
   5. docs/features.md — the board section you rewrite.
@@ -4531,7 +4533,7 @@ document and 009's status table are closed out.
   the sentence false. Turn it into a `RouterLink` to the route Step 1 registers.
 - Test: `frontend/src/features/settings/BoardSettingsPage.test.tsx`
 - Docs: `docs/features.md`, `docs/specs/2026-08-08-mcp-tool-and-command-surface.md`,
-  `docs/plans/009-project-management-expansion-modules.md`, `docs/plans/012-board-and-backlog.md`
+  `docs/plans/implemented/009-project-management-expansion-modules.md`, `docs/plans/implemented/012-board-and-backlog.md`
 
 - [x] **Step 1: Add the route and the subnav entry**
 
@@ -4676,10 +4678,10 @@ The coverage table is where a person sees 'every status claimed by exactly
 one column' holding — and where they see it failing, by name, before a save
 is attempted rather than as a 422 to decode."
 
-git add docs/plans/012-board-and-backlog.md
+git add docs/plans/implemented/012-board-and-backlog.md
 git commit -m "docs(plan): 012 built-and-unverified list"
 
-git add docs/plans/009-project-management-expansion-modules.md
+git add docs/plans/implemented/009-project-management-expansion-modules.md
 git commit -m "docs(plan): M2 done
 
 V5, not the reserved V4 — M1 took two versions. Every V below M2 shifts by

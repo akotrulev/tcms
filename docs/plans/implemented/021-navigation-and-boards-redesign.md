@@ -1,5 +1,7 @@
 # Navigation & boards redesign Implementation Plan
 
+**Status (filed 2026-10-05):** Delivered — T1 `3b8c9891` through T8 `f9b0b01b` (2026-09-06 → 2026-09-07); every gate green on shanks. Unverified: nothing here has been operated in a browser — the long list is *Built but unverified*, below. The shell was later replaced by [023](023-one-design-language.md). Any `Status`, task table or checkbox below this line is the plan's history, not its state.
+
 **Date:** 2026-09-06 · **Written by:** `ep-writing-plans`
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `ep-executing-plans` to implement this plan
@@ -83,7 +85,7 @@ before it stops, in place, with no changelog appended.
 ```
 You are `tooling-engineer` working in the tcms repo. Read CLAUDE.md first.
 
-Read, in this order: docs/plans/021-navigation-and-boards-redesign.md §T1 and its "Decisions"
+Read, in this order: docs/plans/implemented/021-navigation-and-boards-redesign.md §T1 and its "Decisions"
 section IN FULL — D-b through D-j each fix a shape you will otherwise get wrong ·
 docs/specs/2026-09-06-navigation-ia-redesign-proposal.md §2 (all of it) ·
 docs/specs/openapi.yaml: `/projects/{projectId}/boards` and everything below it to
@@ -144,7 +146,7 @@ below if any name you landed differs from this plan.
 You are `be-java` working in the tcms repo. Read CLAUDE.md first, then load
 `be-java-database-code` and `data-migrations`.
 
-Read, in this order: docs/plans/021-navigation-and-boards-redesign.md §T2 and Decisions D-a, D-b,
+Read, in this order: docs/plans/implemented/021-navigation-and-boards-redesign.md §T2 and Decisions D-a, D-b,
 D-e, D-f, D-l, D-m · docs/specs/2026-09-06-navigation-ia-redesign-proposal.md §2.2–§2.5 ·
 backend/src/main/resources/db/migration/V5__tracker_board.sql IN FULL (the seed function you
 replace, and §6's per-company loop, which is the pattern for the back-fill) ·
@@ -199,7 +201,7 @@ Then rewrite the T3 prompt below if anything landed differently.
 You are `be-java` working in the tcms repo. Read CLAUDE.md first, then load
 `be-java-database-code` and `be-java-unit-testing`.
 
-Read, in this order: docs/plans/021-navigation-and-boards-redesign.md §T3 and Decisions D-b, D-c,
+Read, in this order: docs/plans/implemented/021-navigation-and-boards-redesign.md §T3 and Decisions D-b, D-c,
 D-d · docs/specs/2026-09-06-navigation-ia-redesign-proposal.md §2.3, §9 R10 ·
 backend/src/main/java/com/tcms/tracker/TransitionService.java IN FULL · IssueService.java lines
 600–760 (`derivedStatus`, `allowedTransitions`, the `isEpic` branch) · EpicStatus.java ·
@@ -270,7 +272,7 @@ Rewrite the T4 and T5 prompts below if anything landed differently.
 ```
 You are `be-java` working in the tcms repo. Read CLAUDE.md first, then load `be-java-database-code`.
 
-Read, in this order: docs/plans/021-navigation-and-boards-redesign.md §T4 and Decisions D-j, D-k ·
+Read, in this order: docs/plans/implemented/021-navigation-and-boards-redesign.md §T4 and Decisions D-j, D-k ·
 backend/src/main/java/com/tcms/tracker/release/VerificationService.java (`list`, lines 140–200:
 `facts.casesOf` + `facts.lastResultsOf` is EXACTLY the read the card summary batches) ·
 release/ReleaseFacts.java · board/BoardCardService.java (where a card is built; add the summary
@@ -328,7 +330,7 @@ OPEN THE RENDERS FIRST and keep them open: docs/mockups/ia-redesign/12-dev-board
 13-qa-board.html, 14-board-handoff.html, 15-board-coverage.html, 18-pm-board.html, and
 docs/mockups/ia-redesign/README.md's "Choices made while rendering". They are the guide.
 
-Then read: docs/plans/021-navigation-and-boards-redesign.md §T5 and Decisions D-e, D-f, D-l ·
+Then read: docs/plans/implemented/021-navigation-and-boards-redesign.md §T5 and Decisions D-e, D-f, D-l ·
 docs/specs/2026-09-06-navigation-ia-redesign-proposal.md §2.4–§2.8, §8.2 (the board bullet), §8.3
 · frontend/src/features/board/BoardPage.tsx (the segmented strip, line ~140), ProjectBoardView.tsx
 IN FULL, Swimlane.tsx, BoardCardFace.tsx, MoveToMenu.tsx, cardMove.ts, useWorkFilter.ts (CARRIED,
@@ -407,7 +409,7 @@ OPEN THE RENDERS FIRST: docs/mockups/ia-redesign/01, 02, 03, 04, 05, 10, 11, 16,
 00-before-after.html; and assets/shell-v2.js — its `NAV` object is the data model this task
 transcribes into TypeScript.
 
-Then read: docs/plans/021-navigation-and-boards-redesign.md §T6 and Decisions D-g, D-h ·
+Then read: docs/plans/implemented/021-navigation-and-boards-redesign.md §T6 and Decisions D-g, D-h ·
 docs/specs/2026-09-06-navigation-ia-redesign-proposal.md §1, §4, §5, §8.1, §9 R1 R4 R5 R6 R8 R11 ·
 frontend/src/app/AppShell.tsx IN FULL (1,432 lines; `projectNav()` at 328, `RailContent` at 854,
 `ProjectSwitcher` at 1093, `TopBar` at 1249, the user menu at 1330–1385) · app/AppShell.test.tsx ·
@@ -470,7 +472,7 @@ You are `fe-react` working in the tcms repo. Read CLAUDE.md first, then load `fe
 OPEN THE RENDERS FIRST: docs/mockups/ia-redesign/06-palette.html, 08-your-access.html,
 09-case-detail-actions.html, and the header in any of them.
 
-Then read: docs/plans/021-navigation-and-boards-redesign.md §T7 and Decisions D-g ·
+Then read: docs/plans/implemented/021-navigation-and-boards-redesign.md §T7 and Decisions D-g ·
 docs/specs/2026-09-06-navigation-ia-redesign-proposal.md §3, §4, §7, §8.2 ·
 frontend/src/components/PageHeader.tsx · `grep -rln "crumbs=" frontend/src/features` (the 44) ·
 app/router.tsx · app/HeaderActions.tsx, app/topStripSlot.tsx · features/cases/CaseDetailPage.tsx
@@ -538,7 +540,7 @@ You are `fe-react` working in the tcms repo. Read CLAUDE.md first, then load
 OPEN THE RENDERS FIRST: docs/mockups/ia-redesign/13-qa-board.html (the linked-cases line),
 07-my-work-home.html, 06-palette.html.
 
-Then read: docs/plans/021-navigation-and-boards-redesign.md §T8 · the proposal §2.7, §7 Phase 2,
+Then read: docs/plans/implemented/021-navigation-and-boards-redesign.md §T8 · the proposal §2.7, §7 Phase 2,
 §8.3, §8.4, §11 · frontend/src/app/CommandPalette.tsx (T7's) · features/board/BoardCardFace.tsx ·
 features/board/MyWorkPage.tsx · features/dashboard/DashboardPage.tsx (links to `/board`) ·
 `grep -rn "/board'" frontend/src` for every link to the composite board · docs/features.md
@@ -1868,7 +1870,7 @@ See **Built but unverified** at the end of this document.
 ~/bin/tcms-remote sync
 ~/bin/tcms-remote frontend npm run build && ~/bin/tcms-remote frontend npm run lint && ~/bin/tcms-remote frontend npm run test:run
 ~/bin/tcms-remote packages npm run test:run --workspaces
-git add frontend/src docs/features.md docs/plans/021-navigation-and-boards-redesign.md
+git add frontend/src docs/features.md docs/plans/implemented/021-navigation-and-boards-redesign.md
 git commit -m "feat(shell): grouped search, the QA card face, the composite board retired, My work's strip; docs close-out"
 ```
 

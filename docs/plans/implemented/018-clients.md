@@ -1,5 +1,7 @@
 # Clients (Mc) Implementation Plan
 
+**Status (filed 2026-10-05):** Delivered — module Mc, done 2026-09-05 @ `c7e504ff`. See *Close-out* below. Any `Status`, task table or checkbox below this line is the plan's history, not its state.
+
 **Date:** 2026-09-05 · **Written by:** `ep-writing-plans`
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `ep-executing-plans` to implement this plan
@@ -58,7 +60,7 @@ before it stops, in place, with no changelog appended.
 ```
 You are `tooling-engineer` working in the tcms repo. Read CLAUDE.md first.
 
-Read, in this order: docs/plans/018-clients.md §T1 and its "Decisions" section — D-d, D-e, D-f and
+Read, in this order: docs/plans/implemented/018-clients.md §T1 and its "Decisions" section — D-d, D-e, D-f and
 D-m decide shapes you will otherwise get wrong · CLAUDE.md · docs/specs/openapi.yaml's `time` block
 (the pattern for a whole new tag, added by 016 T1) and its Project / ProjectInput / ProjectSettings /
 ProjectSettingsUpdate schemas around lines 11428-11930 · the /projects/{projectId}/settings and
@@ -125,7 +127,7 @@ you landed differ from what they assume.
 You are `data-architect` working in the tcms repo. Read CLAUDE.md first, then load
 `data-migrations` and `data-postgresql`.
 
-Read, in this order: docs/plans/018-clients.md §T2 and decisions D-a, D-k and D-l ·
+Read, in this order: docs/plans/implemented/018-clients.md §T2 and decisions D-a, D-k and D-l ·
 backend/src/main/resources/db/migration/V10__staffing.sql in full — it is the house style for the
 header comment, the company_isolation policy text and the GRANT · V2__pm_foundation.sql lines 295-310,
 which is the column you are constraining and the comment explaining why it shipped without a
@@ -178,7 +180,7 @@ and D-a of the plan if the directory gave you a number other than V11.
 You are `be-java` working in the tcms repo. Read CLAUDE.md first, then load
 `be-java-database-code`.
 
-Read, in this order: docs/plans/018-clients.md §T3 and decisions D-c, D-d, D-e, D-k, D-l, D-o ·
+Read, in this order: docs/plans/implemented/018-clients.md §T3 and decisions D-c, D-d, D-e, D-k, D-l, D-o ·
 backend/src/main/java/com/tcms/project/TrackerBindingDirectory.java IN FULL — it is the pattern this
 task performs and its Javadoc makes the argument · com/tcms/project/PeopleDirectory.java and
 identity/IdentityPeopleDirectory.java (the same pattern, the other end) ·
@@ -236,7 +238,7 @@ You are `fe-react` working in the tcms repo. Read CLAUDE.md first, then run the 
 orchestrator command — NOT `Skill(fe-react:fe-react)`, which returns "Unknown skill" even when the
 plugins are loaded correctly.
 
-Read, in this order: docs/plans/018-clients.md §T4 and decisions D-g, D-h, D-j, D-n · the mockups
+Read, in this order: docs/plans/implemented/018-clients.md §T4 and decisions D-g, D-h, D-j, D-n · the mockups
 docs/mockups/clients-empty.html, clients.html, client.html and client-new.html — they are the source
 of truth for the screens · frontend/src/api/queries/staffing.ts as the query-module pattern ·
 frontend/src/api/queries/keys.ts (the ONE factory) · frontend/src/lib/devFaults.ts, especially the
@@ -293,13 +295,13 @@ paths. Write the record back into §T4 and rewrite T5's prompt if what you lande
 You are `fe-react` working in the tcms repo. Read CLAUDE.md first, then run the /fe-react
 orchestrator command.
 
-Read, in this order: docs/plans/018-clients.md §T5 and decisions D-d, D-f, D-i · the mockups
+Read, in this order: docs/plans/implemented/018-clients.md §T5 and decisions D-d, D-f, D-i · the mockups
 docs/mockups/projects.html, project-new.html, settings-general.html, and — the acceptance criterion —
 solo-overview.html read against project-overview.html, which are the same screen with and without a
 client · frontend/src/features/settings/settingsUpdate.ts IN FULL, including its header ·
 frontend/src/features/settings/GeneralSettingsPage.tsx's header table, which is where the "Client
 select | Mc" row you are closing lives · frontend/src/features/projects/ProjectsPage.tsx's header
-comment, which explains why it is a picker and not a grid · docs/plans/009-project-management-expansion-modules.md
+comment, which explains why it is a picker and not a grid · docs/plans/implemented/009-project-management-expansion-modules.md
 "Prompt hand-off protocol".
 
 Deliver: the Client filter and per-project client on /projects, the Client field on project creation
@@ -2104,7 +2106,7 @@ and the M8 prompt closed per the hand-off protocol.
 **Files:**
 - Modify: `frontend/src/features/projects/{ProjectsPage,ProjectCreateDialog,ProjectOverviewPage}.tsx` + `{ProjectsPage,ProjectOverviewPage}.test.tsx`
 - Modify: `frontend/src/features/settings/{GeneralSettingsPage.tsx,GeneralSettingsPage.test.tsx,settingsUpdate.ts}`
-- Modify: `docs/features.md`, `docs/plans/009-project-management-expansion-modules.md`, `docs/plans/018-clients.md`
+- Modify: `docs/features.md`, `docs/plans/implemented/009-project-management-expansion-modules.md`, `docs/plans/implemented/018-clients.md`
 
 - [ ] **Step 1: `settingsUpdate.ts` — the field list, first**
 
@@ -2259,7 +2261,7 @@ several such citations.
 git add frontend/src/features/projects frontend/src/features/settings
 git commit -m "feat(crm): the client on the project surfaces, and its proven absence"
 
-git add docs/features.md docs/plans/009-project-management-expansion-modules.md docs/plans/018-clients.md
+git add docs/features.md docs/plans/implemented/009-project-management-expansion-modules.md docs/plans/implemented/018-clients.md
 git commit -m "docs(plan): Mc done — V11, the built-and-unverified list, and M8's rewritten prompt"
 ```
 

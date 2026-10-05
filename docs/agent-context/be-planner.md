@@ -76,9 +76,9 @@ nothing before master (`gh workflow run tests.yml`).
 
 | File | State |
 |---|---|
-| `docs/plans/003-case-authoring-redesign.md` | proposed, nothing implemented. Claims `V71`. Holds `openapi.yaml`. |
-| `docs/plans/004-issue-tracker-integration.md` | **revision 5, 2026-08-28** — this agent's. Proposed, nothing implemented. Claims `V72`–`V74`. **Per-user credential; no service credential; no status sync-back; link stores the tracker id, never the key. Zero open questions.** |
-| `docs/plans/005-renders-backend-support.md` | **revision 2, 2026-08-28** — this agent's. Proposed, nothing implemented. **Goes FIRST: holds `openapi.yaml`, claims `V71`.** Backs `docs/specs/2026-08-28-renders-backend-grounding.md` (which is now corrected in place and defers to 005). |
+| `docs/plans/implemented/003-case-authoring-redesign.md` | proposed, nothing implemented. Claims `V71`. Holds `openapi.yaml`. |
+| `docs/plans/implemented/004-issue-tracker-integration.md` | **revision 5, 2026-08-28** — this agent's. Proposed, nothing implemented. Claims `V72`–`V74`. **Per-user credential; no service credential; no status sync-back; link stores the tracker id, never the key. Zero open questions.** |
+| `docs/plans/implemented/005-renders-backend-support.md` | **revision 2, 2026-08-28** — this agent's. Proposed, nothing implemented. **Goes FIRST: holds `openapi.yaml`, claims `V71`.** Backs `docs/specs/2026-08-28-renders-backend-grounding.md` (which is now corrected in place and defers to 005). |
 
 **`NNN` high-water mark: `005`.**
 

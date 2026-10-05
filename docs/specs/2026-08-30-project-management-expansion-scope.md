@@ -1027,7 +1027,7 @@ Itemised rather than assumed, because this is where an expansion of this size ac
 
 > ~~**The horizontal cut below — schema and roles first, screens several phases later — is how this
 > ships.**~~ → **superseded 2026-08-30 by
-> [`docs/plans/009-project-management-expansion-modules.md`](../plans/009-project-management-expansion-modules.md),
+> [`docs/plans/implemented/009-project-management-expansion-modules.md`](../plans/implemented/009-project-management-expansion-modules.md),
 > which cuts the same work vertically:** each module lands its own migration, endpoints and screens
 > and is usable the day it merges. The reasoning below is kept rather than deleted, because it was
 > not wrong — it optimised for schema that is cheap to add and expensive to retrofit, and one

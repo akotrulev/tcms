@@ -588,7 +588,7 @@ long-form reading on the document surface with a contents rail, as §3 describes
 
 ## 10a. Round 2 — what was fixed, 2026-08-30
 
-Worked through [`docs/plans/008-render-audit-remediation.md`](../plans/008-render-audit-remediation.md),
+Worked through [`docs/plans/implemented/008-render-audit-remediation.md`](../plans/implemented/008-render-audit-remediation.md),
 nineteen tasks, one commit each. **Every finding is accounted for below**: fixed, amended in the
 spec, or open with a stated reason. Nothing was closed by deciding it did not matter.
 

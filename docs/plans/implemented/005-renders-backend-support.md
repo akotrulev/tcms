@@ -1,7 +1,9 @@
 # 005 — Backend support for the nine renders
 
+**Status (filed 2026-10-05):** Delivered — slices S1–S10 through plan 006: B1 `3ba1555f`, B2 `48c4c4dd`, B3 `bf76cf69`, B6 `2c0e1214`; gated green in B7 `6932ebeb`. N14 and N16 stay deferred (§5) and belong to a new plan. Unverified: the view changes were applied in code and not walked in a browser. Any `Status`, task table or checkbox below this line is the plan's history, not its state.
+
 **Status:** proposed · nothing implemented, nothing run · **Date:** 2026-08-28 · **Revision 2**
-**Initiative number:** `005-`. The brief said `004-`; `docs/plans/004-issue-tracker-integration.md`
+**Initiative number:** `005-`. The brief said `004-`; `docs/plans/implemented/004-issue-tracker-integration.md`
 already holds it.
 **Position: 005 goes first.** It takes `openapi.yaml` ahead of
 [`003`](003-case-authoring-redesign.md) and [`004`](004-issue-tracker-integration.md), and both
@@ -12,7 +14,7 @@ what changed and why it is not what revision 2 first prescribed.
 `gherkin_source` deleter, `002-`). Disk high-water is `V69`. ~~Under the new position 003 moves to
 `V72` and 004 to `V73`–`V75` — a uniform **+1** shift, §8.2.~~ → **No shift. 003 released its claim
 (its only migration is in a blocked phase — §8.3's own hole); 004 keeps `V72`–`V74`.** §8.2.
-**Input:** [`docs/specs/2026-08-28-renders-backend-grounding.md`](../specs/2026-08-28-renders-backend-grounding.md)
+**Input:** [`docs/specs/2026-08-28-renders-backend-grounding.md`](../../specs/2026-08-28-renders-backend-grounding.md)
 — verified, not trusted. Its five errors have since been **corrected in place** by the coordinator,
 each struck through with `→ corrected by plan 005`; that document now names this one as deciding
 where the two disagree. §1 is kept as the record of what was found and why, not as a live dispute.
@@ -424,13 +426,13 @@ The edit is a uniform **+1** shift, because 005 claims exactly one number:
 | **003** case authoring | `V71` | **`V72`** |
 | **004** issue tracker | `V72`, `V73`, `V74` | **`V73`, `V74`, `V75`** |
 
-**`docs/plans/003-case-authoring-redesign.md` — two lines:**
+**`docs/plans/implemented/003-case-authoring-redesign.md` — two lines:**
 
 - **:6** — *"`V70` is reserved for it — any migration here starts at `V71`"* → starts at **`V72`**;
   add that `V71` is claimed by 005.
 - **:389** — *"**Database (`V71`, never `V70`):**"* → **`V72`**. The "never `V70`" clause stays true.
 
-**`docs/plans/004-issue-tracker-integration.md` — the header block plus twenty in-body mentions.**
+**`docs/plans/implemented/004-issue-tracker-integration.md` — the header block plus twenty in-body mentions.**
 Every `V72`→`V73`, `V73`→`V74`, `V74`→`V75`:
 
 - **:8–:10** the claim block — *"Migrations start at `V72`"* → `V73`; *"`V71` is claimed by 003"* →

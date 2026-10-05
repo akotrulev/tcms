@@ -3,14 +3,14 @@
 **Status:** analysis only, nothing implemented · **Date:** 2026-08-28
 **Subject:** [`docs/specs/assets/renders/`](assets/renders/) — nine family renders, 42 screens
 **Written rules:** [`2026-08-28-design-language.md`](2026-08-28-design-language.md)
-**Decided in:** [`docs/plans/005-renders-backend-support.md`](../plans/005-renders-backend-support.md)
+**Decided in:** [`docs/plans/implemented/005-renders-backend-support.md`](../plans/implemented/005-renders-backend-support.md)
 — this document is the analysis; 005 is what gets built (~~11 build · 5 defer · 13 drop~~ →
 **17 build · 6 defer · 14 drop**, 005 revision 2, splits counted separately). Where the
 two disagree, **005 wins**: it checked the entities and the permission catalogue, and it corrected
 five things here, each struck through in place below rather than deleted.
 
 **Excluded:** case authoring. Already grounded and costed in
-[`docs/plans/003-case-authoring-redesign.md`](../plans/003-case-authoring-redesign.md); nothing here
+[`docs/plans/implemented/003-case-authoring-redesign.md`](../plans/implemented/003-case-authoring-redesign.md); nothing here
 restates it or contradicts it.
 
 Every claim below was checked against `docs/specs/openapi.yaml`, the controller surface under

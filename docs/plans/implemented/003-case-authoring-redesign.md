@@ -1,7 +1,9 @@
 # 003 — Case authoring redesign: plan of action (fe · be · db)
 
+**Status (filed 2026-10-05):** Delivered — Phases 1 and 2 landed through plan 006's batches: B1 `3ba1555f` (contract), B3 `bf76cf69` (render-gherkin backend), B5 `598cec63` (the case editor); gated green in B7 `6932ebeb`. **Phase 3 (metadata as tags) was never built**: it is a blocked stub with no task, gated on the spec's open problem 2 and to be revisited with 005's deferred N14/N16 in a new plan, not here. Unverified: the editor has not been walked in a browser against this plan. Any `Status`, task table or checkbox below this line is the plan's history, not its state.
+
 **Status:** proposed, nothing implemented · **Date:** 2026-08-28
-**Answers:** [`docs/specs/2026-08-28-case-authoring-redesign.md`](../specs/2026-08-28-case-authoring-redesign.md)
+**Answers:** [`docs/specs/2026-08-28-case-authoring-redesign.md`](../../specs/2026-08-28-case-authoring-redesign.md)
 **Initiative number:** `003-`. `002-` is claimed by the `test_case.gherkin_source` deleter (§255),
 and **`V70` is reserved for it**. ~~Any migration here starts at `V71`.~~ → **grounded 2026-08-28
 against [`004`](004-issue-tracker-integration.md) and [`005`](005-renders-backend-support.md): this
@@ -22,7 +24,7 @@ its reasons are in *Sequencing*; the refusal shape Phase 2 writes against comes 
 | **D2** | **`POST /projects/{projectId}/cases/render-gherkin` ships in Phase 2.** | Contract change, both generated copies, and the Write surface works on *New test case* and on dirty edits. |
 | **D3** | **One prose line under the title, and the columns stay.** Per the render. | No migration. `description` and `expectedOutcome` stop being authored and keep being rendered where they have a value. |
 | **D4** | **Every test is written here; CI executes them.** No manual browser pass. | See *Verification* — what CI actually runs is narrower than "CI", and two risks become unobserved rather than mitigated. Stated, not worked around. |
-| **D5** | **Existing test cases are HARD-purged on the lab and prod environments.** Confirmed 2026-08-28: a real `DELETE`, not the product's soft delete. | A data operation, not a code change, and **irreversible**. See *Clearing the environments*: it takes the execution history with it, it has no operator verb, and it empties the corpus the redesign's blank state is built on. ~~**Two answers still missing before it can run.**~~ → both answered 2026-08-28 (scope: all project content; method: the SQL purge, never a volume drop); the operation now lives in [`docs/runbooks/2026-08-28-purge-project-content.md`](../runbooks/2026-08-28-purge-project-content.md). |
+| **D5** | **Existing test cases are HARD-purged on the lab and prod environments.** Confirmed 2026-08-28: a real `DELETE`, not the product's soft delete. | A data operation, not a code change, and **irreversible**. See *Clearing the environments*: it takes the execution history with it, it has no operator verb, and it empties the corpus the redesign's blank state is built on. ~~**Two answers still missing before it can run.**~~ → both answered 2026-08-28 (scope: all project content; method: the SQL purge, never a volume drop); the operation now lives in [`docs/runbooks/2026-08-28-purge-project-content.md`](../../runbooks/2026-08-28-purge-project-content.md). |
 | **D6** | **Preconditions are authored as the `Background:` block at the top of the document.** | Moves a rail row into the text. Carries a permission consequence (`library:manage`) and an unresolved question about inherited and declined conditions — see *Preconditions as `Background:`*. |
 
 **D1 contradicts the render**, which draws a `Write | Fields` toggle in both frames. That toggle is
@@ -125,7 +127,7 @@ Classification). Eleven fields have to live somewhere and six of them are not in
 
 ### Fields that must find a home — decided
 
-Settled by [`docs/specs/2026-08-28-case-authoring-rail.md`](../specs/2026-08-28-case-authoring-rail.md)
+Settled by [`docs/specs/2026-08-28-case-authoring-rail.md`](../../specs/2026-08-28-case-authoring-rail.md)
 (the `ui-ux-pro-max` dataset, the same authority §258 was driven against). **Two fields needed a
 home, not four** — an earlier reading of this section claimed `ownerId` and `lifecycleStatus` did,
 and both were wrong.
@@ -414,7 +416,7 @@ not.
 
 ## Clearing the environments (D5) — pointer, and what lands here
 
-**Moved 2026-08-28** to [`docs/runbooks/2026-08-28-purge-project-content.md`](../runbooks/2026-08-28-purge-project-content.md)
+**Moved 2026-08-28** to [`docs/runbooks/2026-08-28-purge-project-content.md`](../../runbooks/2026-08-28-purge-project-content.md)
 beside its script: it is *not a code change and not part of any phase*, and it was a third of this
 document. What the runbook holds: why D5 is not the product's soft delete; the two foreign keys that
 make a case purge a purge of the execution history; the settled scope (all project content — companies,

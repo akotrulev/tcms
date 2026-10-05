@@ -1,5 +1,7 @@
 # Jira Offramp Implementation Plan
 
+**Status (filed 2026-10-05):** Delivered — module M4, done 2026-09-03 @ `ba0031bb`. Unverified: no import has been run against a real Jira or Azure DevOps instance. Any `Status`, task table or checkbox below this line is the plan's history, not its state.
+
 **Date:** 2026-09-01 · **Written by:** `ep-writing-plans`
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `ep-executing-plans` to implement this plan
@@ -83,7 +85,7 @@ files, then `git commit --amend` after writing the row, or write the row in a se
 ### T1 — The import contract
 
 ````text
-You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/014-jira-offramp.md — the
+You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/implemented/014-jira-offramp.md — the
 decisions D-a…D-m and the whole of T1. Use /be-java.
 
 Land the import contract in ONE commit: docs/specs/openapi.yaml, both generated clients
@@ -127,7 +129,7 @@ Tasks table and tick its steps, per "Marking a task done".
 ### T2 — `V7`
 
 ````text
-You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/014-jira-offramp.md T2 and
+You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/implemented/014-jira-offramp.md T2 and
 decisions D-a, D-f, D-g, D-j. Use /data-architect with data-postgresql and data-migrations.
 
 Write backend/src/main/resources/db/migration/V7__import.sql. `ls` the migration directory FIRST —
@@ -170,7 +172,7 @@ Tasks table and tick its steps.
 ### T3 — `tracker.imports`: the port, the Jira client, the guard, the preview
 
 ````text
-You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/014-jira-offramp.md T3 and
+You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/implemented/014-jira-offramp.md T3 and
 decisions D-a, D-b, D-c, D-d, D-f, D-k. Use /be-java with be-java-database-code,
 be-java-unit-testing and be-java-pattern-writer.
 
@@ -247,7 +249,7 @@ place before stopping.
 ### T4 — The run, the report, and the reaper
 
 ````text
-You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/014-jira-offramp.md T4 and
+You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/implemented/014-jira-offramp.md T4 and
 decisions D-b, D-d, D-f, D-g, D-h, D-i, D-j, D-m. Use /be-java with be-java-database-code and
 be-java-unit-testing.
 
@@ -335,7 +337,7 @@ is the one thing this repo's tests will not catch for you until the frontend fai
 ### T5 — The Azure DevOps source
 
 ````text
-You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/014-jira-offramp.md T5 and
+You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/implemented/014-jira-offramp.md T5 and
 decision D-k. Use /be-java with be-java-pattern-writer and be-java-unit-testing.
 
 Add AzureDevOpsImportSource behind the ImportSource port T3 built. IT REGISTERS ITSELF: the port
@@ -386,7 +388,7 @@ Commit: the T5 step 5 text. Then mark T5 done in the plan's Tasks table and tick
 ### T6 — The CLI import verbs
 
 ````text
-You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/014-jira-offramp.md T6 and
+You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/implemented/014-jira-offramp.md T6 and
 decision D-l. Use tooling:tool-cli-builder.
 
 Add `tcms import list` and `tcms import show <importRunId>` to packages/cli, and §6's rows plus the
@@ -431,7 +433,7 @@ Commit: the T6 step 5 text. Then mark T6 done in the plan's Tasks table and tick
 ### T7 — The wizard
 
 ````text
-You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/014-jira-offramp.md T7 and
+You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/implemented/014-jira-offramp.md T7 and
 decisions D-a, D-e, D-h, D-i, D-k. Use /fe-react with fe-react-forms, fe-react-data-fetching,
 fe-react-component-testing and fe-react-error-handling.
 
@@ -507,7 +509,7 @@ Commit: the T7 step 9 text. Then mark T7 done in the plan's Tasks table and tick
 ### T8 — The report, the list, and the close-out
 
 ````text
-You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/014-jira-offramp.md T8 and
+You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/implemented/014-jira-offramp.md T8 and
 decisions D-e, D-f, D-h. Use /fe-react with fe-react-data-fetching and fe-react-component-testing.
 
 This is the LAST task of module M4, so the documentation close-out rides with it rather than taking
@@ -588,7 +590,7 @@ Then the close-out, and none of it is optional:
   1. docs/features.md — a new "### Moving in from Jira" subsection under ## Issues. Line 507's
      "Bulk import/export — CSV/Excel import, TestRail/Xray migration importers" is NOT what this
      built and stays as a gap; strike through nothing there.
-  2. docs/plans/009-project-management-expansion-modules.md, in ITS OWN COMMIT, staging only that
+  2. docs/plans/implemented/009-project-management-expansion-modules.md, in ITS OWN COMMIT, staging only that
      file, per the plan's "Prompt hand-off protocol":
        - M4's row to `done YYYY-MM-DD @ <short sha>`.
        - M4's **db** line records V7 as taken, striking through the reserved numbers rather than
@@ -1025,7 +1027,7 @@ frontend/src/api/queries/index.ts                          T7
 frontend/src/app/router.tsx                                T7 (new) + T8 (list, report)
 frontend/src/app/AppShell.tsx                              T8 — the gated Imports rail entry
 docs/features.md                                           T8
-docs/plans/009-project-management-expansion-modules.md     T8 — hand-off protocol
+docs/plans/implemented/009-project-management-expansion-modules.md     T8 — hand-off protocol
 ```
 
 ---
@@ -2825,7 +2827,7 @@ the only session that knows what actually landed and what is built-but-unverifie
 git add frontend/src/features/imports frontend/src/app docs/features.md
 git commit -m "feat(imports): the report, the imports list, and the M4 close-out"
 
-git add docs/plans/009-project-management-expansion-modules.md
+git add docs/plans/implemented/009-project-management-expansion-modules.md
 git commit -m "docs(plan): M4 done — V7 taken, R14 closed, no module depends on M4"
 ```
 

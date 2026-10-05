@@ -1,5 +1,7 @@
 # Billing (M8) Implementation Plan
 
+**Status (filed 2026-10-05):** Delivered — module M8, done 2026-09-06 @ `c58384b5`. See *Close-out* below for what is unverified. Any `Status`, task table or checkbox below this line is the plan's history, not its state.
+
 **Date:** 2026-09-05 · **Written by:** `ep-writing-plans`
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `ep-executing-plans` to implement this plan
@@ -68,7 +70,7 @@ before it stops, in place, with no changelog appended.
 ```
 You are `tooling-engineer` working in the tcms repo. Read CLAUDE.md first.
 
-Read, in this order: docs/plans/019-billing.md §T1 and its "Decisions" section IN FULL — D-b, D-c,
+Read, in this order: docs/plans/implemented/019-billing.md §T1 and its "Decisions" section IN FULL — D-b, D-c,
 D-d, D-e, D-f, D-g, D-h, D-i, D-j and D-k each decide a shape you will otherwise get wrong ·
 CLAUDE.md · docs/specs/openapi.yaml's `clients` block (added by 018 T1, the newest whole tag) and its
 `time` block (016 T1) · packages/client/src/test/fixtures.ts around `client` and `timesheetPeriod` ·
@@ -132,7 +134,7 @@ Commit ONE commit, staging only: docs/specs/openapi.yaml, frontend/src/api/schem
 frontend/src/api/types.ts, packages/client/src/schema.ts, frontend/src/test/fixtures.ts,
 packages/client/src/test/fixtures.ts, packages/cli/src/*.ts, packages/mcp/src/*.ts,
 frontend/src/features/help/sections.tsx, docs/specs/2026-08-08-mcp-tool-and-command-surface.md,
-docs/plans/019-billing.md. Message: `feat(billing): the billing contract, both clients, and the
+docs/plans/implemented/019-billing.md. Message: `feat(billing): the billing contract, both clients, and the
 money verbs`.
 
 Gate, on shanks, per CLAUDE.md's standing directive — read docs/specs/shanks-runner-details.md
@@ -154,7 +156,7 @@ That directory is the authority on your version number and this plan is not. Pla
 now been corrected SIX times in five weeks and V11 is spent by Mc. This plan projects V12. If the
 directory disagrees, the directory wins and you correct this plan.
 
-Read, in this order: docs/plans/019-billing.md §T2 and its "Decisions" section — D-b, D-c, D-e, D-h
+Read, in this order: docs/plans/implemented/019-billing.md §T2 and its "Decisions" section — D-b, D-c, D-e, D-h
 and D-k each decide a column · CLAUDE.md · backend/src/main/resources/db/migration/V11__crm_clients.sql
 IN FULL (the newest migration, and the shape yours takes — header, per-table block comments carrying
 the WHY, the RLS DO-block with its two RAISE guards) · V9__time.sql's `time_entry` block (your
@@ -195,7 +197,7 @@ Traps this task will hit:
 
 Commit ONE commit staging only backend/src/main/resources/db/migration/V12__billing.sql,
 backend/src/test/java/com/tcms/tenancy/SchemaConventionTest.java, docs/specs/2026-07-30-tcms-erd.md
-and docs/plans/019-billing.md. Message: `feat(billing): V12 — rate cards, budgets, invoices and
+and docs/plans/implemented/019-billing.md. Message: `feat(billing): V12 — rate cards, budgets, invoices and
 expenses`.
 
 Gate on shanks: `~/bin/tcms-remote sync` then `~/bin/tcms-remote backend ./gradlew build`. Read
@@ -208,7 +210,7 @@ ZERO assertion failures is an fd-limit problem, not a red suite (`ulimit -n 6553
 ```
 You are `be-java` working in the tcms repo. Read CLAUDE.md first, then load `be-java-database-code`.
 
-Read, in this order: docs/plans/019-billing.md §T3 and its "Decisions" section IN FULL · CLAUDE.md ·
+Read, in this order: docs/plans/implemented/019-billing.md §T3 and its "Decisions" section IN FULL · CLAUDE.md ·
 backend/src/main/java/com/tcms/crm/ (the newest module, and the shape yours takes — package-info.java
 with its allowedDependencies, the sealed Outcome, the three-refusal comment on ClientService) ·
 backend/src/main/java/com/tcms/staffing/TimeFacts.java and com/tcms/time/IssueFacts.java (the two
@@ -265,7 +267,7 @@ BudgetBurnTest; verify both.
 
 Commit ONE commit staging only backend/src/main/java/com/tcms/billing/,
 backend/src/test/java/com/tcms/billing/, the two project-module files if ClientDirectory grew, and
-docs/plans/019-billing.md. Message: `feat(billing): the billing module, the rate ladder, and budget
+docs/plans/implemented/019-billing.md. Message: `feat(billing): the billing module, the rate ladder, and budget
 burn without a currency`.
 
 Gate on shanks: `~/bin/tcms-remote sync` then `~/bin/tcms-remote backend ./gradlew build`.
@@ -297,7 +299,7 @@ so a `COMMENT ON` naming the mockup reads as a claim about a column that does no
 You are `be-java` working in the tcms repo. Read CLAUDE.md first, then load `be-java-database-code`,
 `be-java-unit-testing` and `qa-permission-testing-java`.
 
-Read, in this order: docs/plans/019-billing.md §T4 and its "Decisions" section IN FULL — D-c, D-f,
+Read, in this order: docs/plans/implemented/019-billing.md §T4 and its "Decisions" section IN FULL — D-c, D-f,
 D-g, D-k and D-n are this task's whole subject · CLAUDE.md · what T3 landed in
 backend/src/main/java/com/tcms/billing/ · backend/src/test/java/com/tcms/time/TimeMoneyBoundaryTest.java
 IN FULL · backend/src/test/java/com/tcms/crm/CrmCreatesNoLoginTest.java's
@@ -380,7 +382,7 @@ backend/src/test/java/com/tcms/contract/ContractConventionTest.java,
 backend/src/test/java/com/tcms/contract/ContractEnumTest.java,
 backend/src/test/java/com/tcms/time/TimeMoneyBoundaryTest.java,
 backend/src/test/java/com/tcms/crm/CrmCreatesNoLoginTest.java,
-backend/src/main/java/com/tcms/DemoWorkspaceSeeder.java and docs/plans/019-billing.md.
+backend/src/main/java/com/tcms/DemoWorkspaceSeeder.java and docs/plans/implemented/019-billing.md.
 Message: `feat(billing): the draft as a query, the issue as a record, and the two negatives`.
 
 Gate on shanks: `~/bin/tcms-remote sync` then `~/bin/tcms-remote backend ./gradlew build`.
@@ -392,7 +394,7 @@ Gate on shanks: `~/bin/tcms-remote sync` then `~/bin/tcms-remote backend ./gradl
 You are `fe-react` working in the tcms repo. Read CLAUDE.md first, then load `fe-react-ui-rules`,
 `fe-react-data-fetching` and `fe-react-component-testing`.
 
-Read, in this order: docs/plans/019-billing.md §T5 and its "Decisions" section — D-h, D-i, D-l, D-o
+Read, in this order: docs/plans/implemented/019-billing.md §T5 and its "Decisions" section — D-h, D-i, D-l, D-o
 and D-p each decide something you render · CLAUDE.md · docs/mockups/billing.html and
 docs/mockups/invoice.html IN FULL, plus docs/mockups/assets/tcms-mock.css for any class you do not
 recognise · frontend/src/features/clients/ClientsPage.tsx and ClientPage.tsx (the newest screens, and
@@ -434,7 +436,7 @@ Traps this task will hit:
 
 Commit ONE commit staging only frontend/src/features/billing/, frontend/src/api/queries/billing.ts,
 frontend/src/api/queries/{keys.ts,index.ts}, frontend/src/app/{AppShell.tsx,router.tsx},
-frontend/src/lib/{devFaults.ts,labels.ts}, their tests, and docs/plans/019-billing.md.
+frontend/src/lib/{devFaults.ts,labels.ts}, their tests, and docs/plans/implemented/019-billing.md.
 Message: `feat(billing): the billing and invoice screens, and the rail entry that is absent`.
 
 Gate on shanks: `~/bin/tcms-remote sync` then `~/bin/tcms-remote frontend npm run build`,
@@ -450,7 +452,7 @@ do not report them as yours.
 You are `fe-react` working in the tcms repo. Read CLAUDE.md first, then load `fe-react-ui-rules` and
 `fe-react-component-testing`.
 
-Read, in this order: docs/plans/019-billing.md §T6 and its "Decisions" section — D-h, D-i and D-p ·
+Read, in this order: docs/plans/implemented/019-billing.md §T6 and its "Decisions" section — D-h, D-i and D-p ·
 CLAUDE.md · frontend/src/api/queries/billing.ts IN FULL — **T5 already built and exported both hooks
 you need**, `useClientBilling(clientId, enabled)` and `useProjectBudgetBurn(projectId, enabled)`, and
 that file's header says which gate each costs and why neither is a money key ·
@@ -465,7 +467,7 @@ burn" panel · docs/mockups/settings-general.html's Budget row ·
 frontend/src/features/projects/ProjectOverviewPage.tsx and its test (both say in terms why the budget
 card is NOT rendered — you are reversing that, and the strikethrough style is the repo's) ·
 frontend/src/features/settings/GeneralSettingsPage.tsx's TimePanel and its test ·
-docs/plans/009-project-management-expansion-modules.md's "Prompt hand-off protocol".
+docs/plans/implemented/009-project-management-expansion-modules.md's "Prompt hand-off protocol".
 
 Deliver: BillingSlot's body replaced by the five-column table and the two tiles; the Overview's
 Budget burn panel; General settings' Budget row; and the module closed per the hand-off protocol.
@@ -505,7 +507,7 @@ Traps this task will hit:
 Then close the module, and this is part of the deliverable rather than a follow-up:
 1. docs/features.md — the Billing section, written for a reader deciding what the product does.
    Struck through and superseded where it replaces something, never deleted.
-2. docs/plans/009-project-management-expansion-modules.md — M8's row set to
+2. docs/plans/implemented/009-project-management-expansion-modules.md — M8's row set to
    `done YYYY-MM-DD @ <short sha>`; a `**Built and unverified:**` list under the M6·M7·M8 section
    saying what the gates proved compiles and nobody has clicked through; and the V ACTUALLY taken,
    with the reserved number struck through rather than deleted. **No module depends on M8, so no
@@ -514,7 +516,7 @@ Then close the module, and this is part of the deliverable rather than a follow-
 
 Commit the screens and the close-out as TWO commits: the screens first, then
 `docs(plan): M8 done` staging only docs/features.md and
-docs/plans/009-project-management-expansion-modules.md.
+docs/plans/implemented/009-project-management-expansion-modules.md.
 
 Gate on shanks before the first commit: `~/bin/tcms-remote sync` then
 `~/bin/tcms-remote frontend npm run build`, `npm run lint`, `npm run test:run`. The two
@@ -1464,7 +1466,7 @@ tcms rate-card remove <rateCardId>
 git add docs/specs/openapi.yaml frontend/src/api/schema.d.ts packages/client/src/schema.ts \
         frontend/src/test/fixtures.ts packages/client/src/test/fixtures.ts \
         packages/cli/src packages/mcp/src \
-        docs/specs/2026-08-08-mcp-tool-and-command-surface.md docs/plans/019-billing.md
+        docs/specs/2026-08-08-mcp-tool-and-command-surface.md docs/plans/implemented/019-billing.md
 git commit -m "feat(billing): the billing contract, both clients, and the money verbs"
 ```
 
@@ -1889,7 +1891,7 @@ five join tables without `company_id`.
 ~/bin/tcms-remote backend ./gradlew build
 git add backend/src/main/resources/db/migration/V12__billing.sql \
         backend/src/test/java/com/tcms/tenancy/SchemaConventionTest.java \
-        docs/specs/2026-07-30-tcms-erd.md docs/plans/019-billing.md
+        docs/specs/2026-07-30-tcms-erd.md docs/plans/implemented/019-billing.md
 git commit -m "feat(billing): V12 — rate cards, budgets, invoices and expenses"
 ```
 
@@ -2156,7 +2158,7 @@ git add backend/src/main/java/com/tcms/billing backend/src/test/java/com/tcms/bi
         backend/src/test/java/com/tcms/architecture/ModuleStructureTest.java \
         backend/src/test/java/com/tcms/contract/ContractConventionTest.java \
         backend/src/test/java/com/tcms/contract/ContractEnumTest.java \
-        docs/plans/019-billing.md
+        docs/plans/implemented/019-billing.md
 git commit -m "feat(billing): the billing module, the rate ladder, and budget burn without a currency"
 ```
 
@@ -2518,7 +2520,7 @@ loud. Two things follow for whoever picks this up:
 git add backend/src/main/java/com/tcms/billing backend/src/test/java/com/tcms/billing \
         backend/src/test/java/com/tcms/time/TimeMoneyBoundaryTest.java \
         backend/src/test/java/com/tcms/crm/CrmCreatesNoLoginTest.java \
-        backend/src/main/java/com/tcms/DemoWorkspaceSeeder.java docs/plans/019-billing.md
+        backend/src/main/java/com/tcms/DemoWorkspaceSeeder.java docs/plans/implemented/019-billing.md
 git commit -m "feat(billing): the draft as a query, the issue as a record, and the two negatives"
 ```
 
@@ -2798,7 +2800,7 @@ git add frontend/src/features/billing frontend/src/api/queries/billing.ts \
         frontend/src/api/queries/keys.ts frontend/src/api/queries/index.ts \
         frontend/src/app/AppShell.tsx frontend/src/app/AppShell.test.tsx \
         frontend/src/app/router.tsx frontend/src/lib/devFaults.ts frontend/src/lib/labels.ts \
-        docs/plans/019-billing.md
+        docs/plans/implemented/019-billing.md
 git commit -m "feat(billing): the billing and invoice screens, and the rail entry that is absent"
 ```
 
@@ -2819,7 +2821,7 @@ carrying a currency; and M8 is closed per plan 009's hand-off protocol.
 - Create: `frontend/src/features/clients/ClientRateCardPanel.tsx`
 - Modify: `frontend/src/features/projects/ProjectOverviewPage.tsx` and its test
 - Modify: `frontend/src/features/settings/GeneralSettingsPage.tsx` and its test
-- Modify: `docs/features.md`, `docs/plans/009-project-management-expansion-modules.md`
+- Modify: `docs/features.md`, `docs/plans/implemented/009-project-management-expansion-modules.md`
 
 - [x] **Step 1: `BillingSlot` — the whole table, not three of its columns**
 
@@ -2922,10 +2924,10 @@ five things it does not do (D-q). Strike through and supersede what it replaces;
 ~/bin/tcms-remote frontend npm run lint
 ~/bin/tcms-remote frontend npm run test:run
 git add frontend/src/features/clients frontend/src/features/projects frontend/src/features/settings \
-        docs/plans/019-billing.md
+        docs/plans/implemented/019-billing.md
 git commit -m "feat(billing): the client's hours and invoices, and the two budget figures"
 
-git add docs/features.md docs/plans/009-project-management-expansion-modules.md
+git add docs/features.md docs/plans/implemented/009-project-management-expansion-modules.md
 git commit -m "docs(plan): M8 done — V12, the built-and-unverified list, and no dependent prompt"
 ```
 

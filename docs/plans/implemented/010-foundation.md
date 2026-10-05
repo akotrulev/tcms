@@ -1,5 +1,7 @@
 # M0 — Foundation Implementation Plan
 
+**Status (filed 2026-10-05):** Delivered — module M0, done 2026-08-30 @ `24f997bb` (V2, since absorbed into V1). The unticked checkboxes below are not open work. Any `Status`, task table or checkbox below this line is the plan's history, not its state.
+
 **Date:** 2026-08-30 · **Written by:** `ep-writing-plans`
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `ep-executing-plans` to implement this plan
@@ -21,7 +23,7 @@ same commit as the seed.
 generated clients, Vite 8 / React 19 (no screen work — one `satisfies` map and one empty-state
 sentence).
 
-**Module:** M0 of `docs/plans/009-project-management-expansion-modules.md`. **Depends on:** nothing.
+**Module:** M0 of `docs/plans/implemented/009-project-management-expansion-modules.md`. **Depends on:** nothing.
 Status table checked 2026-08-30: every module reads `not started`, so nothing else is in progress.
 
 **Tasks** — in the order they are done:
@@ -263,7 +265,7 @@ the row is a `PROJECT`-scope grant of a `COMPANY`-scope key, unreachable from
 | `docs/features.md` | Six roles → nine; "exactly seven things" → ten; "six immutable roles" → nine. |
 | `backend/src/main/java/com/tcms/documentation/LinkSourceType.java` | Javadoc: the column now admits a third value the enum does not offer. |
 | `frontend/src/features/help/RoleMatrix.tsx` | Empty-state copy: six → nine. |
-| `docs/plans/009-project-management-expansion-modules.md` | T6 only — status table, built-and-unverified, dependent prompts. |
+| `docs/plans/implemented/009-project-management-expansion-modules.md` | T6 only — status table, built-and-unverified, dependent prompts. |
 
 **Deliberately unmodified, each for a checked reason**
 
@@ -2284,7 +2286,7 @@ blocks name `ProjectKeys` and every decision above that they now depend on.
 Its own commit, staging only that one file.
 
 **Files:**
-- Modify: `docs/plans/009-project-management-expansion-modules.md`
+- Modify: `docs/plans/implemented/009-project-management-expansion-modules.md`
 
 - [ ] **Step 1: Status table**
 
@@ -2386,7 +2388,7 @@ M0 landed on 2026-08-30. Three things it decided that Mc must honour:
 
 ```bash
 cd ~/RiderProjects/tcms
-git add docs/plans/009-project-management-expansion-modules.md
+git add docs/plans/implemented/009-project-management-expansion-modules.md
 git commit -m "docs(plan): M0 done"
 git push
 ```

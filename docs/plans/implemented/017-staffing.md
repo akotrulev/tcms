@@ -1,5 +1,7 @@
 # Staffing Implementation Plan — plan 009 module M7
 
+**Status (filed 2026-10-05):** Delivered — module M7, done 2026-09-04 @ `44f8d39a`. Unticked checkboxes below are not open work. Any `Status`, task table or checkbox below this line is the plan's history, not its state.
+
 **Date:** 2026-09-04 · **Written by:** `ep-writing-plans`
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `ep-executing-plans` to implement this plan
@@ -52,7 +54,7 @@ rewrites the blocks below its own before it stops, in place, with no changelog a
 ```
 You are `tooling-engineer` working in the tcms repo. Read CLAUDE.md first.
 
-Read, in this order: docs/plans/017-staffing.md §T1 and its "Decisions this plan takes" · CLAUDE.md ·
+Read, in this order: docs/plans/implemented/017-staffing.md §T1 and its "Decisions this plan takes" · CLAUDE.md ·
 docs/specs/openapi.yaml lines 8857-9260 (the /timesheets and /time blocks, as the pattern) ·
 packages/client/src/test/fixtures.ts around `timesheetPeriod` (the factory shape, which is where the
 bodies live — NOT contractBodies.ts) · packages/cli/src/reads.ts around `timesheet` ·
@@ -106,7 +108,7 @@ schema shapes you landed differ from what they assume.
 You are `data-architect` working in the tcms repo. Read CLAUDE.md first, then load
 `data-postgresql` and `data-migrations`.
 
-Read, in this order: docs/plans/017-staffing.md §T2 and D-a through D-e · CLAUDE.md ·
+Read, in this order: docs/plans/implemented/017-staffing.md §T2 and D-a through D-e · CLAUDE.md ·
 backend/src/main/resources/db/migration/V9__time.sql IN FULL (the header, the per-table COMMENT ON,
 and the RLS DO $$ block with its count assertion are the house style) ·
 docs/specs/2026-07-30-tcms-erd.md §0.1 · docs/specs/tenancy-invariants.md.
@@ -145,7 +147,7 @@ below yours if it is not V10.
 You are `be-java` working in the tcms repo. Read CLAUDE.md first, then load `be-java-database-code`
 and `be-java-unit-testing`.
 
-Read, in this order: docs/plans/017-staffing.md §T3 and D-a, D-c, D-e, D-f, D-h, D-i, D-j, D-k, D-l ·
+Read, in this order: docs/plans/implemented/017-staffing.md §T3 and D-a, D-c, D-e, D-f, D-h, D-i, D-j, D-k, D-l ·
 CLAUDE.md · backend/src/main/java/com/tcms/time/ IN FULL — package-info.java, IssueFacts.java,
 TimeAccess.java, TimesheetController.java, TimesheetService.java are the five patterns this task
 copies · backend/src/main/java/com/tcms/project/ProjectService.java · GateResult.java ·
@@ -216,7 +218,7 @@ from T1's contract.
 You are `fe-react` working in the tcms repo. Read CLAUDE.md first, then load `fe-react-data-fetching`,
 `fe-react-ui-rules` and `fe-react-component-testing`.
 
-Read, in this order: docs/plans/017-staffing.md §T4 and D-e, D-f, D-g, D-i · CLAUDE.md ·
+Read, in this order: docs/plans/implemented/017-staffing.md §T4 and D-e, D-f, D-g, D-i · CLAUDE.md ·
 docs/mockups/staffing.html and docs/mockups/directory.html IN FULL — the mockups are the source of
 truth for what these screens show · docs/agent-context/fe-react.md (your orientation cache) ·
 frontend/src/features/time/TimesheetPage.tsx and ApprovalsPage.tsx as the most recent screens on the
@@ -273,7 +275,7 @@ if the components or hooks you landed are named differently.
 You are `fe-react` working in the tcms repo. Read CLAUDE.md first, then load `fe-react-data-fetching`,
 `fe-react-forms` and `fe-react-component-testing`.
 
-Read, in this order: docs/plans/017-staffing.md §T5 and D-b, D-f, D-g, D-h · CLAUDE.md ·
+Read, in this order: docs/plans/implemented/017-staffing.md §T5 and D-b, D-f, D-g, D-h · CLAUDE.md ·
 docs/mockups/member.html and docs/mockups/directory.html · docs/agent-context/fe-react.md ·
 frontend/src/features/staffing/ as T4 left it · frontend/src/features/admin/TeamsPage.tsx ·
 frontend/src/auth/useCan.ts · frontend/src/api/queries/staffing.ts.
@@ -342,12 +344,12 @@ anything it assumes changed.
 You are `fe-react` working in the tcms repo. Read CLAUDE.md first, then load `fe-react-ui-rules` and
 `fe-react-component-testing`.
 
-Read, in this order: docs/plans/017-staffing.md §T6 and D-i, D-m and "What this module was told"
+Read, in this order: docs/plans/implemented/017-staffing.md §T6 and D-i, D-m and "What this module was told"
 correction 4 · CLAUDE.md · docs/mockups/timesheets.html and docs/mockups/my-work.html ·
 frontend/src/features/time/TimesheetPage.tsx IN FULL, especially its header's "Three KPI tiles"
 section and its `Kpis` component · frontend/src/features/board/MyWorkPage.tsx's header and its
 `ThisPeriodPanel` · frontend/src/features/time/periods.ts IN FULL ·
-docs/plans/016-time.md's "Built and unverified" · docs/plans/009-project-management-expansion-modules.md
+docs/plans/implemented/016-time.md's "Built and unverified" · docs/plans/implemented/009-project-management-expansion-modules.md
 "Prompt hand-off protocol".
 
 Deliver: /timesheets shows FOUR KPI tiles — Logged · Period capacity · Approved · Status — in a
@@ -1523,7 +1525,7 @@ this work and re-running that file at `HEAD`. See the landed note above.
 
 ```bash
 git add docs/specs/openapi.yaml docs/specs/2026-08-08-mcp-tool-and-command-surface.md \
-        docs/plans/017-staffing.md \
+        docs/plans/implemented/017-staffing.md \
         frontend/src/api/schema.d.ts frontend/src/api/types.ts frontend/src/test/fixtures.ts \
         frontend/src/features/help/sections.tsx \
         packages/client/src/schema.ts packages/client/src/test/fixtures.ts \
@@ -3087,8 +3089,8 @@ file headers and `periods.ts` read; 2 skills; 3 plan sections cited
 **Files:**
 - Modify: `frontend/src/features/time/TimesheetPage.tsx`, `TimesheetPage.test.tsx`
 - Modify: `frontend/src/features/board/MyWorkPage.tsx`, and its test
-- Modify: `docs/features.md`, `docs/plans/009-project-management-expansion-modules.md`,
-  `docs/plans/009-execution-breakdown.md`, `docs/agent-context/fe-react.md`
+- Modify: `docs/features.md`, `docs/plans/implemented/009-project-management-expansion-modules.md`,
+  `docs/plans/implemented/009-execution-breakdown.md`, `docs/agent-context/fe-react.md`
 
 - [x] **Step 1: The fourth KPI tile**
 
@@ -3175,7 +3177,7 @@ with its denominator named. Written for a reader deciding what the product does.
 git add frontend/src/features/time frontend/src/features/board docs/features.md
 git commit -m "feat(staffing): the period-capacity tile, My Work's meter, and the features doc"
 
-git add docs/plans/009-project-management-expansion-modules.md docs/plans/009-execution-breakdown.md
+git add docs/plans/implemented/009-project-management-expansion-modules.md docs/plans/implemented/009-execution-breakdown.md
 git commit -m "docs(plan): M7 done"
 ```
 

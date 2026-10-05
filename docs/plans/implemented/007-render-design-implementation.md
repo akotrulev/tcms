@@ -1,5 +1,7 @@
 # 007 — Implementing the renders: Tailwind + shadcn/ui, all 42 screens
 
+**Status (filed 2026-10-05):** Delivered — T1–T17 landed; T17 `91c4bd6a` ran all gates green on shanks and measured the bundle (§4.1). Unverified: the browser pass (T15 step 3, §4.1's last section) was never completed. Any `Status`, task table or checkbox below this line is the plan's history, not its state.
+
 **Date:** 2026-08-29 · **Written by:** `ep-writing-plans` · **Status:** ~~proposed, nothing
 implemented~~ → **T1–T6, T8 and T9 landed**
 (`5e14f336`, `8c21107a`, `2dceb911`, `8b78a4f9`, `8127551a` + `5a4d7226`, T6, T9 `6de8c9a9`, T8),
@@ -28,7 +30,7 @@ the rest open. Next up: **T7**.
 
 **Architecture:** The renders are not a mood board — they are executable HTML with a shared
 stylesheet (`assets/renders/tcms.css`, 367 lines) and a written rulebook
-([`2026-08-28-design-language.md`](../specs/2026-08-28-design-language.md)). That spec's §1 already
+([`2026-08-28-design-language.md`](../../specs/2026-08-28-design-language.md)). That spec's §1 already
 maps every kit token to an app token and concludes *"the port is a mapping, not a translation"* —
 verified true below. So the work is not a re-theme; it is (a) a styling-authority swap from MUI's
 `theme`+`sx` to Tailwind, (b) building the nine-component kit once, and (c) porting each screen onto
@@ -42,7 +44,7 @@ it, family by family, in the order the renders are grouped.
 ## 0. Why this plan exists, and what it is answering
 
 A screenshot of `CaseEditorPage` in the *New test case* state was compared against the origin render
-([`assets/case-authoring-redesign.html`](../specs/assets/case-authoring-redesign.html) frame B). The
+([`assets/case-authoring-redesign.html`](../../specs/assets/case-authoring-redesign.html) frame B). The
 information architecture had been implemented; the design had not. Seven differences, each traceable
 to a rule in a spec that was written before the code:
 
@@ -822,8 +824,8 @@ its test 524. `CaseEditorPage.tsx:67` imports `selectTestId` from `lib/muiTestId
 it with the `Select`s it served.
 
 This is the screen the plan was opened for. Its two specs
-([`2026-08-28-case-authoring-redesign.md`](../specs/2026-08-28-case-authoring-redesign.md),
-[`2026-08-28-case-authoring-rail.md`](../specs/2026-08-28-case-authoring-rail.md)) are the authority
+([`2026-08-28-case-authoring-redesign.md`](../../specs/2026-08-28-case-authoring-redesign.md),
+[`2026-08-28-case-authoring-rail.md`](../../specs/2026-08-28-case-authoring-rail.md)) are the authority
 where they and the render disagree — the rail spec's *"Does the render need redrawing?"* section
 lists four places the render is already known to be wrong.
 
@@ -1647,7 +1649,7 @@ find here, and re-run until all four are green before writing the Results sectio
 buries you, fix in the order build → lint → tests, since a type error hides everything behind it.
 
 **Gates run on `shanks`, not locally** — the standing user directive in CLAUDE.md. Read
-[`shanks-runner-details.md`](../specs/shanks-runner-details.md) first: `BUILD FAILED` with
+[`shanks-runner-details.md`](../../specs/shanks-runner-details.md) first: `BUILD FAILED` with
 `Could not write XML test results` and **zero** assertion failures is an fd-limit problem, not a red
 suite.
 
@@ -1697,7 +1699,7 @@ bundle table, and anything the browser pass found that the gates did not. → **
 - [x] **Step 5: Commit**
 
 ```bash
-git add docs/plans/007-render-design-implementation.md
+git add docs/plans/implemented/007-render-design-implementation.md
 git commit -m "fix: T17 — gates green on shanks, bundle measured"
 ```
 

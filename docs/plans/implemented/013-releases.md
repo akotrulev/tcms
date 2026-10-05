@@ -1,5 +1,7 @@
 # 013 — Releases, roadmap & readiness (module M3 of 009)
 
+**Status (filed 2026-10-05):** Delivered — module M3, done 2026-09-01 @ `55cb4bc0`. Unticked checkboxes below are not open work. Any `Status`, task table or checkbox below this line is the plan's history, not its state.
+
 **Date:** 2026-09-01 · **Written by:** `ep-writing-plans`
 
 > **For agentic workers:** REQUIRED SUB-SKILL: use `ep-executing-plans` to implement this plan
@@ -2545,7 +2547,7 @@ surface document and 009's status table are closed out.
 - Modify: `frontend/src/features/tracker/StoryPanels.tsx`; create `LinkedCasesPanel.tsx` beside it
 - Modify: `frontend/src/features/cases/CaseGrid.tsx`
 - Modify: `docs/features.md`, `docs/specs/2026-08-08-mcp-tool-and-command-surface.md`,
-  `docs/plans/009-project-management-expansion-modules.md`, `docs/agent-context/fe-react.md`
+  `docs/plans/implemented/009-project-management-expansion-modules.md`, `docs/agent-context/fe-react.md`
 
 - [ ] **Step 1: Turn `NextReleasePanel` on — do not replace it**
 
@@ -2692,7 +2694,7 @@ changelog appended.
 ### T1 — The release contract
 
 ````text
-You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/013-releases.md — the
+You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/implemented/013-releases.md — the
 decisions D-a…D-p and the whole of T1. Use /be-java.
 
 Land the release contract in ONE commit: docs/specs/openapi.yaml, both generated clients
@@ -2725,7 +2727,7 @@ Commit message: the T1 step 9 text. Stage only the four files.
 ### T2 — `V6`
 
 ````text
-You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/013-releases.md T2 and
+You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/implemented/013-releases.md T2 and
 decisions D-b, D-c. Use /data-architect with data-postgresql and data-migrations.
 
 Write backend/src/main/resources/db/migration/V6__release.sql. `ls` the migration directory FIRST —
@@ -2756,7 +2758,7 @@ Commit: the T2 step 6 text, staging the migration and the ERD only.
 ### T3 — `tracker.release`
 
 ````text
-You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/013-releases.md T3 and
+You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/implemented/013-releases.md T3 and
 decisions D-a, D-b, D-d, D-f, D-g, D-h, D-i, D-j, D-o. Use /be-java with be-java-database-code and
 be-java-unit-testing.
 
@@ -2796,7 +2798,7 @@ git add <paths> only.
 ### T4 — CLI and MCP
 
 ````text
-You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/013-releases.md T4, and
+You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/implemented/013-releases.md T4, and
 §2, §3.4, §3.5 and §3.6 of docs/specs/2026-08-08-mcp-tool-and-command-surface.md. Use
 /tooling-engineer.
 
@@ -2834,7 +2836,7 @@ frontend "npm run build" because sections.tsx is a frontend file.
 ### T5 — Releases, the roadmap and the calendar
 
 ````text
-You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/013-releases.md T5 and
+You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/implemented/013-releases.md T5 and
 decisions D-d, D-e, D-j, D-n, D-o. Use /fe-react. Read docs/agent-context/fe-react.md and validate it
 against a git delta before trusting it.
 
@@ -2870,7 +2872,7 @@ Gate: ~/bin/tcms-remote sync, then frontend "npm run build && npm run lint && np
 ### T6 — Overview, the QA link on screen, and the close-out
 
 ````text
-You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/013-releases.md T6 and
+You are working in the tcms repo. Read CLAUDE.md first, then docs/plans/implemented/013-releases.md T6 and
 decisions D-i, D-k, D-l, D-p. Use /fe-react.
 
 Five screen changes and the module's close-out. Mockups: project-overview.html (its Next release and

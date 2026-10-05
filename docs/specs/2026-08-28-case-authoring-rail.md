@@ -2,7 +2,7 @@
 
 **Status:** proposed, nothing implemented · **Date:** 2026-08-28 · **Owner:** frontend
 **Answers:** *The cost of D1 — retiring the Fields lens* in
-[`docs/plans/003-case-authoring-redesign.md`](../plans/003-case-authoring-redesign.md)
+[`docs/plans/implemented/003-case-authoring-redesign.md`](../plans/implemented/003-case-authoring-redesign.md)
 **Against:** [`assets/case-authoring-redesign.png`](assets/case-authoring-redesign.png) and
 [`assets/case-authoring-redesign.html`](assets/case-authoring-redesign.html)
 
