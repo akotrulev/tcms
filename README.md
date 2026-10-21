@@ -210,3 +210,10 @@ RLS would be permanently unreachable.
   administrator could grant their way out of. `evidence:read` was rejected for the same reason.
 - **Resolving a comment thread is not commenting** — it costs the subject's `*:review`.
 - **Author-cannot-approve-own-work defaults on.**
+
+## License
+
+[PolyForm Noncommercial 1.0.0](LICENSE.md). You may use, modify and self-host TCMS for any
+noncommercial purpose — personal study, hobby projects, research, or use by a charity, school or
+public institution. Commercial use is not licensed: that includes selling it, offering it as a
+hosted service, and using it inside a business. For any other use, ask the author.

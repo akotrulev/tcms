@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "The typed TCMS API client and command core. The only thing in the CLI or the MCP server that makes an HTTP request.",
   "type": "module",
-  "license": "UNLICENSED",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "engines": {
     "node": ">=22.12.0"
   },

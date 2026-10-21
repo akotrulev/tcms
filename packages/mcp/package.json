@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "The TCMS MCP server. A thin adapter over @tcms/client that exposes the test repository to an MCP host as workflow-shaped tools, filtered by what the caller's credential can actually reach.",
   "type": "module",
-  "license": "UNLICENSED",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "engines": {
     "node": ">=22.12.0"
   },

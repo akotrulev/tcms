@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "The TCMS command line client. Reads and writes the test repository as the user whose API token it carries.",
   "type": "module",
-  "license": "UNLICENSED",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "engines": {
     "node": ">=22.12.0"
   },
