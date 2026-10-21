@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -274,6 +275,7 @@ class ConfigConventionTest {
     private static final Pattern ENV_VAR_NAME = Pattern.compile("[A-Z][A-Z0-9_]*");
 
     @Test
+    @Disabled("deploy/compose.prod.yaml is not part of the public copy of this repository")
     @DisplayName("every required placeholder is a variable compose.prod.yaml actually passes")
     void everyRequiredPlaceholderIsSuppliedInProduction() {
         String prod = codeOf(Path.of("../deploy/compose.prod.yaml"));
@@ -328,6 +330,7 @@ class ConfigConventionTest {
     }
 
     @Test
+    @Disabled("deploy/compose.prod.yaml is not part of the public copy of this repository")
     @DisplayName("every blob root is bind-mounted in production, at the path the app writes to")
     void everyStorageRootIsMountedInProduction() {
         String prod = codeOf(Path.of("../deploy/compose.prod.yaml"));

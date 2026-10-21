@@ -290,6 +290,22 @@ const CORPUS = CORPUS_ROOTS.map((entry) => ({
  * un-pruning `dist`, which would make the check's answer depend on whether anyone had run a build.
  */
 const CITED_BUT_ABSENT_BY_DECISION: Record<string, string> = {
+  'deploy.yml':
+    'Deployment is not part of the public copy of this repository; it lives in the private source '
+    + 'repository the public copy is published from, and the citation is kept so the comment still '
+    + 'says where the thing it argues from lives.',
+  'deploy/README.md':
+    'Deployment is not part of the public copy of this repository; it lives in the private source '
+    + 'repository the public copy is published from, and the citation is kept so the comment still '
+    + 'says where the thing it argues from lives.',
+  'deploy/compose.prod.yaml':
+    'Deployment is not part of the public copy of this repository; it lives in the private source '
+    + 'repository the public copy is published from, and the citation is kept so the comment still '
+    + 'says where the thing it argues from lives.',
+  'docs/specs/shanks-runner-details.md':
+    'Deployment is not part of the public copy of this repository; it lives in the private source '
+    + 'repository the public copy is published from, and the citation is kept so the comment still '
+    + 'says where the thing it argues from lives.',
   'error.tsx':
     'A Next.js App Router file. `ErrorBoundaries.tsx` names it to say this is a Vite SPA and the '
     + 'framework tier does not exist here, so the boundaries are the whole of it.',

@@ -29,7 +29,6 @@ guess, and don't let code and spec drift: several of these are compared against 
 | `docs/specs/parallel-work-rules.md` | What may run concurrently and what may not. Read before any second lane. |
 | `docs/specs/2026-08-08-mcp-tool-and-command-surface.md` | The CLI/MCP capability surface. |
 | `docs/specs/client-distribution.md` | How `@tcms/cli` and `@tcms/mcp` reach users (tarballs from the instance's `/downloads`, no registry). |
-| `docs/specs/shanks-runner-details.md` | The remote gate runner — read before running builds on it. |
 | `docs/features.md` | The product's feature inventory, written for a reader deciding what it does. |
 | `docs/business-model/INDEX.md` | Reverse-engineered business model: 6 areas, entity lifecycles, flows, decisions. |
 
@@ -100,34 +99,17 @@ Sign in by redeeming the `/accept-invitation` link `provision-company` prints �
 `rm -rf node_modules/.vite`: an in-place restart leaves a stale optimize-deps hash and renders a
 blank page with an empty console.
 
-### Run the gates on `shanks`, not locally
-
-**Standing user directive.** Write the code here; run `./gradlew build` and the npm suites on
-`shanks` through `~/bin/tcms-remote` (machine-local tooling on the MacBook, not in this repo — it
-rsyncs the working tree, uncommitted changes included, then runs the command over SSH). Targeted
-tests may run locally *for debugging*; the gates themselves stay on shanks.
-
-```bash
-~/bin/tcms-remote sync
-~/bin/tcms-remote backend ./gradlew build
-~/bin/tcms-remote frontend npm run test:run
-~/bin/tcms-remote packages npm run build
-```
-
-Read `docs/specs/shanks-runner-details.md` first — especially that `BUILD FAILED` with
-`Could not write XML test results` and **zero** assertion failures is an fd-limit problem, not a red
-suite (`ulimit -n 65535; ./gradlew build`).
-
 ### What CI does and does not run
 
-- `ci.yml` (push/PR to master, self-hosted `[self-hosted, tcms-lab]`): backend **compile only**,
-  `./gradlew build -x test`; frontend build + lint + **smoke** tests; packages build + lint + full
-  tests + the release-pack gate. A push to master then continuously delivers to the **lab**.
-- `tests.yml` (nightly 01:17 UTC): the full backend suite on Linux. `gh workflow run tests.yml` for
-  on demand. This is the only machine-run of the backend tests.
-- `deploy.yml`: builds and ships both halves. Production is dispatch-only with a real semver.
+- `ci.yml` (push/PR to master, GitHub-hosted `ubuntu-latest`): backend `./gradlew build` with the
+  full test suite; frontend build + lint + **smoke** tests; packages build + lint + full tests +
+  the release-pack gate.
+- Deployment is not part of this repository. This is the public copy of a private repository,
+  which holds the deploy pipeline and the environments it targets. The two backend checks that
+  read the production compose file are `@Disabled` here for that reason.
 
-So the backend suite gates nothing before master. Run it before you push.
+If `./gradlew build` reports `BUILD FAILED` with `Could not write XML test results` and **zero**
+assertion failures, that is the open-file limit, not a red suite: `ulimit -n 65535; ./gradlew build`.
 
 ### Test-harness rules the suites enforce
 
@@ -290,8 +272,7 @@ React Router 7; project-scoped routes under `/projects/:projectId/*`.
 - **Stage only the files your phase touched** (`git add <paths>`, never `git add -A`): concurrent
   sessions happen in this repo, and re-read a shared doc before editing it.
 - **Push after each lane.** Know what it buys: `ci.yml` triggers on push to `master` and on PRs
-  targeting it, and `tests.yml` runs on the default branch only — so a pushed lane branch is
-  *backed up*, not *observed*.
+  targeting it — so a pushed lane branch is *backed up*, not *observed*.
 
 ## Running work in parallel — don't
 
