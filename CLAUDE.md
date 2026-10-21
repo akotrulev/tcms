@@ -276,6 +276,10 @@ React Router 7; project-scoped routes under `/projects/:projectId/*`.
   "→ superseded", so the next reader doesn't think the old reasoning was never considered.
 - Save generated `.md` artifacts into this project under `docs/specs/` etc. — never to a global
   directory.
+- **There are two repositories.** The private source repository holds deployment and its
+  environments; `akotrulev/tcms` is a public copy derived from it by `scripts/publish-public/publish.sh`,
+  which `ci.yml`'s `public` job runs on every push to master. Never push a private checkout to the
+  public repository — that skips the scrub.
 
 ## Git workflow
 
